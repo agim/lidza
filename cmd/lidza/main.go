@@ -25,6 +25,7 @@ Usage:
   lidza db migrate|rollback|status
   lidza benchmark [scenario] [--vus 500] [--duration 1m]
   lidza test [go test flags] | lidza test --e2e [--install]
+  lidza verify [--json] [--no-test] | lidza verify --install-hook
   lidza doctor
   lidza context [--dir .] [--stdout]
   lidza api [package] [--filter name] [--list]
@@ -42,6 +43,7 @@ Commands:
   db       apply, revert and list migrations (lidza/db pack)
   benchmark  run a k6 scenario from benchmarks/ against the running app; heap before and after
   test     go test ./... with LIDZA_MODE=test, the test database created and migrated, then the frontend check; --e2e runs the Playwright suite against the built binary
+  verify   before a commit: regenerate (generated files must be staged), check, go test; the pre-commit hook runs it
   doctor   report the toolchain, services and the project's prerequisites, each with its fix
   context  write .lidza/context.json: routes, handler signatures, Rust exports
   api      print the framework's public Go API as the project resolves it (one package, or all that app code imports)
@@ -77,6 +79,8 @@ func main() {
 		err = runBenchmark(ctx, args)
 	case "test":
 		err = runTest(ctx, args)
+	case "verify":
+		err = runVerify(ctx, args)
 	case "doctor":
 		err = runDoctor(ctx, args)
 	case "context":

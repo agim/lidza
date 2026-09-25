@@ -44,18 +44,9 @@ func runTest(ctx context.Context, args []string) error {
 		if err := generateAll(abs, cfg, os.Stdout); err != nil {
 			return err
 		}
-		for _, p := range cfg.Packs {
-			if p == pack.OfficialPrefix+"db" {
-				if err := prepareTestDB(ctx, abs); err != nil {
-					return err
-				}
-			}
-		}
 	}
-	fmt.Println("[lidza] go test ./...")
-	goArgs := append([]string{"test", "./..."}, fs.Args()...)
-	if err := run(ctx, abs, "go", goArgs...); err != nil {
-		return fmt.Errorf("go tests failed")
+	if err := goTest(ctx, abs, cfg, fs.Args(), os.Stdout); err != nil {
+		return err
 	}
 	if cfg != nil && cfg.Frontend.Dist != "" {
 		if _, err := os.Stat(filepath.Join(abs, "node_modules")); err == nil {

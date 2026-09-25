@@ -139,6 +139,10 @@ Three things keep an agent from inventing what is not there:
   `fetch` of `/api` (L003) and a handler type not declared in
   `schema.lidza` (L005) are warnings.
 - The recipes: every step names the file, the command and the check.
+- `lidza verify`, run by the pre-commit hook `lidza new` installs:
+  regenerate and refuse a commit whose generated files are not staged,
+  `lidza check` clean, `go test ./...` green. `--json` for agents,
+  `--install-hook` on an existing project.
 
 ### MCP server
 

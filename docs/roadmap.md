@@ -389,7 +389,17 @@ real package, replacing the go tool's "go get" advice; a frontend import
 that `package.json` does not declare, error), L005 (a typed handler whose
 input or output type is not from `schema.lidza`, warning).
 
+### lidza verify and the pre-commit hook (done 2026-09-25)
+
+`lidza verify [--json] [--no-test]`: regenerate, fail when a tracked
+generated file differs from the git index (the commit would miss it),
+`lidza check` with pack diagnostics, `go test ./...` with the test
+database prepared. `lidza new` runs `git init`, writes
+`.githooks/pre-commit` (`exec lidza verify`) and sets `core.hooksPath`;
+inside an existing repository it explains what to add to that
+repository's hook instead. `lidza verify --install-hook` does the setup on
+an existing project.
+
 ### Next
 
-Pending: `lidza verify` with a pre-commit hook; an example app with a
-snippet tool; platform evals.
+Pending: an example app with a snippet tool; platform evals.

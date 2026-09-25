@@ -54,6 +54,13 @@ func runNew(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	// A repository with the pre-commit hook, unless the app is created
+	// inside an existing one.
+	if abs, err := filepath.Abs(name); err == nil {
+		if err := installGitHook(ctx, abs, os.Stdout, true); err != nil {
+			fmt.Printf("pre-commit hook not installed: %v\n", err)
+		}
+	}
 	fmt.Printf("\nnext:\n  cd %s\n  lidza dev\n", name)
 	return nil
 }

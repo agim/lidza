@@ -7,6 +7,7 @@ commands and the rules.
 - `lidza dev`: run on http://127.0.0.1:3000 with hot reload for Go and the frontend.
 - `lidza check --json`: every Go, Rust and frontend error in one list; run it after each change until `"status": "ok"`.
 - `lidza test` for Go tests, `lidza test --e2e` for the browser suite, `lidza doctor` when something is missing on the machine.
+- `lidza verify` before committing (the pre-commit hook runs it): generated files staged, check clean, tests green.
 - `lidza build`: production binary at `bin/{{.Name}}`.
 - MCP server `lidza mcp` (configured in `.mcp.json` and `.gemini/settings.json`): `lidza_routes`, `lidza_context`, `lidza_check`, `lidza_logs`, `lidza_config`, `lidza_api` (the framework's Go API; read it before calling a lidza function).
 - Task recipes, step by step, in `docs/lidza-guide.md` under "Recipes", as `lidza mcp` prompts and as skills in `.claude/skills/`: {{.Recipes}}.

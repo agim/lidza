@@ -7,9 +7,12 @@
 #
 # Installs, when missing: the build prerequisites (git, curl, a C toolchain),
 # Go, Rust (rustup) with the wasm targets, Node, the Go and Rust helper
-# tools, and the `lidza` CLI. With --services also Postgres and Valkey (or
-# Redis), started, with a database role for the current user. Safe to
-# re-run; what is present is left alone.
+# tools, and the `lidza` CLI at the release this installer was tested with
+# (LIDZA_VERSION below; LIDZA_VERSION=master in the environment installs the
+# tip). With --services also Postgres and Valkey (or Redis), started, with
+# a database role for the current user. Safe to re-run; what is present is
+# left alone, except a `lidza` CLI older than the pinned release, which is
+# replaced.
 #
 # Linux (apt, dnf, pacman) and macOS (Homebrew), amd64 and arm64. On
 # Windows use WSL2.
@@ -34,6 +37,9 @@ STATICCHECK_VERSION=2026.2.1
 GOLANGCI_LINT_VERSION=v2.14.0
 SQLC_VERSION=v1.31.1
 WASM_TOOLS_VERSION=1.259.0
+# The CLI release this installer ships with (CHANGELOG.md). Override with
+# LIDZA_VERSION=<tag>, LIDZA_VERSION=master or LIDZA_VERSION=latest.
+LIDZA_VERSION="${LIDZA_VERSION:-v0.1.2}"
 LIDZA_MODULE="github.com/agim/lidza"
 LIDZA_ENV="$HOME/.lidza/env"
 
@@ -202,7 +208,7 @@ status_prereqs() {
   return $r
 }
 status_lidza() {
-  if have lidza; then ok "lidza $(lidza version 2>/dev/null || echo '(version unknown)')"; return 0; fi
+  if have lidza; then ok "$(lidza version 2>/dev/null || echo 'lidza (version unknown)')"; return 0; fi
   todo "lidza CLI"; return 1
 }
 
@@ -341,13 +347,30 @@ install_tools() {
 }
 
 install_lidza() {
-  status_lidza && return 0
-  echo "  go install $LIDZA_MODULE/cmd/lidza@latest"
-  if go install "$LIDZA_MODULE/cmd/lidza@latest" 2>/tmp/lidza-install.err; then
+  if status_lidza; then
+    # A release older than the pin is replaced; a newer release and a
+    # development build (a pseudo-version or +dirty, built from a
+    # checkout) are left alone. LIDZA_VERSION=master or latest always
+    # installs what it names.
+    installed=$(lidza version 2>/dev/null | awk '{print $2}')
+    case "$LIDZA_VERSION" in
+      v[0-9]*)
+        case "$installed" in
+          "$LIDZA_VERSION"|*-*|*+*|dev|"") return 0 ;;
+        esac
+        newest=$(printf '%s\n%s\n' "$installed" "$LIDZA_VERSION" | sort -V | tail -1)
+        [ "$newest" = "$LIDZA_VERSION" ] || return 0
+        echo "  lidza $installed is older than $LIDZA_VERSION; replacing"
+        ;;
+      *) echo "  LIDZA_VERSION=$LIDZA_VERSION requested; replacing lidza $installed" ;;
+    esac
+  fi
+  echo "  go install $LIDZA_MODULE/cmd/lidza@$LIDZA_VERSION"
+  if go install "$LIDZA_MODULE/cmd/lidza@$LIDZA_VERSION" 2>/tmp/lidza-install.err; then
     status_lidza
   else
     fail "lidza CLI: go install failed ($(tail -1 /tmp/lidza-install.err))"
-    echo "         the CLI ships in roadmap Phase 1; until then the toolchain above is what you need"
+    echo "         check network access to GitHub, then rerun; the toolchain above is in place"
   fi
   rm -f /tmp/lidza-install.err
 }

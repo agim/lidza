@@ -38,7 +38,7 @@ What it does, skipping anything already present:
 | Node 22 | `~/.local/opt/node-v22.x-<os>-<arch>` | the official tarball; needed by the react, svelte and astro templates |
 | staticcheck, golangci-lint, sqlc | `~/go/bin` | pinned versions; skipped with `--minimal` |
 | wasm-tools | `~/.cargo/bin` | skipped with `--minimal` |
-| `lidza` CLI | `~/go/bin` | `go install github.com/agim/lidza/cmd/lidza@latest` |
+| `lidza` CLI | `~/go/bin` | the release the installer was tested with; `LIDZA_VERSION=<tag>` or `master` overrides; an older release is replaced on rerun |
 | Postgres, Valkey | system services | with `--services`: installed, started, a superuser role named after you |
 
 PATH changes go to `~/.lidza/env`, sourced from `~/.profile`, `~/.bashrc`

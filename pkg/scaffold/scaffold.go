@@ -152,7 +152,8 @@ func New(ctx context.Context, opt Options) error {
 type templateData struct {
 	Name, Module, LidzaDir, Template, Dist, DevCmd, DevURL, Go string
 	// LidzaVersion is the framework version for `go install` in the
-	// Dockerfile: the CLI's own when it is a release, else latest.
+	// Dockerfile and `go get` in go.mod: the release or commit the CLI was
+	// built from, else latest.
 	LidzaVersion string
 	// Recipes is the comma-separated list of recipe names from the guide.
 	Recipes string
@@ -161,21 +162,27 @@ type templateData struct {
 // dataFor builds the template data for an app from its configuration.
 func dataFor(cfg *config.Config, lidzaDir string) templateData {
 	return templateData{
-		Name:     cfg.Name,
-		Module:   Module,
-		LidzaDir: lidzaDir,
-		Template: cfg.Frontend.Template,
-		Dist:     cfg.Frontend.Dist,
-		DevCmd:   cfg.Frontend.Dev,
-		DevURL:   cfg.Frontend.URL,
-		Go:       goMinor(),
-		LidzaVersion: func() string {
-			if v := version.String(); strings.HasPrefix(v, "v") && !strings.Contains(v, "-") {
-				return v
-			}
-			return "latest"
-		}(),
+		Name:         cfg.Name,
+		Module:       Module,
+		LidzaDir:     lidzaDir,
+		Template:     cfg.Frontend.Template,
+		Dist:         cfg.Frontend.Dist,
+		DevCmd:       cfg.Frontend.Dev,
+		DevURL:       cfg.Frontend.URL,
+		Go:           goMinor(),
+		LidzaVersion: moduleVersion(),
 	}
+}
+
+// moduleVersion is the framework version an app created by this CLI
+// depends on: the release or commit the CLI was built from, so the module
+// matches the code the CLI generates; "latest" for a build with no
+// version.
+func moduleVersion() string {
+	if v := version.Module(); v != "" {
+		return v
+	}
+	return "latest"
 }
 
 // RecipesLine lists recipe names for the agent files: the framework's,
@@ -331,7 +338,7 @@ func resolveModule(ctx context.Context, opt Options) error {
 	}
 	var err error
 	if opt.LidzaDir == "" {
-		err = run("get", Module+"@latest")
+		err = run("get", Module+"@"+moduleVersion())
 	}
 	if err == nil {
 		err = run("mod", "tidy")

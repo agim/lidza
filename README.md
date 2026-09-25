@@ -22,8 +22,9 @@ lidza dev
 claude        # or: codex, gemini
 ```
 
-Releases are tags (`CHANGELOG.md`): `go install github.com/agim/lidza/cmd/lidza@v0.1.0`
-installs a specific CLI, and an app's `go.mod` pins the same version.
+Releases are tags (`CHANGELOG.md`): the installer installs the release it
+was tested with, `go install github.com/agim/lidza/cmd/lidza@v0.1.2` a
+specific one, and an app's `go.mod` pins the version of the CLI that created it.
 
 The installer sets up Go, Rust with wasm targets, the helper tools and the
 `lidza` CLI, skipping what you already have. `lidza new` writes `CLAUDE.md`,

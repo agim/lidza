@@ -20,6 +20,7 @@ app is always at one address: http://127.0.0.1:3000.
 ├── schema/          generated Go structs with Validate(). Do not edit.
 ├── db/              generated schema.sql, migrations/, schema.lock.json; queries/*.sql with the db pack
 ├── packs.go         generated from lidza.json "packs". Do not edit.
+├── tools.go         the app's MCP tools (lidza.ToolFunc), served by lidza mcp and /mcp
 ├── packs/<name>/    a pack: pack.lidza.json, rust/ crate, generated pack.go and <name>.wasm
 ├── lidza.json       project config: name, frontend template, dev server, dist
 ├── go.mod           module {{.Name}}, requires {{.Module}}
@@ -72,6 +73,13 @@ app is always at one address: http://127.0.0.1:3000.
 | `lidza_check` | the diagnostics of `lidza check --json` |
 | `lidza_logs` | the last lines of the `lidza dev` output (`lines`, `filter`) |
 | `lidza_config` | `lidza.json` |
+
+The app adds its own tools in `tools.go` with
+`lidza.ToolFunc("name", "what it does", func(ctx, In) (Out, error))`;
+they appear as `app_name` in `lidza mcp` (running inside the app, with
+its packs) and, when the binary runs with `LIDZA_MCP_TOKEN`, at `/mcp`
+for other agents. Give a tool a `schema.lidza` type as `In` and its rules
+are enforced.
 
 While `lidza dev` runs, http://127.0.0.1:3000/llms.txt summarizes the app
 and http://127.0.0.1:3000/llms-full.txt has this guide plus every handler
@@ -266,5 +274,6 @@ guard an outbound dependency with `resilience.New(...)`.
 | `LIDZA_MODE` | `dev` proxies the frontend instead of serving the embedded build | unset (production) |
 | `LIDZA_FRONTEND_URL` | dev server to proxy to; set by `lidza dev` | |
 | `LIDZA_SSR` | `1` starts the Node SSR sidecar from `dist/.server` (react template) | unset |
+| `LIDZA_MCP_TOKEN` | enables `/mcp` (the app's tools over Streamable HTTP) for clients sending it as a bearer token | unset (endpoint off) |
 | `LIDZA_LOG` | log format, `json` or `text` | `text` under `lidza dev` and `lidza test`, else `json` |
 | `LIDZA_LOG_LEVEL` | `debug`, `info`, `warn`, `error` | `info` |

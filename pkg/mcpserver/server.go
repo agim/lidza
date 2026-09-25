@@ -87,6 +87,7 @@ func New(dir string, cfg *config.Config) *server.MCPServer {
 	})
 
 	addPackTools(s, dir, cfg)
+	addAppTools(s, dir, cfg)
 
 	for _, r := range []struct{ name, uri, desc string }{
 		{"llms.txt", "lidza://llms.txt", "Short description of the app for language models: routes, commands, files."},

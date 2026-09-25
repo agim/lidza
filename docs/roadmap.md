@@ -359,6 +359,23 @@ position, so the prerendered HTML carries the marker the client expects
 and React keeps the DOM. The template's e2e test asserts no window
 errors.
 
+### App-defined MCP tools (done 2026-09-25)
+
+`lidza.Tool` and `lidza.ToolFunc(name, description, func(ctx, In) (Out,
+error))`: the app lists its tools in `tools.go` (written by `lidza new`),
+input schemas come from the Go types (`pkg/jsonschema`), inputs that
+implement `Validate` are validated, and handlers run inside the app with
+its packs. `lidza mcp` builds the app, starts it in tool-serving mode
+(`LIDZA_MCP=stdio`) and mirrors its tools as `app_<name>` next to the
+framework's; the running binary serves the same tools at `/mcp`
+(Streamable HTTP) when `LIDZA_MCP_TOKEN` is set, for agents that present
+the token. No child MCP server is needed.
+
 ### Next
 
-App-defined MCP tools.
+Agent-platform work, pending Agim's go: task recipes as MCP prompts and
+Claude skills generated from the app guide; a `lidza://api` resource
+listing the framework's public API; check rules for hand-written `fetch`,
+undeclared imports and handler types outside the schema; `lidza verify`
+with a pre-commit hook; an example app with a snippet tool; platform
+evals.

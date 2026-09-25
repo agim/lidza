@@ -1,0 +1,17 @@
+package main
+
+import "github.com/agim/lidza"
+
+// tools lists the app's MCP tools: functions an agent can call through
+// `lidza mcp` (as app_<name>) and, with LIDZA_MCP_TOKEN set, through the
+// running binary at /mcp. They run inside the app with its packs, so a
+// tool can query the database or enqueue a job. Example:
+//
+//	lidza.ToolFunc("count_posts", "Number of posts.", func(ctx context.Context, _ struct{}) (int, error) {
+//		var n int
+//		err := db.From(ctx).QueryRow(ctx, "SELECT count(*) FROM post").Scan(&n)
+//		return n, err
+//	}),
+func tools() []lidza.Tool {
+	return nil
+}

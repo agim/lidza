@@ -57,6 +57,8 @@ type App struct {
 	// Packs are started in order before OnStart and stopped in reverse
 	// after OnShutdown. packs.go, generated from lidza.json, lists them.
 	Packs []Pack
+	// Tools are the app's MCP tools (see Tool); tools.go lists them.
+	Tools []Tool
 
 	// OnStart runs after the packs and before the listener opens: connect
 	// what the packs do not, warm caches, Provide services. An error
@@ -86,7 +88,13 @@ const (
 //	LIDZA_MODE          "dev" to proxy the frontend instead of serving Dist
 //	LIDZA_FRONTEND_URL  the frontend dev server (dev mode; set by `lidza dev`)
 func Run(app App) {
-	if err := Serve(context.Background(), app); err != nil {
+	var err error
+	if os.Getenv(EnvMCP) == "stdio" {
+		err = serveToolsStdio(context.Background(), app)
+	} else {
+		err = Serve(context.Background(), app)
+	}
+	if err != nil {
 		fmt.Fprintln(os.Stderr, "lidza:", err)
 		os.Exit(1)
 	}
@@ -258,6 +266,9 @@ func handler(app App, services *Services) (http.Handler, *devserver.Sidecar, err
 	ops.Handle("GET "+MetricsPath, tel.Metrics())
 	ops.Handle("GET "+HealthzPath, telemetry.Healthz())
 	ops.Handle("GET "+ReadyzPath, tel.Readyz(readyTimeout))
+	if h := mcpHTTP(app, services); h != nil {
+		ops.Handle(MCPPath, h)
+	}
 	if os.Getenv(devserver.EnvMode) == "dev" {
 		ops.Handle("GET /debug/pprof/", http.HandlerFunc(pprof.Index))
 		ops.Handle("GET /debug/pprof/profile", http.HandlerFunc(pprof.Profile))
@@ -304,7 +315,7 @@ func handler(app App, services *Services) (http.Handler, *devserver.Sidecar, err
 func opsThenFrontend(ops *http.ServeMux, frontend http.Handler, dev bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case r.URL.Path == MetricsPath, r.URL.Path == HealthzPath, r.URL.Path == ReadyzPath,
+		case r.URL.Path == MetricsPath, r.URL.Path == HealthzPath, r.URL.Path == ReadyzPath, r.URL.Path == MCPPath,
 			dev && strings.HasPrefix(r.URL.Path, "/debug/pprof/"):
 			ops.ServeHTTP(w, r)
 		default:

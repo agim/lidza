@@ -125,7 +125,11 @@ The agent loop Līdza is built for:
 ### MCP server
 
 Tools: `lidza_routes`, `lidza_context`, `lidza_check`, `lidza_logs`,
-`lidza_config`; resources `lidza://llms.txt` and `lidza://llms-full.txt`.
+`lidza_config`, `lidza_packs` and one tool per pack capability,
+`lidza_errors` with the analytics pack, and the app's own tools from
+`tools.go` as `app_<name>`; resources `lidza://llms.txt` and
+`lidza://llms-full.txt`. With `LIDZA_MCP_TOKEN` set, the running binary
+serves the app's tools at `/mcp` to agents that send the token.
 While `lidza dev` runs, the same two documents are at
 http://127.0.0.1:3000/llms.txt and `/llms-full.txt`.
 

@@ -112,6 +112,7 @@ func New(ctx context.Context, opt Options) error {
 		{"main.go.tmpl", "main.go"},
 		{"routes.go.tmpl", "routes.go"},
 		{"routes_test.go.tmpl", "routes_test.go"},
+		{"tools.go.tmpl", "tools.go"},
 		{"agent.md.tmpl", "CLAUDE.md"},
 		{"agent.md.tmpl", "AGENTS.md"},
 		{"agent.md.tmpl", "GEMINI.md"},

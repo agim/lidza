@@ -17,6 +17,7 @@ import (
 	"github.com/agim/lidza/pkg/devserver"
 	"github.com/agim/lidza/pkg/middleware"
 	"github.com/agim/lidza/pkg/router"
+	"github.com/agim/lidza/pkg/validate"
 )
 
 func get(t *testing.T, h http.Handler, path string) (int, string) {
@@ -245,6 +246,58 @@ func TestLog(t *testing.T) {
 	t.Setenv(EnvLogLevel, "warn")
 	if l := NewLogger(); l.Enabled(context.Background(), slog.LevelInfo) || !l.Enabled(context.Background(), slog.LevelWarn) {
 		t.Fatal("level")
+	}
+}
+
+type echoIn struct {
+	Text string `json:"text"`
+}
+
+func (e echoIn) Validate() error {
+	var errs validate.Errors
+	if e.Text == "" {
+		errs.Add("text", "required", "required")
+	}
+	return errs.Result()
+}
+
+func TestToolsOverHTTP(t *testing.T) {
+	t.Setenv(devserver.EnvMode, "")
+	t.Setenv(EnvMCPToken, "s3cret")
+	app := App{Tools: []Tool{ToolFunc("echo", "Echoes text.", func(ctx context.Context, in echoIn) (map[string]string, error) {
+		return map[string]string{"echo": in.Text, "clock": Now(ctx).UTC().Format("2006")}, nil
+	})}}
+	h, err := Handler(app)
+	if err != nil {
+		t.Fatal(err)
+	}
+	post := func(token, body string) (int, string) {
+		req := httptest.NewRequest(http.MethodPost, MCPPath, strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json, text/event-stream")
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Code, rec.Body.String()
+	}
+	if code, _ := post("", `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`); code != http.StatusUnauthorized {
+		t.Fatalf("no token: %d", code)
+	}
+	if code, body := post("s3cret", `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`); code != 200 || !strings.Contains(body, `"name":"echo"`) || !strings.Contains(body, `"text":{"type":"string"}`) {
+		t.Fatalf("list: %d %s", code, body)
+	}
+	if _, body := post("s3cret", `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"echo","arguments":{"text":"hi"}}}`); !strings.Contains(body, `\"echo\": \"hi\"`) {
+		t.Fatalf("call: %s", body)
+	}
+	if _, body := post("s3cret", `{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"echo","arguments":{"text":""}}}`); !strings.Contains(body, "required") || !strings.Contains(body, `"isError":true`) {
+		t.Fatalf("validation: %s", body)
+	}
+	t.Setenv(EnvMCPToken, "")
+	h2, _ := Handler(app)
+	if code, _ := get(t, h2, MCPPath); code != 404 {
+		t.Fatalf("without token /mcp should not exist: %d", code)
 	}
 }
 

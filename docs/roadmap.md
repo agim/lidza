@@ -121,20 +121,39 @@ through the proxy where applicable, single binary in production).
 
 ## Phase 4: Packs
 
-- `pack.lidza.json` manifest format; `pkg/pack` parser and validator
-  (manifest vs WASM exports vs Go signatures).
-- `lidza pack add <name>` (official packs) and `lidza pack scaffold <name>`
-  (local packs).
-- Packs auto-register into `lidza mcp` on change.
-- First official packs: `db` (pgx + sqlc / sqlx, `pgxpool`, `lidza db
-  migrate|rollback|status`), `realtime` (coder/websocket, query
-  invalidations pushed to the client), `geo` (geozero + rstar), `media`
-  (image + zune-jpeg).
-- `lidza.Services`: typed service registry (constructors registered once,
-  resolved by type at startup and per request); packs register into it.
+Done 2026-09-25.
 
-Check: `lidza pack scaffold demo`, fill in one Rust function, and the
-capability shows up in the MCP tool list with a matching Go call.
+- ABI (`core/src/abi.rs`, copied into every pack crate): JSON in linear
+  memory, `lidza_alloc`/`lidza_free`, `lidza_export!(name, |In| ->
+  Result<Out, String>)`; errors travel as `{"$error": ...}`.
+- `pkg/engine`: wazero module compiled once, bounded pool of pre-warmed
+  instances, per-call deadline that cuts a runaway call off and replaces
+  its instance, memory cap per instance.
+- `pack.lidza.json` and `pkg/pack`: manifest (capabilities typed by
+  `schema.lidza` types, pool size, timeout, memory), validator (names,
+  types, module exports), generated `packs/<name>/pack.go` (lifecycle plus
+  one typed method per capability) and `packs.go` from `lidza.json`;
+  `lidza pack scaffold` writes a crate with an example capability, `lidza
+  pack build` compiles to `wasm32-wasip1`; `lidza dev` rebuilds a pack when
+  its crate changes, `lidza check` validates manifests against the built
+  module.
+- `lidza.Services`: typed registry filled by packs and `OnStart`, read in
+  handlers with `lidza.Service[T](ctx)` or a pack's `From(ctx)`.
+- `lidza mcp` exposes `lidza_packs` and one callable tool per capability
+  with the input type's JSON Schema, so an agent can run a capability
+  before wiring it.
+- Official packs, `lidza pack add <name>`: `db` (Go: bounded `pgxpool`
+  from `DATABASE_URL`, migrations with an advisory lock, `lidza db
+  migrate|rollback|status`, sqlc configuration and `lidza gen` running
+  `sqlc generate`), `realtime` (Go: WebSocket topics at
+  `/api/v1/realtime`, per-connection buffers, connection cap, Valkey bus
+  for multi-node fan-out), `geo` (Rust: haversine, R-tree nearest,
+  bounding box) and `media` (Rust: image info, resize and re-encode).
+  Rust packs are copied into the app as sources and built there; the
+  first `media` build takes about a minute, later ones seconds.
+
+Check (passes): `lidza pack scaffold demo`, fill in one Rust function, and
+the capability shows up in the MCP tool list with a matching Go call.
 
 ## Phase 5: Scale primitives
 

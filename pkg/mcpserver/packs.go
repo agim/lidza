@@ -90,6 +90,10 @@ func addPackTools(s *server.MCPServer, dir string, cfg *config.Config) {
 		}
 		out := []info{}
 		for _, name := range cfg.Packs {
+			if o, ok := pack.FindOfficial(name); ok && pack.IsOfficialGo(name) {
+				out = append(out, info{Name: name, Description: o.Description + " (Go pack from the framework; no WASM capabilities)", Built: true, Capabilities: []capInfo{}})
+				continue
+			}
 			m, err := pack.Load(dir, name)
 			if err != nil {
 				return mcp.NewToolResultErrorFromErr("pack "+name, err), nil
@@ -109,6 +113,9 @@ func addPackTools(s *server.MCPServer, dir string, cfg *config.Config) {
 		defs = schema.JSONSchema(sch)
 	}
 	for _, name := range cfg.Packs {
+		if pack.IsOfficialGo(name) {
+			continue
+		}
 		m, err := pack.Load(dir, name)
 		if err != nil {
 			continue

@@ -11,6 +11,7 @@ import (
 )
 
 const packUsage = `usage:
+  lidza pack add <name>        enable an official pack: db, realtime, media, geo
   lidza pack scaffold <name>   create packs/<name> with a crate and an example capability
   lidza pack build [name]      compile the crate(s) to WASM
   lidza pack list              show enabled packs, capabilities and build state
@@ -39,6 +40,28 @@ func runPack(ctx context.Context, args []string) error {
 		return errors.New("pack: packs need a lidza.json project")
 	}
 	switch sub {
+	case "add":
+		if name == "" {
+			return errors.New("pack add: name required")
+		}
+		entry, o, err := pack.Add(abs, name)
+		if err != nil {
+			return err
+		}
+		if !slices.Contains(cfg.Packs, entry) {
+			cfg.Packs = append(cfg.Packs, entry)
+			if err := cfg.Save(abs); err != nil {
+				return err
+			}
+		}
+		fmt.Printf("added %s: %s\n", entry, o.Description)
+		if err := generateAll(abs, cfg, os.Stdout); err != nil {
+			return err
+		}
+		for _, n := range o.Notes {
+			fmt.Println("  -", n)
+		}
+		return nil
 	case "scaffold":
 		if name == "" {
 			return errors.New("pack scaffold: name required")
@@ -65,6 +88,9 @@ func runPack(ctx context.Context, args []string) error {
 			names = []string{name}
 		}
 		for _, n := range names {
+			if pack.IsOfficialGo(n) {
+				continue
+			}
 			m, err := pack.Load(abs, n)
 			if err != nil {
 				return err
@@ -80,6 +106,10 @@ func runPack(ctx context.Context, args []string) error {
 			return nil
 		}
 		for _, n := range cfg.Packs {
+			if o, ok := pack.FindOfficial(n); ok && pack.IsOfficialGo(n) {
+				fmt.Printf("%s (Go, from the framework): %s\n", n, o.Description)
+				continue
+			}
 			m, err := pack.Load(abs, n)
 			if err != nil {
 				return err

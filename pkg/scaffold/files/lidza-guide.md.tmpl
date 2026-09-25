@@ -18,7 +18,9 @@ app is always at one address: http://127.0.0.1:3000.
 ├── routes.go        API handlers. Add routes here (or in packages it calls).
 ├── schema.lidza     data shapes: models (tables), types (API shapes), enums
 ├── schema/          generated Go structs with Validate(). Do not edit.
-├── db/              generated schema.sql, migrations/, schema.lock.json
+├── db/              generated schema.sql, migrations/, schema.lock.json; queries/*.sql with the db pack
+├── packs.go         generated from lidza.json "packs". Do not edit.
+├── packs/<name>/    a pack: pack.lidza.json, rust/ crate, generated pack.go and <name>.wasm
 ├── lidza.json       project config: name, frontend template, dev server, dist
 ├── go.mod           module {{.Name}}, requires {{.Module}}
 {{- if .Dist}}
@@ -43,6 +45,9 @@ app is always at one address: http://127.0.0.1:3000.
 | `lidza gen` | `schema.lidza` to `schema/schema.go`, `db/schema.sql`, a migration in `db/migrations` when models changed; handlers to `.lidza/openapi.json` and the client in `.lidza/client`. `lidza dev` runs it on every change. |
 | `lidza context` | writes `.lidza/context.json`: routes, handler signatures, Rust exports. |
 | `lidza mcp` | MCP server on stdio; see "Agent interface". |
+| `lidza pack add <name>` | enables an official pack: `db`, `realtime`, `geo`, `media`. |
+| `lidza pack scaffold <name>` | creates `packs/<name>` with a crate and an example capability; `lidza pack build` compiles it. |
+| `lidza db migrate\|rollback\|status` | applies `db/migrations` (db pack, `DATABASE_URL` from `.env`). |
 | `lidza version` | prints the framework version. |
 | `go test ./...` | Go tests. |
 {{- if .Dist}}
@@ -122,6 +127,29 @@ signature. Both are regenerated after each Go rebuild.
 3. Save. `lidza dev` regenerates `schema/`, rebuilds, and rewrites the client:
    `api.createThing({ title })` now exists. Check with
    `curl -s -X POST http://127.0.0.1:3000/api/v1/things -d '{"title":"x"}'`.
+
+## Packs
+
+A pack is Rust compiled to WASM, run by the app in a bounded pool with a
+deadline per call. `pack.lidza.json` lists its capabilities; each names an
+input and an output type from `schema.lidza`. `lidza gen` writes
+`packs/<name>/pack.go`, so from a handler:
+
+```go
+out, err := geo.From(ctx).GeoDistance(ctx, req.Body)
+```
+
+To add one: `lidza pack scaffold <name>`, put the types in `schema.lidza`,
+write `lidza_export!(capability, |input: In| -> Result<Out, String>)` in
+`packs/<name>/rust/src/lib.rs`, list it in the manifest, run `lidza check`.
+`lidza dev` rebuilds the module when the crate changes. The MCP tool
+`pack_<name>_<capability>` runs a capability directly.
+
+Official Go packs: `db` gives `db.From(ctx)` (a `*pgxpool.Pool`) and typed
+queries from `db/queries/*.sql` via sqlc (`queries.New(db.From(ctx))`);
+`realtime` gives `realtime.From(ctx).Publish(ctx, topic, value)` and the
+endpoint `r.Handle("GET /api/v1/realtime", realtime.Handler())`. Their
+settings come from `.env` (`DATABASE_URL`, `REALTIME_BUS_URL`).
 
 ## Models and migrations
 

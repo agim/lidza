@@ -112,3 +112,37 @@ func TestABIMatchesCore(t *testing.T) {
 		t.Fatal("pkg/pack/files/abi.rs.tmpl differs from core/src/abi.rs; keep them identical")
 	}
 }
+
+func TestOfficialGo(t *testing.T) {
+	root := t.TempDir()
+	os.WriteFile(filepath.Join(root, ".env.example"), []byte("LIDZA_ADDR=127.0.0.1:3000\n"), 0o644)
+	entry, o, err := Add(root, "db")
+	if err != nil || entry != "lidza/db" || o.Rust {
+		t.Fatalf("%q %+v %v", entry, o, err)
+	}
+	for _, f := range []string{"sqlc.yaml", "db/queries/queries.sql"} {
+		if _, err := os.Stat(filepath.Join(root, f)); err != nil {
+			t.Errorf("missing %s", f)
+		}
+	}
+	envx, _ := os.ReadFile(filepath.Join(root, ".env.example"))
+	if !strings.Contains(string(envx), "DATABASE_URL=") {
+		t.Errorf(".env.example: %s", envx)
+	}
+	if _, _, err := Add(root, "db"); err != nil {
+		t.Fatalf("second add: %v", err)
+	}
+	envx, _ = os.ReadFile(filepath.Join(root, ".env.example"))
+	if strings.Count(string(envx), "DATABASE_URL=") != 1 {
+		t.Errorf("env lines duplicated: %s", envx)
+	}
+	if _, _, err := Add(root, "nope"); err == nil || !strings.Contains(err.Error(), "available") {
+		t.Errorf("unknown pack: %v", err)
+	}
+	got := GeneratePacksGo("app", []string{"lidza/db", "lidza/realtime", "local"})
+	for _, want := range []string{`db "github.com/agim/lidza/packs/db"`, `realtime "github.com/agim/lidza/packs/realtime"`, `local "app/packs/local"`, "db.Pack(),", "realtime.Pack(),", "local.Pack(),"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("packs.go missing %q:\n%s", want, got)
+		}
+	}
+}

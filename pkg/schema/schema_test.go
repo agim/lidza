@@ -327,8 +327,16 @@ func TestGenerateTSAndJSONSchema(t *testing.T) {
 }
 
 func TestGenerateRust(t *testing.T) {
-	s, _ := Parse(example)
+	s, _ := Parse(example + "\ntype Blob {\n  data bytes\n  thumb bytes?\n}\n")
 	rs := GenerateRust(s)
+	for _, want := range []string{"mod b64 {", "#[serde(with = \"b64\")]\n    pub data: Vec<u8>,", "#[serde(with = \"b64opt\", default)]\n    pub thumb: Option<Vec<u8>>,"} {
+		if !strings.Contains(rs, want) {
+			t.Errorf("Rust missing %q\n%s", want, rs)
+		}
+	}
+	if strings.Contains(GenerateRust(mustParse(example)), "mod b64") {
+		t.Error("b64 helpers emitted without bytes fields")
+	}
 	for _, want := range []string{
 		"pub enum Status {", `#[serde(rename = "draft")]`, "    Draft,",
 		"pub struct Post {", `#[serde(rename = "authorId")]`, "pub author_id: String,",
@@ -350,4 +358,12 @@ func TestNames(t *testing.T) {
 	if snake("createdAt") != "created_at" || snake("id") != "id" {
 		t.Error("snake")
 	}
+}
+
+func mustParse(src string) *Schema {
+	s, err := Parse(src)
+	if err != nil {
+		panic(err)
+	}
+	return s
 }

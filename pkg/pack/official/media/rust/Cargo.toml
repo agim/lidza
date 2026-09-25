@@ -1,5 +1,5 @@
 [package]
-name = "<<.Name>>"
+name = "media"
 version = "0.1.0"
 edition = "2024"
 publish = false
@@ -9,9 +9,10 @@ crate-type = ["cdylib"]
 
 [dependencies]
 base64 = "0.22"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp", "gif", "bmp"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 [profile.release]
-opt-level = "s"
+opt-level = 3
 lto = true

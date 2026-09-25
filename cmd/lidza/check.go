@@ -95,6 +95,12 @@ func packDiagnostics(ctx context.Context, dir string, cfg *config.Config) []diag
 	var out []diag.Diagnostic
 	s, _ := schema.Load(dir)
 	for _, name := range cfg.Packs {
+		if pack.IsOfficialGo(name) {
+			if _, ok := pack.FindOfficial(name); !ok {
+				out = append(out, diag.Diagnostic{Layer: "pack", Tool: "lidza", Severity: "error", File: "lidza.json", Message: "unknown official pack " + name})
+			}
+			continue
+		}
 		m, err := pack.Load(dir, name)
 		if err != nil {
 			out = append(out, diag.Diagnostic{Layer: "pack", Tool: "lidza", Severity: "error", File: filepath.ToSlash(filepath.Join(pack.Dir, name, pack.ManifestFile)), Message: err.Error()})

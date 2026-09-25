@@ -1,0 +1,27 @@
+{
+  "name": "media",
+  "version": "0.1.0",
+  "description": "Image processing in Rust: dimensions and format, resize with format conversion.",
+  "rust": {
+    "dir": "rust",
+    "memory_mb": 256,
+    "instances": 2,
+    "timeout_ms": 10000
+  },
+  "capabilities": [
+    {
+      "name": "image_info",
+      "description": "Reads an image's width, height and format without decoding pixels.",
+      "input": "ImageInfoInput",
+      "output": "ImageInfo",
+      "rules": "data is the image file, base64 encoded. Formats: jpeg, png, webp, gif, bmp."
+    },
+    {
+      "name": "image_resize",
+      "description": "Resizes an image to fit within width and height (aspect ratio kept; one of them may be omitted) and encodes it as jpeg, png or webp.",
+      "input": "ImageResizeInput",
+      "output": "ImageResult",
+      "rules": "Give width, height or both; the image is scaled to fit inside. format defaults to the input format when it is jpeg, png or webp, else jpeg. quality (1-100) applies to jpeg only."
+    }
+  ]
+}

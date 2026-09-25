@@ -1,0 +1,33 @@
+{
+  "name": "geo",
+  "version": "0.1.0",
+  "description": "Geospatial in Rust: haversine distance, nearest neighbours (R-tree), bounding boxes.",
+  "rust": {
+    "dir": "rust",
+    "memory_mb": 128,
+    "instances": 4,
+    "timeout_ms": 5000
+  },
+  "capabilities": [
+    {
+      "name": "geo_distance",
+      "description": "Great-circle distance in meters between two WGS84 points (haversine).",
+      "input": "GeoDistanceInput",
+      "output": "GeoDistance",
+      "rules": "lat in [-90, 90], lng in [-180, 180], decimal degrees."
+    },
+    {
+      "name": "geo_nearest",
+      "description": "The nearest points to a location, closest first, with distances in meters. Builds an R-tree over the given points.",
+      "input": "GeoNearestInput",
+      "output": "GeoNearest",
+      "rules": "Send the candidate points in the request; limit caps the result (default 10)."
+    },
+    {
+      "name": "geo_bbox",
+      "description": "The bounding box of a set of points.",
+      "input": "GeoBboxInput",
+      "output": "GeoBbox"
+    }
+  ]
+}

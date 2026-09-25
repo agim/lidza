@@ -1,0 +1,41 @@
+type GeoPoint {
+  id  string?
+  lat float @min(-90) @max(90)
+  lng float @min(-180) @max(180)
+}
+
+type GeoDistanceInput {
+  from GeoPoint
+  to   GeoPoint
+}
+
+type GeoDistance {
+  meters float
+}
+
+type GeoNearestInput {
+  points GeoPoint[] @min(1)
+  to     GeoPoint
+  limit  int? @min(1) @max(1000)
+}
+
+type GeoNeighbor {
+  point  GeoPoint
+  meters float
+}
+
+type GeoNearest {
+  points GeoNeighbor[]
+}
+
+type GeoBboxInput {
+  points GeoPoint[] @min(1)
+}
+
+type GeoBbox {
+  minLat float
+  minLng float
+  maxLat float
+  maxLng float
+  count  int
+}

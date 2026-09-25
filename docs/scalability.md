@@ -82,13 +82,13 @@ Apply to every Go package, Rust module, pack and template, now.
 | Owned goroutines, contexts on every command | Phase 1 and 2 (`diag`, `devserver`) |
 | Middleware pipeline: timeouts, body limits, request ids | in force since Phase 3 (`pkg/middleware`) |
 | Sessions as tokens or Valkey rows | Phase 6 (`auth` pack) |
-| `pgxpool` bounds, generated queries | Phase 4 (`db` pack) |
-| Bounded wazero pool with per-call deadlines | Phase 5 |
+| `pgxpool` bounds, generated queries | in force since Phase 4 (`db` pack) |
+| Bounded wazero pool with per-call deadlines | in force since Phase 4 (`pkg/engine`) |
 | `/metrics`, `/healthz`, `/readyz` | Phase 5 |
 | Rate limiting, circuit breakers | Phase 5 |
 | `lidza check` rules for global state and unbounded goroutines | Phase 5 |
 | `lidza benchmark`, flat-memory gate | Phase 5 |
-| Valkey pub/sub fan-out for WebSockets | Phase 4 (`realtime` pack) |
+| Valkey pub/sub fan-out for WebSockets | in force since Phase 4 (`realtime` pack, `REALTIME_BUS_URL`) |
 | Queue-backed background work | Phase 6 (`jobs` pack) |
 
 ## Capacity reference

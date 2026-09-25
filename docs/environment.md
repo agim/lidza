@@ -141,18 +141,22 @@ lidza/
 │   ├── config/       lidza.json
 │   ├── devserver/    reverse proxy, static SPA server, hot-reload coordinator
 │   ├── diag/         `lidza check`: go vet, staticcheck, cargo check, tsc, svelte-check
+│   ├── engine/       wazero host: compiled module, bounded instance pool, JSON calls
 │   ├── env/          typed configuration from .env files and the environment
 │   ├── inspect/      routes and typed operations via go/ast and go/packages, OpenAPI, llms.txt
 │   ├── mcpserver/    `lidza mcp`
 │   ├── middleware/   request id, log, recovery, timeout, body limit, CORS, secure headers
+│   ├── pack/         pack manifests, validator, generators, scaffold, build, official pack sources
 │   ├── router/       control plane: HTTP router, typed Route[In, Out], /api/v1/health
 │   ├── scaffold/     `lidza new`: template copy plus generated Go and agent files
 │   ├── schema/       schema.lidza parser and generators (Go, SQL, migrations, Rust, JSON Schema)
 │   ├── sdk/          @lidza/client generator (TypeScript)
 │   ├── validate/     rule helpers and the 422 error shape
-│   ├── version/      build version
-│   └── engine/       (Phase 4) binder to the Rust core (wazero)
-├── core/             Rust crate `lidza-core` (Cargo.toml, rust-toolchain.toml, src/)
+│   └── version/      build version
+├── packs/
+│   ├── db/           official Go pack: pgxpool, migrations
+│   └── realtime/     official Go pack: WebSocket topics, Valkey bus
+├── core/             Rust crate `lidza-core`: the WASM ABI (src/abi.rs)
 ├── templates/
 │   ├── embed.go      embeds the template directories into the CLI
 │   ├── react/        default: Vite + React + TypeScript, TanStack Router and Query
@@ -161,16 +165,18 @@ lidza/
 │   └── htmx/         Go html/template views, htmx vendored, no JS toolchain
 ├── docs/
 ├── install.sh
-├── go.mod            dependencies: mark3labs/mcp-go, golang.org/x/tools
+├── go.mod            dependencies: mcp-go, x/tools, wazero, pgx, coder/websocket, valkey-go
 └── README.md
 ```
 
 An app created by `lidza new` is a separate Go module that requires
 `github.com/agim/lidza`: `main.go` embeds `dist/` and calls `lidza.Run`,
-`routes.go` registers `/api` handlers, and the frontend lives at the app
-root (`package.json`, `src/`). `lidza dev` builds that module into
-`.lidza/app` and runs it with `LIDZA_MODE=dev`, so dev and production run
-the same binary.
+`routes.go` registers `/api` handlers, `packs.go` (generated) lists the
+packs, and the frontend lives at the app root (`package.json`, `src/`).
+Packs live under `packs/<name>` with their Rust crate and built module;
+official Go packs are imported from this repo. `lidza dev` builds that
+module into `.lidza/app` and runs it with `LIDZA_MODE=dev`, so dev and
+production run the same binary.
 
 ## Frontend
 

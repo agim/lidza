@@ -1,0 +1,24 @@
+type ImageInfoInput {
+  data bytes
+}
+
+type ImageInfo {
+  width  int
+  height int
+  format string
+}
+
+type ImageResizeInput {
+  data    bytes
+  width   int?    @min(1) @max(16384)
+  height  int?    @min(1) @max(16384)
+  format  string? @pattern("jpeg|png|webp")
+  quality int?    @min(1) @max(100)
+}
+
+type ImageResult {
+  data   bytes
+  width  int
+  height int
+  format string
+}

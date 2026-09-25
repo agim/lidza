@@ -70,7 +70,30 @@ func generatePacks(ctx context.Context, dir string, cfg *config.Config, out io.W
 			fmt.Fprintf(out, "[lidza] go mod tidy: %v\n%s", err, res)
 		}
 	}
-	return pack.BuildStale(ctx, dir, cfg.Packs, out)
+	if err := pack.BuildStale(ctx, dir, cfg.Packs, out); err != nil {
+		return err
+	}
+	return generateQueries(ctx, dir, out)
+}
+
+// generateQueries runs sqlc when the project has sqlc.yaml and a schema.
+func generateQueries(ctx context.Context, dir string, out io.Writer) error {
+	if _, err := os.Stat(filepath.Join(dir, pack.SQLCFile)); err != nil {
+		return nil
+	}
+	if _, err := os.Stat(filepath.Join(dir, schema.SQLFile)); err != nil {
+		return nil
+	}
+	if _, err := exec.LookPath("sqlc"); err != nil {
+		fmt.Fprintln(out, "[lidza] sqlc is not installed; db/queries not generated (run install.sh)")
+		return nil
+	}
+	cmd := exec.CommandContext(ctx, "sqlc", "generate")
+	cmd.Dir = dir
+	if res, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("sqlc generate: %v\n%s", err, res)
+	}
+	return nil
 }
 
 // generateSchema turns schema.lidza into the Go package, the SQL schema, a

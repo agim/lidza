@@ -79,11 +79,16 @@ func GeneratePacksGo(module string, names []string) string {
 	}
 	b.WriteString("import (\n\t\"github.com/agim/lidza\"\n\n")
 	for _, n := range names {
+		if IsOfficialGo(n) {
+			base := strings.TrimPrefix(n, OfficialPrefix)
+			fmt.Fprintf(&b, "\t%s \"github.com/agim/lidza/packs/%s\"\n", base, base)
+			continue
+		}
 		fmt.Fprintf(&b, "\t%s \"%s/%s/%s\"\n", n, module, Dir, n)
 	}
 	b.WriteString(")\n\n// packs lists the packs lidza.json enables, started in this order.\nfunc packs() []lidza.Pack {\n\treturn []lidza.Pack{\n")
 	for _, n := range names {
-		fmt.Fprintf(&b, "\t\t%s.Pack(),\n", n)
+		fmt.Fprintf(&b, "\t\t%s.Pack(),\n", strings.TrimPrefix(n, OfficialPrefix))
 	}
 	b.WriteString("\t}\n}\n")
 	return b.String()
@@ -109,6 +114,9 @@ func Generate(root, module string, names []string, s *schema.Schema) ([]string, 
 		return nil, err
 	}
 	for _, name := range names {
+		if IsOfficialGo(name) {
+			continue
+		}
 		m, err := Load(root, name)
 		if err != nil {
 			return nil, err

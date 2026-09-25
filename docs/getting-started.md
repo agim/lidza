@@ -142,6 +142,20 @@ args = ["mcp"]
 
 To add it to Claude Code by hand: `claude mcp add lidza -- lidza mcp`.
 
+## Packs
+
+Packs add capabilities: official ones with `lidza pack add <name>` (`db`,
+`realtime`, `geo`, `media`), your own with `lidza pack scaffold <name>`.
+A pack is a Rust crate compiled to WASM and run by the Go binary in a
+bounded pool; its manifest `pack.lidza.json` names each capability with
+input and output types from `schema.lidza`, and `lidza gen` writes the Go
+wrapper (`packs/<name>/pack.go`) so a handler calls
+`geo.From(ctx).GeoDistance(ctx, in)`. Go packs (`db`, `realtime`) are
+imported from the framework. `lidza mcp` exposes every capability as a
+tool, so an agent can try one before wiring it. The first build of a pack
+downloads and compiles its crates (about a minute for `media`); later
+builds take seconds.
+
 ## Local services
 
 The first app runs without a database. When you need one:
@@ -151,8 +165,9 @@ docker run -d --name lidza-pg -e POSTGRES_PASSWORD=lidza -p 5432:5432 postgres:1
 docker run -d --name lidza-redis -p 6379:6379 redis:7
 ```
 
-`lidza.json` holds the connection settings; `install.sh --check` reports
-whether both are reachable.
+`DATABASE_URL` and `REALTIME_BUS_URL` go in `.env` (see `.env.example`
+after `lidza pack add`); `install.sh --check` reports whether both services
+are reachable.
 
 ## Troubleshooting
 

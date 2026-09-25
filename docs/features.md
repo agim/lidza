@@ -17,15 +17,15 @@ does not reimplement).
 | Application lifecycle hooks (server) | done | `lidza.App.OnStart`, `OnReady`, `OnShutdown` |
 | HTTP middleware pipeline | done | `pkg/middleware`; request id, log, recovery and deadline on every API route; `router.Use`, `App.Middleware` |
 | CORS | done | `middleware.CORS`; off by default, same-origin is the normal case |
-| Built-in vulnerability shields | done (headers) / phase 4 (SQL) / phase 6 (CSRF) | secure headers on every response, CSP and HSTS opt-in; body limits; SQL injection prevented by parameterized queries only (`sqlc`, `pgx`); XSS by template escaping plus CSP; CSRF tokens arrive with cookie sessions |
+| Built-in vulnerability shields | done (headers, SQL) / phase 6 (CSRF) | secure headers on every response, CSP and HSTS opt-in; body limits; SQL injection prevented by parameterized queries only (`sqlc`, `pgx`); XSS by template escaping plus CSP; CSRF tokens arrive with cookie sessions |
 | Environment configuration injection | done | `pkg/env`: typed struct from `.env`, `.env.<mode>` and the environment; secrets never in `lidza.json` |
 | Form validation | done (server) / phase 7 (client) | rules in `schema.lidza`; generated `Validate()` runs before every typed handler, 422 with field errors the client exposes as `ApiError.fields`; client-side validators from the same rules later |
 | Automatic error boundaries | done | React error boundary in the template; Go panic recovery returning a JSON error |
-| Database schema migrations | done (generate) / phase 4 (apply) | `lidza gen` diffs `schema.lidza` against `db/schema.lock.json` into numbered up/down scripts; `lidza db migrate`, `rollback`, `status` in the `db` pack |
-| Database connection pooling | phase 4 | `pgxpool` in the `db` pack, bounded by config; `/readyz` reports pool health |
-| Object-relational mapping | phase 4 | `sqlc` in the `db` pack: SQL in `.sql` files, generated typed Go functions and structs; see "Decisions" |
-| Dependency injection | phase 4 | `lidza.Services`: typed constructors registered once, resolved by type at startup and per request; packs register their services. Explicit, no reflection scanning |
-| Data binding | phase 4 / phase 7 | server pushes invalidations over the `realtime` pack; TanStack Query refetches; a `useLive` hook in the template |
+| Database schema migrations | done | `lidza gen` diffs `schema.lidza` against `db/schema.lock.json` into numbered up/down scripts; `lidza db migrate`, `rollback`, `status` apply them under an advisory lock |
+| Database connection pooling | done | `pgxpool` in the `db` pack, bounded by `DB_MAX_CONNS`; `/readyz` reports pool health in phase 5 |
+| Object-relational mapping | done | `sqlc` via the `db` pack: SQL in `db/queries/*.sql`, `lidza gen` writes typed Go; see "Decisions" |
+| Dependency injection | done | `lidza.Services`: packs and `OnStart` provide values by type, handlers read them with `lidza.Service[T](ctx)`; explicit, no scanning |
+| Data binding | done (server) / phase 7 (client hook) | handlers publish over the `realtime` pack; a `useLive` hook in the template refetches on messages later |
 | Session management and token auth | phase 6 | `auth` pack: PASETO or JWT, refresh, Valkey-backed sessions, `lidza auth` commands |
 | Job queues and background workers | phase 6 | `jobs` pack on River (Postgres-backed); Rust workers for compute |
 | Localization | phase 6 | `i18n` pack: `Accept-Language` negotiation, message catalogs, `golang.org/x/text` for dates, numbers, currencies; template hook for the frontend |

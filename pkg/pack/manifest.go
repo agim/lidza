@@ -168,10 +168,14 @@ func (m *Manifest) Validate(s *schema.Schema, exports []string) []Problem {
 	return out
 }
 
-// List returns the manifests of the packs lidza.json enables, in order.
+// List returns the manifests of the local packs lidza.json enables, in
+// order; official Go packs have none.
 func List(root string, names []string) ([]*Manifest, error) {
 	var out []*Manifest
 	for _, name := range names {
+		if IsOfficialGo(name) {
+			continue
+		}
 		m, err := Load(root, name)
 		if err != nil {
 			return nil, err

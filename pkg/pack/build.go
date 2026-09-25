@@ -69,6 +69,9 @@ func Build(ctx context.Context, root string, m *Manifest, out io.Writer) error {
 // BuildStale builds every enabled pack whose module is missing or stale.
 func BuildStale(ctx context.Context, root string, names []string, out io.Writer) error {
 	for _, name := range names {
+		if IsOfficialGo(name) {
+			continue
+		}
 		m, err := Load(root, name)
 		if err != nil {
 			return err

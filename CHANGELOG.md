@@ -6,6 +6,18 @@ version in `go.mod`. `install.sh` pins the newest release here;
 `scripts/release.sh vX.Y.Z` turns "Unreleased" into a release, bumps the
 pin, tags and pushes.
 
+## Unreleased
+
+- TLS without a proxy: `LIDZA_TLS_DOMAINS=app.example.com` makes the
+  binary serve HTTPS on 443 with Let's Encrypt certificates
+  (`golang.org/x/crypto/acme/autocert`), renewed on their own, and
+  redirect 80. Certificates are stored in Postgres through the db pack
+  (`tls_certificate`, shared by every node) or, for one node,
+  `LIDZA_TLS_CACHE_DIR`. `APP_URL` and `AUTH_COOKIE_SECURE` follow from
+  the domain unless set. `lidza doctor` checks the DNS record, the ports
+  and the right to bind them; the systemd unit grants
+  `CAP_NET_BIND_SERVICE`; `docs/deploy.md` has the section.
+
 ## v0.1.6 (2026-09-25)
 
 - `llm` pack: language models behind one `Chat`, `Stream`, `Embed`,

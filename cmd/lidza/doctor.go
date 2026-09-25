@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/agim/lidza/pkg/env"
 	"github.com/agim/lidza/pkg/pack"
 )
 
@@ -105,6 +106,7 @@ func runDoctor(ctx context.Context, args []string) error {
 				ok("pack " + name + " built")
 			}
 		}
+		doctorTLS(ctx, abs, cfg.Name, ok, todo, note)
 		if _, err := os.Stat(filepath.Join(abs, "playwright.config.ts")); err == nil {
 			exe, err := browserPath(ctx, abs)
 			switch {
@@ -122,6 +124,55 @@ func runDoctor(ctx context.Context, args []string) error {
 	}
 	fmt.Println("everything in place")
 	return nil
+}
+
+// doctorTLS checks what serving LIDZA_TLS_DOMAINS from .env needs: a DNS
+// record per domain, ports 80 and 443 free, and the right to bind them.
+func doctorTLS(ctx context.Context, dir, app string, ok func(string), todo func(string, string), note func(string)) {
+	var cfg struct {
+		Domains  string `env:"LIDZA_TLS_DOMAINS"`
+		Addr     string `env:"LIDZA_TLS_ADDR" default:":443"`
+		HTTPAddr string `env:"LIDZA_TLS_HTTP_ADDR" default:":80"`
+	}
+	if err := env.Load(dir, &cfg); err != nil || strings.TrimSpace(cfg.Domains) == "" {
+		return
+	}
+	fmt.Println("TLS (LIDZA_TLS_DOMAINS):")
+	var local []string
+	if addrs, err := net.InterfaceAddrs(); err == nil {
+		for _, a := range addrs {
+			if ipn, ok := a.(*net.IPNet); ok && !ipn.IP.IsLoopback() && !ipn.IP.IsLinkLocalUnicast() {
+				local = append(local, ipn.IP.String())
+			}
+		}
+	}
+	for _, d := range strings.Split(cfg.Domains, ",") {
+		d = strings.TrimSpace(d)
+		if d == "" {
+			continue
+		}
+		rctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		ips, err := net.DefaultResolver.LookupHost(rctx, d)
+		cancel()
+		if err != nil || len(ips) == 0 {
+			todo("no DNS record for "+d, "create an A (and AAAA) record for "+d+" pointing at this server's public address; this machine has "+strings.Join(local, ", "))
+			continue
+		}
+		ok(d + " resolves to " + strings.Join(ips, ", ") + " (this machine: " + strings.Join(local, ", ") + ")")
+	}
+	for _, p := range []struct{ name, addr string }{{"HTTPS", cfg.Addr}, {"HTTP", cfg.HTTPAddr}} {
+		ln, err := net.Listen("tcp", p.addr)
+		switch {
+		case err == nil:
+			ln.Close()
+			ok(p.name + " port " + p.addr + " free")
+		case strings.Contains(err.Error(), "permission denied"):
+			note(p.name + " port " + p.addr + ": this user may not bind it; the binary needs root or CAP_NET_BIND_SERVICE (deploy/" + app + ".service grants it; by hand: sudo setcap 'cap_net_bind_service=+ep' bin/" + app + ")")
+		default:
+			note(p.name + " port " + p.addr + " in use (the app itself, or another server that must go)")
+		}
+	}
+	note("open ports 80 and 443 in the firewall; certificates are stored in Postgres (db pack) or LIDZA_TLS_CACHE_DIR")
 }
 
 // browserPath asks the app's Playwright where its Chromium build lives.

@@ -12,6 +12,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"golang.org/x/crypto/acme/autocert"
 
 	"github.com/agim/lidza"
 	"github.com/agim/lidza/pkg/env"
@@ -72,6 +73,8 @@ func (d *DB) Start(ctx context.Context, s *lidza.Services) error {
 	}
 	lidza.Provide(s, d)
 	lidza.Provide(s, pool)
+	// TLS certificates for LIDZA_TLS_DOMAINS, shared by every node.
+	lidza.Provide[autocert.Cache](s, NewCertCache(pool))
 	return nil
 }
 

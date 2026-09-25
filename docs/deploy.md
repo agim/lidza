@@ -69,9 +69,47 @@ lose data or fail on existing rows).
 - **Shutdown**: SIGTERM drains in-flight requests up to the request
   timeout, then stops the packs (jobs finish their current run).
 
+## TLS without a proxy
+
+Set `LIDZA_TLS_DOMAINS` and the binary serves HTTPS itself:
+
+```
+LIDZA_TLS_DOMAINS=app.example.com,www.app.example.com
+LIDZA_TLS_EMAIL=ops@example.com
+```
+
+It listens on 443 with certificates from Let's Encrypt, obtained on the
+first request for each domain and renewed before they expire
+(`golang.org/x/crypto/acme/autocert`; no vendor SDK), answers 80 only
+to redirect to HTTPS and to prove ownership of the domain, and derives
+`APP_URL` (links in emails) and `AUTH_COOKIE_SECURE=true` unless they are
+set. `LIDZA_ADDR` is ignored.
+
+Certificates and the ACME account key are stored in Postgres through
+the db pack, in the `tls_certificate` table the framework creates on
+first use, so every node of the app serves the same certificates and
+any node can renew them. A single node without the db pack sets
+`LIDZA_TLS_CACHE_DIR=/opt/<name>/certs` instead.
+
+What the server needs, and what `lidza doctor` checks in the project:
+
+- **DNS**: an A record (and AAAA for IPv6) for every domain in the list
+  pointing at the server's public address. Let's Encrypt connects to it
+  on port 80 to validate; a domain that does not resolve to this server
+  cannot get a certificate.
+- **Ports 80 and 443 open** in the firewall and free on the machine.
+- **The right to bind them**: `deploy/<name>.service` grants
+  `CAP_NET_BIND_SERVICE` to the unprivileged user; by hand, `sudo setcap
+  'cap_net_bind_service=+ep' bin/<name>`. In a container, publish 80 and
+  443.
+- **Rate limits**: Let's Encrypt issues a bounded number of certificates
+  per domain per week; rehearse against its staging directory with
+  `LIDZA_TLS_DIRECTORY=https://acme-staging-v02.api.letsencrypt.org/directory`
+  (the browser will distrust those certificates, which is the point).
+
 ## In front of it
 
-Terminate TLS in a reverse proxy (Caddy, nginx, a load balancer) and
+Or terminate TLS in a reverse proxy (Caddy, nginx, a load balancer) and
 forward `Host`, `X-Forwarded-For` and `X-Forwarded-Proto`. The rate
 limiters key on the client address by default; behind a proxy, key on
 the forwarded address (`middleware.RateLimitOptions.Key`,

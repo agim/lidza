@@ -4,7 +4,10 @@
 #   sudo useradd --system --home /opt/{{.Name}} --shell /usr/sbin/nologin {{.Name}}
 #   sudo cp deploy/{{.Name}}.service /etc/systemd/system/
 #   sudo systemctl daemon-reload && sudo systemctl enable --now {{.Name}}
-# Put a TLS-terminating reverse proxy in front (docs/lidza-guide.md, "Deployment").
+# TLS: set LIDZA_TLS_DOMAINS in .env and the binary serves 443 itself with
+# Let's Encrypt certificates (the capability below lets it bind 80 and 443),
+# or put a TLS-terminating reverse proxy in front (docs/lidza-guide.md,
+# "Deployment").
 [Unit]
 Description={{.Name}} (Līdza app)
 After=network-online.target postgresql.service
@@ -20,6 +23,8 @@ Restart=always
 RestartSec=2
 # Hardening: the app writes nothing but logs to stdout.
 NoNewPrivileges=true
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true

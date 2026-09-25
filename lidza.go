@@ -87,6 +87,10 @@ const (
 //	LIDZA_ADDR          listen address, default 127.0.0.1:3000
 //	LIDZA_MODE          "dev" to proxy the frontend instead of serving Dist
 //	LIDZA_FRONTEND_URL  the frontend dev server (dev mode; set by `lidza dev`)
+//	LIDZA_TLS_DOMAINS   serve HTTPS on :443 for these domains with Let's
+//	                    Encrypt certificates (stored in Postgres through the
+//	                    db pack), redirect :80; APP_URL and AUTH_COOKIE_SECURE
+//	                    follow unless set (see tls.go)
 func Run(app App) {
 	var err error
 	if os.Getenv(EnvMCP) == "stdio" {
@@ -180,9 +184,19 @@ func Serve(ctx context.Context, app App) error {
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	tlsCfg, err := tlsFromEnv()
+	if err != nil {
+		return err
+	}
+	if tlsCfg != nil {
+		tlsCfg.deriveEnv()
+	}
 	booted, err := Boot(ctx, app)
 	if err != nil {
 		return err
+	}
+	if tlsCfg != nil {
+		return serveTLS(ctx, booted, tlsCfg, name(app), app.OnReady, log)
 	}
 	h := booted.Handler
 	addr := envOr(devserver.EnvAddr, "127.0.0.1:3000")

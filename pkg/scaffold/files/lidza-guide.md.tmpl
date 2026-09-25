@@ -787,18 +787,28 @@ runtime (except `LIDZA_SSR=1`). `Dockerfile` builds the same into an
 image that runs as a non-root user on port 3000; `deploy/{{.Name}}.service`
 runs the binary under systemd from `/opt/{{.Name}}` (install commands in
 its header). Migrations ship as files in `db/`: apply them with `lidza db
-migrate` in the deploy step or `DB_MIGRATE=true` at start. Put a
-TLS-terminating proxy in front, forward `X-Forwarded-For`, point the
-orchestrator at `/healthz` and `/readyz`, scrape `/metrics`. Production
-settings: `LIDZA_MODE` unset, `LIDZA_LOG=json`, `AUTH_COOKIE_SECURE=true`,
-`AUTH_SECRET` the same on every node. The framework's `docs/deploy.md`
-has the details.
+migrate` in the deploy step or `DB_MIGRATE=true` at start. TLS: set
+`LIDZA_TLS_DOMAINS=app.example.com` and the binary serves HTTPS on 443
+itself with Let's Encrypt certificates, renewed on its own and stored
+in Postgres through the db pack so every node shares them, and
+redirects 80; `APP_URL` and `AUTH_COOKIE_SECURE` follow from it. Needs
+a DNS record for the domain and ports 80 and 443 open (`lidza doctor`
+checks both). Or put a TLS-terminating proxy in front and forward
+`X-Forwarded-For`. Point the orchestrator at `/healthz` and `/readyz`,
+scrape `/metrics`. Production settings: `LIDZA_MODE` unset,
+`LIDZA_LOG=json`, `AUTH_SECRET` the same on every node. The framework's
+`docs/deploy.md` has the details.
 
 ## Environment the binary reads
 
 | Variable | Meaning | Default |
 |---|---|---|
-| `LIDZA_ADDR` | listen address | `127.0.0.1:3000` |
+| `LIDZA_ADDR` | listen address (ignored when TLS is on) | `127.0.0.1:3000` |
+| `LIDZA_TLS_DOMAINS` | domains to serve over HTTPS with Let's Encrypt certificates; the first is the public name (`APP_URL` when unset; `AUTH_COOKIE_SECURE` becomes true) | unset (plain HTTP) |
+| `LIDZA_TLS_EMAIL` | ACME account contact | unset |
+| `LIDZA_TLS_ADDR`, `LIDZA_TLS_HTTP_ADDR` | the HTTPS and HTTP (redirect) listen addresses | `:443`, `:80` |
+| `LIDZA_TLS_CACHE_DIR` | certificate store on disk for a single node without the db pack | unset (Postgres through the db pack) |
+| `LIDZA_TLS_DIRECTORY` | ACME directory URL (Let's Encrypt staging for a rehearsal) | Let's Encrypt |
 | `LIDZA_MODE` | `dev` proxies the frontend instead of serving the embedded build | unset (production) |
 | `LIDZA_FRONTEND_URL` | dev server to proxy to; set by `lidza dev` | |
 | `LIDZA_SSR` | `1` starts the Node SSR sidecar from `dist/.server` (react template) | unset |

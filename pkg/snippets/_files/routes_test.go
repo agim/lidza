@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/agim/lidza/packs/llm"
 	"github.com/agim/lidza/packs/mail"
+	"github.com/agim/lidza/packs/storage"
 	"github.com/agim/lidza/pkg/lidzatest"
 
 	"notes/schema"
@@ -113,6 +115,28 @@ func TestNotes(t *testing.T) {
 		t.Fatalf("stats: %d %+v", res.StatusCode, st)
 	}
 
+	// An attachment: uploaded raw, read back with its type, gone with the
+	// note. The local provider keeps it under .lidza/test-storage.
+	upload, _ := http.NewRequest(http.MethodPut, srv.URL+"/api/v1/notes/"+note.ID+"/attachment", strings.NewReader("attached bytes"))
+	upload.Header.Set("Content-Type", "text/plain")
+	upload.Header.Set("Sec-Fetch-Site", "same-origin")
+	if res, err := srv.Client().Do(upload); err != nil || res.StatusCode != http.StatusCreated {
+		t.Fatalf("upload: %v %v", err, res)
+	}
+	download, _ := http.NewRequest(http.MethodGet, srv.URL+"/api/v1/notes/"+note.ID+"/attachment", nil)
+	res, err := srv.Client().Do(download)
+	if err != nil {
+		t.Fatal(err)
+	}
+	attached, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if res.StatusCode != http.StatusOK || string(attached) != "attached bytes" || res.Header.Get("Content-Type") != "text/plain" {
+		t.Fatalf("download: %d %q %s", res.StatusCode, attached, res.Header.Get("Content-Type"))
+	}
+	if res := srv.JSON(t, http.MethodGet, "/api/v1/notes/00000000-0000-0000-0000-000000000000/attachment", nil, nil); res.StatusCode != http.StatusNotFound {
+		t.Fatalf("another note's attachment: %d", res.StatusCode)
+	}
+
 	// Tag suggestions come from the llm pack; .env.test makes it the fake,
 	// scripted here, so the test checks the prompt and the validation.
 	fake := llm.From(srv.Context()).Fake()
@@ -127,6 +151,14 @@ func TestNotes(t *testing.T) {
 	fake.ReplyJSON(schema.NoteTags{})
 	if res := srv.JSON(t, http.MethodPost, "/api/v1/notes/"+note.ID+"/tags", nil, nil); res.StatusCode != http.StatusInternalServerError {
 		t.Fatalf("an empty tag list must fail validation: %d %s", res.StatusCode, body(res))
+	}
+
+	// Deleting the note removes its attachment too.
+	if res := srv.JSON(t, http.MethodDelete, "/api/v1/notes/"+note.ID, nil, nil); res.StatusCode != http.StatusNoContent {
+		t.Fatalf("delete note: %d %s", res.StatusCode, body(res))
+	}
+	if _, err := storage.From(srv.Context()).Stat(context.Background(), "notes/"+note.ID+"/attachment"); err != storage.ErrNotFound {
+		t.Fatalf("attachment should go with the note: %v", err)
 	}
 
 	// A bearer token works without the cookies.

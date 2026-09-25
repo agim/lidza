@@ -158,6 +158,42 @@ func addPackTools(s *server.MCPServer, dir string, cfg *config.Config) {
 			}
 			return jsonResult(map[string]any{"provider": l.Provider(), "model": res.Model, "text": res.Text, "usage": res.Usage, "stop": res.Stop})
 		})
+		if slices.Contains(cfg.Packs, pack.OfficialPrefix+"db") {
+			s.AddTool(mcp.NewTool("lidza_llm_usage",
+				mcp.WithDescription("Token usage of the llm pack from the llm_usage table: calls, errors, input and output tokens per day, provider, model and label (Request.Label), plus the newest calls. Needs DATABASE_URL in .env."),
+				mcp.WithNumber("days", mcp.Description("How many days back (default 7)."), mcp.DefaultNumber(7)),
+				mcp.WithNumber("recent", mcp.Description("How many of the newest calls to list (default 10)."), mcp.DefaultNumber(10)),
+			), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+				var dbcfg db.Config
+				if err := env.Load(dir, &dbcfg); err != nil {
+					return mcp.NewToolResultErrorFromErr("database", err), nil
+				}
+				pool, err := db.Open(ctx, dbcfg)
+				if err != nil {
+					return mcp.NewToolResultErrorFromErr("database", err), nil
+				}
+				defer pool.Close()
+				l, err := llm.New(llm.Config{Provider: "fake"})
+				if err != nil {
+					return mcp.NewToolResultErrorFromErr("llm", err), nil
+				}
+				l.TrackUsage(pool)
+				days := req.GetInt("days", 7)
+				rows, err := l.Usage(ctx, time.Now().AddDate(0, 0, -days))
+				if err != nil {
+					return mcp.NewToolResultErrorFromErr("usage", err), nil
+				}
+				calls, err := l.RecentCalls(ctx, req.GetInt("recent", 10))
+				if err != nil {
+					return mcp.NewToolResultErrorFromErr("usage", err), nil
+				}
+				var in, out, n int64
+				for _, r := range rows {
+					in, out, n = in+r.Input, out+r.Output, n+r.Calls
+				}
+				return jsonResult(map[string]any{"days": days, "calls": n, "input": in, "output": out, "byDay": rows, "recent": calls})
+			})
+		}
 	}
 	if slices.Contains(cfg.Packs, pack.OfficialPrefix+"mail") && slices.Contains(cfg.Packs, pack.OfficialPrefix+"db") {
 		s.AddTool(mcp.NewTool("lidza_mail",

@@ -20,10 +20,18 @@ const APIPrefix = "/api/"
 // Router registers and serves API handlers. It wraps net/http's ServeMux, so
 // patterns take the "METHOD /path/{param}" form.
 type Router struct {
-	mux  *http.ServeMux
-	mw   []middleware.Middleware
-	once sync.Once
-	h    http.Handler
+	mux    *http.ServeMux
+	mw     []middleware.Middleware
+	once   sync.Once
+	h      http.Handler
+	mounts []Mount
+}
+
+// Mount is a handler served outside /api, at a path prefix, before the
+// frontend: the admin pages, a webhook endpoint, a file server.
+type Mount struct {
+	Prefix  string
+	Handler http.Handler
 }
 
 // builtins are the routes every app serves, registered by New.
@@ -85,6 +93,17 @@ func (r *Router) Group(prefix string, mw ...middleware.Middleware) *Router {
 	}
 	return g
 }
+
+// Mount serves h at prefix and below it, outside /api, ahead of the
+// frontend ("/admin/" for the admin pages). The app's middleware and
+// services apply; the router's own do not.
+func (r *Router) Mount(prefix string, h http.Handler) {
+	prefix = strings.TrimSuffix(prefix, "/") + "/"
+	r.mounts = append(r.mounts, Mount{Prefix: prefix, Handler: h})
+}
+
+// Mounts lists what Mount registered.
+func (r *Router) Mounts() []Mount { return r.mounts }
 
 // Handler returns the router with its middleware applied.
 func (r *Router) Handler() http.Handler {

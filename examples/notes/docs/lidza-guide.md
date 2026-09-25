@@ -501,6 +501,32 @@ app's tools. The llm pack speaks the providers; the app never does.
    `llm-handler` and `routes_test.go` in the reference app show it.
 6. `lidza check`, then `lidza test`.
 
+### Store a file
+
+Keep uploads and generated files in object storage through the storage
+pack, with the app deciding who may read them.
+
+1. `lidza pack add storage` (MCP: `lidza_pack_add`). Development and
+   tests use `STORAGE_PROVIDER=local` (files under `storage/`);
+   production sets `s3` with `STORAGE_BUCKET`, `STORAGE_ENDPOINT` and
+   the keys in the credentials (`lidza credentials set
+   STORAGE_ACCESS_KEY=... STORAGE_SECRET_KEY=...`).
+2. Accept the upload in a raw handler (a body is not JSON, so not
+   `router.Route`): `r.HandleFunc("PUT /api/v1/notes/{id}/attachment",
+   ...)` behind the same access check as the note, read the body up to
+   a limit (`http.MaxBytesReader`), and store it under a key that names
+   the owner and the row: `notes/<id>/attachment`. Keep the key in a
+   column of the row.
+3. Read it back through the app (`storage.Handler` or a handler that
+   checks access and streams `Get`), or hand the browser a
+   `PresignGet` URL for a minute; never a permanent public URL for a
+   private file. Delete the object when the row goes.
+4. Test with the local provider: `.env.test` sets `STORAGE_PROVIDER=local`
+   and a `STORAGE_DIR`; upload through the API, read it back, delete the
+   row and check `Stat` returns `storage.ErrNotFound`. The snippet
+   `storage-handler` and `routes_test.go` in the reference app show it.
+5. `lidza check`, then `lidza test`.
+
 ### Add a recipe
 
 Record a convention of this app so the next task follows it: a pattern

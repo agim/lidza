@@ -42,6 +42,15 @@ analytics retention and OTLP endpoint, `MAIL_PROVIDER`, `MAIL_FROM` and
 `MAIL_API_KEY` (`mail`; keep `MAIL_PROVIDER=log` until the domain is
 verified at the provider).
 
+## Secrets
+
+`config/credentials.yml.enc` ships with the app; the master key does
+not. Set `LIDZA_MASTER_KEY` to the contents of `config/master.key` in the
+environment of the process (the unit's `.env`, the container's
+`--env-file`), and every pack reads the sealed values as if they were
+in `.env`. Values saved from the admin pages live in the database,
+sealed with the same key, and every node reads them.
+
 ## Database
 
 Migrations are files under `db/migrations`, read from the working
@@ -71,7 +80,13 @@ lose data or fail on existing rows).
 
 ## TLS without a proxy
 
-Set `LIDZA_TLS_DOMAINS` and the binary serves HTTPS itself:
+`lidza ship --domains app.example.com --email ops@example.com` records
+the domains in `lidza.json` and writes them to `deploy/production.env`
+on every ship, with `LIDZA_LOG=json` and `DB_MIGRATE=true`; that file
+plus `DATABASE_URL` and `LIDZA_MASTER_KEY` is the process environment
+(`/opt/<name>/.env` for the unit, `--env-file` for the container, which
+exposes 80 and 443). Set `LIDZA_TLS_DOMAINS` and the binary serves
+HTTPS itself:
 
 ```
 LIDZA_TLS_DOMAINS=app.example.com,www.app.example.com

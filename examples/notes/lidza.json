@@ -11,7 +11,8 @@
     "lidza/auth",
     "stats",
     "lidza/mail",
-    "lidza/llm"
+    "lidza/llm",
+    "lidza/storage"
   ],
   "sdk": {}
 }

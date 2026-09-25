@@ -30,7 +30,9 @@ import (
 //     APIs already, with the outbox, templates and retries;
 //   - L007: an import of a language-model vendor SDK or client library;
 //     the llm pack speaks those APIs already, with structured output,
-//     tools, retries and a fake for tests.
+//     tools, retries and a fake for tests;
+//   - L008: an import of an object-storage SDK; the storage pack speaks
+//     the S3 API already, with a local provider for tests.
 //
 // Except for L004 the findings are warnings: they point at the pattern,
 // the author decides. A comment "lidza:ignore L001" on the line, or the
@@ -100,6 +102,9 @@ func checkFile(fset *token.FileSet, f *ast.File, rel, moduleDir string) []Diagno
 		}
 		if vendor := mailVendor(path); vendor != "" {
 			warn(imp.Pos(), "L006", "import of the "+vendor+" SDK: use the mail pack instead (`lidza pack add mail`, MAIL_PROVIDER="+vendor+"), which speaks the API directly and adds the outbox, templates and retries")
+		}
+		if storageVendor(path) {
+			warn(imp.Pos(), "L008", "import of "+path+": use the storage pack instead (`lidza pack add storage`, STORAGE_PROVIDER=s3 with any S3-compatible service), which speaks the API directly and adds a local provider for tests")
 		}
 		if vendor := llmVendor(path); vendor != "" {
 			warn(imp.Pos(), "L007", "import of "+path+": use the llm pack instead (`lidza pack add llm`, LLM_PROVIDER="+vendor+"), which speaks the API directly and adds structured output, tools, retries and a fake for tests")
@@ -225,6 +230,19 @@ func llmVendor(path string) string {
 		}
 	}
 	return ""
+}
+
+// storageVendor reports an object-storage SDK import.
+func storageVendor(path string) bool {
+	for _, prefix := range []string{
+		"github.com/aws/aws-sdk-go-v2/service/s3", "github.com/aws/aws-sdk-go/service/s3", "github.com/aws/aws-sdk-go-v2/feature/s3",
+		"github.com/minio/minio-go", "gocloud.dev/blob", "cloud.google.com/go/storage", "github.com/Azure/azure-sdk-for-go/sdk/storage",
+	} {
+		if path == prefix || strings.HasPrefix(path, prefix+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 // ignoreComments maps line numbers to the rule codes a "lidza:ignore"

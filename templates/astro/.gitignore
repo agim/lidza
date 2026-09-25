@@ -9,3 +9,5 @@ bin/
 !.env.example
 playwright-report/
 test-results/
+config/master.key
+storage/

@@ -52,7 +52,8 @@ app is always at one address: http://127.0.0.1:3000.
 | `lidza context` | writes `.lidza/context.json`: routes, handler signatures, Rust exports. |
 | `lidza mcp` | MCP server on stdio; see "Agent interface". |
 | `lidza gen resource <Model>` | queries, `Create/Update/<Model>List` types, `handlers/<table>.go` with list, get, create, patch, delete under `/api/v1/<plural>`, registered in `routes.go`. Needs the `db` pack. |
-| `lidza pack add <name>` | enables an official pack: `db`, `auth`, `jobs`, `mail`, `llm`, `cache`, `i18n`, `realtime`, `analytics`, `geo`, `media`. |
+| `lidza pack add <name>` | enables an official pack: `db`, `auth`, `jobs`, `mail`, `llm`, `storage`, `cache`, `i18n`, `realtime`, `analytics`, `geo`, `media`. |
+| `lidza credentials set NAME=value` | seals a secret into `config/credentials.yml.enc` with `config/master.key`; `list`, `show`, `unset`, `edit`, `init`. |
 | `lidza test [go test flags]` | creates and migrates the `.env.test` database, runs `go test ./...` with `LIDZA_MODE=test`, then the frontend check. |
 | `lidza test --e2e [--install]` | builds the app, starts the binary with `.env.test`, runs the Playwright suite in `e2e/`; `--install` fetches the browser when missing. |
 | `lidza setup [--packs db,auth,mail] [--agent claude]` | on an existing app: enables the packs (db added when one needs it), writes `.env` from `.env.example` with a random `AUTH_SECRET` and the app's database, writes `.env.test`, generates, creates and migrates the dev and test databases, installs `node_modules`, installs the agent CLI when asked, makes the first commit. `lidza new --packs ...` runs it for a new app. Rerunning is safe. |
@@ -538,6 +539,32 @@ app's tools. The llm pack speaks the providers; the app never does.
    `llm-handler` and `routes_test.go` in the reference app show it.
 6. `lidza check`, then `lidza test`.
 
+### Store a file
+
+Keep uploads and generated files in object storage through the storage
+pack, with the app deciding who may read them.
+
+1. `lidza pack add storage` (MCP: `lidza_pack_add`). Development and
+   tests use `STORAGE_PROVIDER=local` (files under `storage/`);
+   production sets `s3` with `STORAGE_BUCKET`, `STORAGE_ENDPOINT` and
+   the keys in the credentials (`lidza credentials set
+   STORAGE_ACCESS_KEY=... STORAGE_SECRET_KEY=...`).
+2. Accept the upload in a raw handler (a body is not JSON, so not
+   `router.Route`): `r.HandleFunc("PUT /api/v1/notes/{id}/attachment",
+   ...)` behind the same access check as the note, read the body up to
+   a limit (`http.MaxBytesReader`), and store it under a key that names
+   the owner and the row: `notes/<id>/attachment`. Keep the key in a
+   column of the row.
+3. Read it back through the app (`storage.Handler` or a handler that
+   checks access and streams `Get`), or hand the browser a
+   `PresignGet` URL for a minute; never a permanent public URL for a
+   private file. Delete the object when the row goes.
+4. Test with the local provider: `.env.test` sets `STORAGE_PROVIDER=local`
+   and a `STORAGE_DIR`; upload through the API, read it back, delete the
+   row and check `Stat` returns `storage.ErrNotFound`. The snippet
+   `storage-handler` and `routes_test.go` in the reference app show it.
+5. `lidza check`, then `lidza test`.
+
 ### Add a recipe
 
 Record a convention of this app so the next task follows it: a pattern
@@ -732,6 +759,17 @@ Official Go packs, configured from `.env` (see `.env.example` after
   `LLM_MODEL`, `LLM_API_KEY`). Every call has a deadline and retries on
   429 and 5xx; tokens count on `/metrics`. Never import a vendor SDK or
   a client library (`lidza check` L007). Recipe: "Add an LLM feature".
+- `storage`: `storage.From(ctx).Put(ctx, "avatars/"+id+".png", r,
+  storage.PutOptions{})` stores a file (content type detected), `Get`,
+  `Stat`, `List(ctx, prefix, n)`, `Delete`; `PresignGet(ctx, key, ttl)`
+  and `PresignPut` give a browser a URL to read or upload directly,
+  `URL(key)` the public address with `STORAGE_PUBLIC_URL`; mount
+  `storage.Handler("/api/v1/files/")` behind `auth.Require()` to serve
+  private objects through the app. Providers: `s3` (AWS S3, MinIO, R2,
+  B2, Wasabi, Spaces: `STORAGE_BUCKET`, `STORAGE_ENDPOINT`, the keys in
+  the credentials) and `local` (a directory, for development and tests).
+  Never import a storage SDK (`lidza check` L008). Recipe: "Store a
+  file".
 - `analytics` (opt-in): server errors are captured on their own; register
   `r.Handle("POST /api/v1/analytics/{kind}", analytics.Handler())`, set
   `VITE_ANALYTICS=1`, and call `analytics.From(ctx).Track(ctx, "name",
@@ -746,6 +784,21 @@ Order in `lidza.json` matters: `lidza/db` before `lidza/auth` and
 Set `"sdk": {"dart": "clients/dart"}` in `lidza.json`; `lidza gen` writes
 the `lidza_client` Dart package there with the same operations as
 `@lidza/client`.
+
+## Secrets
+
+Anything secret (API keys, SMTP URLs, storage keys, `AUTH_SECRET` in
+production) lives in `config/credentials.yml.enc`, sealed with
+AES-256-GCM under `config/master.key`, which git ignores. `lidza
+credentials set MAIL_API_KEY=...` (MCP: `lidza_credentials_set`) seals a
+value; `list` shows the names, `show NAME` one value, `edit` the whole
+file in `$EDITOR`. Every pack reads the credentials by the same names as
+`.env`, between the `.env` files and the process environment, so nothing
+in the code changes. In production the key travels as
+`LIDZA_MASTER_KEY` (the file's contents) and the sealed file is deployed
+with the binary. The admin pages save changes to the database, sealed
+with the same key, and the mail, llm and storage packs pick them up
+without a restart.
 
 ## Models and migrations
 
@@ -787,8 +840,11 @@ runtime (except `LIDZA_SSR=1`). `Dockerfile` builds the same into an
 image that runs as a non-root user on port 3000; `deploy/{{.Name}}.service`
 runs the binary under systemd from `/opt/{{.Name}}` (install commands in
 its header). Migrations ship as files in `db/`: apply them with `lidza db
-migrate` in the deploy step or `DB_MIGRATE=true` at start. TLS: set
-`LIDZA_TLS_DOMAINS=app.example.com` and the binary serves HTTPS on 443
+migrate` in the deploy step or `DB_MIGRATE=true` at start. `lidza ship
+--domains app.example.com` records the domain in `lidza.json` and writes
+`deploy/production.env`, the environment of the deployed process
+(plus `DATABASE_URL` and `LIDZA_MASTER_KEY`). TLS: with
+`LIDZA_TLS_DOMAINS=app.example.com` the binary serves HTTPS on 443
 itself with Let's Encrypt certificates, renewed on its own and stored
 in Postgres through the db pack so every node shares them, and
 redirects 80; `APP_URL` and `AUTH_COOKIE_SECURE` follow from it. Needs

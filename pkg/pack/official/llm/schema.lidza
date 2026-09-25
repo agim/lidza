@@ -1,0 +1,15 @@
+// Every call the llm pack makes, with its tokens: the pack writes a row
+// after each Chat, Stream, Generate or Run when the db pack runs. Label
+// is Request.Label, the feature that made the call ("note.tags").
+model LLMUsage @table("llm_usage") {
+  id       uuid    @id @default(uuid())
+  at       time    @default(now()) @index
+  provider string
+  model    string
+  label    string  @index
+  input    int
+  output   int
+  ms       int
+  status   string
+  error    string?
+}

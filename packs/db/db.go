@@ -14,6 +14,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/crypto/acme/autocert"
 
+	"github.com/agim/lidza/pkg/credentials"
+
 	"github.com/agim/lidza"
 	"github.com/agim/lidza/pkg/env"
 )
@@ -75,6 +77,14 @@ func (d *DB) Start(ctx context.Context, s *lidza.Services) error {
 	lidza.Provide(s, pool)
 	// TLS certificates for LIDZA_TLS_DOMAINS, shared by every node.
 	lidza.Provide[autocert.Cache](s, NewCertCache(pool))
+	// Credentials saved at runtime, sealed with the master key: loaded
+	// now so the packs that start after this one read them.
+	store := NewCredentialStore(pool, ".")
+	if err := store.Load(ctx); err != nil {
+		pool.Close()
+		return fmt.Errorf("credentials: %w", err)
+	}
+	lidza.Provide[credentials.Store](s, store)
 	return nil
 }
 

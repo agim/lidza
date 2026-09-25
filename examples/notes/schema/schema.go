@@ -142,6 +142,38 @@ func (v MailMessage) Validate() error {
 	return errs.Result()
 }
 
+// LLMUsage is a row of the llm_usage table.
+type LLMUsage struct {
+	ID       string    `json:"id" db:"id"`
+	At       time.Time `json:"at" db:"at"`
+	Provider string    `json:"provider" db:"provider"`
+	Model    string    `json:"model" db:"model"`
+	Label    string    `json:"label" db:"label"`
+	Input    int       `json:"input" db:"input"`
+	Output   int       `json:"output" db:"output"`
+	Ms       int       `json:"ms" db:"ms"`
+	Status   string    `json:"status" db:"status"`
+	Error    *string   `json:"error" db:"error"`
+}
+
+// Validate applies the rules of LLMUsage from schema.lidza.
+func (v LLMUsage) Validate() error {
+	var errs validate.Errors
+	if v.Provider == "" {
+		errs.Add("provider", "required", "required")
+	}
+	if v.Model == "" {
+		errs.Add("model", "required", "required")
+	}
+	if v.Label == "" {
+		errs.Add("label", "required", "required")
+	}
+	if v.Status == "" {
+		errs.Add("status", "required", "required")
+	}
+	return errs.Result()
+}
+
 // CreateNote is an API type.
 type CreateNote struct {
 	Title string  `json:"title"`

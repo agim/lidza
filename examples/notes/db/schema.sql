@@ -60,3 +60,18 @@ CREATE INDEX mail_message_recipient_idx ON mail_message (recipient);
 CREATE INDEX mail_message_status_idx ON mail_message (status);
 CREATE INDEX mail_message_created_at_idx ON mail_message (created_at);
 
+CREATE TABLE llm_usage (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  at timestamptz NOT NULL DEFAULT now(),
+  provider text NOT NULL,
+  model text NOT NULL,
+  label text NOT NULL,
+  input integer NOT NULL,
+  output integer NOT NULL,
+  ms integer NOT NULL,
+  status text NOT NULL,
+  error text
+);
+CREATE INDEX llm_usage_at_idx ON llm_usage (at);
+CREATE INDEX llm_usage_label_idx ON llm_usage (label);
+

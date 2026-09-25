@@ -33,5 +33,7 @@ func routes(r *router.Router) {
 	router.Route(account, "GET /api/v1/auth/me", handlers.Me)
 	router.Route(account, "POST /api/v1/auth/logout", handlers.Logout)
 
-	handlers.NoteRoutes(r.Group("/api/v1/notes", auth.Require()))
+	notes := r.Group("/api/v1/notes", auth.Require())
+	handlers.NoteRoutes(notes)
+	handlers.AttachmentRoutes(notes)
 }

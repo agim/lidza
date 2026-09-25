@@ -24,9 +24,20 @@ type Config struct {
 	// SDK names extra generated clients: {"dart": "clients/dart"} writes
 	// the Dart package to that directory on every `lidza gen`.
 	SDK SDK `json:"sdk,omitempty"`
+	// Deploy is what `lidza ship` writes into deploy/production.env: the
+	// domains the binary serves over TLS and the ACME contact.
+	Deploy Deploy `json:"deploy,omitempty"`
 
 	// Dir is the project root the file was read from. Not serialized.
 	Dir string `json:"-"`
+}
+
+// Deploy holds the deployment settings `lidza ship --domains` records.
+type Deploy struct {
+	// Domains are LIDZA_TLS_DOMAINS: the first is the public name.
+	Domains []string `json:"domains,omitempty"`
+	// Email is LIDZA_TLS_EMAIL, the ACME account contact.
+	Email string `json:"email,omitempty"`
 }
 
 // SDK lists generated clients besides the TypeScript one.

@@ -3,3 +3,5 @@ bin/
 .env
 .env.*
 !.env.example
+config/master.key
+storage/

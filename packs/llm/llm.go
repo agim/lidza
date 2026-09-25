@@ -13,8 +13,11 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/agim/lidza"
 	"github.com/agim/lidza/pkg/env"
@@ -104,6 +107,9 @@ type Request struct {
 	MaxTokens int    `json:"maxTokens,omitempty"`
 	// Temperature, when set, replaces the provider's default.
 	Temperature *float64 `json:"temperature,omitempty"`
+	// Label names the feature making the call ("note.tags") for the usage
+	// report (llm_usage, with the db pack).
+	Label string `json:"label,omitempty"`
 }
 
 // Response is the model's reply.
@@ -168,7 +174,9 @@ type LLM struct {
 	cfg      Config
 	log      *slog.Logger
 	provider Provider
+	pool     *pgxpool.Pool
 	sleep    func(context.Context, time.Duration) error
+	mu       sync.RWMutex
 
 	calls, failures, inputTokens, outputTokens atomic.Int64
 }
@@ -224,12 +232,41 @@ func (l *LLM) Start(ctx context.Context, s *lidza.Services) error {
 		return err
 	}
 	l.cfg, l.provider, l.sleep = built.cfg, built.provider, built.sleep
+	if pool, ok := s.Lookup(typeOf[*pgxpool.Pool]()); ok {
+		l.pool = pool.(*pgxpool.Pool)
+	}
 	lidza.Provide(s, l)
 	return nil
 }
 
 // Stop implements lidza.Pack.
 func (l *LLM) Stop(context.Context) error { return nil }
+
+// providerNow is the provider under the lock: Reconfigure may swap it.
+func (l *LLM) providerNow() Provider {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	return l.provider
+}
+
+// Reconfigure reads .env and the credentials again and switches the
+// provider and model: what the admin pages call after an LLM setting is
+// saved.
+func (l *LLM) Reconfigure(ctx context.Context) error {
+	var cfg Config
+	if err := env.Load(".", &cfg); err != nil {
+		return err
+	}
+	built, err := New(cfg)
+	if err != nil {
+		return err
+	}
+	l.mu.Lock()
+	l.cfg, l.provider = built.cfg, built.provider
+	l.mu.Unlock()
+	l.log.Info("llm: reconfigured", "provider", l.cfg.Provider, "model", l.cfg.Model)
+	return nil
+}
 
 // Provider returns the configured provider's name.
 func (l *LLM) Provider() string { return l.cfg.Provider }
@@ -240,7 +277,7 @@ func (l *LLM) Model() string { return l.cfg.Model }
 // Fake returns the fake provider to script replies in a test, nil when
 // another provider is configured.
 func (l *LLM) Fake() *Fake {
-	f, _ := l.provider.(*Fake)
+	f, _ := l.providerNow().(*Fake)
 	return f
 }
 
@@ -264,7 +301,7 @@ func (l *LLM) Embed(ctx context.Context, texts []string) ([][]float32, error) {
 	var out [][]float32
 	err := l.retry(ctx, func(ctx context.Context) error {
 		var err error
-		out, err = l.provider.Embed(ctx, l.cfg.EmbedModel, texts)
+		out, err = l.providerNow().Embed(ctx, l.cfg.EmbedModel, texts)
 		return err
 	})
 	l.calls.Add(1)
@@ -392,18 +429,19 @@ func (l *LLM) call(ctx context.Context, req Request, stream func(string) error) 
 			return errNoRetry
 		}
 		var err error
-		res, err = l.provider.Chat(ctx, req, wrapped)
+		res, err = l.providerNow().Chat(ctx, req, wrapped)
 		return err
 	})
 	l.calls.Add(1)
+	l.record(ctx, req, res, time.Since(start), err)
 	if err != nil {
 		l.failures.Add(1)
-		lidza.Log(ctx).Warn("llm chat failed", "provider", l.cfg.Provider, "model", req.Model, "error", err, "ms", time.Since(start).Milliseconds())
+		lidza.Log(ctx).Warn("llm chat failed", "provider", l.cfg.Provider, "model", req.Model, "label", req.Label, "error", err, "ms", time.Since(start).Milliseconds())
 		return res, err
 	}
 	l.inputTokens.Add(int64(res.Usage.Input))
 	l.outputTokens.Add(int64(res.Usage.Output))
-	lidza.Log(ctx).Info("llm chat", "provider", l.cfg.Provider, "model", res.Model, "in", res.Usage.Input, "out", res.Usage.Output, "stop", res.Stop, "tools", len(res.ToolCalls), "ms", time.Since(start).Milliseconds())
+	lidza.Log(ctx).Info("llm chat", "provider", l.cfg.Provider, "model", res.Model, "label", req.Label, "in", res.Usage.Input, "out", res.Usage.Output, "stop", res.Stop, "tools", len(res.ToolCalls), "ms", time.Since(start).Milliseconds())
 	return res, nil
 }
 

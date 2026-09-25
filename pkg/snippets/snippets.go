@@ -37,6 +37,7 @@ var Index = []Snippet{
 	{"handler-test", "routes_test.go", "A Go test with lidzatest.Start: cookies carried across calls, a bearer token, mail read from the outbox with WaitFor and srv.Context(), and the expected 401, 409, 422 and 404 replies."},
 	{"mcp-tool", "tools.go", "An app MCP tool (lidza.ToolFunc) that queries the database through the db pack."},
 	{"mail-template", "mail/verify.txt.tmpl", "A mail template (Go text/template over the Data of mail.Message); the html variant sits next to it. handlers/auth.go sends it through the mail pack."},
+	{"storage-handler", "handlers/attachment.go", "Raw upload and download handlers through the storage pack: the body stored under a key derived from the row, the same access check as the row, streaming back through the app, the object deleted with the row."},
 	{"llm-handler", "handlers/tags.go", "A route that asks the language model for a schema type through the llm pack: llm.Generate over the note the user may read, the prompt in the handler, the reply validated by the type's rules."},
 	{"pack-capability", "packs/stats/rust/src/lib.rs", "A Rust pack capability (lidza_export!) over types from schema.lidza: one CPU pass over user text, no I/O; the handler noteStats in resource-handlers calls it through the generated wrapper."},
 	{"pack-manifest", "packs/stats/pack.lidza.json", "The pack manifest: capability names with their input and output types, the pool size, memory cap, timeout, and uninterruptible for input-bounded loops."},

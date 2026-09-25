@@ -316,12 +316,34 @@ func handler(app App, services *Services) (http.Handler, *devserver.Sidecar, err
 	if os.Getenv(devserver.EnvMode) == "dev" && app.Dist == nil {
 		frontend = devserver.AgentFiles(frontend)
 	}
-	all := devserver.Split(router.APIPrefix, api, opsThenFrontend(ops, frontend, os.Getenv(devserver.EnvMode) == "dev"))
+	all := devserver.Split(router.APIPrefix, api, opsThenFrontend(ops, mounted(r.Mounts(), frontend), os.Getenv(devserver.EnvMode) == "dev"))
 	mw := append([]middleware.Middleware{
 		middleware.SecureHeaders(middleware.SecureHeadersOptions{CSP: app.CSP}),
 		servicesMiddleware(services),
 	}, app.Middleware...)
 	return middleware.Chain(all, mw...), sidecar, nil
+}
+
+// mounted serves the router's mounts (the admin pages, a webhook) by path
+// prefix, and everything else through next.
+func mounted(mounts []router.Mount, next http.Handler) http.Handler {
+	if len(mounts) == 0 {
+		return next
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		for _, m := range mounts {
+			bare := strings.TrimSuffix(m.Prefix, "/")
+			if r.URL.Path == bare {
+				http.Redirect(w, r, m.Prefix, http.StatusMovedPermanently)
+				return
+			}
+			if strings.HasPrefix(r.URL.Path, m.Prefix) {
+				m.Handler.ServeHTTP(w, r)
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // opsThenFrontend serves the operational endpoints and hands everything

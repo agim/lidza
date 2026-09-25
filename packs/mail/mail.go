@@ -134,6 +134,30 @@ func (m *Mail) Start(ctx context.Context, s *lidza.Services) error {
 	return nil
 }
 
+// providerNow is the provider under the lock: Reconfigure may swap it.
+func (m *Mail) providerNow() Provider {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.provider
+}
+
+// Reconfigure reads .env and the credentials again and switches the
+// provider: what the admin pages call after a mail setting is saved.
+func (m *Mail) Reconfigure(ctx context.Context) error {
+	var cfg Config
+	if err := env.Load(".", &cfg); err != nil {
+		return err
+	}
+	prev := m.cfg
+	m.cfg = cfg
+	if err := m.setup(); err != nil {
+		m.cfg = prev
+		return err
+	}
+	m.log.Info("mail: reconfigured", "provider", m.cfg.Provider)
+	return nil
+}
+
 func (m *Mail) setup() error {
 	if m.cfg.MaxAttempts <= 0 {
 		m.cfg.MaxAttempts = 5
@@ -145,7 +169,9 @@ func (m *Mail) setup() error {
 	if err != nil {
 		return err
 	}
+	m.mu.Lock()
 	m.provider = p
+	m.mu.Unlock()
 	if err := m.loadTemplates(); err != nil {
 		return err
 	}
@@ -189,7 +215,7 @@ func (m *Mail) Send(ctx context.Context, msg Message) (string, error) {
 		return "", err
 	}
 	if m.pool == nil {
-		return m.provider.Send(ctx, msg)
+		return m.providerNow().Send(ctx, msg)
 	}
 	var id string
 	err := m.pool.QueryRow(ctx, `INSERT INTO mail_message (recipient, subject, text, html, template, status, attempts) VALUES ($1, $2, $3, $4, $5, $6, 0) RETURNING id`,
@@ -219,7 +245,7 @@ func (m *Mail) Deliver(ctx context.Context, id string) error {
 		return fmt.Errorf("mail: outbox row %s: %w", id, err)
 	}
 	msg.Text, msg.HTML = deref(text), deref(html)
-	providerID, sendErr := m.provider.Send(ctx, msg)
+	providerID, sendErr := m.providerNow().Send(ctx, msg)
 	if sendErr != nil {
 		m.pool.Exec(ctx, `UPDATE mail_message SET status = $2, error = $3, attempts = attempts + 1 WHERE id = $1`, id, StatusFailed, sendErr.Error())
 		return sendErr

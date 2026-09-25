@@ -2,6 +2,7 @@ package mcpserver
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/agim/lidza/pkg/apidoc"
 	"github.com/agim/lidza/pkg/config"
+	"github.com/agim/lidza/pkg/credentials"
 	"github.com/agim/lidza/pkg/decisions"
 	"github.com/agim/lidza/pkg/recipes"
 	"github.com/agim/lidza/pkg/scaffold"
@@ -78,6 +80,41 @@ func addRecipeTool(s *server.MCPServer, dir string, cfg *config.Config) {
 			return mcp.NewToolResultErrorFromErr("recipe", err), nil
 		}
 		return jsonResult(map[string]any{"name": r.Name, "title": r.Title, "scope": r.Scope, "skill": recipes.SkillsDir + "/" + r.Name + "/SKILL.md", "note": "the prompt appears after lidza mcp restarts; the skill and command are in place"})
+	})
+}
+
+// addCredentialTools seal and list the app's secrets; values are never
+// returned.
+func addCredentialTools(s *server.MCPServer, dir string, cfg *config.Config) {
+	if cfg == nil {
+		return
+	}
+	s.AddTool(mcp.NewTool("lidza_credentials_set",
+		mcp.WithDescription("Seal secrets (an API key, an SMTP URL, a storage secret) into config/credentials.yml.enc with the app's master key (created when missing, kept out of git). Every pack reads them by their environment name (MAIL_API_KEY, LLM_API_KEY, STORAGE_SECRET_KEY): prefer this over .env for anything secret. A running app reads them at its next start."),
+		mcp.WithObject("values", mcp.Required(), mcp.Description("NAME: value pairs; names are environment variable names."), mcp.AdditionalProperties(map[string]any{"type": "string"})),
+	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		raw, _ := req.GetArguments()["values"].(map[string]any)
+		values := map[string]string{}
+		for k, v := range raw {
+			values[k] = fmt.Sprint(v)
+		}
+		if len(values) == 0 {
+			return mcp.NewToolResultError("values: at least one NAME: value"), nil
+		}
+		if !credentials.HasKey(dir) {
+			if _, err := credentials.Generate(dir); err != nil {
+				return mcp.NewToolResultErrorFromErr("credentials", err), nil
+			}
+		}
+		if err := credentials.Set(dir, values); err != nil {
+			return mcp.NewToolResultErrorFromErr("credentials", err), nil
+		}
+		return jsonResult(map[string]any{"file": credentials.File, "sealed": len(values), "names": credentials.Names(dir)})
+	})
+	s.AddTool(mcp.NewTool("lidza_credentials_list",
+		mcp.WithDescription("The names of the secrets in config/credentials.yml.enc (values are never shown)."),
+	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		return jsonResult(map[string]any{"file": credentials.File, "hasKey": credentials.HasKey(dir), "names": credentials.Names(dir)})
 	})
 }
 

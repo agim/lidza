@@ -16,6 +16,7 @@ import (
 
 	"github.com/agim/lidza/packs/db"
 	"github.com/agim/lidza/pkg/config"
+	"github.com/agim/lidza/pkg/credentials"
 	"github.com/agim/lidza/pkg/devserver"
 	"github.com/agim/lidza/pkg/env"
 	"github.com/agim/lidza/pkg/pack"
@@ -115,7 +116,14 @@ func setup(ctx context.Context, dir string, cfg *config.Config, opt setupOptions
 	hasDB := slices.Contains(cfg.Packs, pack.OfficialPrefix+"db")
 	hasMail := slices.Contains(cfg.Packs, pack.OfficialPrefix+"mail")
 
-	// 2. .env and .env.test with real values.
+	// 2. The master key for the credentials, kept out of git.
+	if created, err := credentials.Generate(dir); err != nil {
+		return err
+	} else if created {
+		step("%s created (kept out of git); secrets go in with lidza credentials set NAME=value", credentials.MasterKeyFile)
+	}
+
+	// 3. .env and .env.test with real values.
 	devURL := opt.DatabaseURL
 	if devURL == "" {
 		devURL = "postgres:///" + dbName(cfg.Name, "dev") + "?host=/var/run/postgresql"

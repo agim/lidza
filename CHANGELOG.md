@@ -6,6 +6,31 @@ version in `go.mod`. `install.sh` pins the newest release here;
 `scripts/release.sh vX.Y.Z` turns "Unreleased" into a release, bumps the
 pin, tags and pushes.
 
+## Unreleased
+
+- `llm`: every call is recorded in `llm_usage` with the db pack
+  (provider, model, `Request.Label`, tokens, time, status);
+  `llm.From(ctx).Usage(ctx, since)` and `RecentCalls` report it, the MCP
+  tool `lidza_llm_usage` too.
+- Credentials: `config/credentials.yml.enc` sealed with AES-256-GCM under
+  `config/master.key` (git-ignored) or `LIDZA_MASTER_KEY`; `lidza
+  credentials init | set | unset | list | show | edit` and the MCP tools
+  `lidza_credentials_set` and `lidza_credentials_list`. Every pack reads
+  the sealed values by their environment names through `pkg/env`, between
+  the `.env` files and the process environment. Values saved at runtime
+  live in the `credential` table through the db pack, sealed with the
+  same key, and `lidza.Reconfigure` lets the mail, llm and storage packs
+  switch provider without a restart. `lidza setup` creates the key.
+- `lidza ship --domains a.example.com --email ops@example.com` records
+  the deployment in `lidza.json` (`deploy`) and writes
+  `deploy/production.env` (`LIDZA_TLS_DOMAINS`, `LIDZA_TLS_EMAIL`,
+  `LIDZA_LOG=json`, `DB_MIGRATE=true`) on every ship; the Dockerfile
+  exposes 80 and 443; the report names the URL and the deploy commands.
+- `storage` pack: `Put`, `Get`, `Stat`, `List`, `Delete`, `PresignGet`,
+  `PresignPut`, `URL`, `Handler`; any S3-compatible service with
+  Signature V4 spoken directly, and a `local` provider. Rule L008 against
+  storage SDKs; the recipe "Store a file".
+
 ## v0.1.7 (2026-09-25)
 
 - TLS without a proxy: `LIDZA_TLS_DOMAINS=app.example.com` makes the

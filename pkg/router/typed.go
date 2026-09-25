@@ -158,6 +158,11 @@ func decodeBody(req *http.Request, dst any) error {
 	return nil
 }
 
+// WriteError answers a raw handler's error the way typed handlers do:
+// an HTTPError with its status and message, validation errors as a 422
+// with fields, anything else as a 500 whose text stays on the server.
+func WriteError(w http.ResponseWriter, req *http.Request, err error) { writeError(w, req, err) }
+
 func writeError(w http.ResponseWriter, req *http.Request, err error) {
 	var httpErr *HTTPError
 	var valErr *validate.Errors

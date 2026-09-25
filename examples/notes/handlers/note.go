@@ -118,7 +118,8 @@ func deleteNote(ctx context.Context, req *router.Request[router.None]) (router.N
 	if n == 0 {
 		return router.None{}, router.NotFound("note")
 	}
-	return router.None{}, nil
+	// The attachment goes with the note; a missing one is not an error.
+	return router.None{}, deleteAttachment(ctx, req.Param("id"))
 }
 
 // toNote maps a row to the API type.

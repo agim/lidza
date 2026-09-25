@@ -221,6 +221,40 @@ func (q *Queue) enqueue(ctx context.Context, db rowQuerier, kind string, payload
 	return id, nil
 }
 
+// Recent returns the newest jobs by run time, every state. The admin
+// pages show them.
+func (q *Queue) Recent(ctx context.Context, limit int) ([]Job, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	rows, err := q.pool.Query(ctx, `SELECT id, kind, payload, state, run_at, attempts, max_attempts, last_error FROM job ORDER BY run_at DESC LIMIT $1`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Job
+	for rows.Next() {
+		var j Job
+		if err := rows.Scan(&j.ID, &j.Kind, &j.Payload, &j.State, &j.RunAt, &j.Attempts, &j.MaxAttempts, &j.LastError); err != nil {
+			return nil, err
+		}
+		out = append(out, j)
+	}
+	return out, rows.Err()
+}
+
+// Retry puts a failed job back in the queue to run now, attempts reset.
+func (q *Queue) Retry(ctx context.Context, id string) error {
+	tag, err := q.pool.Exec(ctx, `UPDATE job SET state = 'pending', run_at = now(), attempts = 0, last_error = NULL, locked_at = NULL WHERE id = $1 AND state = 'failed'`, id)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return errors.New("jobs: no failed job with that id")
+	}
+	return nil
+}
+
 // Get reads a job's state.
 func (q *Queue) Get(ctx context.Context, id string) (*Job, error) {
 	var j Job

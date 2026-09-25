@@ -79,6 +79,20 @@ pub struct MailMessage {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LLMUsage {
+    pub id: String,
+    pub at: String,
+    pub provider: String,
+    pub model: String,
+    pub label: String,
+    pub input: i32,
+    pub output: i32,
+    pub ms: i32,
+    pub status: String,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CreateNote {
     pub title: String,
     pub body: Option<String>,

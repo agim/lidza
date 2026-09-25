@@ -68,7 +68,7 @@ func TestNewReact(t *testing.T) {
 	if read("CLAUDE.md") != read("AGENTS.md") || read("CLAUDE.md") != read("GEMINI.md") {
 		t.Errorf("agent files should be identical")
 	}
-	if !strings.Contains(read("CLAUDE.md"), "<!-- lidza:recipes -->`add-api-route`, `add-resource`, `scope-query-to-signed-in-user`, `add-page`, `add-pack-capability`, `add-mcp-tool`, `send-email`, `add-background-job`, `publish-live-updates`, `add-llm-feature`, `add-recipe`, `write-test`<!-- /lidza:recipes -->") {
+	if !strings.Contains(read("CLAUDE.md"), "<!-- lidza:recipes -->`add-api-route`, `add-resource`, `scope-query-to-signed-in-user`, `add-page`, `add-pack-capability`, `add-mcp-tool`, `send-email`, `add-background-job`, `publish-live-updates`, `add-llm-feature`, `store-file`, `add-recipe`, `write-test`<!-- /lidza:recipes -->") {
 		t.Errorf("CLAUDE.md should list the recipes: %s", read("CLAUDE.md"))
 	}
 	// An app recipe: added to the guide, generated, listed in the agent files.

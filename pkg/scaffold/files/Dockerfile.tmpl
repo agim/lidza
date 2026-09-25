@@ -32,6 +32,8 @@ FROM gcr.io/distroless/static-debian12:nonroot
 WORKDIR /app
 COPY --from=build /out/{{.Name}} /app/{{.Name}}
 COPY --from=build /src/db /app/db
+# Plain HTTP on 3000 behind a proxy, or, with LIDZA_TLS_DOMAINS in the
+# environment (deploy/production.env), HTTPS on 443 and the redirect on 80.
 ENV LIDZA_ADDR=0.0.0.0:3000
-EXPOSE 3000
+EXPOSE 3000 80 443
 ENTRYPOINT ["/app/{{.Name}}"]

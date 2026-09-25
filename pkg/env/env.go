@@ -10,8 +10,10 @@
 //	}
 //
 // Load reads, in order of increasing precedence: .env, .env.<mode>, the
-// process environment. Mode is LIDZA_MODE ("dev" under lidza dev, "test"
-// under lidza test), else "production".
+// app's credentials (config/credentials.yml.enc, decrypted with the
+// master key, plus the values saved at runtime), the process
+// environment. Mode is LIDZA_MODE ("dev" under lidza dev, "test" under
+// lidza test), else "production".
 package env
 
 import (
@@ -24,6 +26,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/agim/lidza/pkg/credentials"
 )
 
 // Mode returns the run mode: the value of LIDZA_MODE, or "production".
@@ -44,12 +48,35 @@ func Load(dir string, dst any) error {
 			return err
 		}
 	}
+	for k, v := range credentials.Values(dir) {
+		values[k] = v
+	}
 	for _, kv := range os.Environ() {
 		if k, v, ok := strings.Cut(kv, "="); ok {
 			values[k] = v
 		}
 	}
 	return Fill(dst, values)
+}
+
+// Values returns everything Load would read, as a map: the .env files,
+// the credentials, the process environment.
+func Values(dir string) (map[string]string, error) {
+	values := map[string]string{}
+	for _, name := range []string{".env", ".env." + Mode()} {
+		if err := readFile(filepath.Join(dir, name), values); err != nil {
+			return nil, err
+		}
+	}
+	for k, v := range credentials.Values(dir) {
+		values[k] = v
+	}
+	for _, kv := range os.Environ() {
+		if k, v, ok := strings.Cut(kv, "="); ok {
+			values[k] = v
+		}
+	}
+	return values, nil
 }
 
 // Fill sets dst's fields from values, using the `env`, `default` and

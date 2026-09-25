@@ -217,7 +217,7 @@ func TestInaccessibleElement(t *testing.T) {
 }
 
 func TestGuidanceSurfaces(t *testing.T) {
-	for _, skill := range []string{"add-api-route", "add-resource", "scope-query-to-signed-in-user", "add-page", "add-pack-capability", "add-mcp-tool", "send-email", "add-background-job", "publish-live-updates", "add-llm-feature", "add-recipe", "write-test"} {
+	for _, skill := range []string{"add-api-route", "add-resource", "scope-query-to-signed-in-user", "add-page", "add-pack-capability", "add-mcp-tool", "send-email", "add-background-job", "publish-live-updates", "add-llm-feature", "store-file", "add-recipe", "write-test"} {
 		for _, p := range []string{filepath.Join(".claude", "skills", skill, "SKILL.md"), filepath.Join(".agents", "skills", skill, "SKILL.md"), filepath.Join(".gemini", "commands", "lidza", skill+".toml")} {
 			if _, err := os.Stat(filepath.Join(app, p)); err != nil {
 				t.Errorf("%s missing", p)
@@ -272,7 +272,7 @@ func TestGuidanceSurfaces(t *testing.T) {
 		t.Fatal(err)
 	}
 	prompts, err := c.ListPrompts(ctx, mcp.ListPromptsRequest{})
-	if err != nil || len(prompts.Prompts) != 12 {
+	if err != nil || len(prompts.Prompts) != 13 {
 		t.Errorf("prompts: %v %d", err, len(prompts.Prompts))
 	}
 	tools, err := c.ListTools(ctx, mcp.ListToolsRequest{})
@@ -283,7 +283,7 @@ func TestGuidanceSurfaces(t *testing.T) {
 	for _, tl := range tools.Tools {
 		names[tl.Name] = true
 	}
-	for _, want := range []string{"lidza_routes", "lidza_check", "lidza_api", "lidza_snippet", "lidza_logs", "lidza_gen", "lidza_gen_resource", "lidza_verify", "lidza_test", "lidza_recipe_add", "lidza_recipes", "lidza_decision_add"} {
+	for _, want := range []string{"lidza_routes", "lidza_check", "lidza_api", "lidza_snippet", "lidza_logs", "lidza_gen", "lidza_gen_resource", "lidza_verify", "lidza_test", "lidza_recipe_add", "lidza_recipes", "lidza_decision_add", "lidza_credentials_set", "lidza_credentials_list"} {
 		if !names[want] {
 			t.Errorf("tool %s missing", want)
 		}
@@ -467,6 +467,32 @@ func TestDecisionAdd(t *testing.T) {
 	}
 	if out, err := command(app, lidza, "decision", "add", "No reason"); err == nil {
 		t.Errorf("decision without --why accepted:\n%s", out)
+	}
+}
+
+// Secrets are sealed through the CLI and read back by name.
+func TestCredentials(t *testing.T) {
+	t.Cleanup(func() {
+		os.Remove(filepath.Join(app, "config", "master.key"))
+		os.Remove(filepath.Join(app, "config", "credentials.yml.enc"))
+	})
+	out, err := command(app, lidza, "credentials", "set", "MAIL_API_KEY=key-abc", "LLM_API_KEY=sk-1")
+	if err != nil {
+		t.Fatalf("credentials set: %v\n%s", err, out)
+	}
+	sealed, _ := os.ReadFile(filepath.Join(app, "config", "credentials.yml.enc"))
+	if strings.Contains(string(sealed), "key-abc") {
+		t.Fatal("credentials file is not sealed")
+	}
+	if out, _ := command(app, lidza, "credentials", "list"); !strings.Contains(string(out), "MAIL_API_KEY") || strings.Contains(string(out), "key-abc") {
+		t.Errorf("credentials list:\n%s", out)
+	}
+	if out, _ := command(app, lidza, "credentials", "show", "LLM_API_KEY"); strings.TrimSpace(string(out)) != "sk-1" {
+		t.Errorf("credentials show:\n%s", out)
+	}
+	ignore, _ := os.ReadFile(filepath.Join(app, ".gitignore"))
+	if !strings.Contains(string(ignore), "config/master.key") {
+		t.Error("master.key not ignored")
 	}
 }
 

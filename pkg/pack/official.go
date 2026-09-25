@@ -162,7 +162,7 @@ var Officials = []Official{
 	},
 	{
 		Name:        "llm",
-		Description: "Language models behind one Chat, Stream, Embed, Generate and Run: Anthropic, OpenAI, Google and Ollama spoken directly over HTTP, a fake provider for tests, structured output from schema types, the app's tools offered to the model, retries and token counts.",
+		Description: "Language models behind one Chat, Stream, Embed, Generate and Run: Anthropic, OpenAI, Google and Ollama spoken directly over HTTP, a fake provider for tests, structured output from schema types, the app's tools offered to the model, retries, and token usage per call in llm_usage with the db pack.",
 		Env: []string{
 			"# lidza/llm",
 			"LLM_PROVIDER=fake          # fake | ollama | anthropic | openai | google",
@@ -177,7 +177,29 @@ var Officials = []Official{
 			"structured: out, err := llm.Generate[schema.NoteTags](ctx, llm.From(ctx), req) sends the type's JSON Schema and validates the reply",
 			"tools: llm.From(ctx).Run(ctx, req, tools()) offers the app's lidza.Tool values to the model and runs the calls it makes",
 			"tests: LLM_PROVIDER=fake in .env.test; llm.From(srv.Context()).Fake().Reply(\"...\") or .ReplyJSON(v) scripts the next reply",
+			"usage: with the db pack every call is a row in llm_usage (set Request.Label to the feature name); llm.From(ctx).Usage(ctx, since) reports it, the MCP tool lidza_llm_usage too; run `lidza gen` and `lidza db migrate` for the table",
 			"never import a vendor SDK (lidza check L007): the pack speaks each API directly",
+		},
+	},
+	{
+		Name:        "storage",
+		Description: "Files behind one Put, Get, Stat, List, Delete and presigned URLs: any S3-compatible service (AWS S3, MinIO, Cloudflare R2, Backblaze B2, Wasabi, Spaces) spoken directly with Signature V4, and a local directory for development and tests.",
+		Env: []string{
+			"# lidza/storage",
+			"STORAGE_PROVIDER=local     # local | s3",
+			"# STORAGE_DIR=storage       # local: where the files go",
+			"# STORAGE_BUCKET=           # s3",
+			"# STORAGE_ENDPOINT=https://s3.amazonaws.com   # or https://<account>.r2.cloudflarestorage.com, http://127.0.0.1:9000 (MinIO)",
+			"# STORAGE_REGION=us-east-1",
+			"# STORAGE_ACCESS_KEY=       # keep both keys in the credentials: lidza credentials set STORAGE_ACCESS_KEY=... STORAGE_SECRET_KEY=...",
+			"# STORAGE_PUBLIC_URL=       # a CDN or public bucket; URL(key) returns it plus the key",
+			"# STORAGE_MAX_SIZE=104857600   # one Put, bytes",
+		},
+		Notes: []string{
+			"store: obj, err := storage.From(ctx).Put(ctx, \"avatars/\"+id+\".png\", r, storage.PutOptions{}) (content type detected); Get, Stat, List, Delete",
+			"browsers: PresignGet(ctx, key, ttl) for a private object, PresignPut for a direct upload, URL(key) with STORAGE_PUBLIC_URL; or mount storage.Handler(\"/api/v1/files/\") behind auth.Require()",
+			"tests: STORAGE_PROVIDER=local and STORAGE_DIR under a temporary directory; nothing leaves the machine",
+			"never import a vendor SDK (lidza check L008): the pack speaks the S3 API directly",
 		},
 	},
 	{

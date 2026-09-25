@@ -89,6 +89,27 @@ func Service[T any](ctx context.Context) T {
 	panic(fmt.Sprintf("lidza: no service of type %s; is its pack enabled in lidza.json?", t))
 }
 
+// Optional returns the T provided at start and whether there is one:
+// for code that adapts to which packs are enabled (the admin pages).
+func Optional[T any](ctx context.Context) (T, bool) {
+	var zero T
+	s, _ := ctx.Value(servicesKey{}).(*Services)
+	if s == nil {
+		return zero, false
+	}
+	v, ok := s.Lookup(reflect.TypeFor[T]())
+	if !ok {
+		return zero, false
+	}
+	return v.(T), true
+}
+
+// ServicesFrom returns the services in ctx, nil outside the app.
+func ServicesFrom(ctx context.Context) *Services {
+	s, _ := ctx.Value(servicesKey{}).(*Services)
+	return s
+}
+
 func servicesMiddleware(s *Services) func(http.Handler) http.Handler {
 	lookup := func() report.Reporter {
 		if v, ok := s.Lookup(typeOf[report.Reporter]()); ok {

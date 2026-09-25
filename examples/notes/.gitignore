@@ -9,3 +9,4 @@ bin/
 playwright-report/
 test-results/
 !.env.test
+storage/

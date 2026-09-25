@@ -1,6 +1,6 @@
 # systemd unit for {{.Name}}: install the binary and its files under
-# /opt/{{.Name}} (bin/{{.Name}}, db/, .env with LIDZA_ADDR, DATABASE_URL, the
-# secrets), then:
+# /opt/{{.Name}} (bin/{{.Name}}, db/, config/credentials.yml.enc, and .env made
+# from deploy/production.env plus DATABASE_URL and LIDZA_MASTER_KEY), then:
 #   sudo useradd --system --home /opt/{{.Name}} --shell /usr/sbin/nologin {{.Name}}
 #   sudo cp deploy/{{.Name}}.service /etc/systemd/system/
 #   sudo systemctl daemon-reload && sudo systemctl enable --now {{.Name}}

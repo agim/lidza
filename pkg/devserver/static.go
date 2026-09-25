@@ -7,9 +7,15 @@ import (
 	"strings"
 )
 
+// ShellFile is the unrendered index.html the react template's prerender
+// keeps next to the server bundle; it serves every path that has no file
+// of its own.
+const ShellFile = ".server/index.html"
+
 // Static serves a built single-page app from dist: files by path, hashed
-// assets under /assets/ with a long cache lifetime, and index.html for every
-// path that has no file (client-side routing).
+// assets under /assets/ with a long cache lifetime, prerendered pages at
+// <path>/index.html, and the shell for every other path (client-side
+// routing).
 func Static(dist fs.FS) http.Handler {
 	files := http.FileServerFS(dist)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -40,7 +46,14 @@ func Static(dist fs.FS) http.Handler {
 			files.ServeHTTP(w, r)
 			return
 		}
-		index, err := fs.ReadFile(dist, "index.html")
+		// Any other path is the app's to route in the browser. It gets the
+		// bare shell the prerender kept (dist/.server/index.html), not the
+		// prerendered home page: that one carries the home markup and its
+		// hydration payload, which would mismatch here.
+		index, err := fs.ReadFile(dist, ShellFile)
+		if err != nil || name == "" {
+			index, err = fs.ReadFile(dist, "index.html")
+		}
 		if err != nil {
 			http.Error(w, "no frontend build: run `lidza build` first", http.StatusNotFound)
 			return

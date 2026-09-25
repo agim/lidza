@@ -193,6 +193,11 @@ func (s *Sidecar) render(r *http.Request) ([]byte, error) {
 	if res.StatusCode != http.StatusOK || out.Error != "" {
 		return nil, fmt.Errorf("sidecar: %s", firstLineOf(out.Error))
 	}
+	// The sidecar returns the whole page (markup and hydration payload in
+	// the template); a bare fragment is placed into the template here.
+	if trimmed := bytes.TrimSpace([]byte(out.HTML)); bytes.HasPrefix(bytes.ToLower(trimmed), []byte("<!doctype")) || bytes.HasPrefix(trimmed, []byte("<html")) {
+		return []byte(out.HTML), nil
+	}
 	marker := []byte(`<div id="root"></div>`)
 	if !bytes.Contains(s.template, marker) {
 		return nil, errors.New("index.html has no root element")

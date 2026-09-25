@@ -22,6 +22,9 @@ lidza dev
 claude        # or: codex, gemini
 ```
 
+Releases are tags (`CHANGELOG.md`): `go install github.com/agim/lidza/cmd/lidza@v0.1.0`
+installs a specific CLI, and an app's `go.mod` pins the same version.
+
 The installer sets up Go, Rust with wasm targets, the helper tools and the
 `lidza` CLI, skipping what you already have. `lidza new` writes `CLAUDE.md`,
 `AGENTS.md` and `GEMINI.md`, so any of the three agents can start building

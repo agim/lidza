@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot, hydrateRoot } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { RouterProvider } from '@tanstack/react-router'
+import { RouterClient } from '@tanstack/react-router/ssr/client'
 import { createAppRouter } from './router'
 import { ErrorBoundary } from './ErrorBoundary'
 import { announceTimezone } from './timezone'
@@ -16,17 +17,19 @@ const root = document.getElementById('root')!
 const hydrating = root.hasChildNodes()
 const router = createAppRouter()
 
+// Prerendered and server-rendered pages arrive with markup and the
+// router's hydration payload (loader data): RouterClient hydrates both, so
+// the loaders do not run again. Otherwise render from scratch.
 const app = (
   <StrictMode>
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
+        {hydrating ? <RouterClient router={router} /> : <RouterProvider router={router} />}
       </QueryClientProvider>
     </ErrorBoundary>
   </StrictMode>
 )
 
-// Prerendered pages arrive with markup: hydrate it; otherwise render.
 if (hydrating) {
   hydrateRoot(root, app)
 } else {

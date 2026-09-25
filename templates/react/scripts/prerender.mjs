@@ -10,12 +10,18 @@ const dist = 'dist'
 const server = join(dist, '.server')
 const { render, staticPaths } = await import(pathToFileURL(join(process.cwd(), server, 'entry-server.js')).href)
 const template = await readFile(join(dist, 'index.html'), 'utf8')
-const marker = '<div id="root"></div>'
-if (!template.includes(marker)) throw new Error('index.html has no <div id="root"></div>')
 
 for (const path of staticPaths()) {
-  const html = await render(path)
-  const page = template.replace(marker, `<div id="root">${html}</div>`)
+  let page
+  try {
+    page = await render(path, { template })
+  } catch (err) {
+    // A loader that needs the API cannot run at build time: the path is
+    // served as the shell and renders in the browser, or per request with
+    // LIDZA_SSR=1.
+    console.log(`not prerendered ${path}: ${String(err.message ?? err).split('\n')[0]} (needs LIDZA_SSR=1 or a loader that works without the API)`)
+    continue
+  }
   const file = path === '/' ? join(dist, 'index.html') : join(dist, path, 'index.html')
   await mkdir(dirname(file), { recursive: true })
   await writeFile(file, page)

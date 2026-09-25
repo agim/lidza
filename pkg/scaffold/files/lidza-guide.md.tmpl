@@ -262,10 +262,13 @@ Add a client-side route rendered by React, prerendered at build time.
    from `@lidza/client`; never `fetch` by hand.
 4. Routes without parameters are prerendered by `npm run build`; keep
    the first render free of browser-only APIs (`window`, `localStorage`),
-   read them in effects. With `LIDZA_SSR=1` at deploy time every page
-   renders per request in a Node sidecar: give a route a `loader` calling
-   `api.*` and its data is in the HTML, with the visitor's cookies
-   forwarded to the API.
+   read them in effects. A route with a `loader` that calls `api.*` is
+   not prerendered (no API at build time; the build says so) and renders
+   in the browser, unless the binary runs with `LIDZA_SSR=1`: then every
+   page renders per request in a Node sidecar, the loader runs on the
+   server with the visitor's cookies forwarded, and the page arrives with
+   its data and the router's hydration payload, so the loader does not
+   run again in the browser.
 5. Live data: `useLive(['things'])` (src/live.ts) refetches the `things`
    queries when a handler publishes to that topic on the `realtime` pack.
 6. Forms: `validators.CreateThing(values)` from `@lidza/client` returns the

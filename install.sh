@@ -20,6 +20,12 @@ set -eu
 
 GO_MIN_MINOR=24
 NODE_MIN_MAJOR=20
+# Helper tools, pinned: the versions the framework is developed and tested
+# with (docs/environment.md, .github/workflows/ci.yml).
+STATICCHECK_VERSION=2026.2.1
+GOLANGCI_LINT_VERSION=v2.14.0
+SQLC_VERSION=v1.31.1
+WASM_TOOLS_VERSION=1.259.0
 LIDZA_MODULE="github.com/agim/lidza"
 LIDZA_ENV="$HOME/.lidza/env"
 
@@ -178,10 +184,10 @@ install_rust() {
 
 install_tools() {
   [ "$MINIMAL" -eq 0 ] || { skip "helper tools (--minimal)"; return 0; }
-  have staticcheck   || go install honnef.co/go/tools/cmd/staticcheck@latest
-  have golangci-lint || go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
-  have sqlc          || go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
-  have wasm-tools    || cargo install wasm-tools --locked
+  have staticcheck   || go install honnef.co/go/tools/cmd/staticcheck@$STATICCHECK_VERSION
+  have golangci-lint || go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$GOLANGCI_LINT_VERSION
+  have sqlc          || go install github.com/sqlc-dev/sqlc/cmd/sqlc@$SQLC_VERSION
+  have wasm-tools    || cargo install wasm-tools --version "$WASM_TOOLS_VERSION" --locked
   for t in staticcheck golangci-lint sqlc wasm-tools; do status_tool "$t" || true; done
 }
 

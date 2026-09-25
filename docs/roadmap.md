@@ -505,6 +505,23 @@ the models a pack's newer schema fragment brings (`pack.SyncFragments`),
 so upgraded apps get the table with the next migration. The reference
 app runs all of it, with tests; its agent files are current.
 
+### SSR hydration payload, release (done 2026-09-25)
+
+The react template's server entry now renders through TanStack Router's
+request handler (`createRequestHandler`, `renderSsrHtmlResponse`): the
+page comes back whole, with the loader data of the rendered matches
+serialized before `</body>`, and the client hydrates it with
+`RouterClient`, so loaders do not run again after hydration (the
+"partial" row of the feature matrix is done). The Go sidecar serves the
+page as returned; the prerender skips a path whose loader needs the API
+and says so. The extra Suspense boundary the server render carried is
+gone: with the payload, the client router renders its matches the way
+the server does. Found on the way: the static server answered every
+client-side path with the prerendered home page, whose markup and payload
+mismatch any other route at hydration; it now serves the bare shell the
+prerender keeps (`dist/.server/index.html`). `install.sh` pins the helper
+tools; `CHANGELOG.md` starts at v0.1.0, the first tag.
+
 ### Next
 
 Nothing queued.

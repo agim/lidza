@@ -68,10 +68,10 @@ Check: `cargo --version`, `rustc --version`,
 ### Helper tools
 
 ```sh
-go install honnef.co/go/tools/cmd/staticcheck@latest
-go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
-go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
-cargo install wasm-tools --locked
+go install honnef.co/go/tools/cmd/staticcheck@2026.2.1
+go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0
+go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1
+cargo install wasm-tools --version 1.259.0 --locked
 ```
 
 Check: `staticcheck -version`, `golangci-lint --version`, `sqlc version`,

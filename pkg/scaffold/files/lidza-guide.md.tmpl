@@ -36,15 +36,33 @@ app is always at one address: http://127.0.0.1:3000.
 |---|---|
 | `lidza dev` | starts the frontend dev server{{if .DevURL}} ({{.DevURL}}){{end}}, builds and runs the app on http://127.0.0.1:3000, rebuilds on Go changes. `npm install` runs automatically when `node_modules` is missing. |
 | `lidza build` | builds the frontend into `{{if .Dist}}{{.Dist}}/{{else}}(none){{end}}`, then compiles `bin/{{.Name}}`: one binary, no Node at runtime. |
+| `lidza check --json` | runs `go vet`, `staticcheck`, `cargo check` and `tsc`; prints one JSON list of diagnostics, each with `layer`, `file`, `line`, `message`. Exit 1 while there are errors. |
+| `lidza context` | writes `.lidza/context.json`: routes, handler signatures, Rust exports. |
+| `lidza mcp` | MCP server on stdio; see "Agent interface". |
 | `lidza version` | prints the framework version. |
 | `go test ./...` | Go tests. |
 {{- if .Dist}}
 | `npm run check` | frontend type check (`tsc --noEmit`). |
 {{- end}}
 
-Coming with the framework's roadmap: `lidza check --json` (one diagnostics
-stream for Go, Rust and frontend errors), `lidza mcp` (route map, schema and
-logs over MCP), and the generated `@lidza/client`.
+Coming with the framework's roadmap: the generated `@lidza/client`.
+
+## Agent interface
+
+`.mcp.json` (Claude Code) and `.gemini/settings.json` (Gemini CLI) start
+`lidza mcp` for this project. Its tools:
+
+| Tool | Returns |
+|---|---|
+| `lidza_routes` | the API routes with handler name, file, line and signature |
+| `lidza_context` | the whole project as JSON (same as `.lidza/context.json`) |
+| `lidza_check` | the diagnostics of `lidza check --json` |
+| `lidza_logs` | the last lines of the `lidza dev` output (`lines`, `filter`) |
+| `lidza_config` | `lidza.json` |
+
+While `lidza dev` runs, http://127.0.0.1:3000/llms.txt summarizes the app
+and http://127.0.0.1:3000/llms-full.txt has this guide plus every handler
+signature. Both are regenerated after each Go rebuild.
 
 ## Rules
 

@@ -113,6 +113,8 @@ func New(ctx context.Context, opt Options) error {
 		{"agent.md.tmpl", "AGENTS.md"},
 		{"agent.md.tmpl", "GEMINI.md"},
 		{"lidza-guide.md.tmpl", filepath.Join("docs", "lidza-guide.md")},
+		{"mcp.json.tmpl", ".mcp.json"},
+		{"gemini-settings.json.tmpl", filepath.Join(".gemini", "settings.json")},
 	} {
 		if err := render(f.src, filepath.Join(opt.Dir, f.dst), data); err != nil {
 			return err

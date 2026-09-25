@@ -99,7 +99,7 @@ func Handler(app App) (http.Handler, error) {
 		if err != nil {
 			return nil, err
 		}
-		frontend = p
+		frontend = devserver.AgentFiles(p)
 	case app.Dist != nil:
 		frontend = devserver.Static(app.Dist)
 	default:

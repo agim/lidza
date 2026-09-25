@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -18,12 +19,18 @@ Usage:
   lidza new <name> [--template react] [--lidza-dir <path>]
   lidza dev   [--dir .] [--addr 127.0.0.1:3000]
   lidza build [--dir .] [--out bin/<name>]
+  lidza check [--dir .] [--json]
+  lidza context [--dir .] [--stdout]
+  lidza mcp [--dir .]
   lidza version
 
 Commands:
   new      create an app from a template
   dev      run the app with hot reload (frontend dev server proxied behind /api)
   build    build the frontend and compile one production binary
+  check    run go vet, staticcheck, cargo check and tsc; one diagnostics list
+  context  write .lidza/context.json: routes, handler signatures, Rust exports
+  mcp      serve routes, context, diagnostics and dev logs over MCP on stdio
   version  print the framework version
 `
 
@@ -43,6 +50,12 @@ func main() {
 		err = runDev(ctx, args)
 	case "build":
 		err = runBuild(ctx, args)
+	case "check":
+		err = runCheck(ctx, args)
+	case "context":
+		err = runContext(ctx, args)
+	case "mcp":
+		err = runMCP(ctx, args)
 	case "version", "--version", "-v":
 		fmt.Println("lidza", version.String())
 	case "help", "--help", "-h":
@@ -50,6 +63,9 @@ func main() {
 	default:
 		fmt.Fprintf(os.Stderr, "lidza: unknown command %q\n\n%s", cmd, usage)
 		os.Exit(2)
+	}
+	if errors.Is(err, errCheckFailed) {
+		os.Exit(1)
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "lidza:", err)

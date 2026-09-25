@@ -19,6 +19,7 @@ func TestNewReact(t *testing.T) {
 	for _, f := range []string{
 		"go.mod", "main.go", "routes.go", "lidza.json",
 		"CLAUDE.md", "AGENTS.md", "GEMINI.md", "docs/lidza-guide.md",
+		".mcp.json", ".gemini/settings.json",
 		"package.json", "index.html", "vite.config.ts", "tsconfig.json",
 		"src/main.tsx", "src/router.tsx", "src/api.ts", "src/pages/Home.tsx",
 		".gitignore", "dist/.gitkeep",

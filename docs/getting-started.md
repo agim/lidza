@@ -3,10 +3,10 @@
 How a developer sets up Līdza and builds an app with an AI agent (Claude
 Code, Codex CLI or Gemini CLI) doing the coding.
 
-Status 2026-09-25: `install.sh` and the `lidza` CLI (`new`, `dev`, `build`)
-work. Only the `react` template exists; `svelte`, `astro` and `htmx` come
-with roadmap Phase 3. The agent interface (`lidza mcp`, `lidza check
---json`) is Phase 2; steps that need it are marked.
+Status 2026-09-25: `install.sh`, the `lidza` CLI (`new`, `dev`, `build`,
+`check`, `context`, `mcp`) and the agent interface work. Only the `react`
+template exists; `svelte`, `astro` and `htmx` come with roadmap Phase 3, the
+generated client too.
 
 ## Requirements
 
@@ -76,8 +76,8 @@ copy of the framework.
 | `CLAUDE.md` | Claude Code |
 | `AGENTS.md` | Codex CLI (and other AGENTS.md-aware tools) |
 | `GEMINI.md` | Gemini CLI |
-| `.mcp.json` | Claude Code, project-scoped MCP server (Phase 2) |
-| `.gemini/settings.json` | Gemini CLI MCP server (Phase 2) |
+| `.mcp.json` | Claude Code, project-scoped MCP server |
+| `.gemini/settings.json` | Gemini CLI MCP server |
 | `docs/lidza-guide.md` | all three; the framework rules in one place |
 
 The three instruction files are short and point at `docs/lidza-guide.md`,
@@ -116,13 +116,18 @@ The agent loop Līdza is built for:
 
 1. The agent edits Go, Rust or frontend code.
 2. `lidza check --json` returns one JSON list of errors across all three
-   layers, with file and line (Phase 2).
+   layers, with file and line.
 3. `lidza dev` hot-reloads; the generated client keeps frontend types in sync
    with the Go handlers (Phase 3).
-4. `lidza mcp` lets the agent ask for the route map, schema and logs instead
-   of grepping (Phase 2).
+4. `lidza mcp` lets the agent ask for the route map, diagnostics and logs
+   instead of grepping.
 
-### MCP server (Phase 2)
+### MCP server
+
+Tools: `lidza_routes`, `lidza_context`, `lidza_check`, `lidza_logs`,
+`lidza_config`; resources `lidza://llms.txt` and `lidza://llms-full.txt`.
+While `lidza dev` runs, the same two documents are at
+http://127.0.0.1:3000/llms.txt and `/llms-full.txt`.
 
 `lidza new` configures it for Claude Code and Gemini CLI. Codex CLI reads a
 user-level file; add:

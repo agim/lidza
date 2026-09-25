@@ -22,6 +22,9 @@ type Options struct {
 	Out io.Writer
 	// Poll is how often the Go sources are checked for changes.
 	Poll time.Duration
+	// AfterBuild runs after every successful build of the app, before the
+	// restart. `lidza dev` uses it to refresh the agent context files.
+	AfterBuild func()
 }
 
 // Environment the app binary reads, in dev (set by `lidza dev`) and in
@@ -81,11 +84,18 @@ func Dev(ctx context.Context, cfg *config.Config, opt Options) error {
 	}
 	defer app.stop()
 
+	afterBuild := func() {
+		if opt.AfterBuild != nil {
+			opt.AfterBuild()
+		}
+	}
 	if err := app.build(ctx); err != nil {
 		logf("build failed; fix the errors above, watching for changes")
-	} else if err := app.start(); err != nil {
-		return err
 	} else {
+		afterBuild()
+		if err := app.start(); err != nil {
+			return err
+		}
 		logf("app: http://%s  (API under /api, frontend proxied from %s)", opt.Addr, cfg.Frontend.URL)
 	}
 
@@ -107,6 +117,7 @@ func Dev(ctx context.Context, cfg *config.Config, opt Options) error {
 				logf("build failed; keeping the previous binary running")
 				continue
 			}
+			afterBuild()
 			app.stop()
 			if err := app.start(); err != nil {
 				logf("restart failed: %v", err)

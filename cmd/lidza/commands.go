@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,6 +12,8 @@ import (
 
 	"github.com/agim/lidza/pkg/config"
 	"github.com/agim/lidza/pkg/devserver"
+	"github.com/agim/lidza/pkg/inspect"
+	"github.com/agim/lidza/pkg/mcpserver"
 	"github.com/agim/lidza/pkg/scaffold"
 )
 
@@ -65,7 +68,22 @@ func runDev(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	return devserver.Dev(ctx, cfg, devserver.Options{Addr: *addr, Out: os.Stdout})
+	// Everything printed also goes to .lidza/dev.log for `lidza mcp`.
+	if err := os.MkdirAll(filepath.Join(cfg.Dir, devserver.BuildDir), 0o755); err != nil {
+		return err
+	}
+	logFile, err := os.Create(filepath.Join(cfg.Dir, mcpserver.LogFile))
+	if err != nil {
+		return err
+	}
+	defer logFile.Close()
+	out := io.MultiWriter(os.Stdout, logFile)
+	refresh := func() {
+		if err := inspect.Refresh(cfg.Dir, cfg); err != nil {
+			fmt.Fprintf(out, "[lidza] context refresh failed: %v\n", err)
+		}
+	}
+	return devserver.Dev(ctx, cfg, devserver.Options{Addr: *addr, Out: out, AfterBuild: refresh})
 }
 
 func runBuild(ctx context.Context, args []string) error {

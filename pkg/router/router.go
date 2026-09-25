@@ -20,10 +20,29 @@ type Router struct {
 	mux *http.ServeMux
 }
 
+// builtins are the routes every app serves, registered by New.
+var builtins = []struct {
+	pattern string
+	handler http.HandlerFunc
+}{
+	{"GET /api/v1/health", health},
+}
+
+// Builtins lists the patterns of the routes every app serves.
+func Builtins() []string {
+	out := make([]string, len(builtins))
+	for i, b := range builtins {
+		out[i] = b.pattern
+	}
+	return out
+}
+
 // New returns a Router with the built-in routes registered.
 func New() *Router {
 	r := &Router{mux: http.NewServeMux()}
-	r.HandleFunc("GET /api/v1/health", health)
+	for _, b := range builtins {
+		r.HandleFunc(b.pattern, b.handler)
+	}
 	return r
 }
 

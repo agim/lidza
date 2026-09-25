@@ -45,19 +45,37 @@ yields one binary that serves the app with no Node running.
 
 ## Phase 2: Agent interface
 
-- `lidza context`: JSON dump of routes, handler signatures and Rust exports
-  to `.lidza/context.json` (`go/ast`, `syn`).
-- `lidza check --json`: one JSON diagnostics stream merging `go vet`,
-  `staticcheck`, `cargo check --message-format=json` and frontend build
-  errors, each with layer, file, line, message.
-- `lidza mcp`: MCP server (`mark3labs/mcp-go`) exposing route map, schema
-  and runtime logs.
-- `/llms.txt` and `/llms-full.txt` served by `lidza dev`.
-- `lidza new` writes `.mcp.json` (Claude Code) and `.gemini/settings.json`
-  (Gemini CLI) pointing at `lidza mcp`; Codex CLI snippet in the docs.
+Done 2026-09-25.
 
-Check: an agent connected to `lidza mcp` can list routes; introducing a Rust
-type error makes `lidza check --json` report it with the right file and line.
+- `lidza check --json` (`pkg/diag`): `go vet`, `staticcheck`, `cargo check`
+  and `tsc` run in parallel; one list of diagnostics with layer, tool,
+  severity, file, line, column, code, message. Findings two tools report
+  identically (Go compile errors) appear once. Missing tools are reported
+  as skipped, not errors. Exit 1 while errors remain.
+- `lidza context` (`pkg/inspect`): `.lidza/context.json` with routes found
+  by `go/ast` (`HandleFunc`/`Handle` calls with literal patterns; handler
+  name, file, line, signature; built-ins marked) and the Rust crate's
+  `#[no_mangle] pub extern "C" fn` exports found by scanning the source.
+  `syn`-based parsing waits for Phase 4, when pack validation needs full
+  Rust signatures.
+- `lidza mcp` (`pkg/mcpserver`, `mark3labs/mcp-go`, the first dependency):
+  tools `lidza_routes`, `lidza_context`, `lidza_check`, `lidza_logs`
+  (tail of `.lidza/dev.log`, which `lidza dev` now writes), `lidza_config`;
+  resources `lidza://llms.txt` and `lidza://llms-full.txt`.
+- `/llms.txt` and `/llms-full.txt` served in dev mode from `.lidza/`,
+  regenerated after every Go rebuild.
+- `lidza new` writes `.mcp.json` and `.gemini/settings.json`; the guide
+  documents the tools; Codex CLI snippet in `docs/getting-started.md`.
+
+Check (passes): an agent connected to `lidza mcp` can list routes;
+introducing a Rust type error makes `lidza check --json` report it with the
+right file and line.
+
+## Feature matrix
+
+`docs/features.md` maps every capability a complete framework needs to the
+phase that delivers it, and lists the two open decisions (ORM, SSR). The
+phases below carry the items it assigns them.
 
 ## Phase 3: Schema and SDKs
 
@@ -68,6 +86,15 @@ type error makes `lidza check --json` report it with the right file and line.
 - Remaining templates, each using `@lidza/client` where it has a JS
   toolchain: `svelte` (Vite + Svelte 5), `astro` (static output only),
   `htmx` (Go `templ`, no proxy).
+- Middleware pipeline: `router.Use`; request log, panic recovery (JSON
+  error), request id, timeouts, CORS, secure headers and CSP; CSRF for
+  cookie sessions.
+- App lifecycle hooks on `lidza.App`: `OnStart`, `OnReady`, `OnShutdown`.
+- `pkg/env`: typed configuration from the environment and `.env.<mode>`.
+- Validation rules in the schema source; Go and generated TypeScript
+  validators share them.
+- Migrations generated from the schema source.
+- React error boundary in the template.
 
 Check: changing a handler's response struct updates the generated TypeScript
 types without manual steps; `tsc` on the `react` and `svelte` templates
@@ -81,8 +108,12 @@ check (HMR through the proxy where applicable, single binary in production).
 - `lidza pack add <name>` (official packs) and `lidza pack scaffold <name>`
   (local packs).
 - Packs auto-register into `lidza mcp` on change.
-- First official packs: `db` (pgx + sqlc / sqlx), `realtime`
-  (coder/websocket), `geo` (geozero + rstar), `media` (image + zune-jpeg).
+- First official packs: `db` (pgx + sqlc / sqlx, `pgxpool`, `lidza db
+  migrate|rollback|status`), `realtime` (coder/websocket, query
+  invalidations pushed to the client), `geo` (geozero + rstar), `media`
+  (image + zune-jpeg).
+- `lidza.Services`: typed service registry (constructors registered once,
+  resolved by type at startup and per request); packs register into it.
 
 Check: `lidza pack scaffold demo`, fill in one Rust function, and the
 capability shows up in the MCP tool list with a matching Go call.
@@ -100,3 +131,32 @@ capability shows up in the MCP tool list with a matching Go call.
 Check: `k6 run --vus 500 --duration 1m benchmarks/scale_test.js` against
 `lidza dev` completes with flat memory (`go tool pprof` heap before and
 after within noise).
+
+## Phase 6: Application services
+
+Official packs on the Phase 4 model:
+
+- `auth`: PASETO or JWT with refresh, Valkey-backed sessions, `lidza auth`
+  commands.
+- `jobs`: River (Postgres-backed queue), Rust workers for compute.
+- `cache`: server-side query cache on Valkey with invalidation hooks.
+- `i18n`: `Accept-Language` negotiation, message catalogs, dates, numbers
+  and currencies via `golang.org/x/text`, frontend catalog export.
+- `lidza test`: `lidza_test` database per run, `httptest` helpers, fake
+  clock, recorded HTTP fixtures.
+
+Check: the template app with `auth`, `jobs` and `cache` added passes
+`lidza test` offline, and a login survives a restart of the binary.
+
+## Phase 7: Frontend depth
+
+- Prerendering for `react` (static HTML at build time, hydration on the
+  client) with TanStack Query dehydrate/hydrate; the SSR decision in
+  `docs/features.md` may extend this.
+- Accessibility: `eslint-plugin-jsx-a11y` in the templates, findings in
+  `lidza check --json`.
+- `useLive` in the template: data bound to `realtime` invalidations.
+
+Check: a content page of the template app is served as complete HTML by the
+binary and becomes interactive without a second data fetch; an a11y
+violation in a page fails `lidza check`.

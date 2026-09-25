@@ -40,10 +40,11 @@ is one binary.
 
 ## Status
 
-Phase 1 done: `lidza new`, `lidza dev` (Go and frontend hot reload behind
-one port), `lidza build` (one binary), the `react` template and the
-`lidza-core` crate. Next: Phase 2, the agent interface (`lidza check --json`,
-`lidza mcp`). See `docs/roadmap.md`.
+Phases 1 and 2 done: `lidza new`, `lidza dev` (Go and frontend hot reload
+behind one port), `lidza build` (one binary), the `react` template, the
+`lidza-core` crate, and the agent interface: `lidza check --json`,
+`lidza context`, `lidza mcp`, `/llms.txt`. Next: Phase 3, schema and SDKs.
+See `docs/roadmap.md`; `docs/features.md` maps every capability to a phase.
 
 ## Developing the framework
 
@@ -61,4 +62,6 @@ bin/lidza new demo --lidza-dir "$PWD"   # an app pointed at this checkout
 - `docs/getting-started.md`: install, create an app, build it with Claude Code, Codex or Gemini CLI.
 - `docs/environment.md`: host inventory, toolchain plan, services, layout, naming, verification.
 - `docs/roadmap.md`: phases and acceptance checks.
+- `docs/features.md`: feature matrix, what is done, what comes when, open decisions.
+- `docs/scalability.md`: the scalable-by-default primitives and the rules every change follows.
 - `docs/research/`: design notes the project started from.

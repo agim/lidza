@@ -38,6 +38,29 @@ func TestI18n(t *testing.T) {
 	if got := i.Date(ctx, time.Date(2026, 9, 25, 0, 0, 0, 0, time.UTC)); got != "25.09.2026" {
 		t.Fatalf("date %q", got)
 	}
+	// Time zone: cookie, then header; unknown names fall back to UTC.
+	tzReq := httptest.NewRequest("GET", "/", nil)
+	tzReq.AddCookie(&http.Cookie{Name: "tz", Value: "Europe/Tirane"})
+	tzCtx := WithTimezone(ctx, i.NegotiateTimezone(tzReq))
+	stamp := time.Date(2026, 9, 25, 22, 30, 0, 0, time.UTC)
+	if got := i.DateTime(tzCtx, stamp); got != "2026-09-26 00:30" {
+		t.Fatalf("datetime in zone: %q", got)
+	}
+	if got := i.Time(tzCtx, stamp); got != "00:30" {
+		t.Fatalf("time in zone: %q", got)
+	}
+	if got := i.Date(tzCtx, stamp); got != "26.09.2026" {
+		t.Fatalf("date crosses midnight in zone: %q", got)
+	}
+	hdr := httptest.NewRequest("GET", "/", nil)
+	hdr.Header.Set("X-Timezone", "America/New_York")
+	if i.NegotiateTimezone(hdr).String() != "America/New_York" {
+		t.Fatal("header zone")
+	}
+	bad := httptest.NewRequest("GET", "/?tz=Mars/Olympus", nil)
+	if i.NegotiateTimezone(bad).String() != "UTC" {
+		t.Fatal("unknown zone should fall back")
+	}
 	if got := i.Number(ctx, 1234567.5); got != "1.234.567,5" {
 		t.Fatalf("number %q", got)
 	}

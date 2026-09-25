@@ -99,6 +99,9 @@ signature. Both are regenerated after each Go rebuild.
    starts both and keeps them in sync.
 7. Keep the app stateless: no global mutable maps, no in-memory sessions.
    State goes to Postgres or Redis.
+8. Log with `lidza.Log(ctx).Info("what happened", "key", value)`: the line
+   carries the request id, so one request's lines are found together.
+   Never `fmt.Println` in handlers.
 
 ## Tests
 
@@ -182,8 +185,11 @@ Official Go packs, configured from `.env` (see `.env.example` after
 - `cache`: `cache.Remember(ctx, cache.From(ctx), "key", ttl, load)`;
   `cache.From(ctx).Invalidate(ctx, "prefix:")` after writes.
 - `i18n`: `i18n.From(ctx).T(ctx, "key", args...)`, `Number`, `Currency`,
-  `Date`; catalogs in `locales/<lang>.json`; serve them with
-  `r.Handle("GET /api/v1/i18n/{lang}", i18n.Handler())`.
+  `Date`, `Time`, `DateTime` (in the visitor's zone: the template sets a
+  `tz` cookie, API clients send `X-Timezone`; `I18N_TIMEZONE` is the
+  default); catalogs in `locales/<lang>.json`; serve them with
+  `r.Handle("GET /api/v1/i18n/{lang}", i18n.Handler())`. Store and send
+  times in UTC; format at the edge.
 - `realtime`: `realtime.From(ctx).Publish(ctx, topic, value)` and
   `r.Handle("GET /api/v1/realtime", realtime.Handler())`.
 
@@ -243,3 +249,5 @@ guard an outbound dependency with `resilience.New(...)`.
 | `LIDZA_MODE` | `dev` proxies the frontend instead of serving the embedded build | unset (production) |
 | `LIDZA_FRONTEND_URL` | dev server to proxy to; set by `lidza dev` | |
 | `LIDZA_SSR` | `1` starts the Node SSR sidecar from `dist/.server` (react template) | unset |
+| `LIDZA_LOG` | log format, `json` or `text` | `text` under `lidza dev` and `lidza test`, else `json` |
+| `LIDZA_LOG_LEVEL` | `debug`, `info`, `warn`, `error` | `info` |

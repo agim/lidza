@@ -50,7 +50,9 @@ type App struct {
 	// sends none; Vite's dev server needs inline scripts, so set it for
 	// production builds only.
 	CSP string
-	// Logger receives request and error logs; default slog.Default().
+	// Logger receives request and error logs. Default: NewLogger from
+	// LIDZA_LOG and LIDZA_LOG_LEVEL, also installed as slog's default so
+	// packs log the same way. Handlers use lidza.Log(ctx).
 	Logger *slog.Logger
 	// Packs are started in order before OnStart and stopped in reverse
 	// after OnShutdown. packs.go, generated from lidza.json, lists them.
@@ -103,7 +105,12 @@ type Booted struct {
 // Boot starts the packs in order, runs OnStart and builds the handler.
 // Close stops everything in reverse.
 func Boot(ctx context.Context, app App) (*Booted, error) {
+	if app.Logger == nil {
+		app.Logger = NewLogger()
+		slog.SetDefault(app.Logger)
+	}
 	services := NewServices()
+	Provide(services, app.Logger)
 	h, sidecar, err := handler(app, services)
 	if err != nil {
 		return nil, err

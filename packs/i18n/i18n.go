@@ -31,6 +31,8 @@ import (
 type Config struct {
 	// Default is the locale used when nothing better matches.
 	Default string `env:"I18N_DEFAULT" default:"en"`
+	// Timezone is the IANA zone used when the request names none.
+	Timezone string `env:"I18N_TIMEZONE" default:"UTC"`
 }
 
 // I18n is the running pack.
@@ -41,6 +43,7 @@ type I18n struct {
 	tags     []language.Tag
 	matcher  language.Matcher
 	def      language.Tag
+	defZone  *time.Location
 }
 
 // Pack returns the pack for packs.go; packs.go embeds locales/ and passes
@@ -49,7 +52,7 @@ func Pack(locales fs.FS) lidza.Pack { return &I18n{locales: locales} }
 
 // New loads the catalogs outside the lifecycle (tests).
 func New(locales fs.FS, def string) (*I18n, error) {
-	i := &I18n{locales: locales, cfg: Config{Default: def}}
+	i := &I18n{locales: locales, cfg: Config{Default: def, Timezone: "UTC"}}
 	return i, i.load()
 }
 
@@ -74,13 +77,51 @@ func (i *I18n) Start(ctx context.Context, s *lidza.Services) error {
 // Stop implements lidza.Pack.
 func (i *I18n) Stop(context.Context) error { return nil }
 
-// Middleware puts the negotiated locale in every API request's context.
+// Middleware puts the negotiated locale and time zone in every API
+// request's context.
 func (i *I18n) Middleware() middleware.Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			next.ServeHTTP(w, r.WithContext(WithLocale(r.Context(), i.Negotiate(r))))
+			ctx := WithLocale(r.Context(), i.Negotiate(r))
+			ctx = WithTimezone(ctx, i.NegotiateTimezone(r))
+			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}
+
+// NegotiateTimezone picks the request's zone: ?tz, the tz cookie (the
+// react template sets it from the browser), the X-Timezone header, then
+// the default. Unknown names fall back to the default.
+func (i *I18n) NegotiateTimezone(r *http.Request) *time.Location {
+	candidates := []string{r.URL.Query().Get("tz")}
+	if c, err := r.Cookie("tz"); err == nil {
+		candidates = append(candidates, c.Value)
+	}
+	candidates = append(candidates, r.Header.Get("X-Timezone"))
+	for _, name := range candidates {
+		if name == "" {
+			continue
+		}
+		if loc, err := time.LoadLocation(name); err == nil {
+			return loc
+		}
+	}
+	return i.defZone
+}
+
+type timezoneKey struct{}
+
+// WithTimezone attaches a zone to ctx.
+func WithTimezone(ctx context.Context, loc *time.Location) context.Context {
+	return context.WithValue(ctx, timezoneKey{}, loc)
+}
+
+// Timezone returns the request's zone, or the default.
+func (i *I18n) Timezone(ctx context.Context) *time.Location {
+	if loc, ok := ctx.Value(timezoneKey{}).(*time.Location); ok && loc != nil {
+		return loc
+	}
+	return i.defZone
 }
 
 // load reads locales/*.json. Nested objects flatten to dotted keys.
@@ -132,6 +173,11 @@ func (i *I18n) load() error {
 	}
 	i.def = def
 	i.matcher = language.NewMatcher(ordered)
+	zone, err := time.LoadLocation(i.cfg.Timezone)
+	if err != nil {
+		return fmt.Errorf("i18n: I18N_TIMEZONE: %w", err)
+	}
+	i.defZone = zone
 	return nil
 }
 
@@ -245,14 +291,28 @@ func (i *I18n) Currency(ctx context.Context, amount float64, code string) string
 	return p.Sprint(currency.Symbol(unit.Amount(amount)))
 }
 
-// Date formats t with the catalog's "_formats.date" layout (Go layout),
-// default 2006-01-02.
+// Date formats t in the request's zone with the catalog's "_formats.date"
+// layout (Go layout), default 2006-01-02.
 func (i *I18n) Date(ctx context.Context, t time.Time) string {
-	layout := i.T(ctx, "_formats.date")
-	if layout == "_formats.date" {
-		layout = "2006-01-02"
+	return i.format(ctx, t, "_formats.date", "2006-01-02")
+}
+
+// Time formats the time of day, "_formats.time", default 15:04.
+func (i *I18n) Time(ctx context.Context, t time.Time) string {
+	return i.format(ctx, t, "_formats.time", "15:04")
+}
+
+// DateTime formats both, "_formats.datetime", default 2006-01-02 15:04.
+func (i *I18n) DateTime(ctx context.Context, t time.Time) string {
+	return i.format(ctx, t, "_formats.datetime", "2006-01-02 15:04")
+}
+
+func (i *I18n) format(ctx context.Context, t time.Time, key, fallback string) string {
+	layout := i.T(ctx, key)
+	if layout == key {
+		layout = fallback
 	}
-	return t.Format(layout)
+	return t.In(i.Timezone(ctx)).Format(layout)
 }
 
 // Handler serves the catalog of a locale for the frontend:

@@ -4,7 +4,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { RouterProvider } from '@tanstack/react-router'
 import { createAppRouter } from './router'
 import { ErrorBoundary } from './ErrorBoundary'
+import { announceTimezone } from './timezone'
 import './index.css'
+
+announceTimezone()
 
 const queryClient = new QueryClient()
 const router = createAppRouter()

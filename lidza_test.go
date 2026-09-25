@@ -1,10 +1,12 @@
 package lidza
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -217,6 +219,34 @@ type readyService struct{}
 
 func (*readyService) Name() string                { return "ready" }
 func (*readyService) Ready(context.Context) error { return errors.New("not yet") }
+
+func TestLog(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&buf, nil))
+	s := NewServices()
+	Provide(s, logger)
+	t.Setenv(devserver.EnvMode, "")
+	h, _, err := handler(App{Logger: logger, Routes: func(r *router.Router) {
+		r.HandleFunc("GET /api/v1/log", func(w http.ResponseWriter, req *http.Request) {
+			Log(req.Context()).Info("handled", "thing", 1)
+		})
+	}}, s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/log", nil)
+	req.Header.Set("X-Request-ID", "req-42")
+	h.ServeHTTP(rec, req)
+	if !strings.Contains(buf.String(), `"msg":"handled"`) || !strings.Contains(buf.String(), `"request_id":"req-42"`) || !strings.Contains(buf.String(), `"thing":1`) {
+		t.Fatalf("log: %s", buf.String())
+	}
+	t.Setenv(EnvLog, "text")
+	t.Setenv(EnvLogLevel, "warn")
+	if l := NewLogger(); l.Enabled(context.Background(), slog.LevelInfo) || !l.Enabled(context.Background(), slog.LevelWarn) {
+		t.Fatal("level")
+	}
+}
 
 func TestHandlerNoFrontend(t *testing.T) {
 	t.Setenv(devserver.EnvMode, "")

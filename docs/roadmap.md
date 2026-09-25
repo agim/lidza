@@ -306,7 +306,17 @@ The repository is public; `install.sh` installs the CLI with `go install`
 and `lidza new` fetches the module. The design notes the project started
 from were replaced by `docs/design.md` before publishing.
 
+### Logging and time zones (done 2026-09-25)
+
+`lidza.Log(ctx)` returns the app logger with the request id attached;
+`LIDZA_LOG` picks JSON or text (text under dev and test), `LIDZA_LOG_LEVEL`
+the level; the same logger is slog's default, so packs log alike. The
+`i18n` pack negotiates a time zone per request (`?tz`, `tz` cookie,
+`X-Timezone`, then `I18N_TIMEZONE`) and formats `Date`, `Time` and
+`DateTime` in it; the `react` template sets the cookie from `Intl`.
+Storage and the API stay in UTC.
+
 ### Next
 
-Logging and time zones, a CRUD generator, Tailwind in the `react`
-template, opt-in analytics and error reporting, app-defined MCP tools.
+A CRUD generator, Tailwind in the `react` template, opt-in analytics and
+error reporting, app-defined MCP tools.

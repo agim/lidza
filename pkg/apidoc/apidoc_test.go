@@ -53,4 +53,26 @@ func TestRender(t *testing.T) {
 	if s := Suggest(dir, "github.com/agim/lidza/pkg/routers"); s != "github.com/agim/lidza/pkg/router" {
 		t.Errorf("suggest: %q", s)
 	}
+
+	// The reference app as an app source.
+	src, ok := App(filepath.Join(root, "examples", "notes"))
+	if !ok || src.Module != "notes" {
+		t.Fatalf("app source: %+v %v", src, ok)
+	}
+	pkgs, _ = Packages(src.Dir)
+	if strings.Join(pkgs, ",") != ",db/queries/gen,handlers,schema" {
+		t.Errorf("app packages: %v", pkgs)
+	}
+	for _, p := range []string{"notes/handlers", "./handlers", "handlers/"} {
+		if rel, ok := src.Rel(p); p != "handlers/" && (!ok || rel != "handlers") {
+			t.Errorf("Rel(%q) = %q %v", p, rel, ok)
+		}
+	}
+	if !src.Exists("./handlers") || src.Exists("./nope") || src.Exists("github.com/agim/lidza/pkg/router") {
+		t.Error("app Exists")
+	}
+	appText, err := src.Render([]string{"handlers"}, "")
+	if err != nil || !strings.Contains(appText, "## notes/handlers (package handlers)") || !strings.Contains(appText, "func NoteRoutes(r *router.Router)") {
+		t.Errorf("app render: %v\n%s", err, appText)
+	}
 }

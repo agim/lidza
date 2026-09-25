@@ -33,7 +33,8 @@ app is always at one address: http://127.0.0.1:3000.
 ├── {{.Dist}}/            frontend build output, embedded into the binary. Never edit.
 {{- end}}
 ├── .githooks/pre-commit  runs lidza verify before every commit
-├── .claude/skills/  one skill per recipe below, generated from this file
+├── .claude/skills/  one skill per recipe below (Claude Code), generated from this file
+├── .agents/skills/  the same skills for Codex; .gemini/commands/lidza/ the same as Gemini commands
 ├── docs/lidza-guide.md   this file
 └── .lidza/          dev build artifacts (gitignored)
 ```
@@ -81,7 +82,11 @@ app is always at one address: http://127.0.0.1:3000.
 | `lidza_errors` | captured errors (analytics pack) |
 
 Its prompts are the recipes of this guide (`add-api-route`,
-`add-resource`, ...), also written as skills to `.claude/skills/`.
+`add-resource`, ...). The same recipes are skills for Claude Code
+(`.claude/skills/`) and Codex (`.agents/skills/`, invoked as
+`$add-api-route`) and commands for Gemini CLI (`.gemini/commands/lidza/`,
+invoked as `/lidza:add-api-route`); `lidza gen` rewrites all of them from
+this file.
 
 The app adds its own tools in `tools.go` with
 `lidza.ToolFunc("name", "what it does", func(ctx, In) (Out, error))`;
@@ -121,8 +126,9 @@ signature. Both are regenerated after each Go rebuild.
    carries the request id, so one request's lines are found together.
    Never `fmt.Println` in handlers.
 9. Before calling a framework function, read its signature: `lidza api
-   [package] [--filter name]` or the MCP tool `lidza_api`. An import of a
-   framework package that does not exist fails `lidza check` (L004).
+   [package] [--filter name]` or the MCP tool `lidza_api`; `lidza api app`
+   (or `./handlers`) does the same for this app's own packages. An import
+   of a framework package that does not exist fails `lidza check` (L004).
 10. Before writing a handler, page, test or tool of a kind you have not
    written here, read the matching snippet (`lidza snippet` or the MCP
    tool `lidza_snippet`): it is the reference app's code, verified by its
@@ -147,9 +153,10 @@ prints the install line; `lidza test --e2e --install` runs it.
 
 ## Recipes
 
-Step-by-step tasks. Each one is also a prompt in `lidza mcp` and a skill
-in `.claude/skills/<name>`; `lidza gen` rewrites the skills from this
-section, so edit it here. Every recipe ends the same way: `lidza check
+Step-by-step tasks. Each one is also a prompt in `lidza mcp`, a skill in
+`.claude/skills/<name>` and `.agents/skills/<name>`, and a Gemini command
+in `.gemini/commands/lidza/<name>.toml`; `lidza gen` rewrites them from
+this section, so edit it here. Every recipe ends the same way: `lidza check
 --json` until `"status": "ok"`, then `lidza test`.
 
 ### Add an API route

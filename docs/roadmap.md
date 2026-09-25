@@ -433,8 +433,22 @@ MCP prompts, tools and resources are there; `lidza verify` passes; the
 reference app's own verify passes when Postgres is reachable.
 `evals/README.md` lists the cases; every new rule or surface gets one.
 
+### Recipes for every CLI, app API, agent-driven evals (done 2026-09-25)
+
+The recipes are now written for each agent CLI from the one guide
+section: Claude Code skills (`.claude/skills`), Codex skills in the Agent
+Skills layout (`.agents/skills`, invoked as `$add-api-route`) and Gemini
+CLI commands (`.gemini/commands/lidza/<name>.toml`, invoked as
+`/lidza:add-api-route`, the user's words appended as the task). Codex
+custom prompts stay user-level by design, so skills are the shared form.
+`lidza api` and `lidza_api` render the app's own packages too (`app`,
+`./handlers`, or the app's import path); `--list` and `lidza_api list`
+name both sets. `evals/agent_test.go` (tag `agenteval`) runs a real agent
+on a fresh copy of the scaffolded app for three tasks (a typed route, a
+page, an MCP tool) and scores each with `lidza verify` plus a probe; the
+agent command comes from `LIDZA_EVAL_AGENT`, run by the operator, since
+the runner adds no permission-skipping flag of its own.
+
 ### Next
 
-Nothing queued. Candidates, in no order: an agent-driven eval (a real
-agent given a task on a fresh app, scored by `lidza verify`); Gemini CLI
-custom commands from the recipes; `lidza api` for the app's own packages.
+Nothing queued.

@@ -261,8 +261,10 @@ func TestInaccessibleElement(t *testing.T) {
 
 func TestGuidanceSurfaces(t *testing.T) {
 	for _, skill := range []string{"add-api-route", "add-resource", "add-page", "add-pack-capability", "add-mcp-tool", "write-test"} {
-		if _, err := os.Stat(filepath.Join(app, ".claude", "skills", skill, "SKILL.md")); err != nil {
-			t.Errorf("skill %s missing", skill)
+		for _, p := range []string{filepath.Join(".claude", "skills", skill, "SKILL.md"), filepath.Join(".agents", "skills", skill, "SKILL.md"), filepath.Join(".gemini", "commands", "lidza", skill+".toml")} {
+			if _, err := os.Stat(filepath.Join(app, p)); err != nil {
+				t.Errorf("%s missing", p)
+			}
 		}
 	}
 	for _, f := range []string{"CLAUDE.md", "AGENTS.md", "GEMINI.md"} {

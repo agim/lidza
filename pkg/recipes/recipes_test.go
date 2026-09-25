@@ -79,6 +79,28 @@ func TestWriteSkills(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, SkillsDir, "old")); !os.IsNotExist(err) {
 		t.Error("stale generated skill kept")
 	}
+	agents, err := os.ReadFile(filepath.Join(dir, AgentsSkillsDir, "add-api-route", "SKILL.md"))
+	claude, _ := os.ReadFile(filepath.Join(dir, SkillsDir, "add-api-route", "SKILL.md"))
+	if err != nil || string(agents) != string(claude) {
+		t.Errorf("codex skill: %v", err)
+	}
+	gem, err := os.ReadFile(filepath.Join(dir, GeminiCommandsDir, "add-api-route.toml"))
+	if err != nil || !strings.HasPrefix(string(gem), geminiMarker+"\ndescription = \"Expose an operation with \\\"typed\\\" input and output. Second line of the paragraph.\"\nprompt = \"\"\"\n# Add an API route\n") || !strings.Contains(string(gem), "Task: {{args}}\n\"\"\"\n") {
+		t.Errorf("gemini command: %v\n%s", err, gem)
+	}
+	// A second sync with one recipe gone removes its files everywhere.
+	os.WriteFile(filepath.Join(dir, GuideFile), []byte("## Recipes\n\n### Write a test\n\nBoot.\n"), 0o644)
+	if _, err := Sync(dir); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []string{filepath.Join(SkillsDir, "add-api-route"), filepath.Join(AgentsSkillsDir, "add-api-route"), filepath.Join(GeminiCommandsDir, "add-api-route.toml")} {
+		if _, err := os.Stat(filepath.Join(dir, p)); !os.IsNotExist(err) {
+			t.Errorf("%s not removed", p)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dir, SkillsDir, "mine", "SKILL.md")); err != nil {
+		t.Error("hand-written skill removed")
+	}
 	if rs, err := Sync(t.TempDir()); err != nil || rs != nil {
 		t.Errorf("no guide: %v %v", rs, err)
 	}

@@ -25,6 +25,7 @@ func TestNewReact(t *testing.T) {
 		".gitignore", "dist/.gitkeep",
 		".claude/skills/add-api-route/SKILL.md", ".claude/skills/add-resource/SKILL.md", ".claude/skills/add-page/SKILL.md",
 		".claude/skills/add-pack-capability/SKILL.md", ".claude/skills/add-mcp-tool/SKILL.md", ".claude/skills/write-test/SKILL.md",
+		".agents/skills/add-api-route/SKILL.md", ".gemini/commands/lidza/add-api-route.toml", ".gemini/commands/lidza/write-test.toml",
 	} {
 		if _, err := os.Stat(filepath.Join(dir, f)); err != nil {
 			t.Errorf("missing %s", f)

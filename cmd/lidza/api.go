@@ -9,9 +9,10 @@ import (
 	"github.com/agim/lidza/pkg/apidoc"
 )
 
-// runAPI is `lidza api [package] [--filter name]`: the framework's public
-// Go API rendered from the sources the project resolves, so an agent
-// reads a signature instead of guessing it. `--list` names the packages.
+// runAPI is `lidza api [package] [--filter name]`: the public Go API of
+// the framework as the project resolves it, or of the project's own
+// packages ("app", or "./handlers"), so an agent reads a signature
+// instead of guessing it. `--list` names the packages.
 func runAPI(ctx context.Context, args []string) error {
 	fs := flags("api")
 	dir := fs.String("dir", ".", "project directory")
@@ -31,43 +32,19 @@ func runAPI(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	moduleDir, err := apidoc.ModuleDir(ctx, abs)
-	if err != nil {
-		return err
-	}
 	if *list {
-		pkgs, err := apidoc.Packages(moduleDir)
+		text, err := apidoc.Listing(ctx, abs)
 		if err != nil {
 			return err
 		}
-		app := map[string]bool{}
-		for _, p := range apidoc.AppPackages(moduleDir) {
-			app[p] = true
-		}
-		for _, p := range pkgs {
-			note := ""
-			if !app[p] {
-				note = "  (framework internal)"
-			}
-			fmt.Printf("%s%s\n", apidoc.ImportPath(p), note)
-		}
+		fmt.Print(text)
 		return nil
 	}
-	var rels []string
-	if pkg != "" {
-		rel, ok := apidoc.Rel(pkg)
-		if !ok {
-			rel = strings.TrimSuffix(pkg, "/")
-		}
-		if rel == "lidza" || rel == "." {
-			rel = ""
-		}
-		if !apidoc.Exists(moduleDir, apidoc.ImportPath(rel)) {
-			return fmt.Errorf("no package %s in this version of Līdza; `lidza api --list` names them", apidoc.ImportPath(rel))
-		}
-		rels = []string{rel}
+	src, rels, err := apidoc.Resolve(ctx, abs, pkg)
+	if err != nil {
+		return err
 	}
-	text, err := apidoc.Render(moduleDir, rels, *filter)
+	text, err := src.Render(rels, *filter)
 	if err != nil {
 		return err
 	}

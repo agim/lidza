@@ -26,6 +26,135 @@ import (
 // Module is the framework's module path.
 const Module = "github.com/agim/lidza"
 
+// Source is a Go module to render: the framework as the app resolves it,
+// or the app itself.
+type Source struct {
+	// Dir holds the module's sources.
+	Dir string
+	// Module is its module path.
+	Module string
+}
+
+// Framework returns the framework as the project in dir resolves it.
+func Framework(ctx context.Context, dir string) (Source, error) {
+	d, err := ModuleDir(ctx, dir)
+	if err != nil {
+		return Source{}, err
+	}
+	return Source{Dir: d, Module: Module}, nil
+}
+
+// App returns the project in dir as a source; ok is false without a go.mod.
+func App(dir string) (Source, bool) {
+	data, err := os.ReadFile(filepath.Join(dir, "go.mod"))
+	if err != nil {
+		return Source{}, false
+	}
+	for _, l := range strings.Split(string(data), "\n") {
+		if strings.HasPrefix(l, "module ") {
+			return Source{Dir: dir, Module: strings.TrimSpace(strings.TrimPrefix(l, "module "))}, true
+		}
+	}
+	return Source{}, false
+}
+
+// ImportPath is the import path of rel within the source.
+func (s Source) ImportPath(rel string) string {
+	if rel == "" {
+		return s.Module
+	}
+	return s.Module + "/" + rel
+}
+
+// Rel turns an import path or a "./rel" path into a path relative to the
+// source; ok is false for paths outside it.
+func (s Source) Rel(p string) (rel string, ok bool) {
+	switch {
+	case p == s.Module || p == ".":
+		return "", true
+	case strings.HasPrefix(p, s.Module+"/"):
+		return strings.TrimPrefix(p, s.Module+"/"), true
+	case strings.HasPrefix(p, "./"):
+		return strings.Trim(strings.TrimPrefix(p, "./"), "/"), true
+	}
+	return "", false
+}
+
+// Resolve picks the source and packages a request names: "" is the
+// framework's app-facing packages, "app" every package of the project,
+// "./rel" or the project's import path one of the project's, and
+// anything else a framework package (import path or path relative to
+// the framework module). The error for an unknown package names both
+// listings.
+func Resolve(ctx context.Context, dir, pkg string) (Source, []string, error) {
+	fw, err := Framework(ctx, dir)
+	if err != nil {
+		return Source{}, nil, err
+	}
+	app, hasApp := App(dir)
+	switch {
+	case pkg == "":
+		return fw, AppPackages(fw.Dir), nil
+	case pkg == "app" && hasApp:
+		pkgs, err := Packages(app.Dir)
+		return app, pkgs, err
+	case hasApp && app.Module != Module:
+		if rel, ok := app.Rel(pkg); ok && app.Exists(pkg) {
+			return app, []string{rel}, nil
+		}
+		if app.Exists("./" + pkg) {
+			return app, []string{strings.Trim(pkg, "/")}, nil
+		}
+	}
+	rel, ok := fw.Rel(pkg)
+	if !ok {
+		rel = strings.Trim(pkg, "/")
+	}
+	if rel == "lidza" {
+		rel = ""
+	}
+	if !fw.Exists(fw.ImportPath(rel)) {
+		return Source{}, nil, fmt.Errorf("no package %s in this version of Līdza and none at ./%s in this app; `lidza api --list` names them", fw.ImportPath(rel), strings.Trim(pkg, "./"))
+	}
+	return fw, []string{rel}, nil
+}
+
+// Listing names the project's packages, then the framework's, one per
+// line with a note on which are the app's and which are framework
+// internals.
+func Listing(ctx context.Context, dir string) (string, error) {
+	var b strings.Builder
+	if app, ok := App(dir); ok && app.Module != Module {
+		pkgs, err := Packages(app.Dir)
+		if err != nil {
+			return "", err
+		}
+		for _, p := range pkgs {
+			fmt.Fprintf(&b, "%s  (this app)\n", app.ImportPath(p))
+		}
+	}
+	fw, err := Framework(ctx, dir)
+	if err != nil {
+		return "", err
+	}
+	pkgs, err := Packages(fw.Dir)
+	if err != nil {
+		return "", err
+	}
+	public := map[string]bool{}
+	for _, p := range AppPackages(fw.Dir) {
+		public[p] = true
+	}
+	for _, p := range pkgs {
+		note := ""
+		if !public[p] {
+			note = "  (framework internal)"
+		}
+		fmt.Fprintf(&b, "%s%s\n", fw.ImportPath(p), note)
+	}
+	return b.String(), nil
+}
+
 // Public lists the packages app code imports, relative to the module root
 // ("" is the root package). Every packs/<name> package is public too.
 var Public = []string{"", "pkg/router", "pkg/middleware", "pkg/lidzatest", "pkg/report", "pkg/resilience", "pkg/env"}
@@ -70,9 +199,9 @@ func ModuleDir(ctx context.Context, dir string) (string, error) {
 	return d, nil
 }
 
-// Packages lists every importable package of the framework at moduleDir,
-// relative to it, "" for the root. Commands, internal, test data and
-// examples are left out.
+// Packages lists every importable package of the module at moduleDir,
+// relative to it, "" for the root. Commands, internal, test data,
+// examples, node_modules and nested modules are left out.
 func Packages(moduleDir string) ([]string, error) {
 	var out []string
 	err := filepath.WalkDir(moduleDir, func(p string, d fs.DirEntry, err error) error {
@@ -81,7 +210,7 @@ func Packages(moduleDir string) ([]string, error) {
 		}
 		if d.IsDir() {
 			name := d.Name()
-			if p != moduleDir && (strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_") || name == "cmd" || name == "internal" || name == "testdata" || name == "examples" || name == "node_modules" || name == "templates" || name == "core") {
+			if p != moduleDir && (strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_") || name == "cmd" || name == "internal" || name == "testdata" || name == "examples" || name == "node_modules" || name == "templates" || name == "core" || name == "dist" || name == "bin") {
 				return filepath.SkipDir
 			}
 			if p != moduleDir {
@@ -153,16 +282,21 @@ func Rel(importPath string) (rel string, ok bool) {
 	return "", false
 }
 
-// Render writes the public API of the packages (relative paths; nil means
-// AppPackages) as markdown. filter, when set, keeps only the declarations
-// whose name contains it (case-insensitive).
+// Render writes the public API of the framework packages (relative
+// paths; nil means AppPackages) as markdown. filter, when set, keeps only
+// the declarations whose name contains it (case-insensitive).
 func Render(moduleDir string, rels []string, filter string) (string, error) {
 	if rels == nil {
 		rels = AppPackages(moduleDir)
 	}
+	return Source{Dir: moduleDir, Module: Module}.Render(rels, filter)
+}
+
+// Render writes the public API of the source's packages as markdown.
+func (s Source) Render(rels []string, filter string) (string, error) {
 	var b strings.Builder
 	for _, rel := range rels {
-		text, err := renderPackage(moduleDir, rel, strings.ToLower(filter))
+		text, err := s.renderPackage(rel, strings.ToLower(filter))
 		if err != nil {
 			return "", err
 		}
@@ -171,8 +305,9 @@ func Render(moduleDir string, rels []string, filter string) (string, error) {
 	return b.String(), nil
 }
 
-func renderPackage(moduleDir, rel, filter string) (string, error) {
-	dir := filepath.Join(moduleDir, filepath.FromSlash(rel))
+func (s Source) renderPackage(rel, filter string) (string, error) {
+	dir := filepath.Join(s.Dir, filepath.FromSlash(rel))
+	ImportPath := s.ImportPath
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return "", fmt.Errorf("%s: %w", ImportPath(rel), err)
@@ -324,11 +459,17 @@ func firstCodeLine(code string) string {
 // Exists reports whether importPath names a package of the framework at
 // moduleDir.
 func Exists(moduleDir, importPath string) bool {
-	rel, ok := Rel(importPath)
+	return Source{Dir: moduleDir, Module: Module}.Exists(importPath)
+}
+
+// Exists reports whether p (an import path or "./rel") names a package
+// of the source.
+func (s Source) Exists(p string) bool {
+	rel, ok := s.Rel(p)
 	if !ok {
 		return false
 	}
-	entries, err := os.ReadDir(filepath.Join(moduleDir, filepath.FromSlash(rel)))
+	entries, err := os.ReadDir(filepath.Join(s.Dir, filepath.FromSlash(rel)))
 	if err != nil {
 		return false
 	}

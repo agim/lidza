@@ -58,31 +58,24 @@ func (e errNoRecipe) Error() string {
 // package and a name filter.
 func addAPI(s *server.MCPServer, dir string) {
 	render := func(ctx context.Context, pkg, filter string) (string, error) {
-		moduleDir, err := apidoc.ModuleDir(ctx, dir)
+		src, rels, err := apidoc.Resolve(ctx, dir, pkg)
 		if err != nil {
 			return "", err
 		}
-		var rels []string
-		if pkg != "" {
-			rel, ok := apidoc.Rel(pkg)
-			if !ok {
-				rel = strings.TrimPrefix(pkg, "/")
-			}
-			if rel == "lidza" || rel == "." {
-				rel = ""
-			}
-			if !apidoc.Exists(moduleDir, apidoc.ImportPath(rel)) {
-				return "", errNoPackage(apidoc.ImportPath(rel))
-			}
-			rels = []string{rel}
-		}
-		return apidoc.Render(moduleDir, rels, filter)
+		return src.Render(rels, filter)
 	}
 	s.AddTool(mcp.NewTool("lidza_api",
-		mcp.WithDescription("The framework's public Go API as it is in this app's dependency: exported functions, types, methods and their doc comments. Read this before calling a lidza function; guessing a name is how imports fail. Without arguments: every package app code imports (lidza, pkg/router, pkg/middleware, pkg/lidzatest, pkg/report, pkg/resilience, pkg/env, packs/*)."),
-		mcp.WithString("package", mcp.Description("One package, as an import path or relative to the module: \"pkg/router\", \"packs/auth\", \"\" for the root package lidza.")),
+		mcp.WithDescription("Public Go API with doc comments, rendered from the sources: the framework as this app depends on it, or this app's own packages. Read it before calling a function; guessing a name is how imports fail. Without arguments: every framework package app code imports (lidza, pkg/router, pkg/middleware, pkg/lidzatest, pkg/report, pkg/resilience, pkg/env, packs/*). \"app\": every package of this app. \"list\": the names of both."),
+		mcp.WithString("package", mcp.Description("A framework package as an import path or relative path (\"pkg/router\", \"packs/auth\", \"\" for the root package lidza); one of this app's as \"./handlers\" or its import path; \"app\" for all of this app's; \"list\" for the names.")),
 		mcp.WithString("filter", mcp.Description("Keep only declarations whose name contains this text (case-insensitive), e.g. \"cookie\".")),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		if req.GetString("package", "") == "list" {
+			text, err := apidoc.Listing(ctx, dir)
+			if err != nil {
+				return mcp.NewToolResultErrorFromErr("api", err), nil
+			}
+			return mcp.NewToolResultText(text), nil
+		}
 		text, err := render(ctx, req.GetString("package", ""), req.GetString("filter", ""))
 		if err != nil {
 			return mcp.NewToolResultErrorFromErr("api", err), nil
@@ -103,7 +96,7 @@ func addAPI(s *server.MCPServer, dir string) {
 			return []mcp.ResourceContents{mcp.TextResourceContents{URI: req.Params.URI, MIMEType: "text/markdown", Text: text}}, nil
 		})
 	s.AddResourceTemplate(mcp.NewResourceTemplate("lidza://api/{+package}", "api package",
-		mcp.WithTemplateDescription("One framework package's public API, e.g. lidza://api/pkg/router or lidza://api/packs/auth."),
+		mcp.WithTemplateDescription("One package's public API: lidza://api/pkg/router or lidza://api/packs/auth for the framework, lidza://api/app for this app's packages."),
 		mcp.WithTemplateMIMEType("text/markdown")),
 		func(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
 			pkg := strings.TrimPrefix(req.Params.URI, "lidza://api/")
@@ -113,12 +106,6 @@ func addAPI(s *server.MCPServer, dir string) {
 			}
 			return []mcp.ResourceContents{mcp.TextResourceContents{URI: req.Params.URI, MIMEType: "text/markdown", Text: text}}, nil
 		})
-}
-
-type errNoPackage string
-
-func (e errNoPackage) Error() string {
-	return "no package " + string(e) + " in this version of Līdza; lidza_api without arguments lists the packages"
 }
 
 // addSnippets serves the reference app's files: the tool lidza_snippet

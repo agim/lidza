@@ -6,7 +6,7 @@ version in `go.mod`. `install.sh` pins the newest release here;
 `scripts/release.sh vX.Y.Z` turns "Unreleased" into a release, bumps the
 pin, tags and pushes.
 
-## Unreleased
+## v0.1.5 (2026-09-25)
 
 - A per-app decision log, `docs/decisions.md`: why the app is built a
   way (a pack added, Rust for a module, a dependency, a schema tradeoff),

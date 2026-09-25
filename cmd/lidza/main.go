@@ -33,6 +33,7 @@ Usage:
   lidza api [package] [--filter name] [--list]
   lidza snippet [name]
   lidza recipe add "<title>" [--description ...] [--step ...] | lidza recipe list
+  lidza decision add "<title>" --why "..." [--touches ...] | lidza decision list
   lidza mcp [--dir .]
   lidza version
 
@@ -54,6 +55,7 @@ Commands:
   context  write .lidza/context.json: routes, handler signatures, Rust exports
   api      print the framework's public Go API as the project resolves it (one package, or all that app code imports)
   recipe   add one of this app's conventions to docs/lidza-guide.md as a recipe (prompt, skills, command), or list the recipes
+  decision record why the app is built a way (a pack, Rust, a dependency, a schema tradeoff) in docs/decisions.md, or list the decisions
   snippet  print a file of the reference app (examples/notes): auth routes, an owned resource, a page, tests, a tool
   mcp      serve routes, context, diagnostics, dev logs, the API and the guide's recipes over MCP on stdio
   version  print the framework version
@@ -101,6 +103,8 @@ func main() {
 		err = runAPI(ctx, args)
 	case "snippet":
 		err = runSnippet(ctx, args)
+	case "decision":
+		err = runDecision(ctx, args)
 	case "recipe":
 		err = runRecipe(ctx, args)
 	case "mcp":

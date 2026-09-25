@@ -21,6 +21,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/agim/lidza/pkg/config"
+	"github.com/agim/lidza/pkg/decisions"
 	"github.com/agim/lidza/pkg/pack"
 	"github.com/agim/lidza/pkg/recipes"
 	"github.com/agim/lidza/pkg/schema"
@@ -108,6 +109,7 @@ func New(ctx context.Context, opt Options) error {
 		{"routes_test.go.tmpl", "routes_test.go"},
 		{"tools.go.tmpl", "tools.go"},
 		{"lidza-guide.md.tmpl", filepath.FromSlash(recipes.GuideFile)},
+		{"decisions.md.tmpl", filepath.FromSlash(decisions.File)},
 		{"mcp.json.tmpl", ".mcp.json"},
 		{"gemini-settings.json.tmpl", filepath.Join(".gemini", "settings.json")},
 		{"schema.lidza.tmpl", schema.FileName},
@@ -156,6 +158,8 @@ type templateData struct {
 	// Dockerfile and `go get` in go.mod: the release or commit the CLI was
 	// built from, else latest.
 	LidzaVersion string
+	// DecisionsLine tells the agent about the decision log.
+	DecisionsLine string
 	// Recipes is the comma-separated list of recipe names from the guide.
 	Recipes string
 }
@@ -163,15 +167,16 @@ type templateData struct {
 // dataFor builds the template data for an app from its configuration.
 func dataFor(cfg *config.Config, lidzaDir string) templateData {
 	return templateData{
-		Name:         cfg.Name,
-		Module:       Module,
-		LidzaDir:     lidzaDir,
-		Template:     cfg.Frontend.Template,
-		Dist:         cfg.Frontend.Dist,
-		DevCmd:       cfg.Frontend.Dev,
-		DevURL:       cfg.Frontend.URL,
-		Go:           goMinor(),
-		LidzaVersion: moduleVersion(),
+		Name:          cfg.Name,
+		Module:        Module,
+		LidzaDir:      lidzaDir,
+		Template:      cfg.Frontend.Template,
+		Dist:          cfg.Frontend.Dist,
+		DevCmd:        cfg.Frontend.Dev,
+		DevURL:        cfg.Frontend.URL,
+		Go:            goMinor(),
+		LidzaVersion:  moduleVersion(),
+		DecisionsLine: DecisionsLine,
 	}
 }
 
@@ -185,6 +190,10 @@ func moduleVersion() string {
 	}
 	return "latest"
 }
+
+// DecisionsLine is the agent files' line about the decision log; Refresh
+// adds it to apps that predate it.
+const DecisionsLine = "Why the app is built a way (a pack added, Rust for a module, a dependency, a schema tradeoff) is recorded in `docs/decisions.md`: read it before working in those areas, and record yours in the same commit with `lidza decision add \"Title\" --why \"...\"` (MCP `lidza_decision_add`)."
 
 // RecipesLine lists recipe names for the agent files: the framework's,
 // then the app's own.
@@ -246,6 +255,11 @@ func FrameworkRecipes(cfg *config.Config) (string, error) {
 // updated between its markers. It returns what changed, for the log.
 func Refresh(dir string, cfg *config.Config) ([]string, error) {
 	var changed []string
+	if created, err := decisions.Ensure(dir, cfg.Name); err != nil {
+		return nil, err
+	} else if created {
+		changed = append(changed, decisions.File)
+	}
 	if fw, err := FrameworkRecipes(cfg); err == nil {
 		replaced, err := recipes.ReplaceFramework(dir, fw)
 		if err != nil {
@@ -272,6 +286,12 @@ func Refresh(dir string, cfg *config.Config) ([]string, error) {
 			continue
 		}
 		next := text[:i] + line + text[j+len(recipesClose):]
+		// An app from before the decision log gets the line once.
+		if !strings.Contains(next, decisions.File) {
+			if k := strings.Index(next[i:], "\n"); k >= 0 {
+				next = next[:i+k+1] + "- " + DecisionsLine + "\n" + next[i+k+1:]
+			}
+		}
 		if next == text {
 			continue
 		}

@@ -6,6 +6,15 @@ version in `go.mod`. `install.sh` pins the newest release here;
 `scripts/release.sh vX.Y.Z` turns "Unreleased" into a release, bumps the
 pin, tags and pushes.
 
+## Unreleased
+
+- A per-app decision log, `docs/decisions.md`: why the app is built a
+  way (a pack added, Rust for a module, a dependency, a schema tradeoff),
+  written with `lidza decision add "Title" --why "..."` or the MCP tool
+  `lidza_decision_add`, read as `lidza://decisions`. `lidza new` creates
+  it, `lidza gen` adds it to an existing app with the line in its agent
+  files; rule 12 and the pack recipe point at it.
+
 ## v0.1.4 (2026-09-25)
 
 - A change to a foreign key's delete rule (`@ref(Model)` to `@ref(Model,

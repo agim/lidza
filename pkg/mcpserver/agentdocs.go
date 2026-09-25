@@ -2,6 +2,8 @@ package mcpserver
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -9,6 +11,7 @@ import (
 
 	"github.com/agim/lidza/pkg/apidoc"
 	"github.com/agim/lidza/pkg/config"
+	"github.com/agim/lidza/pkg/decisions"
 	"github.com/agim/lidza/pkg/recipes"
 	"github.com/agim/lidza/pkg/scaffold"
 	"github.com/agim/lidza/pkg/snippets"
@@ -76,6 +79,33 @@ func addRecipeTool(s *server.MCPServer, dir string, cfg *config.Config) {
 		}
 		return jsonResult(map[string]any{"name": r.Name, "title": r.Title, "scope": r.Scope, "skill": recipes.SkillsDir + "/" + r.Name + "/SKILL.md", "note": "the prompt appears after lidza mcp restarts; the skill and command are in place"})
 	})
+}
+
+// addDecisionTool records an entry in the app's decision log.
+func addDecisionTool(s *server.MCPServer, dir string, cfg *config.Config) {
+	if cfg == nil {
+		return
+	}
+	s.AddTool(mcp.NewTool("lidza_decision_add",
+		mcp.WithDescription("Record why this app is built a way in docs/decisions.md: a pack added, Rust chosen for a module (say which of contained input, a crate Go lacks, or heap pressure), a dependency taken, a schema tradeoff, an integration. Call it in the same change, before lidza_verify. Read the file first (lidza://decisions or Read) when working in those areas."),
+		mcp.WithString("title", mcp.Required(), mcp.Description("What was decided, e.g. \"Word statistics in a Rust pack\".")),
+		mcp.WithString("why", mcp.Required(), mcp.Description("The reason, one or two sentences, with the alternative that was not taken.")),
+		mcp.WithString("touches", mcp.Description("The files, packs or tables it concerns.")),
+	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		e, err := decisions.Add(dir, req.GetString("title", ""), req.GetString("why", ""), req.GetString("touches", ""))
+		if err != nil {
+			return mcp.NewToolResultErrorFromErr("decision", err), nil
+		}
+		return jsonResult(map[string]any{"file": decisions.File, "date": e.Date, "title": e.Title})
+	})
+	s.AddResource(mcp.NewResource("lidza://decisions", "decisions", mcp.WithResourceDescription("This app's decision log, docs/decisions.md: why it is built the way it is."), mcp.WithMIMEType("text/markdown")),
+		func(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+			data, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(decisions.File)))
+			if err != nil {
+				return nil, err
+			}
+			return []mcp.ResourceContents{mcp.TextResourceContents{URI: req.Params.URI, MIMEType: "text/markdown", Text: string(data)}}, nil
+		})
 }
 
 type errNoRecipe string

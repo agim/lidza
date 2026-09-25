@@ -226,7 +226,7 @@ func TestGuidanceSurfaces(t *testing.T) {
 	}
 	for _, f := range []string{"CLAUDE.md", "AGENTS.md", "GEMINI.md"} {
 		data, _ := os.ReadFile(filepath.Join(app, f))
-		for _, want := range []string{"docs/lidza-guide.md", "lidza_api", "lidza_snippet", "lidza verify", "lidza_verify", "add-api-route"} {
+		for _, want := range []string{"docs/lidza-guide.md", "lidza_api", "lidza_snippet", "lidza verify", "lidza_verify", "add-api-route", "docs/decisions.md"} {
 			if !strings.Contains(string(data), want) {
 				t.Errorf("%s does not mention %s", f, want)
 			}
@@ -283,7 +283,7 @@ func TestGuidanceSurfaces(t *testing.T) {
 	for _, tl := range tools.Tools {
 		names[tl.Name] = true
 	}
-	for _, want := range []string{"lidza_routes", "lidza_check", "lidza_api", "lidza_snippet", "lidza_logs", "lidza_gen", "lidza_gen_resource", "lidza_verify", "lidza_test", "lidza_recipe_add", "lidza_recipes"} {
+	for _, want := range []string{"lidza_routes", "lidza_check", "lidza_api", "lidza_snippet", "lidza_logs", "lidza_gen", "lidza_gen_resource", "lidza_verify", "lidza_test", "lidza_recipe_add", "lidza_recipes", "lidza_decision_add"} {
 		if !names[want] {
 			t.Errorf("tool %s missing", want)
 		}
@@ -451,6 +451,25 @@ func mustRead(t *testing.T, rel string) string {
 // TestSetup: lidza setup on a fresh app enables packs, writes the
 // environment files with real values, creates and migrates the databases
 // and installs node_modules. Skipped when Postgres is unreachable.
+// A decision is recorded through the CLI and read back.
+func TestDecisionAdd(t *testing.T) {
+	edit(t, map[string]string{"docs/decisions.md": mustRead(t, "docs/decisions.md")})
+	out, err := command(app, lidza, "decision", "add", "Thumbnails in a Rust pack", "--why", "Image bytes come from users: contained.", "--touches", "packs/media")
+	if err != nil {
+		t.Fatalf("decision add: %v\n%s", err, out)
+	}
+	log := mustRead(t, "docs/decisions.md")
+	if !strings.HasPrefix(log, "# Decisions") || !strings.Contains(log, ": Thumbnails in a Rust pack\n\nWhy: Image bytes come from users: contained.\n\nTouches: packs/media") {
+		t.Errorf("decisions.md:\n%s", log)
+	}
+	if out, _ := command(app, lidza, "decision", "list"); !strings.Contains(string(out), "Thumbnails in a Rust pack") {
+		t.Errorf("decision list:\n%s", out)
+	}
+	if out, err := command(app, lidza, "decision", "add", "No reason"); err == nil {
+		t.Errorf("decision without --why accepted:\n%s", out)
+	}
+}
+
 func TestSetup(t *testing.T) {
 	if out, err := command(app, "pg_isready"); err != nil {
 		t.Skipf("postgres not reachable: %s", out)

@@ -320,8 +320,11 @@ Run work in Rust, compiled to WASM and called from a handler with a
 deadline: for code that must be contained, a crate Go lacks, or heap
 pressure. Read "Rust: when and how" first; it is not for speed.
 
-1. `lidza pack scaffold <name>` creates `packs/<name>` with a crate and
-   an example capability (skip when the pack exists).
+1. Record why this module is Rust (`lidza decision add "<module> in a
+   Rust pack" --why "contained input | crate X | heap pressure"`, MCP
+   `lidza_decision_add`), then `lidza pack scaffold <name>`: it creates
+   `packs/<name>` with a crate and an example capability (skip when the
+   pack exists).
 2. Declare the input and output types in `schema.lidza`.
 3. In `packs/<name>/rust/src/lib.rs` write
    `lidza_export!(capability, |input: In| -> Result<Out, String>)`; the

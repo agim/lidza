@@ -37,6 +37,7 @@ app is always at one address: http://127.0.0.1:3000.
 ├── .claude/skills/  one skill per recipe below (Claude Code), generated from this file
 ├── .agents/skills/  the same skills for Codex; .gemini/commands/lidza/ the same as Gemini commands
 ├── docs/lidza-guide.md   this file
+├── docs/decisions.md     why the app is built a way: packs, Rust, dependencies, tradeoffs
 └── .lidza/          dev build artifacts (gitignored)
 ```
 
@@ -141,6 +142,10 @@ signature. Both are regenerated after each Go rebuild.
    written here, read the matching snippet (`lidza snippet` or the MCP
    tool `lidza_snippet`): it is the reference app's code, verified by its
    tests.
+12. A pack (Rust or official), a dependency, an integration or a schema
+   tradeoff is a decision: read `docs/decisions.md` before changing those
+   areas and record yours in the same commit (`lidza decision add
+   "Title" --why "..."`, MCP `lidza_decision_add`).
 
 ## Templates
 
@@ -347,8 +352,11 @@ Run work in Rust, compiled to WASM and called from a handler with a
 deadline: for code that must be contained, a crate Go lacks, or heap
 pressure. Read "Rust: when and how" first; it is not for speed.
 
-1. `lidza pack scaffold <name>` creates `packs/<name>` with a crate and
-   an example capability (skip when the pack exists).
+1. Record why this module is Rust (`lidza decision add "<module> in a
+   Rust pack" --why "contained input | crate X | heap pressure"`, MCP
+   `lidza_decision_add`), then `lidza pack scaffold <name>`: it creates
+   `packs/<name>` with a crate and an example capability (skip when the
+   pack exists).
 2. Declare the input and output types in `schema.lidza`.
 3. In `packs/<name>/rust/src/lib.rs` write
    `lidza_export!(capability, |input: In| -> Result<Out, String>)`; the

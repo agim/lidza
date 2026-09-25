@@ -19,7 +19,7 @@ func TestNewReact(t *testing.T) {
 	}
 	for _, f := range []string{
 		"go.mod", "main.go", "routes.go", "routes_test.go", "tools.go", "lidza.json",
-		"CLAUDE.md", "AGENTS.md", "GEMINI.md", "docs/lidza-guide.md",
+		"CLAUDE.md", "AGENTS.md", "GEMINI.md", "docs/lidza-guide.md", "docs/decisions.md",
 		".mcp.json", ".gemini/settings.json",
 		"package.json", "index.html", "vite.config.ts", "tsconfig.json",
 		"src/main.tsx", "src/router.tsx", "src/pages/Home.tsx", "src/ErrorBoundary.tsx", "playwright.config.ts", "e2e/home.spec.ts", "schema.lidza", "schema/schema.go", ".env.example", "packs.go", "benchmarks/scale_test.js",
@@ -61,6 +61,9 @@ func TestNewReact(t *testing.T) {
 	}
 	if !strings.Contains(read("CLAUDE.md"), "docs/lidza-guide.md") {
 		t.Errorf("CLAUDE.md should point at the guide")
+	}
+	if !strings.Contains(read("CLAUDE.md"), "docs/decisions.md") || !strings.HasPrefix(read("docs/decisions.md"), "# Decisions") {
+		t.Errorf("CLAUDE.md should point at the decision log")
 	}
 	if read("CLAUDE.md") != read("AGENTS.md") || read("CLAUDE.md") != read("GEMINI.md") {
 		t.Errorf("agent files should be identical")

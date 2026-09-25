@@ -63,10 +63,9 @@ reload. A change to a Go file rebuilds and restarts the app; `npm install`
 runs on first start. `lidza build` produces `bin/myapp`, one binary with
 the frontend embedded.
 
-The app is its own Go module requiring `github.com/agim/lidza`. While the
-repo is private, `go get` needs `GOPRIVATE=github.com/agim/lidza` and git
-access, or pass `--lidza-dir <checkout>` to `lidza new` to use a local
-copy of the framework.
+The app is its own Go module requiring `github.com/agim/lidza`, fetched
+from GitHub by `lidza new`. To develop against a local checkout of the
+framework, pass `--lidza-dir <checkout>`.
 
 `lidza new` writes the agent files for you:
 
@@ -229,7 +228,8 @@ are reachable.
 - `lidza: command not found`: open a new shell or `. ~/.lidza/env`.
 - Installer asks for a password: it found `sudo` but not passwordless; rerun
   with `--no-sudo` to keep everything under `$HOME`.
-- `go install` of the CLI fails: the CLI is not published yet (Phase 1) or
-  the repo is private for your account. The toolchain is still complete.
+- `go install` of the CLI fails: check network access to GitHub and the
+  Go module proxy (`GOPROXY=direct` bypasses the proxy). The toolchain is
+  still complete.
 - Windows: run everything inside WSL2 (Ubuntu). Native Windows is not
   supported yet.

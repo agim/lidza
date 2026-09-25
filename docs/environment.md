@@ -284,5 +284,5 @@ lidza build && ./bin/demo                   # one binary, Node not running
   Never symlinked or shared with another session.
 - Role brief: `CLAUDE.local.md` in the repo root, gitignored.
 - Shared rules: `CLAUDE.md` (committed).
-- Remote: `https://github.com/agim/lidza.git`, private, branch `master`.
+- Remote: `https://github.com/agim/lidza.git`, public, branch `master`.
   Push straight to `master`.

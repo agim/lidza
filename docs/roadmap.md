@@ -33,10 +33,10 @@ Done 2026-09-25, except publishing.
   coordinator: frontend dev command, `go build` into `.lidza/app`, restart
   on Go changes (500 ms mtime poll, no watcher dependency).
 - `pkg/router`: `GET /api/v1/health`, `router.JSON`, `router.Error`.
-- Not done: publishing so `go install github.com/agim/lidza/cmd/lidza@latest`
-  works from `install.sh`. The repo is private; Agim decides between making
-  it public and documenting a `GOPRIVATE` setup. Until then `install.sh`
-  reports `[todo] lidza CLI` on any other machine.
+- Publishing: the repository is public since 2026-09-25, so
+  `go install github.com/agim/lidza/cmd/lidza@latest` works from
+  `install.sh` and apps resolve the module without a local checkout;
+  `--lidza-dir` remains for framework development.
 
 Check (passes): `lidza new demo --lidza-dir <checkout>` then `lidza dev`,
 `curl -i http://127.0.0.1:3000/api/v1/health` returns JSON, the React app
@@ -300,7 +300,13 @@ so production needs Node and `dist/.server` only, no `node_modules`.
 Renders run one at a time in the sidecar; loader data is not
 dehydrated, the client runs loaders again on navigation.
 
-### Open
+### Publishing (done 2026-09-25)
 
-- Publishing the CLI so `go install` works from `install.sh` (skipped
-  for now by decision).
+The repository is public; `install.sh` installs the CLI with `go install`
+and `lidza new` fetches the module. The design notes the project started
+from were replaced by `docs/design.md` before publishing.
+
+### Next
+
+Logging and time zones, a CRUD generator, Tailwind in the `react`
+template, opt-in analytics and error reporting, app-defined MCP tools.

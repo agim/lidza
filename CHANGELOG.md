@@ -2,7 +2,14 @@
 
 Releases are git tags; `go install github.com/agim/lidza/cmd/lidza@<tag>`
 installs that CLI, and `lidza version` prints it. Apps depend on the same
-version in `go.mod`.
+version in `go.mod`. `install.sh` pins the newest release here;
+`scripts/release.sh vX.Y.Z` turns "Unreleased" into a release, bumps the
+pin, tags and pushes.
+
+## Unreleased
+
+- `scripts/release.sh`, a test that the installer's pin is the newest
+  release in this file, and a CI job on tags that installs the tag.
 
 ## v0.1.2 (2026-09-25)
 

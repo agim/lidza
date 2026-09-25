@@ -17,4 +17,8 @@ Gotchas:
 - `examples/notes` is the reference app; its files are embedded for `lidza snippet` from `pkg/snippets/_files`. After changing the example: `go generate ./pkg/snippets` (the package test fails while they differ), and `lidza test` plus `lidza test --e2e` inside it.
 - A new check rule or agent surface gets a case in `evals/` (`go test -tags evals ./evals`).
 - Git: pull before committing, push straight to `master`; no branches or PRs unless asked.
+- Releases: `install.sh` installs the tag it pins, not master. A new command
+  or flag reaches users only once `scripts/release.sh vX.Y.Z` has tagged it,
+  so tag before a runbook or the README tells anyone to run it. Entries go
+  under "## Unreleased" in `CHANGELOG.md` until then.
 - Keep docs plain: short headings, facts, no decorative arrows, no taglines.

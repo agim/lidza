@@ -25,7 +25,9 @@ import (
 //     package of the framework version the app uses (an error: it will
 //     not compile, and `go get` cannot help);
 //   - L005: a typed handler whose input or output type is not declared in
-//     schema.lidza, so it is neither validated nor known to the client.
+//     schema.lidza, so it is neither validated nor known to the client;
+//   - L006: an import of an email vendor SDK; the mail pack speaks those
+//     APIs already, with the outbox, templates and retries.
 //
 // Except for L004 the findings are warnings: they point at the pattern,
 // the author decides. A comment "lidza:ignore L001" on the line, or the
@@ -92,6 +94,9 @@ func checkFile(fset *token.FileSet, f *ast.File, rel, moduleDir string) []Diagno
 			if name != "" {
 				schemaPkg = name
 			}
+		}
+		if vendor := mailVendor(path); vendor != "" {
+			warn(imp.Pos(), "L006", "import of the "+vendor+" SDK: use the mail pack instead (`lidza pack add mail`, MAIL_PROVIDER="+vendor+"), which speaks the API directly and adds the outbox, templates and retries")
 		}
 		if moduleDir != "" {
 			if _, ok := apidoc.Rel(path); ok && !apidoc.Exists(moduleDir, path) {
@@ -175,6 +180,25 @@ func isHandler(ft *ast.FuncType) bool {
 		}
 	}
 	return false
+}
+
+// mailVendor names the mail provider whose SDK an import path belongs to,
+// or "".
+func mailVendor(path string) string {
+	for prefix, vendor := range map[string]string{
+		"github.com/mailgun/mailgun-go":            "mailgun",
+		"github.com/sendgrid/sendgrid-go":          "sendgrid",
+		"github.com/mattevans/postmark-go":         "postmark",
+		"github.com/keighl/postmark":               "postmark",
+		"github.com/resend/resend-go":              "resend",
+		"github.com/aws/aws-sdk-go-v2/service/ses": "ses",
+		"github.com/aws/aws-sdk-go/service/ses":    "ses",
+	} {
+		if path == prefix || strings.HasPrefix(path, prefix+"/") {
+			return vendor
+		}
+	}
+	return ""
 }
 
 // ignoreComments maps line numbers to the rule codes a "lidza:ignore"

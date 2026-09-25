@@ -38,7 +38,9 @@ Packs add their own (`.env.example` lists them): `DATABASE_URL` and
 `DB_MAX_CONNS` (`db`), `AUTH_SECRET` (32 random bytes or more, the same
 on every node) and `AUTH_COOKIE_SECURE=true` behind TLS (`auth`),
 `CACHE_URL` and `BUS_URL` for Valkey (`cache`, `realtime`), the
-analytics retention and OTLP endpoint.
+analytics retention and OTLP endpoint, `MAIL_PROVIDER`, `MAIL_FROM` and
+`MAIL_API_KEY` (`mail`; keep `MAIL_PROVIDER=log` until the domain is
+verified at the provider).
 
 ## Database
 

@@ -139,6 +139,27 @@ var Officials = []Official{
 		},
 	},
 	{
+		Name:        "mail",
+		Description: "Transactional email behind one Send: Mailgun, SendGrid, Postmark, Resend or SMTP over plain HTTP, log and outbox providers for development and tests, templates in mail/, an outbox table with the db pack, background delivery with retries through the jobs pack.",
+		Env: []string{
+			"# lidza/mail (list lidza/db and lidza/jobs before it for the outbox and background delivery)",
+			"MAIL_PROVIDER=log          # log | outbox | smtp | mailgun | sendgrid | postmark | resend",
+			"MAIL_FROM=\"App <app@example.com>\"",
+			"# MAIL_API_KEY=            # mailgun, sendgrid, postmark, resend",
+			"# MAIL_DOMAIN=example.com  # mailgun",
+			"# MAIL_BASE_URL=https://api.eu.mailgun.net   # a provider's regional API",
+			"# MAIL_SMTP_URL=smtp://user:pass@smtp.example.com:587   # or smtps://...:465",
+			"# MAIL_MAX_ATTEMPTS=5      # delivery retries through the jobs pack",
+		},
+		Notes: []string{
+			"send: mail.From(ctx).Send(ctx, mail.Message{To: email, Subject: \"Verify your email\", Template: \"verify\", Data: data})",
+			"templates: mail/<name>.txt.tmpl and mail/<name>.html.tmpl (Go templates over Data); or set Text and HTML on the message",
+			"tests: MAIL_PROVIDER=outbox in .env.test, then mail.From(ctx).Outbox(ctx, 10) has the messages; agents: the MCP tool lidza_mail",
+			"never import a vendor SDK (lidza check L006): the pack speaks each API directly",
+			"run `lidza gen` and `lidza db migrate`: the mail_message table comes from schema.lidza",
+		},
+	},
+	{
 		Name:        "media",
 		Description: "Image processing in Rust: dimensions and format, resize with format conversion.",
 		Rust:        true,

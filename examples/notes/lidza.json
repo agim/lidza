@@ -9,7 +9,8 @@
   "packs": [
     "lidza/db",
     "lidza/auth",
-    "stats"
+    "stats",
+    "lidza/mail"
   ],
   "sdk": {}
 }

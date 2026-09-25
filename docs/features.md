@@ -41,6 +41,7 @@ does not reimplement).
 | Continuous integration | done | GitHub Actions: framework checks and tests, platform evals, the reference app's verify and browser test, with Postgres and Valkey |
 | Deployment | done | `Dockerfile`, `.dockerignore`, `deploy/<name>.service` from `lidza new`; `docs/deploy.md`; `DB_MIGRATE=true` |
 | Auth hardening | done | `auth.Throttle()`, `ValidatePassword`, one-time tokens for verification and reset, sessions ended at once; `router.Route` per-route middleware |
+| Transactional email | done | `mail` pack: one `Send`, Mailgun, SendGrid, Postmark, Resend and SMTP spoken directly, `log` and `outbox` providers, templates in `mail/`, outbox table, delivery through the jobs pack with retries, `lidza_mail` MCP tool, rule L006 against vendor SDKs |
 | Authorization | done | `auth.Require()` and `auth.Optional()` middleware, `r.Group(prefix, mw...)` for a protected sub-tree, `auth.CurrentUser(ctx)`; the CSRF guard accepts JSON content or a same-origin `Sec-Fetch-Site` |
 | Error reporting and analytics | done (opt-in) | `analytics` pack: panics, 500s, frontend errors and events in Postgres, OTLP export, `lidza_errors` MCP tool; off unless added |
 | Observability | done | `/metrics`, `/healthz`, `/readyz`, structured logs (`lidza.Log(ctx)` with request ids, JSON in production, `LIDZA_LOG_LEVEL`), `/debug/pprof/` in dev |

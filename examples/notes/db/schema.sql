@@ -40,3 +40,21 @@ CREATE TABLE auth_token (
 CREATE INDEX auth_token_purpose_idx ON auth_token (purpose);
 CREATE INDEX auth_token_subject_idx ON auth_token (subject);
 
+CREATE TABLE mail_message (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  recipient text NOT NULL,
+  subject text NOT NULL,
+  text text,
+  html text,
+  template text,
+  status text NOT NULL,
+  provider_id text,
+  error text,
+  attempts integer NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  sent_at timestamptz
+);
+CREATE INDEX mail_message_recipient_idx ON mail_message (recipient);
+CREATE INDEX mail_message_status_idx ON mail_message (status);
+CREATE INDEX mail_message_created_at_idx ON mail_message (created_at);
+

@@ -128,6 +128,23 @@ signature. Both are regenerated after each Go rebuild.
    tool `lidza_snippet`): it is the reference app's code, verified by its
    tests.
 
+## Templates
+
+What each frontend template ships; the API contract, `lidza check`,
+`lidza test` and the packs are the same for all.
+
+| | react | svelte | astro | htmx |
+|---|---|---|---|---|
+| Rendering | client routes, prerendered at build; per-request SSR with `LIDZA_SSR=1` | one page, prerendered at build, hydrated | static pages at build | Go templates per request |
+| Data | `@lidza/client` with TanStack Query, live refetch via `useLive` | `@lidza/client` in components | `@lidza/client` in page scripts | Go handlers, htmx partials |
+| Accessibility | `jsx-a11y`, errors | Svelte compiler a11y checks, errors | `jsx-a11y` through `eslint-plugin-astro`, errors | none automated |
+| Browser tests | `e2e/` (Playwright), `lidza test --e2e` | same | same | `pages_test.go` in Go |
+| Time zone cookie | `src/timezone.ts` | same | same | inline in `views/layout.html` |
+| Analytics reporter | `VITE_ANALYTICS=1` | `VITE_ANALYTICS=1` | `PUBLIC_ANALYTICS=1` | `ANALYTICS_FRONTEND=1`, `static/analytics.js` |
+| Styling | Tailwind v4 | `app.css` | `<style is:global>` in the layout | `static/app.css` |
+
+This app uses the **react** template.
+
 ## Tests
 
 `routes_test.go` shows the shape: `srv := lidzatest.Start(t, app())`
@@ -236,10 +253,13 @@ Add a client-side route rendered by React, prerendered at build time.
    from `@lidza/client`; never `fetch` by hand.
 4. Routes without parameters are prerendered by `npm run build`; keep
    the first render free of browser-only APIs (`window`, `localStorage`),
-   read them in effects. With `LIDZA_SSR=1` at deploy time every page
-   renders per request in a Node sidecar: give a route a `loader` calling
-   `api.*` and its data is in the HTML, with the visitor's cookies
-   forwarded to the API.
+   read them in effects. A route with a `loader` that calls `api.*` is
+   not prerendered (no API at build time; the build says so) and renders
+   in the browser, unless the binary runs with `LIDZA_SSR=1`: then every
+   page renders per request in a Node sidecar, the loader runs on the
+   server with the visitor's cookies forwarded, and the page arrives with
+   its data and the router's hydration payload, so the loader does not
+   run again in the browser.
 5. Live data: `useLive(['things'])` (src/live.ts) refetches the `things`
    queries when a handler publishes to that topic on the `realtime` pack.
 6. Forms: `validators.CreateThing(values)` from `@lidza/client` returns the
@@ -290,6 +310,35 @@ Let an agent call a function of this app, with its packs, from
    input schema shown to the agent comes from the Go type.
 3. `lidza check`; then restart `lidza mcp` (the MCP client reconnects) and
    call `app_count_posts`.
+
+### Send an email
+
+Send a transactional email (verification, reset, receipt) through the
+mail pack, never through a vendor SDK.
+
+1. `lidza pack add mail` (after `db`, and `jobs` for background delivery);
+   set `MAIL_FROM` and, in production, `MAIL_PROVIDER` with its key in
+   `.env`. `.env.test` gets `MAIL_PROVIDER=outbox`.
+2. Write the bodies as Go templates: `mail/<name>.txt.tmpl` (always) and
+   `mail/<name>.html.tmpl` (optional), over the `Data` you pass.
+3. From a handler or a job:
+
+   ```go
+   _, err := mail.From(ctx).Send(ctx, mail.Message{
+   	To: user.Email, Subject: "Verify your email", Template: "verify",
+   	Data: map[string]string{"Link": link},
+   })
+   ```
+
+   Send returns once the row is in the outbox (queued for the jobs pack,
+   or delivered right away without it). Do not build the message with
+   `fmt.Sprintf` and do not call the vendor's API.
+4. Test it: `mail.From(lidza.WithServices(ctx, srv.Services)).Outbox(ctx, 5)`
+   returns the messages, newest first, with `Status`, `Text` and `HTML`;
+   read the link out of the text. The snippet `auth-handlers` and
+   `routes_test.go` in the reference app show both sides.
+5. `lidza check`, then `lidza test`. In dev, `lidza_mail` (MCP) shows the
+   outbox.
 
 ### Write a test
 
@@ -403,8 +452,15 @@ Official Go packs, configured from `.env` (see `.env.example` after
   `g := r.Group("/api/v1/notes", auth.Require())` and read
   `auth.CurrentUser(ctx)`; `auth.Optional()` for a route that serves
   visitors too (the user is nil then). Logout:
-  `auth.From(ctx).Logout(ctx, user.SessionID)`. Working code: the
-  snippets `routes` and `auth-handlers`.
+  `auth.From(ctx).Logout(ctx, user.SessionID)`. Hardening: wrap the
+  credential routes with `auth.Throttle()` (per-client rate limit,
+  `AUTH_LOGIN_RPS`), refuse weak passwords with
+  `auth.From(ctx).ValidatePassword(password, email)` (length, common
+  passwords, the email itself), and run email verification and password
+  reset on one-time tokens: `IssueToken(ctx, auth.PurposeVerifyEmail,
+  email, 0)` makes the token the app mails, `ConsumeToken` redeems it
+  once; `RevokeAll` after a reset. Working code: the snippets `routes`
+  and `auth-handlers`.
 - `jobs`: register handlers in `OnStart` with
   `jobs.FromServices(s).Handle("kind", fn)`; enqueue with
   `jobs.From(ctx).Enqueue(ctx, "kind", payload, jobs.RunAt(t))`.
@@ -418,6 +474,14 @@ Official Go packs, configured from `.env` (see `.env.example` after
   times in UTC; format at the edge.
 - `realtime`: `realtime.From(ctx).Publish(ctx, topic, value)` and
   `r.Handle("GET /api/v1/realtime", realtime.Handler())`.
+- `mail`: `mail.From(ctx).Send(ctx, mail.Message{To, Subject, Template:
+  "verify", Data: data})` renders `mail/verify.txt.tmpl` and
+  `mail/verify.html.tmpl` (Go templates over `Data`) and delivers through
+  `MAIL_PROVIDER` (`mailgun`, `sendgrid`, `postmark`, `resend`, `smtp`;
+  `log` by default, `outbox` in tests). With the `db` pack every message
+  is a row in `mail_message` (`Outbox(ctx, n)`, the MCP tool
+  `lidza_mail`); with the `jobs` pack delivery runs as a job with
+  retries. Never import a vendor SDK (`lidza check` L006).
 - `analytics` (opt-in): server errors are captured on their own; register
   `r.Handle("POST /api/v1/analytics/{kind}", analytics.Handler())`, set
   `VITE_ANALYTICS=1`, and call `analytics.From(ctx).Track(ctx, "name",
@@ -453,6 +517,20 @@ of packages that do not exist or are not declared (L004); handler types
 not declared in `schema.lidza` (L005).
 Rate limit a route group with `r.Use(middleware.RateLimit(middleware.RateLimitOptions{RPS: 10, Burst: 20}))`;
 guard an outbound dependency with `resilience.New(...)`.
+
+## Deployment
+
+`lidza build` makes `bin/notes`: the frontend embedded, no Node at
+runtime (except `LIDZA_SSR=1`). `Dockerfile` builds the same into an
+image that runs as a non-root user on port 3000; `deploy/notes.service`
+runs the binary under systemd from `/opt/notes` (install commands in
+its header). Migrations ship as files in `db/`: apply them with `lidza db
+migrate` in the deploy step or `DB_MIGRATE=true` at start. Put a
+TLS-terminating proxy in front, forward `X-Forwarded-For`, point the
+orchestrator at `/healthz` and `/readyz`, scrape `/metrics`. Production
+settings: `LIDZA_MODE` unset, `LIDZA_LOG=json`, `AUTH_COOKIE_SECURE=true`,
+`AUTH_SECRET` the same on every node. The framework's `docs/deploy.md`
+has the details.
 
 ## Environment the binary reads
 

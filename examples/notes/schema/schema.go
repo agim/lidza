@@ -109,6 +109,37 @@ func (v AuthToken) Validate() error {
 	return errs.Result()
 }
 
+// MailMessage is a row of the mail_message table.
+type MailMessage struct {
+	ID         string     `json:"id" db:"id"`
+	Recipient  string     `json:"recipient" db:"recipient"`
+	Subject    string     `json:"subject" db:"subject"`
+	Text       *string    `json:"text" db:"text"`
+	HTML       *string    `json:"html" db:"html"`
+	Template   *string    `json:"template" db:"template"`
+	Status     string     `json:"status" db:"status"`
+	ProviderID *string    `json:"providerId" db:"provider_id"`
+	Error      *string    `json:"error" db:"error"`
+	Attempts   int        `json:"attempts" db:"attempts"`
+	CreatedAt  time.Time  `json:"createdAt" db:"created_at"`
+	SentAt     *time.Time `json:"sentAt" db:"sent_at"`
+}
+
+// Validate applies the rules of MailMessage from schema.lidza.
+func (v MailMessage) Validate() error {
+	var errs validate.Errors
+	if v.Recipient == "" {
+		errs.Add("recipient", "required", "required")
+	}
+	if v.Subject == "" {
+		errs.Add("subject", "required", "required")
+	}
+	if v.Status == "" {
+		errs.Add("status", "required", "required")
+	}
+	return errs.Result()
+}
+
 // CreateNote is an API type.
 type CreateNote struct {
 	Title string  `json:"title"`

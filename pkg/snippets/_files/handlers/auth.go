@@ -8,9 +8,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"github.com/agim/lidza"
 	"github.com/agim/lidza/packs/auth"
 	"github.com/agim/lidza/packs/db"
+	"github.com/agim/lidza/packs/mail"
 	"github.com/agim/lidza/pkg/router"
 
 	"notes/db/queries/gen"
@@ -20,13 +20,11 @@ import (
 // uniqueViolation is Postgres' code for a duplicate key.
 const uniqueViolation = "23505"
 
-// Mail sends the emails the auth flows need: the verification link after
-// registration and the password reset link. The default logs the message
-// (the request id ties it to the request); replace it in main.go with a
-// real sender, and in tests with a capture.
-var Mail = func(ctx context.Context, to, subject, body string) error {
-	lidza.Log(ctx).Info("mail (no sender configured)", "to", to, "subject", subject, "body", body)
-	return nil
+// send mails one of the templates in mail/ through the mail pack: the
+// outbox keeps a copy (tests read it), the configured provider delivers.
+func send(ctx context.Context, to, subject, template, link string) error {
+	_, err := mail.From(ctx).Send(ctx, mail.Message{To: to, Subject: subject, Template: template, Data: map[string]string{"App": "notes", "Link": link}})
+	return err
 }
 
 // Register creates a user from validated credentials, applies the
@@ -52,7 +50,7 @@ func Register(ctx context.Context, req *router.Request[schema.Credentials]) (sch
 	if err != nil {
 		return schema.Session{}, err
 	}
-	if err := Mail(ctx, user.Email, "Verify your email", "Open /verify?token="+token+" to confirm this address."); err != nil {
+	if err := send(ctx, user.Email, "Verify your email", "verify", "/verify?token="+token); err != nil {
 		return schema.Session{}, err
 	}
 	req.Status(http.StatusCreated)
@@ -85,7 +83,7 @@ func ForgotPassword(ctx context.Context, req *router.Request[schema.ForgotPasswo
 	if err != nil {
 		return router.None{}, err
 	}
-	return router.None{}, Mail(ctx, user.Email, "Reset your password", "Open /reset?token="+token+" to choose a new password.")
+	return router.None{}, send(ctx, user.Email, "Reset your password", "reset", "/reset?token="+token)
 }
 
 // ResetPassword sets a new password from a reset link and ends every

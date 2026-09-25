@@ -4,6 +4,13 @@ Releases are git tags; `go install github.com/agim/lidza/cmd/lidza@<tag>`
 installs that CLI, and `lidza version` prints it. Apps depend on the same
 version in `go.mod`.
 
+## Unreleased
+
+- `mail` pack: transactional email behind one `Send` (Mailgun, SendGrid,
+  Postmark, Resend, SMTP; `log` and `outbox` providers), templates in
+  `mail/`, outbox table, delivery through the jobs pack, `lidza_mail`,
+  rule L006 against vendor SDKs; the reference app uses it.
+
 ## v0.1.0 (2026-09-25)
 
 The first release: everything in `docs/roadmap.md` phases 0 to 7 and what

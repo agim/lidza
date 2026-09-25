@@ -56,6 +56,25 @@ pub struct AuthToken {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MailMessage {
+    pub id: String,
+    pub recipient: String,
+    pub subject: String,
+    pub text: Option<String>,
+    pub html: Option<String>,
+    pub template: Option<String>,
+    pub status: String,
+    #[serde(rename = "providerId")]
+    pub provider_id: Option<String>,
+    pub error: Option<String>,
+    pub attempts: i32,
+    #[serde(rename = "createdAt")]
+    pub created_at: String,
+    #[serde(rename = "sentAt")]
+    pub sent_at: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CreateNote {
     pub title: String,
     pub body: Option<String>,

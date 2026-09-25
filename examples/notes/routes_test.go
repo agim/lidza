@@ -8,9 +8,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/agim/lidza"
+	"github.com/agim/lidza/packs/mail"
 	"github.com/agim/lidza/pkg/lidzatest"
 
-	"notes/handlers"
 	"notes/schema"
 )
 
@@ -37,20 +38,40 @@ func TestNotes(t *testing.T) {
 		t.Fatalf("weak password: %d %s", res.StatusCode, body(res))
 	}
 
-	// Emails are captured instead of sent.
-	var mails []string
-	handlers.Mail = func(ctx context.Context, to, subject, body string) error {
-		mails = append(mails, body)
-		return nil
+	// MAIL_PROVIDER=outbox in .env.test: nothing is sent, the outbox has
+	// every message, newest first.
+	// The table persists across runs, so assertions look at the newest row.
+	outbox := func() []mail.Stored {
+		rows, err := mail.From(lidza.WithServices(context.Background(), srv.Services)).Outbox(context.Background(), 5)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return rows
+	}
+	newest := func() string {
+		if rows := outbox(); len(rows) > 0 {
+			return rows[0].ID
+		}
+		return ""
+	}
+	linkIn := func(row mail.Stored, prefix string) string {
+		for _, f := range strings.Fields(*row.Text) {
+			if strings.HasPrefix(f, prefix) {
+				return strings.TrimPrefix(f, prefix)
+			}
+		}
+		t.Fatalf("no %s link in %q", prefix, *row.Text)
+		return ""
 	}
 	var session schema.Session
 	if res := srv.JSON(t, http.MethodPost, "/api/v1/auth/register", creds, &session); res.StatusCode != http.StatusCreated || session.Email != creds.Email || session.AccessToken == "" || session.Verified {
 		t.Fatalf("register: %d %+v", res.StatusCode, session)
 	}
-	if len(mails) != 1 || !strings.Contains(mails[0], "/verify?token=") {
-		t.Fatalf("verification mail: %v", mails)
+	mails := outbox()
+	if len(mails) == 0 || mails[0].To != creds.Email || mails[0].Status != mail.StatusSent || mails[0].Template == nil || *mails[0].Template != "verify" {
+		t.Fatalf("verification mail: %+v", mails)
 	}
-	verifyToken := strings.TrimPrefix(strings.Fields(mails[0])[1], "/verify?token=")
+	verifyToken := linkIn(mails[0], "/verify?token=")
 	if res := srv.JSON(t, http.MethodPost, "/api/v1/auth/verify", schema.VerifyEmail{Token: "nope"}, nil); res.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("bad verify token: %d", res.StatusCode)
 	}
@@ -120,14 +141,18 @@ func TestNotes(t *testing.T) {
 	}
 
 	// Password reset: a link by mail, a new password, every session ended.
-	mails = nil
-	if res := srv.JSON(t, http.MethodPost, "/api/v1/auth/forgot", schema.ForgotPassword{Email: "nobody@example.com"}, nil); res.StatusCode != http.StatusNoContent || len(mails) != 0 {
-		t.Fatalf("forgot for unknown email: %d %v", res.StatusCode, mails)
+	last := newest()
+	if res := srv.JSON(t, http.MethodPost, "/api/v1/auth/forgot", schema.ForgotPassword{Email: "nobody@example.com"}, nil); res.StatusCode != http.StatusNoContent || newest() != last {
+		t.Fatalf("forgot for unknown email must send nothing: %d", res.StatusCode)
 	}
-	if res := srv.JSON(t, http.MethodPost, "/api/v1/auth/forgot", schema.ForgotPassword{Email: other.Email}, nil); res.StatusCode != http.StatusNoContent || len(mails) != 1 {
-		t.Fatalf("forgot: %d %v", res.StatusCode, mails)
+	if res := srv.JSON(t, http.MethodPost, "/api/v1/auth/forgot", schema.ForgotPassword{Email: other.Email}, nil); res.StatusCode != http.StatusNoContent {
+		t.Fatalf("forgot: %d", res.StatusCode)
 	}
-	resetToken := strings.TrimPrefix(strings.Fields(mails[0])[1], "/reset?token=")
+	reset := outbox()[0]
+	if reset.ID == last || reset.To != other.Email || reset.Template == nil || *reset.Template != "reset" {
+		t.Fatalf("reset mail: %+v", reset)
+	}
+	resetToken := linkIn(reset, "/reset?token=")
 	newPassword := "battery staple horse"
 	if res := srv.JSON(t, http.MethodPost, "/api/v1/auth/reset", schema.ResetPassword{Token: resetToken, Password: newPassword}, nil); res.StatusCode != http.StatusNoContent {
 		t.Fatalf("reset: %d %s", res.StatusCode, body(res))

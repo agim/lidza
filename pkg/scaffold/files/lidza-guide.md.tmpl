@@ -321,6 +321,35 @@ Let an agent call a function of this app, with its packs, from
 3. `lidza check`; then restart `lidza mcp` (the MCP client reconnects) and
    call `app_count_posts`.
 
+### Send an email
+
+Send a transactional email (verification, reset, receipt) through the
+mail pack, never through a vendor SDK.
+
+1. `lidza pack add mail` (after `db`, and `jobs` for background delivery);
+   set `MAIL_FROM` and, in production, `MAIL_PROVIDER` with its key in
+   `.env`. `.env.test` gets `MAIL_PROVIDER=outbox`.
+2. Write the bodies as Go templates: `mail/<name>.txt.tmpl` (always) and
+   `mail/<name>.html.tmpl` (optional), over the `Data` you pass.
+3. From a handler or a job:
+
+   ```go
+   _, err := mail.From(ctx).Send(ctx, mail.Message{
+   	To: user.Email, Subject: "Verify your email", Template: "verify",
+   	Data: map[string]string{"Link": link},
+   })
+   ```
+
+   Send returns once the row is in the outbox (queued for the jobs pack,
+   or delivered right away without it). Do not build the message with
+   `fmt.Sprintf` and do not call the vendor's API.
+4. Test it: `mail.From(lidza.WithServices(ctx, srv.Services)).Outbox(ctx, 5)`
+   returns the messages, newest first, with `Status`, `Text` and `HTML`;
+   read the link out of the text. The snippet `auth-handlers` and
+   `routes_test.go` in the reference app show both sides.
+5. `lidza check`, then `lidza test`. In dev, `lidza_mail` (MCP) shows the
+   outbox.
+
 ### Write a test
 
 Cover a handler with a Go test that boots the app, or a page with a
@@ -457,6 +486,14 @@ Official Go packs, configured from `.env` (see `.env.example` after
   times in UTC; format at the edge.
 - `realtime`: `realtime.From(ctx).Publish(ctx, topic, value)` and
   `r.Handle("GET /api/v1/realtime", realtime.Handler())`.
+- `mail`: `mail.From(ctx).Send(ctx, mail.Message{To, Subject, Template:
+  "verify", Data: data})` renders `mail/verify.txt.tmpl` and
+  `mail/verify.html.tmpl` (Go templates over `Data`) and delivers through
+  `MAIL_PROVIDER` (`mailgun`, `sendgrid`, `postmark`, `resend`, `smtp`;
+  `log` by default, `outbox` in tests). With the `db` pack every message
+  is a row in `mail_message` (`Outbox(ctx, n)`, the MCP tool
+  `lidza_mail`); with the `jobs` pack delivery runs as a job with
+  retries. Never import a vendor SDK (`lidza check` L006).
 - `analytics` (opt-in): server errors are captured on their own; register
   `r.Handle("POST /api/v1/analytics/{kind}", analytics.Handler())`, set
   `VITE_ANALYTICS=1`, and call `analytics.From(ctx).Track(ctx, "name",

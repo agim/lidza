@@ -35,6 +35,21 @@ type AuthToken struct {
 	CreatedAt time.Time  `json:"created_at"`
 }
 
+type MailMessage struct {
+	ID         string     `json:"id"`
+	Recipient  string     `json:"recipient"`
+	Subject    string     `json:"subject"`
+	Text       *string    `json:"text"`
+	Html       *string    `json:"html"`
+	Template   *string    `json:"template"`
+	Status     string     `json:"status"`
+	ProviderID *string    `json:"provider_id"`
+	Error      *string    `json:"error"`
+	Attempts   int32      `json:"attempts"`
+	CreatedAt  time.Time  `json:"created_at"`
+	SentAt     *time.Time `json:"sent_at"`
+}
+
 type Note struct {
 	ID        string    `json:"id"`
 	OwnerID   string    `json:"owner_id"`

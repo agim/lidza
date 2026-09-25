@@ -64,7 +64,7 @@ func TestNewReact(t *testing.T) {
 	if read("CLAUDE.md") != read("AGENTS.md") || read("CLAUDE.md") != read("GEMINI.md") {
 		t.Errorf("agent files should be identical")
 	}
-	if !strings.Contains(read("CLAUDE.md"), "`add-api-route`, `add-resource`, `add-page`, `add-pack-capability`, `add-mcp-tool`, `write-test`") {
+	if !strings.Contains(read("CLAUDE.md"), "`add-api-route`, `add-resource`, `add-page`, `add-pack-capability`, `add-mcp-tool`, `send-email`, `write-test`") {
 		t.Errorf("CLAUDE.md should list the recipes: %s", read("CLAUDE.md"))
 	}
 	if skill := read(".claude/skills/add-page/SKILL.md"); !strings.Contains(skill, "name: add-page\n") || !strings.Contains(skill, "src/router.tsx") || strings.Contains(skill, "{{") {

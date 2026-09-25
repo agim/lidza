@@ -50,6 +50,7 @@ import (
 
 	"github.com/agim/lidza/pkg/orm"
 	"github.com/agim/lidza/pkg/router"
+	_ "github.com/sendgrid/sendgrid-go/helpers/mail"
 
 	"app/schema"
 	"app/db/queries"
@@ -75,7 +76,7 @@ func helper[In any](req *router.Request[In], n int) (In, error) { var z In; retu
 		lines = append(lines, d.Code+" "+d.File+":"+itoa(d.Line)+" "+d.Severity)
 	}
 	want := "L001 app.go:10 warning,L001 app.go:11 warning,L001 app.go:14 warning,L002 app.go:19 warning,L002 app.go:23 warning," +
-		"L004 handlers/things.go:6 error,L005 handlers/things.go:17 warning,L005 handlers/things.go:17 warning,L005 handlers/things.go:18 warning,L005 handlers/things.go:18 warning"
+		"L004 handlers/things.go:6 error,L006 handlers/things.go:8 warning,L005 handlers/things.go:18 warning,L005 handlers/things.go:18 warning,L005 handlers/things.go:19 warning,L005 handlers/things.go:19 warning"
 	if strings.Join(lines, ",") != want {
 		t.Fatalf("got %v\nwant %s", lines, want)
 	}
@@ -86,7 +87,7 @@ func helper[In any](req *router.Request[In], n int) (In, error) { var z In; retu
 		if d.Code == "L004" && !strings.Contains(d.Message, "did you mean github.com/agim/lidza/pkg/router") && !strings.Contains(d.Message, "does not exist") {
 			t.Fatalf("L004 message: %s", d.Message)
 		}
-		if d.Code == "L005" && d.Line == 18 && !strings.Contains(d.Message, "struct{...}") && !strings.Contains(d.Message, "any") {
+		if d.Code == "L005" && d.Line == 19 && !strings.Contains(d.Message, "struct{...}") && !strings.Contains(d.Message, "any") {
 			t.Fatalf("L005 message: %s", d.Message)
 		}
 	}

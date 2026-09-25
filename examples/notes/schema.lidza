@@ -118,3 +118,20 @@ model AuthToken @table("auth_token") {
   usedAt    time?
   createdAt time   @default(now())
 }
+
+// Types of the mail pack.
+// Types of the mail pack: the outbox, one row per message sent or queued.
+model MailMessage @table("mail_message") {
+  id         uuid   @id @default(uuid())
+  recipient  string @index
+  subject    string
+  text       text?
+  html       text?
+  template   string?
+  status     string @index
+  providerId string?
+  error      text?
+  attempts   int
+  createdAt  time   @default(now()) @index
+  sentAt     time?
+}

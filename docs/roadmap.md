@@ -522,6 +522,21 @@ mismatch any other route at hydration; it now serves the bare shell the
 prerender keeps (`dist/.server/index.html`). `install.sh` pins the helper
 tools; `CHANGELOG.md` starts at v0.1.0, the first tag.
 
+### Mail pack (done 2026-09-25)
+
+`lidza pack add mail`: `mail.From(ctx).Send(ctx, mail.Message{...})`
+behind which a provider delivers. Mailgun, SendGrid, Postmark and Resend
+are each one HTTP request written directly (no vendor SDK, recordable
+with `lidzatest`), SMTP with STARTTLS or TLS builds a MIME message;
+`log` is the default and `outbox` keeps messages for tests. Bodies come
+from `mail/<name>.txt.tmpl` and `.html.tmpl`. With the db pack every
+message is a row in `mail_message` with status, provider id, error and
+attempts (`Outbox`, the MCP tool `lidza_mail`); with the jobs pack
+delivery runs as a job with retries. `lidza check` L006 flags an import
+of a vendor SDK. The reference app sends its verification and reset
+links through it and its tests read the outbox; the guide has the recipe
+"Send an email".
+
 ### Next
 
 Nothing queued.

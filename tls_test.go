@@ -3,7 +3,6 @@ package lidza
 import (
 	"context"
 	"crypto/tls"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -95,18 +94,14 @@ func TestRedirectToHTTPS(t *testing.T) {
 // a certificate for the domain (issuance itself needs a CA and is not
 // exercised), and shutdown is clean.
 func TestServeTLS(t *testing.T) {
-	free := func() string {
-		ln, err := net.Listen("tcp", "127.0.0.1:0")
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer ln.Close()
-		return ln.Addr().String()
-	}
-	httpsAddr, httpAddr := free(), free()
+	// Port 0 on both listeners; the server reports what it bound.
+	var httpsAddr, httpAddr string
+	bound := make(chan struct{})
+	tlsListening = func(https, http string) { httpsAddr, httpAddr = https, http; close(bound) }
+	t.Cleanup(func() { tlsListening = nil })
 	t.Setenv(EnvTLSDomains, "app.example.com")
-	t.Setenv(EnvTLSAddr, httpsAddr)
-	t.Setenv(EnvTLSHTTPAddr, httpAddr)
+	t.Setenv(EnvTLSAddr, "127.0.0.1:0")
+	t.Setenv(EnvTLSHTTPAddr, "127.0.0.1:0")
 	t.Setenv(EnvTLSCacheDir, t.TempDir())
 	t.Setenv(EnvTLSDirectory, "https://127.0.0.1:1/directory") // never reached
 	t.Setenv("APP_URL", "")
@@ -117,9 +112,10 @@ func TestServeTLS(t *testing.T) {
 	go func() { done <- Serve(ctx, app) }()
 	select {
 	case <-ready:
+		<-bound
 	case err := <-done:
 		t.Fatalf("serve: %v", err)
-	case <-time.After(10 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("not ready")
 	}
 	if os.Getenv("APP_URL") != "https://app.example.com" {

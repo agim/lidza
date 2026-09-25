@@ -1,0 +1,19 @@
+{{define "content"}}
+<h1>Language model</h1>
+<div class="grid">
+  <div class="card"><div class="muted">Provider</div><div class="stat">{{.Data.Provider}}</div><div class="help">{{or .Data.Model "default model"}}</div></div>
+  <div class="card"><div class="muted">Calls, 30 days</div><div class="stat">{{.Data.Calls}}</div></div>
+  <div class="card"><div class="muted">Input tokens, 30 days</div><div class="stat">{{.Data.Input}}</div></div>
+  <div class="card"><div class="muted">Output tokens, 30 days</div><div class="stat">{{.Data.Output}}</div></div>
+</div>
+{{if .Data.NoUsage}}<div class="card">{{.Data.NoUsage}}</div>{{else}}
+<div class="card"><h2 style="margin-top:0">By day, model and label</h2>
+<table><tr><th>Day</th><th>Model</th><th>Label</th><th>Calls</th><th>Errors</th><th>Input</th><th>Output</th></tr>
+{{range .Data.Rows}}<tr><td>{{.Day}}</td><td class="mono">{{.Provider}} {{.Model}}</td><td class="mono">{{.Label}}</td><td>{{.Calls}}</td><td>{{if .Errors}}<span class="bad">{{.Errors}}</span>{{else}}0{{end}}</td><td>{{.Input}}</td><td>{{.Output}}</td></tr>{{else}}<tr><td colspan="7" class="muted">no calls yet</td></tr>{{end}}
+</table></div>
+<div class="card"><h2 style="margin-top:0">Recent calls</h2>
+<table><tr><th>When</th><th>Model</th><th>Label</th><th>Tokens</th><th>Time</th><th>Status</th></tr>
+{{range .Data.Recent}}<tr><td>{{since .At}}</td><td class="mono">{{.Model}}</td><td class="mono">{{.Label}}</td><td>{{.Input}} / {{.Output}}</td><td>{{.Ms}} ms</td><td>{{if eq .Status "ok"}}<span class="ok">ok</span>{{else}}<span class="bad">{{short (deref .Error)}}</span>{{end}}</td></tr>{{end}}
+</table></div>
+{{end}}
+{{end}}

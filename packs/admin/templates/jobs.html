@@ -1,0 +1,12 @@
+{{define "content"}}
+<h1>Jobs</h1>
+<div class="grid">
+  {{range $k, $v := .Data.Stats}}<div class="card"><div class="muted">{{$k}}</div><div class="stat">{{$v}}</div></div>{{end}}
+</div>
+{{if .Data.Error}}<div class="card error">{{.Data.Error}}</div>{{end}}
+<div class="card"><h2 style="margin-top:0">Recent, newest first</h2>
+<table><tr><th>Run at</th><th>Kind</th><th>State</th><th>Attempts</th><th>Error</th><th></th></tr>
+{{range .Data.Rows}}<tr><td>{{since .RunAt}}</td><td class="mono">{{.Kind}}</td><td>{{if eq .State "failed"}}<span class="bad">failed</span>{{else if eq .State "done"}}<span class="ok">done</span>{{else}}{{.State}}{{end}}</td><td>{{.Attempts}}/{{.MaxAttempts}}</td><td class="mono">{{short (deref .LastError)}}</td>
+<td>{{if eq .State "failed"}}<form method="post" action="{{$.Path}}/jobs/{{.ID}}/retry"><button class="small" type="submit">Retry</button></form>{{end}}</td></tr>{{else}}<tr><td colspan="6" class="muted">no jobs yet</td></tr>{{end}}
+</table></div>
+{{end}}

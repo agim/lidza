@@ -565,6 +565,26 @@ pack, with the app deciding who may read them.
    `storage-handler` and `routes_test.go` in the reference app show it.
 5. `lidza check`, then `lidza test`.
 
+### Add the admin pages
+
+Give operators a place to set credentials and watch the packs, without
+writing a page.
+
+1. `lidza pack add auth` if the app has no accounts yet; the pages are
+   behind `auth.Require()`.
+2. In `routes.go`: `admin.Mount(r, admin.Options{Title: "{{.Name}}"})`
+   (import `github.com/agim/lidza/packs/admin`).
+3. Name the admins in `.env`: `ADMIN_USERS=you@example.com` (ids or
+   emails, comma separated). `.env.test` names a test account.
+4. Theme it when the app has a look: `admin/theme.css` with the
+   variables the default defines (`lidza api packs/admin` lists the
+   options; the pack's `templates/theme.css` is the reference), or
+   `admin/layout.html` for a frame of your own.
+5. Test it: a user in `ADMIN_USERS` gets 200 on `/admin/`, another
+   user 403, a visitor 401; the reference app's `routes_test.go` shows
+   it.
+6. `lidza check`, then `lidza test`.
+
 ### Add a recipe
 
 Record a convention of this app so the next task follows it: a pattern
@@ -770,6 +790,8 @@ Official Go packs, configured from `.env` (see `.env.example` after
   the credentials) and `local` (a directory, for development and tests).
   Never import a storage SDK (`lidza check` L008). Recipe: "Store a
   file".
+- `admin`: `admin.Mount(r, admin.Options{Title: "{{.Name}}"})` serves
+  the admin pages at `/admin` for `ADMIN_USERS` (see "Admin pages").
 - `analytics` (opt-in): server errors are captured on their own; register
   `r.Handle("POST /api/v1/analytics/{kind}", analytics.Handler())`, set
   `VITE_ANALYTICS=1`, and call `analytics.From(ctx).Track(ctx, "name",
@@ -784,6 +806,20 @@ Order in `lidza.json` matters: `lidza/db` before `lidza/auth` and
 Set `"sdk": {"dart": "clients/dart"}` in `lidza.json`; `lidza gen` writes
 the `lidza_client` Dart package there with the same operations as
 `@lidza/client`.
+
+## Admin pages
+
+`admin.Mount(r, admin.Options{Title: "{{.Name}}"})` in `routes.go` serves
+`/admin` for the signed-in users `ADMIN_USERS` names (ids or emails,
+comma separated; `Options.Allow` for another rule): an overview of the
+packs, the credentials of the mail, language-model and storage providers
+(saved sealed with the master key and applied without a restart), token
+usage by day, model and label, the mail outbox, jobs with a retry, and
+stored files. Theme it: `admin/theme.css` overrides the CSS variables
+(`--admin-accent`, `--admin-bg`, `--admin-font`, ...), `admin/layout.html`
+replaces the frame (define `layout` and call `{{"{{"}}template "content" .{{"}}"}}`).
+Nothing in it is JavaScript; it works in every template. Recipe: "Add
+the admin pages".
 
 ## Secrets
 

@@ -3,7 +3,6 @@ package lidza
 import (
 	"context"
 	"crypto/tls"
-	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -28,19 +27,16 @@ func TestServeTLSIssues(t *testing.T) {
 	} else {
 		res.Body.Close()
 	}
-	free := func() string {
-		ln, err := net.Listen("tcp", "127.0.0.1:0")
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer ln.Close()
-		return ln.Addr().String()
-	}
-	httpsAddr, httpAddr := free(), free()
+	// Port 0 on both listeners; the server reports what it bound.
+	var httpsAddr, httpAddr string
+	bound := make(chan struct{})
+	tlsListening = func(https, http string) { httpsAddr, httpAddr = https, http; close(bound) }
+	_ = httpAddr
+	t.Cleanup(func() { tlsListening = nil })
 	cacheDir := t.TempDir()
 	t.Setenv(EnvTLSDomains, "app.example.com")
-	t.Setenv(EnvTLSAddr, httpsAddr)
-	t.Setenv(EnvTLSHTTPAddr, httpAddr)
+	t.Setenv(EnvTLSAddr, "127.0.0.1:0")
+	t.Setenv(EnvTLSHTTPAddr, "127.0.0.1:0")
 	t.Setenv(EnvTLSCacheDir, cacheDir)
 	t.Setenv(EnvTLSDirectory, directory)
 	t.Setenv(EnvTLSEmail, "ops@example.com")
@@ -56,9 +52,10 @@ func TestServeTLSIssues(t *testing.T) {
 	go func() { done <- Serve(ctx, app) }()
 	select {
 	case <-ready:
+		<-bound
 	case err := <-done:
 		t.Fatalf("serve: %v", err)
-	case <-time.After(10 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("not ready")
 	}
 

@@ -6,6 +6,19 @@ version in `go.mod`. `install.sh` pins the newest release here;
 `scripts/release.sh vX.Y.Z` turns "Unreleased" into a release, bumps the
 pin, tags and pushes.
 
+## Unreleased
+
+- Admin pages: `admin.Mount(r, admin.Options{})` serves `/admin` for the
+  users `ADMIN_USERS` names: an overview of the packs, the credentials
+  of the mail, language-model and storage providers (saved sealed with
+  the master key, applied without a restart), token usage by day, model
+  and label, the mail outbox, jobs with a retry, stored files. Themed by
+  `admin/theme.css` (CSS variables) and `admin/layout.html`. The
+  reference app mounts it; the recipe "Add the admin pages".
+- Core: `router.Mount` serves a handler outside `/api` ahead of the
+  frontend; `lidza.Optional`, `lidza.ServicesFrom`, `env.Values`; the
+  jobs pack's `Recent` and `Retry`; `router.WriteError` for raw handlers.
+
 ## v0.1.8 (2026-09-25)
 
 - `llm`: every call is recorded in `llm_usage` with the db pack

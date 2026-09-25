@@ -527,6 +527,26 @@ pack, with the app deciding who may read them.
    `storage-handler` and `routes_test.go` in the reference app show it.
 5. `lidza check`, then `lidza test`.
 
+### Add the admin pages
+
+Give operators a place to set credentials and watch the packs, without
+writing a page.
+
+1. `lidza pack add auth` if the app has no accounts yet; the pages are
+   behind `auth.Require()`.
+2. In `routes.go`: `admin.Mount(r, admin.Options{Title: "notes"})`
+   (import `github.com/agim/lidza/packs/admin`).
+3. Name the admins in `.env`: `ADMIN_USERS=you@example.com` (ids or
+   emails, comma separated). `.env.test` names a test account.
+4. Theme it when the app has a look: `admin/theme.css` with the
+   variables the default defines (`lidza api packs/admin` lists the
+   options; the pack's `templates/theme.css` is the reference), or
+   `admin/layout.html` for a frame of your own.
+5. Test it: a user in `ADMIN_USERS` gets 200 on `/admin/`, another
+   user 403, a visitor 401; the reference app's `routes_test.go` shows
+   it.
+6. `lidza check`, then `lidza test`.
+
 ### Add a recipe
 
 Record a convention of this app so the next task follows it: a pattern

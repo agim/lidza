@@ -1,0 +1,14 @@
+{{define "content"}}
+<h1>Storage</h1>
+<div class="card"><div class="muted">Provider</div><div class="stat">{{.Data.Provider}}</div></div>
+<form class="card" method="get" action="{{.Path}}/storage">
+  <label for="prefix">Prefix</label>
+  <input type="text" id="prefix" name="prefix" value="{{.Data.Prefix}}" placeholder="avatars/">
+  <button type="submit">List</button>
+</form>
+{{if .Data.Error}}<div class="card error">{{.Data.Error}}</div>{{end}}
+<div class="card">
+<table><tr><th>Key</th><th>Size</th><th>Type</th><th>Modified</th></tr>
+{{range .Data.Rows}}<tr><td class="mono">{{.Key}}</td><td>{{.Size}}</td><td class="mono">{{.ContentType}}</td><td>{{since .ModifiedAt}}</td></tr>{{else}}<tr><td colspan="4" class="muted">nothing under this prefix</td></tr>{{end}}
+</table></div>
+{{end}}

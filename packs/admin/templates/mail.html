@@ -1,0 +1,13 @@
+{{define "content"}}
+<h1>Mail</h1>
+<div class="grid">
+  <div class="card"><div class="muted">Provider</div><div class="stat">{{.Data.Provider}}</div></div>
+  <div class="card"><div class="muted">Templates</div><div class="mono">{{range .Data.Templates}}{{.}} {{end}}</div></div>
+</div>
+{{if .Data.NoOutbox}}<div class="card">{{.Data.NoOutbox}}</div>{{else}}
+<div class="card"><h2 style="margin-top:0">Outbox, newest first</h2>
+<table><tr><th>When</th><th>To</th><th>Subject</th><th>Status</th><th>Attempts</th></tr>
+{{range .Data.Rows}}<tr><td>{{since .CreatedAt}}</td><td class="mono">{{.To}}</td><td>{{.Subject}}</td><td>{{if eq .Status "failed"}}<span class="bad">failed: {{short (deref .Error)}}</span>{{else if eq .Status "sent"}}<span class="ok">sent</span>{{else}}{{.Status}}{{end}}</td><td>{{.Attempts}}</td></tr>{{else}}<tr><td colspan="5" class="muted">nothing sent yet</td></tr>{{end}}
+</table></div>
+{{end}}
+{{end}}

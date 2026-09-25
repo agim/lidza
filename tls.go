@@ -127,6 +127,10 @@ func (t *tlsSettings) manager(cache autocert.Cache) *autocert.Manager {
 	return m
 }
 
+// tlsListening, when set by a test, receives the bound HTTPS and HTTP
+// addresses, so the test can listen on port 0 and still find the server.
+var tlsListening func(https, http string)
+
 // acmeHTTPClient is the client the ACME manager uses for the directory;
 // nil is the default. A test against a local test authority sets one
 // that trusts its certificate.
@@ -180,6 +184,9 @@ func serveTLS(ctx context.Context, booted *Booted, t *tlsSettings, appName strin
 		ErrorLog:          errLog,
 	}
 	log.Info("listening", "app", appName, "addr", t.PublicURL(), "https", tlsLn.Addr().String(), "http", httpLn.Addr().String(), "domains", t.domains, "mode", "production")
+	if tlsListening != nil {
+		tlsListening(tlsLn.Addr().String(), httpLn.Addr().String())
+	}
 	if onReady != nil {
 		onReady()
 	}

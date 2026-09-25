@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/agim/lidza/packs/admin"
 	"github.com/agim/lidza/packs/auth"
 	"github.com/agim/lidza/pkg/router"
 
@@ -36,4 +37,9 @@ func routes(r *router.Router) {
 	notes := r.Group("/api/v1/notes", auth.Require())
 	handlers.NoteRoutes(notes)
 	handlers.AttachmentRoutes(notes)
+
+	// The admin pages at /admin, for the users ADMIN_USERS names:
+	// credentials of the mail, model and storage providers, token usage,
+	// the outbox, jobs, files. Themed by admin/theme.css and layout.html.
+	admin.Mount(r, admin.Options{Title: "notes"})
 }

@@ -237,3 +237,44 @@ func body(res *http.Response) string {
 	n, _ := res.Body.Read(b)
 	return string(b[:n])
 }
+
+// TestAdmin: the admin pages open for a user ADMIN_USERS names, refuse
+// another user, and ask a visitor to sign in.
+func TestAdmin(t *testing.T) {
+	srv := lidzatest.Start(t, app())
+	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	if res, err := client.Get(srv.URL + "/admin/"); err != nil || res.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("visitor: %v %v", err, res)
+	}
+	// The admin account persists across runs: register, or sign in.
+	creds := schema.Credentials{Email: "admin@example.com", Password: "correct horse battery staple"}
+	if res := srv.JSON(t, http.MethodPost, "/api/v1/auth/register", creds, nil); res.StatusCode == http.StatusConflict {
+		if res := srv.JSON(t, http.MethodPost, "/api/v1/auth/login", creds, nil); res.StatusCode != http.StatusOK {
+			t.Fatalf("admin login: %d %s", res.StatusCode, body(res))
+		}
+	} else if res.StatusCode != http.StatusCreated {
+		t.Fatalf("admin register: %d %s", res.StatusCode, body(res))
+	}
+	res, err := srv.Client().Get(srv.URL + "/admin/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if res.StatusCode != http.StatusOK || !strings.Contains(string(page), "Overview") || !strings.Contains(string(page), "Credentials") {
+		t.Fatalf("admin overview: %d %s", res.StatusCode, page)
+	}
+	res, _ = srv.Client().Get(srv.URL + "/admin/llm")
+	page, _ = io.ReadAll(res.Body)
+	res.Body.Close()
+	if res.StatusCode != http.StatusOK || !strings.Contains(string(page), "Language model") {
+		t.Fatalf("admin llm page: %d", res.StatusCode)
+	}
+	// Another user is signed in but not an admin.
+	if res := srv.JSON(t, http.MethodPost, "/api/v1/auth/register", schema.Credentials{Email: fmt.Sprintf("notadmin%d@example.com", time.Now().UnixNano()), Password: creds.Password}, nil); res.StatusCode != http.StatusCreated {
+		t.Fatalf("register: %d", res.StatusCode)
+	}
+	if res, _ := srv.Client().Get(srv.URL + "/admin/"); res.StatusCode != http.StatusForbidden {
+		t.Fatalf("non-admin: %d", res.StatusCode)
+	}
+}

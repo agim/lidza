@@ -1,0 +1,53 @@
+{{define "layout"}}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Active}} · {{.Title}}</title>
+<link rel="stylesheet" href="{{.Path}}/theme.css">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--admin-bg); color: var(--admin-fg); font: 15px/1.5 var(--admin-font); }
+  a { color: var(--admin-accent); }
+  header { background: var(--admin-surface); border-bottom: 1px solid var(--admin-line); }
+  header .bar { max-width: 1100px; margin: 0 auto; padding: 12px 16px; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+  header .brand { font-weight: 600; margin-right: 8px; }
+  header nav a { text-decoration: none; color: var(--admin-fg); padding: 6px 10px; border-radius: var(--admin-radius); }
+  header nav a.active { background: var(--admin-accent); color: var(--admin-accent-fg); }
+  header .version { margin-left: auto; color: var(--admin-muted); font-size: 13px; }
+  main { max-width: 1100px; margin: 0 auto; padding: 24px 16px; }
+  h1 { font-size: 22px; margin: 0 0 16px; }
+  h2 { font-size: 16px; margin: 24px 0 8px; }
+  .card { background: var(--admin-surface); border: 1px solid var(--admin-line); border-radius: var(--admin-radius); padding: 16px; margin-bottom: 16px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--admin-line); vertical-align: top; }
+  th { color: var(--admin-muted); font-weight: 500; }
+  code, .mono { font-family: var(--admin-mono); font-size: 13px; }
+  .muted { color: var(--admin-muted); }
+  .flash { border-left: 4px solid var(--admin-ok); }
+  .error { border-left: 4px solid var(--admin-danger); }
+  label { display: block; margin: 12px 0 4px; font-weight: 500; }
+  input[type=text], input[type=password], select { width: 100%; padding: 8px 10px; border: 1px solid var(--admin-line); border-radius: var(--admin-radius); background: var(--admin-bg); color: var(--admin-fg); font: inherit; }
+  .help { color: var(--admin-muted); font-size: 13px; margin-top: 2px; }
+  .check { font-weight: normal; display: inline; margin-left: 8px; font-size: 13px; }
+  button { background: var(--admin-accent); color: var(--admin-accent-fg); border: 0; border-radius: var(--admin-radius); padding: 8px 14px; font: inherit; cursor: pointer; margin-top: 16px; }
+  button.small { padding: 4px 10px; margin: 0; font-size: 13px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+  .stat { font-size: 24px; font-weight: 600; }
+  .ok { color: var(--admin-ok); } .bad { color: var(--admin-danger); }
+  @media (max-width: 640px) { th, td { padding: 6px 4px; } }
+</style>
+</head>
+<body>
+<header><div class="bar">
+  <span class="brand">{{.App}}</span>
+  <nav>{{range .Sections}}<a href="{{.Href}}"{{if eq .Name $.Active}} class="active"{{end}}>{{.Name}}</a>{{end}}</nav>
+  <span class="version">Līdza {{.Version}}</span>
+</div></header>
+<main>
+  {{if .Flash}}<div class="card flash">{{.Flash}}</div>{{end}}
+  {{if .Error}}<div class="card error">{{.Error}}</div>{{end}}
+  {{template "content" .}}
+</main>
+</body>
+</html>{{end}}

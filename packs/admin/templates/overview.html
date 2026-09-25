@@ -1,0 +1,17 @@
+{{define "content"}}
+<h1>Overview</h1>
+<div class="grid">
+  <div class="card"><div class="muted">Mail</div><div class="stat">{{or .Data.Mail "off"}}</div></div>
+  <div class="card"><div class="muted">Language model</div><div class="stat">{{or .Data.LLM "off"}}</div></div>
+  <div class="card"><div class="muted">Storage</div><div class="stat">{{or .Data.Storage "off"}}</div></div>
+  <div class="card"><div class="muted">Credentials</div><div class="stat">{{.Data.Credentials}}</div><div class="help">sealed values, kept in the {{.Data.Store}}{{if not .Data.HasKey}}; <span class="bad">no master key</span>{{end}}</div></div>
+</div>
+<div class="card">
+  <h2 style="margin-top:0">Serving</h2>
+  <table>
+    <tr><th>TLS domains</th><td class="mono">{{or .Data.TLSDomains "not set (plain HTTP behind a proxy)"}}</td></tr>
+    <tr><th>Public URL</th><td class="mono">{{or .Data.AppURL "not set"}}</td></tr>
+    <tr><th>Packs</th><td class="mono">{{range .Data.Packs}}{{.}} {{end}}</td></tr>
+  </table>
+</div>
+{{end}}

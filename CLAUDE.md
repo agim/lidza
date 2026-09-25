@@ -15,5 +15,6 @@ Gotchas:
 - Docker: `agim` is not in the `docker` group; use `sg docker -c '...'`.
 - Redis on 6379 is the local Valkey stand-in.
 - `examples/notes` is the reference app; its files are embedded for `lidza snippet` from `pkg/snippets/_files`. After changing the example: `go generate ./pkg/snippets` (the package test fails while they differ), and `lidza test` plus `lidza test --e2e` inside it.
+- A new check rule or agent surface gets a case in `evals/` (`go test -tags evals ./evals`).
 - Git: pull before committing, push straight to `master`; no branches or PRs unless asked.
 - Keep docs plain: short headings, facts, no decorative arrows, no taglines.

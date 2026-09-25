@@ -419,6 +419,22 @@ required in TypeScript, generated Go never gofmt-formatted, and
 `go test ./...` descending into a Go package shipped inside
 `node_modules` (isolated with a `go.mod` there).
 
+### Platform evals (done 2026-09-25)
+
+`go test -tags evals ./evals -v` builds the CLI, scaffolds an app against
+the checkout, installs its dependencies once and checks what an agent
+gets: a fresh app is silent; a hand-written `fetch`, an undeclared npm
+import, an invented framework package (with the go tool's `go get`
+advice gone), handler types outside the schema, global state and
+goroutines in handlers, a call to a missing operation, a field renamed in
+the schema, and an inaccessible element each produce the expected
+diagnostic; the skills, agent files, hook, `lidza api`, `lidza snippet`,
+MCP prompts, tools and resources are there; `lidza verify` passes; the
+reference app's own verify passes when Postgres is reachable.
+`evals/README.md` lists the cases; every new rule or surface gets one.
+
 ### Next
 
-Pending: platform evals.
+Nothing queued. Candidates, in no order: an agent-driven eval (a real
+agent given a task on a fresh app, scored by `lidza verify`); Gemini CLI
+custom commands from the recipes; `lidza api` for the app's own packages.

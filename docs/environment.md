@@ -169,6 +169,7 @@ lidza/
 │   └── realtime/     WebSocket topics, Valkey bus
 ├── core/             Rust crate `lidza-core`: the WASM ABI (src/abi.rs)
 ├── examples/notes/   the reference app (its own module, replace => ../..): auth, an owned resource, a page, tests, a tool
+├── evals/            platform evals (build tag evals): each agent mistake caught, guidance present, verify green
 ├── templates/
 │   ├── embed.go      embeds the template directories into the CLI
 │   ├── react/        default: Vite + React + TypeScript, TanStack Router and Query, Tailwind, prerendering, eslint with jsx-a11y
@@ -263,6 +264,8 @@ Framework build, from the repo root:
 gofmt -l . && go vet ./... && staticcheck ./... && go test ./...
 (cd core && cargo test && cargo build --target wasm32-wasip1)
 go build -o bin/lidza ./cmd/lidza
+go test -tags evals ./evals -v      # platform evals on a fresh app, a few minutes
+(cd examples/notes && lidza verify && lidza test --e2e)   # the reference app
 ```
 
 Phase 1 acceptance, against this checkout rather than the published module:

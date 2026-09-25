@@ -14,6 +14,16 @@ func Static(dist fs.FS) http.Handler {
 	files := http.FileServerFS(dist)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		name := strings.TrimPrefix(path.Clean("/"+r.URL.Path), "/")
+		// A prerendered page lives at <path>/index.html.
+		if name != "" && exists(dist, name+"/index.html") {
+			page, err := fs.ReadFile(dist, name+"/index.html")
+			if err == nil {
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+				w.Header().Set("Cache-Control", "no-cache")
+				_, _ = w.Write(page)
+				return
+			}
+		}
 		// index.html is written directly: FileServer would redirect it to "/".
 		if name != "" && name != "index.html" && exists(dist, name) {
 			if strings.HasPrefix(name, "assets/") {

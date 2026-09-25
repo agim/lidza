@@ -72,6 +72,18 @@ func TestParseTSC(t *testing.T) {
 	}
 }
 
+func TestParseESLint(t *testing.T) {
+	out := []byte(`[{"filePath":"/r/src/pages/Home.tsx","messages":[{"ruleId":"jsx-a11y/alt-text","severity":2,"message":"img elements must have an alt prop","line":7,"column":9},{"ruleId":"no-unused-vars","severity":1,"message":"x is unused","line":2,"column":7}]},{"filePath":"/r/src/ok.ts","messages":[]}]`)
+	got := parseESLint("/r", out)
+	want := []Diagnostic{
+		{Layer: "frontend", Tool: "eslint", Severity: "error", Code: "jsx-a11y/alt-text", File: "src/pages/Home.tsx", Line: 7, Column: 9, Message: "img elements must have an alt prop"},
+		{Layer: "frontend", Tool: "eslint", Severity: "warning", Code: "no-unused-vars", File: "src/pages/Home.tsx", Line: 2, Column: 7, Message: "x is unused"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %+v", got)
+	}
+}
+
 func TestDedupe(t *testing.T) {
 	in := []Diagnostic{
 		{Tool: "go vet", File: "a.go", Line: 1, Message: "m"},

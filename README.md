@@ -40,7 +40,7 @@ client, production is one binary.
 
 ## Status
 
-Phases 1 to 6 done: `lidza new` with the `react`, `svelte`, `astro` and
+Phases 1 to 7 done: `lidza new` with the `react`, `svelte`, `astro` and
 `htmx` templates, `lidza dev` (Go and frontend hot reload behind one port),
 `lidza build` (one binary), the agent interface (`lidza check --json`,
 `lidza context`, `lidza mcp`, `/llms.txt`), `schema.lidza` with generated
@@ -50,7 +50,9 @@ run as WASM in a bounded pool, official `db`, `realtime`, `geo` and
 `media`; scale primitives: `/metrics`, `/healthz`, `/readyz`, rate
 limiting, circuit breaker, `lidza check` rules for unbounded state,
 `lidza benchmark` on k6; application services: `auth`, `jobs`, `cache`,
-`i18n` packs and `lidza test`. Next: Phase 7, frontend depth. See
+`i18n` packs and `lidza test`; frontend depth: prerendered routes,
+accessibility in `lidza check`, `useLive`, client-side validators. Every
+roadmap phase is delivered. See
 `docs/roadmap.md`;
 `docs/features.md` maps every capability to a phase.
 

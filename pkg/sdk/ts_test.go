@@ -32,7 +32,7 @@ func TestTypeScript(t *testing.T) {
 				"opt":    map[string]any{"type": "integer"},
 			}, "required": []string{"id", "body", "status", "tags", "meta", "extra", "author"}},
 			"User":       map[string]any{"type": "object", "properties": map[string]any{"name": map[string]any{"type": "string"}}, "required": []any{"name"}},
-			"CreatePost": map[string]any{"type": "object", "properties": map[string]any{"title": map[string]any{"type": "string", "minLength": 1}}, "required": []string{"title"}},
+			"CreatePost": map[string]any{"type": "object", "properties": map[string]any{"title": map[string]any{"type": "string", "minLength": 1}}, "required": []string{"title"}, "x-lidza": "schema"},
 		},
 	}
 	files := TypeScript(c)
@@ -68,7 +68,24 @@ func TestTypeScript(t *testing.T) {
 			t.Errorf("client.ts missing %q\n%s", want, client)
 		}
 	}
-	if !strings.Contains(files["index.ts"], "export * from './client'") {
+	if !strings.Contains(files["index.ts"], "export * from './client'") || !strings.Contains(files["index.ts"], "export * from './validators'") {
 		t.Error("index.ts")
+	}
+	validators := files["validators.ts"]
+	for _, want := range []string{
+		"export function validateCreatePost(v: T.CreatePost): FieldError[]",
+		`if (v.title === '') errs.push({ field: "title", rule: "required", message: "required" })`,
+		`if (v.title.length < 1) errs.push({ field: "title", rule: "min", message: "at least 1 character(s)" })`,
+		"  CreatePost: validateCreatePost,",
+	} {
+		if !strings.Contains(validators, want) {
+			t.Errorf("validators.ts missing %q\n%s", want, validators)
+		}
+	}
+	if strings.Contains(validators, "validateHealth") {
+		t.Error("types without rules should not get validators")
+	}
+	if strings.Contains(validators, "const EMAIL") || strings.Contains(validators, "function isURL") {
+		t.Error("unused helpers emitted")
 	}
 }

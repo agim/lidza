@@ -19,23 +19,23 @@ does not reimplement).
 | CORS | done | `middleware.CORS`; off by default, same-origin is the normal case |
 | Built-in vulnerability shields | done | secure headers on every response, CSP and HSTS opt-in; body limits; SQL injection prevented by parameterized queries only (`sqlc`, `pgx`); XSS by template escaping plus CSP; CSRF tokens arrive with cookie sessions |
 | Environment configuration injection | done | `pkg/env`: typed struct from `.env`, `.env.<mode>` and the environment; secrets never in `lidza.json` |
-| Form validation | done (server) / phase 7 (client) | rules in `schema.lidza`; generated `Validate()` runs before every typed handler, 422 with field errors the client exposes as `ApiError.fields`; client-side validators from the same rules later |
+| Form validation | done | rules in `schema.lidza`; generated `Validate()` runs before every typed handler (422 with field errors, `ApiError.fields` on the client); `validators.ts` in `@lidza/client` applies the same rules in the browser |
 | Automatic error boundaries | done | React error boundary in the template; Go panic recovery returning a JSON error |
 | Database schema migrations | done | `lidza gen` diffs `schema.lidza` against `db/schema.lock.json` into numbered up/down scripts; `lidza db migrate`, `rollback`, `status` apply them under an advisory lock |
 | Database connection pooling | done | `pgxpool` in the `db` pack, bounded by `DB_MAX_CONNS`; `/readyz` pings it, `/metrics` reports it |
 | Object-relational mapping | done | `sqlc` via the `db` pack: SQL in `db/queries/*.sql`, `lidza gen` writes typed Go; see "Decisions" |
 | Dependency injection | done | `lidza.Services`: packs and `OnStart` provide values by type, handlers read them with `lidza.Service[T](ctx)`; explicit, no scanning |
-| Data binding | done (server) / phase 7 (client hook) | handlers publish over the `realtime` pack; a `useLive` hook in the template refetches on messages later |
+| Data binding | done | handlers publish over the `realtime` pack; `useLive(topics)` in the template invalidates the matching queries |
 | Session management and token auth | done | `auth` pack: argon2id, JWT access tokens, refresh sessions in Postgres, cookies or bearer, `auth.Require` |
 | Job queues and background workers | done | `jobs` pack: Postgres queue, bounded workers, retries, scheduling; heavy work in a pack capability |
 | Localization | done | `i18n` pack: catalogs embedded, locale per request, numbers, currency, dates, catalog endpoint for the frontend |
 | Mocking and stubbing | done (harness) | `lidza test` with the test database created and migrated; `lidzatest.Start` boots the app on httptest with a JSON client; `CACHE_URL=memory`; fake clock and recorded fixtures not built |
-| Accessibility checks | phase 7 | `eslint-plugin-jsx-a11y` in the template, findings ingested by `lidza check --json` |
-| State hydration and dehydration | phase 7 | TanStack Query `dehydrate`/`hydrate`; only meaningful with SSR or prerendering |
+| Accessibility checks | done | `eslint-plugin-jsx-a11y` in the `react` template; `lidza check` reports its findings as errors |
+| State hydration and dehydration | not needed | prerendered pages carry markup, not data; the client fetches once after hydration. TanStack Query `dehydrate`/`hydrate` would come with per-request SSR |
 | Observability | done | `/metrics`, `/healthz`, `/readyz`, request log with ids, `/debug/pprof/` in dev |
 | Rate limiting and circuit breakers | done | `middleware.RateLimit` (token bucket per key, bounded table), `resilience.Breaker` |
 | Load testing | done | `lidza benchmark` on k6 with heap and goroutine comparison; `benchmarks/scale_test.js` in every app |
-| Server-side rendering | phase 7 | build-time prerendering, hydration on the client, dynamic data from `/api`; see "Decisions" |
+| Server-side rendering | done (prerendering) | `react` and `astro` templates emit static HTML per route at build time, hydrated on the client, data from `/api`; see "Decisions" |
 
 ## Decisions
 

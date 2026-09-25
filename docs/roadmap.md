@@ -226,13 +226,37 @@ Check (passes): the template app with `db`, `auth`, `jobs`, `cache` and
 
 ## Phase 7: Frontend depth
 
-- Prerendering for `react` (static HTML at build time, hydration on the
-  client) with TanStack Query dehydrate/hydrate; the SSR decision in
-  `docs/features.md` may extend this.
-- Accessibility: `eslint-plugin-jsx-a11y` in the templates, findings in
-  `lidza check --json`.
-- `useLive` in the template: data bound to `realtime` invalidations.
+Done 2026-09-25.
 
-Check: a content page of the template app is served as complete HTML by the
-binary and becomes interactive without a second data fetch; an a11y
-violation in a page fails `lidza check`.
+- Prerendering for `react`: `npm run build` runs the client build, a
+  Vite SSR build of `src/entry-server.tsx`, and `scripts/prerender.mjs`,
+  which writes `dist/<path>/index.html` for every parameterless route
+  (TanStack Router memory history, `renderToString`). `main.tsx` hydrates
+  when markup is present and renders otherwise; the Go static server
+  serves `<path>/index.html` when it exists. Pages render their loading
+  state at build time and fetch from `/api` after hydration, so there is
+  no server-side data and no dehydrate/hydrate step. `astro` prerenders
+  by itself; `svelte` and `htmx` are unchanged.
+- Accessibility: ESLint 9 with `eslint-plugin-jsx-a11y` (recommended,
+  errors) and `typescript-eslint` in the `react` template; `lidza check`
+  runs `eslint --format json` and reports the findings with file and line.
+- `useLive(topics)` in the template: a WebSocket to the `realtime` pack
+  that invalidates the TanStack queries keyed by the topic; reconnects
+  with backoff.
+- Client-side validators: `@lidza/client` gains `validators.ts`, one
+  function per `schema.lidza` type with rules (required, min, max,
+  email, url, pattern, enum), the same checks and messages as the Go
+  `Validate`, so a form can show the server's field errors before the
+  request.
+
+Check (passes): the template app's `/about` is served as complete HTML by
+the binary and hydrates in Chromium without console errors, then fetches
+its data once; an `img` without `alt` fails `lidza check`.
+
+## Beyond the roadmap
+
+Every phase of the plan is delivered. Open items recorded along the way:
+the Dart client (`@lidza/client` has a TypeScript implementation only), a
+fake clock and recorded HTTP fixtures for tests, per-request SSR (an
+optional Node sidecar, see `docs/features.md`), publishing the CLI so
+`go install` works from `install.sh`.

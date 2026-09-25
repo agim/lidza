@@ -112,6 +112,7 @@ func Run(ctx context.Context, l Layers) Report {
 		{"cargo check", "rust", func(ctx context.Context) ([]Diagnostic, ToolRun) { return runCargo(ctx, l) }},
 		{"tsc", "frontend", func(ctx context.Context) ([]Diagnostic, ToolRun) { return runTSC(ctx, l) }},
 		{"svelte-check", "frontend", func(ctx context.Context) ([]Diagnostic, ToolRun) { return runSvelteCheck(ctx, l) }},
+		{"eslint", "frontend", func(ctx context.Context) ([]Diagnostic, ToolRun) { return runESLint(ctx, l) }},
 		{"lidza rules", "go", func(ctx context.Context) ([]Diagnostic, ToolRun) {
 			if !l.Go {
 				return nil, skip("no go.mod")
@@ -278,6 +279,23 @@ func runSvelteCheck(ctx context.Context, l Layers) ([]Diagnostic, ToolRun) {
 	diags := parseSvelteCheck(stdout)
 	if err != nil && len(diags) == 0 && !bytes.Contains(stdout, []byte("COMPLETED")) {
 		return nil, ToolRun{Failed: true, Reason: firstLine(append(stdout, stderr...), err)}
+	}
+	return diags, ToolRun{}
+}
+
+// runESLint covers the frontend lint rules, accessibility among them.
+func runESLint(ctx context.Context, l Layers) ([]Diagnostic, ToolRun) {
+	if !l.NodeModules {
+		return nil, skip("node_modules missing")
+	}
+	bin := filepath.Join(l.Dir, "node_modules", ".bin", "eslint")
+	if !fileExists(bin) || !fileExists(filepath.Join(l.Dir, "eslint.config.js")) {
+		return nil, skip("no eslint configuration")
+	}
+	stdout, stderr, err := command(ctx, l.Dir, bin, "--format", "json", "src")
+	diags := parseESLint(l.Dir, stdout)
+	if err != nil && len(diags) == 0 && len(bytes.TrimSpace(stdout)) == 0 {
+		return nil, ToolRun{Failed: true, Reason: firstLine(stderr, err)}
 	}
 	return diags, ToolRun{}
 }

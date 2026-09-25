@@ -40,7 +40,7 @@ app is always at one address: http://127.0.0.1:3000.
 | Command | What it does |
 |---|---|
 | `lidza dev` | starts the frontend dev server{{if .DevURL}} ({{.DevURL}}){{end}}, builds and runs the app on http://127.0.0.1:3000, rebuilds on Go changes. `npm install` runs automatically when `node_modules` is missing. |
-| `lidza build` | builds the frontend into `{{if .Dist}}{{.Dist}}/{{else}}(none){{end}}`, then compiles `bin/{{.Name}}`: one binary, no Node at runtime. |
+| `lidza build` | builds the frontend into `{{if .Dist}}{{.Dist}}/{{else}}(none){{end}}`{{if eq .Template "react"}} (routes without parameters prerendered to static HTML){{end}}, then compiles `bin/{{.Name}}`: one binary, no Node at runtime. |
 | `lidza check --json` | regenerates, then runs `go vet`, `staticcheck`, `cargo check` and `tsc`; prints one JSON list of diagnostics, each with `layer`, `file`, `line`, `message`. Exit 1 while there are errors. A frontend call that no longer matches a handler fails here. |
 | `lidza gen` | `schema.lidza` to `schema/schema.go`, `db/schema.sql`, a migration in `db/migrations` when models changed; handlers to `.lidza/openapi.json` and the client in `.lidza/client`. `lidza dev` runs it on every change. |
 | `lidza context` | writes `.lidza/context.json`: routes, handler signatures, Rust exports. |
@@ -53,7 +53,7 @@ app is always at one address: http://127.0.0.1:3000.
 | `lidza version` | prints the framework version. |
 | `go test ./...` | Go tests. |
 {{- if .Dist}}
-| `npm run check` | frontend type check (`tsc --noEmit`). |
+| `npm run check` | frontend type check{{if eq .Template "react"}} and lint (`tsc --noEmit && eslint src`; `jsx-a11y` violations are errors){{end}}. |
 {{- end}}
 
 
@@ -190,8 +190,17 @@ Statements that lose data or can fail on existing rows carry a
 ## Adding a page
 
 1. Create `src/pages/Things.tsx` exporting a component.
-2. In `src/router.tsx`, declare `createRoute({ getParentRoute: () => rootRoute, path: '/things', component: Things })` and add it to `addChildren([...])`.
-3. Fetch data with `useQuery` and a function from `src/api.ts`.
+2. In `src/router.tsx`, declare `createRoute({ getParentRoute: () => rootRoute, path: '/things', component: Things })` and add it to the route tree.
+3. Fetch data with `useQuery({ queryKey: ['things'], queryFn: () => api.listThings() })`.
+4. Routes without parameters are prerendered by `npm run build`; keep
+   the first render free of browser-only APIs (`window`, `localStorage`),
+   read them in effects.
+5. Live data: `useLive(['things'])` (src/live.ts) refetches the `things`
+   queries when a handler publishes to that topic on the `realtime` pack.
+6. Forms: `validators.CreateThing(values)` from `@lidza/client` returns the
+   field errors the server would, before the request.
+7. Every element must be accessible: `lidza check` fails on `jsx-a11y`
+   errors (missing `alt`, click handlers on non-interactive elements, ...).
 {{- end}}
 
 ## Operations

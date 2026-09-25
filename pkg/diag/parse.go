@@ -190,6 +190,37 @@ func parseTSC(out []byte) []Diagnostic {
 	return diags
 }
 
+// parseESLint reads `eslint --format json`.
+func parseESLint(root string, out []byte) []Diagnostic {
+	var files []struct {
+		FilePath string `json:"filePath"`
+		Messages []struct {
+			RuleID   string `json:"ruleId"`
+			Severity int    `json:"severity"`
+			Message  string `json:"message"`
+			Line     int    `json:"line"`
+			Column   int    `json:"column"`
+		} `json:"messages"`
+	}
+	if err := json.Unmarshal(out, &files); err != nil {
+		return nil
+	}
+	var diags []Diagnostic
+	for _, f := range files {
+		for _, m := range f.Messages {
+			sev := "warning"
+			if m.Severity == 2 {
+				sev = "error"
+			}
+			diags = append(diags, Diagnostic{
+				Layer: "frontend", Tool: "eslint", Severity: sev, Code: m.RuleID,
+				File: rel(root, f.FilePath), Line: m.Line, Column: m.Column, Message: m.Message,
+			})
+		}
+	}
+	return diags
+}
+
 // rel makes p relative to root with forward slashes. Paths the go tool
 // prints as "./x.go" or absolute both end up as "x.go".
 func rel(root, p string) string {

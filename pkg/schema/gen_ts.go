@@ -70,7 +70,9 @@ func JSONSchema(s *Schema) map[string]any {
 			props[f.Name] = jsonSchemaType(s, f)
 			required = append(required, f.Name)
 		}
-		defs[m.Name] = map[string]any{"type": "object", "properties": props, "required": required}
+		// x-lidza marks definitions that carry validation rules, so the
+		// client generates validators for them and not for plain Go types.
+		defs[m.Name] = map[string]any{"type": "object", "properties": props, "required": required, "x-lidza": "schema"}
 	}
 	return defs
 }

@@ -121,12 +121,14 @@ func TestStatic(t *testing.T) {
 		"index.html":         {Data: []byte("<html>app</html>")},
 		"assets/app-1a2b.js": {Data: []byte("js")},
 		"favicon.svg":        {Data: []byte("<svg/>")},
+		"about/index.html":   {Data: []byte("<html>about</html>")},
 	}
 	h := Static(dist)
 	cases := []struct{ path, body, cache string }{
 		{"/", "<html>app</html>", "no-cache"},
 		{"/index.html", "<html>app</html>", "no-cache"},
-		{"/about", "<html>app</html>", "no-cache"},
+		{"/about", "<html>about</html>", "no-cache"},
+		{"/about/", "<html>about</html>", "no-cache"},
 		{"/about/deep/route", "<html>app</html>", "no-cache"},
 		{"/assets/app-1a2b.js", "js", "public, max-age=31536000, immutable"},
 		{"/favicon.svg", "<svg/>", "no-cache"},

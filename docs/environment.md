@@ -167,7 +167,7 @@ lidza/
 ├── core/             Rust crate `lidza-core`: the WASM ABI (src/abi.rs)
 ├── templates/
 │   ├── embed.go      embeds the template directories into the CLI
-│   ├── react/        default: Vite + React + TypeScript, TanStack Router and Query
+│   ├── react/        default: Vite + React + TypeScript, TanStack Router and Query, prerendering, eslint with jsx-a11y
 │   ├── svelte/       Vite + Svelte 5 + TypeScript
 │   ├── astro/        Astro, static output only
 │   └── htmx/         Go html/template views, htmx vendored, no JS toolchain
@@ -194,7 +194,7 @@ Package manager: npm (already installed; no pnpm).
 
 | Template | Dev server | Production |
 |---|---|---|
-| `react` | Vite on 5173, proxied by `lidza dev` | `dist/` embedded in the Go binary (`embed.FS`) |
+| `react` | Vite on 5173, proxied by `lidza dev` | `dist/` embedded in the Go binary, parameterless routes prerendered to `dist/<path>/index.html` |
 | `svelte` | Vite on 5173, proxied | same |
 | `astro` | Astro dev on 5173, proxied; `output: 'static'` only | same |
 | `htmx` | none; Go renders `html/template` views from `views/` | Go binary only |

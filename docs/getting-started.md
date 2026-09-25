@@ -157,6 +157,15 @@ tool, so an agent can try one before wiring it. The first build of a pack
 downloads and compiles its crates (about a minute for `media`); later
 builds take seconds.
 
+## Frontend
+
+The `react` template prerenders every parameterless route at build time
+(`npm run build`: client build, SSR build, `scripts/prerender.mjs`), so
+the binary serves complete HTML and the page hydrates in the browser.
+`lidza check` runs ESLint with `jsx-a11y`: an inaccessible element is an
+error. `useLive(['topic'])` keeps queries fresh from the `realtime` pack,
+and `@lidza/client` exports `validators` with the schema rules for forms.
+
 ## Tests
 
 `lidza test` runs the Go tests with `LIDZA_MODE=test`: the database named

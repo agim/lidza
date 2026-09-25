@@ -4,6 +4,7 @@ import {
   createRouter,
   Link,
   Outlet,
+  type RouterHistory,
 } from '@tanstack/react-router'
 import { Home } from './pages/Home'
 import { About } from './pages/About'
@@ -11,7 +12,8 @@ import { RouteError } from './ErrorBoundary'
 
 // Code-based routes. Add a page: create it under src/pages, declare a route
 // here, add it to the tree. Paths under /api are never routed here; they
-// belong to the Go control plane.
+// belong to the Go control plane. Routes without parameters are prerendered
+// to static HTML by `npm run build` (scripts/prerender.mjs).
 const rootRoute = createRootRoute({
   component: () => (
     <>
@@ -29,13 +31,16 @@ const rootRoute = createRootRoute({
 const homeRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', component: Home })
 const aboutRoute = createRoute({ getParentRoute: () => rootRoute, path: '/about', component: About })
 
-export const router = createRouter({
-  routeTree: rootRoute.addChildren([homeRoute, aboutRoute]),
-  defaultErrorComponent: RouteError,
-})
+const routeTree = rootRoute.addChildren([homeRoute, aboutRoute])
+
+// createAppRouter builds a router for the browser (no history given) or for
+// prerendering (a memory history at one path).
+export function createAppRouter(history?: RouterHistory) {
+  return createRouter({ routeTree, defaultErrorComponent: RouteError, history })
+}
 
 declare module '@tanstack/react-router' {
   interface Register {
-    router: typeof router
+    router: ReturnType<typeof createAppRouter>
   }
 }

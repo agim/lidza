@@ -19,7 +19,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -32,48 +31,6 @@ import (
 	"github.com/agim/lidza/pkg/diag"
 	"github.com/agim/lidza/pkg/mcpserver"
 )
-
-var (
-	root  string // this checkout
-	lidza string // the CLI built from it
-	app   string // the scaffolded app
-)
-
-func TestMain(m *testing.M) {
-	var err error
-	root, err = filepath.Abs("..")
-	if err != nil {
-		panic(err)
-	}
-	tmp, err := os.MkdirTemp("", "lidza-evals-")
-	if err != nil {
-		panic(err)
-	}
-	lidza = filepath.Join(tmp, "lidza")
-	if out, err := command(root, "go", "build", "-o", lidza, "./cmd/lidza"); err != nil {
-		fmt.Fprintf(os.Stderr, "build lidza: %v\n%s", err, out)
-		os.Exit(1)
-	}
-	app = filepath.Join(tmp, "evalapp")
-	if out, err := command(tmp, lidza, "new", "evalapp", "--lidza-dir", root); err != nil {
-		fmt.Fprintf(os.Stderr, "lidza new: %v\n%s", err, out)
-		os.Exit(1)
-	}
-	if out, err := command(app, "npm", "install", "--no-fund", "--no-audit"); err != nil {
-		fmt.Fprintf(os.Stderr, "npm install: %v\n%s", err, out)
-		os.Exit(1)
-	}
-	code := m.Run()
-	os.RemoveAll(tmp)
-	os.Exit(code)
-}
-
-func command(dir, name string, args ...string) ([]byte, error) {
-	cmd := exec.Command(name, args...)
-	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "LIDZA_LOG_LEVEL=error")
-	return cmd.CombinedOutput()
-}
 
 // check runs `lidza check --json` on the app.
 func check(t *testing.T) diag.Report {

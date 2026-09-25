@@ -36,23 +36,19 @@ does not reimplement).
 
 ## Decisions
 
-Two items need a call before they enter the roadmap.
+Decided 2026-09-25.
 
-**ORM.** The design notes and the packs plan use `sqlc`: the developer (or
-agent) writes SQL, the tool generates typed Go. Rows map to structs, queries
-are checked against the schema at generation time, nothing is hidden. It
-is not an ORM: there is no query builder and no lazy loading. Options:
+**ORM: `sqlc`.** The developer (or agent) writes SQL in `.sql` files; `sqlc`
+generates typed Go functions and structs checked against the schema. Rows
+map to structs, nothing is hidden, output is deterministic. No query
+builder, no lazy loading; a full ORM is not planned.
 
-1. `sqlc` plus schema-generated structs (recommended: deterministic output,
-   agents are good at SQL, no runtime magic).
-2. An ORM such as `ent` (schema as Go code, generated client) or `bun`.
-
-**SSR.** True server-side rendering of React needs a JavaScript runtime at
-request time, which means Node beside the Go binary. Options:
-
-1. Prerendering (recommended): the `astro` template (phase 3) and Vite
-   prerendering for `react` produce static HTML at build time; the Go binary
-   serves it, hydration on the client. No Node at runtime, fast first paint
-   for content pages.
-2. An optional Node SSR sidecar managed by the Go binary, for apps that need
-   per-request rendering. Breaks the single-binary deployment for those apps.
+**SSR: build-time prerendering.** The `astro` template (phase 3) and Vite
+prerendering for `react` produce static HTML at build time; the Go binary
+serves it and the page hydrates on the client. Dynamic data comes from
+`/api` (handlers on `sqlc` queries) through the generated client and
+TanStack Query, so interactive apps work unchanged; prerendering only
+replaces the empty `index.html` first paint. Per-request, per-user HTML
+(complete before JavaScript runs) is not covered; an optional Node SSR
+sidecar can be added later for apps that need it, at the cost of the
+single binary for those apps.

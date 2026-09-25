@@ -44,7 +44,7 @@ app is always at one address: http://127.0.0.1:3000.
 | Command | What it does |
 |---|---|
 | `lidza dev` | starts the frontend dev server{{if .DevURL}} ({{.DevURL}}){{end}}, builds and runs the app on http://127.0.0.1:3000, rebuilds on Go changes. `npm install` runs automatically when `node_modules` is missing. |
-| `lidza build` | builds the frontend into `{{if .Dist}}{{.Dist}}/{{else}}(none){{end}}`{{if eq .Template "react"}} (routes without parameters prerendered to static HTML){{end}}, then compiles `bin/{{.Name}}`: one binary, no Node at runtime. |
+| `lidza build` | builds the frontend into `{{if .Dist}}{{.Dist}}/{{else}}(none){{end}}`{{if eq .Template "react"}} (routes without parameters prerendered to static HTML){{else if eq .Template "svelte"}} (the page prerendered to static HTML, hydrated in the browser){{else if eq .Template "astro"}} (static HTML for every page){{end}}, then compiles `bin/{{.Name}}`: one binary, no Node at runtime. |
 | `lidza check --json` | regenerates, then runs `go vet`, `staticcheck`, `cargo check` and `tsc`; prints one JSON list of diagnostics, each with `layer`, `file`, `line`, `message`. Exit 1 while there are errors. A frontend call that no longer matches a handler fails here. |
 | `lidza gen` | `schema.lidza` to `schema/schema.go`, `db/schema.sql`, a migration in `db/migrations` when models changed; handlers to `.lidza/openapi.json` and the client in `.lidza/client`. `lidza dev` runs it on every change. |
 | `lidza context` | writes `.lidza/context.json`: routes, handler signatures, Rust exports. |
@@ -61,7 +61,7 @@ app is always at one address: http://127.0.0.1:3000.
 | `lidza version` | prints the framework version. |
 | `go test ./...` | Go tests. |
 {{- if .Dist}}
-| `npm run check` | frontend type check{{if eq .Template "react"}} and lint (`tsc --noEmit && eslint src`; `jsx-a11y` violations are errors){{end}}. |
+| `npm run check` | frontend type check{{if eq .Template "react"}} and lint (`tsc --noEmit && eslint src`; `jsx-a11y` violations are errors){{else if eq .Template "svelte"}} (`svelte-check`; its accessibility warnings are errors in `lidza check`){{else if eq .Template "astro"}} and lint (`astro check && eslint src`; `jsx-a11y` violations are errors){{end}}. |
 {{- end}}
 
 
@@ -133,6 +133,23 @@ signature. Both are regenerated after each Go rebuild.
    written here, read the matching snippet (`lidza snippet` or the MCP
    tool `lidza_snippet`): it is the reference app's code, verified by its
    tests.
+
+## Templates
+
+What each frontend template ships; the API contract, `lidza check`,
+`lidza test` and the packs are the same for all.
+
+| | react | svelte | astro | htmx |
+|---|---|---|---|---|
+| Rendering | client routes, prerendered at build; per-request SSR with `LIDZA_SSR=1` | one page, prerendered at build, hydrated | static pages at build | Go templates per request |
+| Data | `@lidza/client` with TanStack Query, live refetch via `useLive` | `@lidza/client` in components | `@lidza/client` in page scripts | Go handlers, htmx partials |
+| Accessibility | `jsx-a11y`, errors | Svelte compiler a11y checks, errors | `jsx-a11y` through `eslint-plugin-astro`, errors | none automated |
+| Browser tests | `e2e/` (Playwright), `lidza test --e2e` | same | same | `pages_test.go` in Go |
+| Time zone cookie | `src/timezone.ts` | same | same | inline in `views/layout.html` |
+| Analytics reporter | `VITE_ANALYTICS=1` | `VITE_ANALYTICS=1` | `PUBLIC_ANALYTICS=1` | `ANALYTICS_FRONTEND=1`, `static/analytics.js` |
+| Styling | Tailwind v4 | `app.css` | `<style is:global>` in the layout | `static/app.css` |
+
+This app uses the **{{.Template}}** template.
 
 ## Tests
 
@@ -465,6 +482,20 @@ of packages that do not exist or are not declared (L004); handler types
 not declared in `schema.lidza` (L005).
 Rate limit a route group with `r.Use(middleware.RateLimit(middleware.RateLimitOptions{RPS: 10, Burst: 20}))`;
 guard an outbound dependency with `resilience.New(...)`.
+
+## Deployment
+
+`lidza build` makes `bin/{{.Name}}`: the frontend embedded, no Node at
+runtime (except `LIDZA_SSR=1`). `Dockerfile` builds the same into an
+image that runs as a non-root user on port 3000; `deploy/{{.Name}}.service`
+runs the binary under systemd from `/opt/{{.Name}}` (install commands in
+its header). Migrations ship as files in `db/`: apply them with `lidza db
+migrate` in the deploy step or `DB_MIGRATE=true` at start. Put a
+TLS-terminating proxy in front, forward `X-Forwarded-For`, point the
+orchestrator at `/healthz` and `/readyz`, scrape `/metrics`. Production
+settings: `LIDZA_MODE` unset, `LIDZA_LOG=json`, `AUTH_COOKIE_SECURE=true`,
+`AUTH_SECRET` the same on every node. The framework's `docs/deploy.md`
+has the details.
 
 ## Environment the binary reads
 

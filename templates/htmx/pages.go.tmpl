@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"os"
 
 	"github.com/agim/lidza/pkg/router"
 )
@@ -19,6 +20,7 @@ var assets embed.FS
 // Each page is layout.html plus its own file, which defines "content".
 // Partials are fragments htmx swaps into the page.
 var (
+	// lidza:ignore L001 (filled once at start, read only after)
 	pageTemplates = map[string]*template.Template{
 		"index": template.Must(template.ParseFS(assets, "views/layout.html", "views/index.html")),
 		"about": template.Must(template.ParseFS(assets, "views/layout.html", "views/about.html")),
@@ -56,8 +58,14 @@ func pages() http.Handler {
 	return mux
 }
 
-func renderPage(w http.ResponseWriter, name string, data any) {
+// analyticsEnabled turns on the browser reporter (static/analytics.js):
+// errors and pageviews go to the analytics pack. ANALYTICS_FRONTEND=1 in
+// .env; nothing is sent otherwise.
+var analyticsEnabled = os.Getenv("ANALYTICS_FRONTEND") == "1"
+
+func renderPage(w http.ResponseWriter, name string, data map[string]any) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	data["Analytics"] = analyticsEnabled
 	if err := pageTemplates[name].ExecuteTemplate(w, "layout", data); err != nil {
 		slog.Error("render page", "page", name, "error", err)
 	}

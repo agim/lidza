@@ -28,7 +28,8 @@ import (
 //     schema.lidza, so it is neither validated nor known to the client.
 //
 // Except for L004 the findings are warnings: they point at the pattern,
-// the author decides.
+// the author decides. A comment "lidza:ignore L001" on the line, or the
+// line before, exempts that line from the rule it names.
 func Rules(ctx context.Context, root string) []Diagnostic {
 	var out []Diagnostic
 	fset := token.NewFileSet()
@@ -65,8 +66,12 @@ var skipRuleDirs = map[string]bool{"node_modules": true, "dist": true, "bin": tr
 
 func checkFile(fset *token.FileSet, f *ast.File, rel, moduleDir string) []Diagnostic {
 	var out []Diagnostic
+	ignored := ignoreComments(fset, f)
 	report := func(pos token.Pos, severity, code, msg string) {
 		p := fset.Position(pos)
+		if ignored[p.Line][code] || ignored[p.Line-1][code] {
+			return
+		}
 		out = append(out, Diagnostic{Layer: "go", Tool: "lidza rules", Severity: severity, Code: code, File: rel, Line: p.Line, Column: p.Column, Message: msg})
 	}
 	warn := func(pos token.Pos, code, msg string) { report(pos, "warning", code, msg) }
@@ -170,6 +175,34 @@ func isHandler(ft *ast.FuncType) bool {
 		}
 	}
 	return false
+}
+
+// ignoreComments maps line numbers to the rule codes a "lidza:ignore"
+// comment on that line names.
+func ignoreComments(fset *token.FileSet, f *ast.File) map[int]map[string]bool {
+	out := map[int]map[string]bool{}
+	for _, g := range f.Comments {
+		for _, c := range g.List {
+			text := c.Text
+			for {
+				i := strings.Index(text, "lidza:ignore ")
+				if i < 0 {
+					break
+				}
+				text = text[i+len("lidza:ignore "):]
+				code := strings.FieldsFunc(text, func(r rune) bool { return r == ' ' || r == ')' || r == ',' || r == '\n' })
+				if len(code) == 0 {
+					break
+				}
+				line := fset.Position(c.Pos()).Line
+				if out[line] == nil {
+					out[line] = map[string]bool{}
+				}
+				out[line][code[0]] = true
+			}
+		}
+	}
+	return out
 }
 
 // foreignTypes returns the In and Out types of a typed handler signature

@@ -24,6 +24,7 @@ import (
 	"github.com/agim/lidza/pkg/pack"
 	"github.com/agim/lidza/pkg/recipes"
 	"github.com/agim/lidza/pkg/schema"
+	"github.com/agim/lidza/pkg/version"
 	"github.com/agim/lidza/templates"
 )
 
@@ -107,6 +108,12 @@ func New(ctx context.Context, opt Options) error {
 		DevCmd:   cfg.Frontend.Dev,
 		DevURL:   cfg.Frontend.URL,
 		Go:       goMinor(),
+		LidzaVersion: func() string {
+			if v := version.String(); strings.HasPrefix(v, "v") && !strings.Contains(v, "-") {
+				return v
+			}
+			return "latest"
+		}(),
 	}
 	for _, f := range []struct{ src, dst string }{
 		{"go.mod.tmpl", "go.mod"},
@@ -119,6 +126,9 @@ func New(ctx context.Context, opt Options) error {
 		{"gemini-settings.json.tmpl", filepath.Join(".gemini", "settings.json")},
 		{"schema.lidza.tmpl", schema.FileName},
 		{"scale_test.js.tmpl", filepath.Join("benchmarks", "scale_test.js")},
+		{"Dockerfile.tmpl", "Dockerfile"},
+		{"dockerignore.tmpl", ".dockerignore"},
+		{"systemd.service.tmpl", filepath.Join("deploy", opt.Name+".service")},
 	} {
 		if err := render(f.src, filepath.Join(opt.Dir, f.dst), data); err != nil {
 			return err
@@ -160,6 +170,9 @@ func New(ctx context.Context, opt Options) error {
 
 type templateData struct {
 	Name, Module, LidzaDir, Template, Dist, DevCmd, DevURL, Go string
+	// LidzaVersion is the framework version for `go install` in the
+	// Dockerfile: the CLI's own when it is a release, else latest.
+	LidzaVersion string
 	// Recipes is the comma-separated list of recipe names from the guide.
 	Recipes string
 }

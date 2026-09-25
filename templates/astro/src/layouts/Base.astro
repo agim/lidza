@@ -29,5 +29,15 @@ const { title } = Astro.props
     <main>
       <slot />
     </main>
+    <script>
+      // Tells the server the visitor's time zone (tz cookie, read by the
+      // i18n pack) and, with PUBLIC_ANALYTICS=1, reports errors and
+      // pageviews to the analytics pack.
+      import { announceTimezone } from '../timezone'
+      import { enableAnalytics } from '../analytics'
+
+      announceTimezone()
+      if (import.meta.env.PUBLIC_ANALYTICS === '1') enableAnalytics()
+    </script>
   </body>
 </html>

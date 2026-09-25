@@ -1,0 +1,36 @@
+package main
+
+import (
+	"io"
+	"net/http"
+	"strings"
+	"testing"
+
+	"github.com/agim/lidza/pkg/lidzatest"
+)
+
+// The pages are Go templates served by the binary: a browser is not
+// needed to test them. lidzatest.Start boots the app; `lidza test` runs
+// this.
+func TestPages(t *testing.T) {
+	srv := lidzatest.Start(t, app())
+	get := func(path string) (int, string) {
+		t.Helper()
+		res, err := srv.Client().Get(srv.URL + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		body, _ := io.ReadAll(res.Body)
+		return res.StatusCode, string(body)
+	}
+	if code, body := get("/"); code != http.StatusOK || !strings.Contains(body, "<title>__LIDZA_APP_NAME__</title>") || !strings.Contains(body, `hx-get="/partials/hello"`) {
+		t.Fatalf("home: %d %s", code, body)
+	}
+	if code, body := get("/partials/hello?name=test"); code != http.StatusOK || !strings.Contains(body, "hello, test") {
+		t.Fatalf("partial: %d %s", code, body)
+	}
+	if code, _ := get("/about"); code != http.StatusOK {
+		t.Fatalf("about: %d", code)
+	}
+}

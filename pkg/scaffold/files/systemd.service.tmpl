@@ -1,0 +1,29 @@
+# systemd unit for {{.Name}}: install the binary and its files under
+# /opt/{{.Name}} (bin/{{.Name}}, db/, .env with LIDZA_ADDR, DATABASE_URL, the
+# secrets), then:
+#   sudo useradd --system --home /opt/{{.Name}} --shell /usr/sbin/nologin {{.Name}}
+#   sudo cp deploy/{{.Name}}.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now {{.Name}}
+# Put a TLS-terminating reverse proxy in front (docs/lidza-guide.md, "Deployment").
+[Unit]
+Description={{.Name}} (Līdza app)
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+User={{.Name}}
+Group={{.Name}}
+WorkingDirectory=/opt/{{.Name}}
+EnvironmentFile=/opt/{{.Name}}/.env
+ExecStart=/opt/{{.Name}}/bin/{{.Name}}
+Restart=always
+RestartSec=2
+# Hardening: the app writes nothing but logs to stdout.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadOnlyPaths=/opt/{{.Name}}
+
+[Install]
+WantedBy=multi-user.target

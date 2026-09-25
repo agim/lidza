@@ -6,6 +6,12 @@
     <title>{{.Title}}</title>
     <link rel="stylesheet" href="/static/app.css" />
     <script src="/static/htmx.min.js"></script>
+    <script>
+      // The visitor's time zone, read by the i18n pack for Date, Time and
+      // DateTime (tz cookie).
+      try { document.cookie = "tz=" + encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone) + "; path=/; max-age=31536000; SameSite=Lax" } catch (e) {}
+    </script>{{if .Analytics}}
+    <script src="/static/analytics.js" defer></script>{{end}}
   </head>
   <body>
     <nav>

@@ -22,7 +22,7 @@ func TestNewReact(t *testing.T) {
 		".mcp.json", ".gemini/settings.json",
 		"package.json", "index.html", "vite.config.ts", "tsconfig.json",
 		"src/main.tsx", "src/router.tsx", "src/pages/Home.tsx", "src/ErrorBoundary.tsx", "playwright.config.ts", "e2e/home.spec.ts", "schema.lidza", "schema/schema.go", ".env.example", "packs.go", "benchmarks/scale_test.js",
-		".gitignore", "dist/.gitkeep",
+		".gitignore", "dist/.gitkeep", "Dockerfile", ".dockerignore", "deploy/demo.service",
 		".claude/skills/add-api-route/SKILL.md", ".claude/skills/add-resource/SKILL.md", ".claude/skills/add-page/SKILL.md",
 		".claude/skills/add-pack-capability/SKILL.md", ".claude/skills/add-mcp-tool/SKILL.md", ".claude/skills/write-test/SKILL.md",
 		".agents/skills/add-api-route/SKILL.md", ".gemini/commands/lidza/add-api-route.toml", ".gemini/commands/lidza/write-test.toml",
@@ -111,7 +111,7 @@ func TestNewEveryTemplate(t *testing.T) {
 			t.Errorf("%s: template %q", tpl, cfg.Frontend.Template)
 		}
 		if tpl == "htmx" {
-			for _, f := range []string{"pages.go", "views/layout.html", "views/partials/hello.html", "static/htmx.min.js"} {
+			for _, f := range []string{"pages.go", "pages_test.go", "views/layout.html", "views/partials/hello.html", "static/htmx.min.js", "static/analytics.js"} {
 				if _, err := os.Stat(filepath.Join(dir, f)); err != nil {
 					t.Errorf("htmx: missing %s", f)
 				}
@@ -128,11 +128,25 @@ func TestNewEveryTemplate(t *testing.T) {
 				t.Error("htmx: placeholder left in pages.go")
 			}
 		} else {
-			for _, f := range []string{"package.json", "dist/.gitkeep", ".env.example"} {
+			for _, f := range []string{"package.json", "dist/.gitkeep", ".env.example", "playwright.config.ts", "e2e/home.spec.ts", "src/analytics.ts", "src/timezone.ts"} {
 				if _, err := os.Stat(filepath.Join(dir, f)); err != nil {
 					t.Errorf("%s: missing %s", tpl, f)
 				}
 			}
+		}
+		if tpl == "svelte" {
+			if _, err := os.Stat(filepath.Join(dir, "scripts", "prerender.mjs")); err != nil {
+				t.Error("svelte: missing scripts/prerender.mjs")
+			}
+		}
+		if tpl == "astro" {
+			if _, err := os.Stat(filepath.Join(dir, "eslint.config.js")); err != nil {
+				t.Error("astro: missing eslint.config.js")
+			}
+		}
+		guide, _ := os.ReadFile(filepath.Join(dir, "docs", "lidza-guide.md"))
+		if !strings.Contains(string(guide), "This app uses the **"+tpl+"** template.") {
+			t.Errorf("%s: guide does not name the template", tpl)
 		}
 	}
 }

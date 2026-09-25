@@ -265,10 +265,16 @@ func parseSvelteCheck(out []byte) []Diagnostic {
 		if m == nil {
 			continue
 		}
-		diags = append(diags, Diagnostic{
+		d := Diagnostic{
 			Layer: "frontend", Tool: "svelte-check", Severity: strings.ToLower(m[1]),
 			File: filepath.ToSlash(m[2]), Line: atoi(m[3]), Column: atoi(m[4]), Message: m[5],
-		})
+		}
+		// The compiler reports accessibility problems as warnings; here
+		// they are errors, as jsx-a11y's are in the react template.
+		if strings.Contains(strings.ToLower(d.Message), "a11y") {
+			d.Severity, d.Code = "error", "a11y"
+		}
+		diags = append(diags, d)
 	}
 	return diags
 }

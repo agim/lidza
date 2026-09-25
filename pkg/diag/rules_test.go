@@ -26,6 +26,8 @@ import (
 
 var sessions = map[string]int{}
 var cache = make(map[string][]byte)
+// lidza:ignore L001 (read only)
+var lookup = map[string]int{}
 var recent []string
 var limit = 10
 var mu sync.Mutex
@@ -72,7 +74,7 @@ func helper[In any](req *router.Request[In], n int) (In, error) { var z In; retu
 	for _, d := range got {
 		lines = append(lines, d.Code+" "+d.File+":"+itoa(d.Line)+" "+d.Severity)
 	}
-	want := "L001 app.go:10 warning,L001 app.go:11 warning,L001 app.go:12 warning,L002 app.go:17 warning,L002 app.go:21 warning," +
+	want := "L001 app.go:10 warning,L001 app.go:11 warning,L001 app.go:14 warning,L002 app.go:19 warning,L002 app.go:23 warning," +
 		"L004 handlers/things.go:6 error,L005 handlers/things.go:17 warning,L005 handlers/things.go:17 warning,L005 handlers/things.go:18 warning,L005 handlers/things.go:18 warning"
 	if strings.Join(lines, ",") != want {
 		t.Fatalf("got %v\nwant %s", lines, want)

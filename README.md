@@ -13,11 +13,6 @@ structured diagnostics, no implicit magic.
 - **`lidza`** in every identifier: CLI binary, Go module, crate prefix,
   config file, npm scope.
 
-*Līdza* is the reconstructed Proto-Albanian verb "to bind, tie, connect",
-ancestor of modern Albanian *lidh* (Vladimir Orel, *Albanian Etymological
-Dictionary*, Brill 1998, p. 223). The framework's job is to bind Go, Rust
-and a frontend into one application.
-
 ## Quick start
 
 ```sh

@@ -90,7 +90,7 @@ func prepareTestDB(ctx context.Context, dir string) error {
 // the install command, or installed with --install.
 func runE2E(ctx context.Context, dir string, cfg *config.Config, install bool, extra []string) error {
 	if _, err := os.Stat(filepath.Join(dir, "playwright.config.ts")); err != nil {
-		return errors.New("no playwright.config.ts: the react template ships one; see docs/lidza-guide.md")
+		return errors.New("no playwright.config.ts: the react, svelte and astro templates ship one; htmx pages are tested in Go (pages_test.go)")
 	}
 	if err := devserver.EnsureNodeModules(ctx, dir, os.Stdout); err != nil {
 		return err

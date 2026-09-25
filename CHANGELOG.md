@@ -6,7 +6,7 @@ version in `go.mod`. `install.sh` pins the newest release here;
 `scripts/release.sh vX.Y.Z` turns "Unreleased" into a release, bumps the
 pin, tags and pushes.
 
-## Unreleased
+## v0.1.9 (2026-09-25)
 
 - Admin pages: `admin.Mount(r, admin.Options{})` serves `/admin` for the
   users `ADMIN_USERS` names: an overview of the packs, the credentials

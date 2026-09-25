@@ -27,7 +27,10 @@ import (
 //   - L005: a typed handler whose input or output type is not declared in
 //     schema.lidza, so it is neither validated nor known to the client;
 //   - L006: an import of an email vendor SDK; the mail pack speaks those
-//     APIs already, with the outbox, templates and retries.
+//     APIs already, with the outbox, templates and retries;
+//   - L007: an import of a language-model vendor SDK or client library;
+//     the llm pack speaks those APIs already, with structured output,
+//     tools, retries and a fake for tests.
 //
 // Except for L004 the findings are warnings: they point at the pattern,
 // the author decides. A comment "lidza:ignore L001" on the line, or the
@@ -97,6 +100,9 @@ func checkFile(fset *token.FileSet, f *ast.File, rel, moduleDir string) []Diagno
 		}
 		if vendor := mailVendor(path); vendor != "" {
 			warn(imp.Pos(), "L006", "import of the "+vendor+" SDK: use the mail pack instead (`lidza pack add mail`, MAIL_PROVIDER="+vendor+"), which speaks the API directly and adds the outbox, templates and retries")
+		}
+		if vendor := llmVendor(path); vendor != "" {
+			warn(imp.Pos(), "L007", "import of "+path+": use the llm pack instead (`lidza pack add llm`, LLM_PROVIDER="+vendor+"), which speaks the API directly and adds structured output, tools, retries and a fake for tests")
 		}
 		if moduleDir != "" {
 			if _, ok := apidoc.Rel(path); ok && !apidoc.Exists(moduleDir, path) {
@@ -193,6 +199,26 @@ func mailVendor(path string) string {
 		"github.com/resend/resend-go":              "resend",
 		"github.com/aws/aws-sdk-go-v2/service/ses": "ses",
 		"github.com/aws/aws-sdk-go/service/ses":    "ses",
+	} {
+		if path == prefix || strings.HasPrefix(path, prefix+"/") {
+			return vendor
+		}
+	}
+	return ""
+}
+
+// llmVendor names the provider a language-model SDK or client library
+// import belongs to, or "" for any other import.
+func llmVendor(path string) string {
+	for prefix, vendor := range map[string]string{
+		"github.com/anthropics/anthropic-sdk-go": "anthropic",
+		"github.com/openai/openai-go":            "openai",
+		"github.com/sashabaranov/go-openai":      "openai",
+		"google.golang.org/genai":                "google",
+		"github.com/google/generative-ai-go":     "google",
+		"github.com/ollama/ollama":               "ollama",
+		"github.com/tmc/langchaingo":             "anthropic|openai|google|ollama",
+		"github.com/cloudwego/eino":              "anthropic|openai|google|ollama",
 	} {
 		if path == prefix || strings.HasPrefix(path, prefix+"/") {
 			return vendor

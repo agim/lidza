@@ -10,7 +10,8 @@
     "lidza/db",
     "lidza/auth",
     "stats",
-    "lidza/mail"
+    "lidza/mail",
+    "lidza/llm"
   ],
   "sdk": {}
 }

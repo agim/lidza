@@ -6,6 +6,18 @@ version in `go.mod`. `install.sh` pins the newest release here;
 `scripts/release.sh vX.Y.Z` turns "Unreleased" into a release, bumps the
 pin, tags and pushes.
 
+## Unreleased
+
+- `llm` pack: language models behind one `Chat`, `Stream`, `Embed`,
+  `Generate[T]` (structured output from a schema type, validated) and
+  `Run` (the app's `lidza.Tool` values offered to the model, its calls
+  run with the packs in the context). Anthropic, OpenAI, Google and
+  Ollama spoken directly over HTTP; `fake` scripts replies in tests.
+  Deadlines, retries on 429 and 5xx with Retry-After, token counts on
+  `/metrics`, the MCP tool `lidza_llm`, rule L007 against vendor SDKs
+  and client libraries, the recipe "Add an LLM feature", and the
+  reference app's tag suggestion as the snippet `llm-handler`.
+
 ## v0.1.5 (2026-09-25)
 
 - A per-app decision log, `docs/decisions.md`: why the app is built a

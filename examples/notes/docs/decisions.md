@@ -18,3 +18,9 @@ Touches: packs/stats, handlers/note.go (noteStats)
 Why: Tests read verification and reset links from the outbox table instead of a mail stub, so the same code path runs in tests and in production; `.env.test` sets `MAIL_PROVIDER=outbox`.
 
 Touches: .env.test, routes_test.go
+
+## 2026-09-25: Tag suggestions through the llm pack
+
+Why: The model is reached only through the pack (`llm.Generate` over a schema type), so the reply is validated by the type's rules and tests script the fake provider instead of calling a vendor; the prompt stays in the handler.
+
+Touches: handlers/tags.go, schema.lidza (NoteTags), .env.test (LLM_PROVIDER=fake)

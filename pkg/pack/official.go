@@ -161,6 +161,26 @@ var Officials = []Official{
 		},
 	},
 	{
+		Name:        "llm",
+		Description: "Language models behind one Chat, Stream, Embed, Generate and Run: Anthropic, OpenAI, Google and Ollama spoken directly over HTTP, a fake provider for tests, structured output from schema types, the app's tools offered to the model, retries and token counts.",
+		Env: []string{
+			"# lidza/llm",
+			"LLM_PROVIDER=fake          # fake | ollama | anthropic | openai | google",
+			"# LLM_MODEL=                # the provider's default when empty (claude-sonnet-5, gpt-5-mini, gemini-2.5-flash, llama3.2)",
+			"# LLM_API_KEY=              # anthropic, openai, google",
+			"# LLM_BASE_URL=             # a proxy or region; Ollama elsewhere than http://127.0.0.1:11434",
+			"# LLM_EMBED_MODEL=          # text-embedding-3-small, text-embedding-004, nomic-embed-text",
+			"# LLM_MAX_TOKENS=1024       # reply bound; LLM_TIMEOUT=60s per attempt; LLM_MAX_ATTEMPTS=3 on 429 and 5xx",
+		},
+		Notes: []string{
+			"chat: llm.From(ctx).Chat(ctx, llm.Request{System: \"...\", Messages: []llm.Message{{Role: llm.User, Content: text}}}) returns Text and Usage; Stream delivers the text as it arrives",
+			"structured: out, err := llm.Generate[schema.NoteTags](ctx, llm.From(ctx), req) sends the type's JSON Schema and validates the reply",
+			"tools: llm.From(ctx).Run(ctx, req, tools()) offers the app's lidza.Tool values to the model and runs the calls it makes",
+			"tests: LLM_PROVIDER=fake in .env.test; llm.From(srv.Context()).Fake().Reply(\"...\") or .ReplyJSON(v) scripts the next reply",
+			"never import a vendor SDK (lidza check L007): the pack speaks each API directly",
+		},
+	},
+	{
 		Name:        "media",
 		Description: "Image processing in Rust: dimensions and format, resize with format conversion.",
 		Rust:        true,

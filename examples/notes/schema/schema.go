@@ -374,6 +374,23 @@ func (v TextStats) Validate() error {
 	return errs.Result()
 }
 
+// NoteTags is an API type.
+type NoteTags struct {
+	Tags []string `json:"tags"`
+}
+
+// Validate applies the rules of NoteTags from schema.lidza.
+func (v NoteTags) Validate() error {
+	var errs validate.Errors
+	if len(v.Tags) < 1 {
+		errs.Add("tags", "min", "at least 1 item(s)")
+	}
+	if len(v.Tags) > 5 {
+		errs.Add("tags", "max", "at most 5 item(s)")
+	}
+	return errs.Result()
+}
+
 // WordCount is an API type.
 type WordCount struct {
 	Word  string `json:"word"`

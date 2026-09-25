@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/agim/lidza/packs/llm"
 	"github.com/agim/lidza/packs/mail"
 	"github.com/agim/lidza/pkg/lidzatest"
 
@@ -110,6 +111,22 @@ func TestNotes(t *testing.T) {
 	var st schema.TextStats
 	if res := srv.JSON(t, http.MethodGet, "/api/v1/notes/"+note.ID+"/stats", nil, &st); res.StatusCode != http.StatusOK || st.Words != 9 || st.Unique != 6 || len(st.TopWords) != 5 || st.TopWords[0].Word != "the" || st.TopWords[0].Count != 3 {
 		t.Fatalf("stats: %d %+v", res.StatusCode, st)
+	}
+
+	// Tag suggestions come from the llm pack; .env.test makes it the fake,
+	// scripted here, so the test checks the prompt and the validation.
+	fake := llm.From(srv.Context()).Fake()
+	fake.ReplyJSON(schema.NoteTags{Tags: []string{"lists", "words"}})
+	var tags schema.NoteTags
+	if res := srv.JSON(t, http.MethodPost, "/api/v1/notes/"+note.ID+"/tags", nil, &tags); res.StatusCode != http.StatusOK || len(tags.Tags) != 2 || tags.Tags[0] != "lists" {
+		t.Fatalf("tags: %d %+v %s", res.StatusCode, tags, body(res))
+	}
+	if calls := fake.Calls(); len(calls) != 1 || calls[0].Schema == nil || !strings.Contains(calls[0].Messages[0].Content, note.Title) {
+		t.Fatalf("prompt sent to the model: %+v", calls)
+	}
+	fake.ReplyJSON(schema.NoteTags{})
+	if res := srv.JSON(t, http.MethodPost, "/api/v1/notes/"+note.ID+"/tags", nil, nil); res.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("an empty tag list must fail validation: %d %s", res.StatusCode, body(res))
 	}
 
 	// A bearer token works without the cookies.

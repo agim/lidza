@@ -152,6 +152,7 @@ that predates the install needs `. ~/.lidza/env`.
 |---|---|---|
 | Postgres 17 | 127.0.0.1:5432 | cluster `main`, data on `/mnt/faststorage/pgdata`. Databases `lidza_dev` and `lidza_test` (created 2026-09-25). Auth: the Unix socket is `peer`, so `psql -U agim` works (`agim` is a superuser); TCP on 127.0.0.1 is `scram-sha-256` and `agim` has no password set yet. |
 | Redis | 127.0.0.1:6379 | stand-in for Valkey; same protocol, `valkey-go` works against it. |
+| Ollama | 127.0.0.1:11434 | a Docker container (`docker run -d --name ollama -p 127.0.0.1:11434:11434 -v ollama:/root/.ollama ollama/ollama`) with `qwen2.5:0.5b` and `all-minilm` pulled; the llm pack's live test runs against it and skips when it is down. Check: `curl -s http://127.0.0.1:11434/api/tags`. |
 | Docker | `/var/run/docker.sock` | root:docker; use `sg docker -c '<cmd>'`. |
 
 Nothing else runs on ports 3000 or 5173.

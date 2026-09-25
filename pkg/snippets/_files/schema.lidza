@@ -105,6 +105,12 @@ type TextStats {
   topWords       WordCount[]
 }
 
+// Reply of POST /api/v1/notes/{id}/tags: topics the model suggests for a
+// note, one to five short lowercase words (handlers/tags.go).
+type NoteTags {
+  tags string[] @min(1) @max(5)
+}
+
 type WordCount {
   word  string
   count int

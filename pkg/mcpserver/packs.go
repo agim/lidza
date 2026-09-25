@@ -16,6 +16,7 @@ import (
 
 	"github.com/agim/lidza/packs/analytics"
 	"github.com/agim/lidza/packs/db"
+	"github.com/agim/lidza/packs/llm"
 	"github.com/agim/lidza/packs/mail"
 	"github.com/agim/lidza/pkg/config"
 	"github.com/agim/lidza/pkg/engine"
@@ -137,6 +138,27 @@ func addPackTools(s *server.MCPServer, dir string, cfg *config.Config) {
 		})
 	}
 
+	if slices.Contains(cfg.Packs, pack.OfficialPrefix+"llm") {
+		s.AddTool(mcp.NewTool("lidza_llm",
+			mcp.WithDescription("Send one prompt to the model the app is configured with (.env: LLM_PROVIDER, LLM_MODEL) and return the reply with its token usage: a check that the provider, key and model work before writing the feature, or a look at how the model answers a prompt. With LLM_PROVIDER=fake the reply is an echo."),
+			mcp.WithString("prompt", mcp.Required(), mcp.Description("The user message.")),
+			mcp.WithString("system", mcp.Description("A system prompt.")),
+		), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			var cfg llm.Config
+			if err := env.Load(dir, &cfg); err != nil {
+				return mcp.NewToolResultErrorFromErr("llm", err), nil
+			}
+			l, err := llm.New(cfg)
+			if err != nil {
+				return mcp.NewToolResultErrorFromErr("llm", err), nil
+			}
+			res, err := l.Chat(ctx, llm.Request{System: req.GetString("system", ""), Messages: []llm.Message{{Role: llm.User, Content: req.GetString("prompt", "")}}})
+			if err != nil {
+				return mcp.NewToolResultErrorFromErr("llm", err), nil
+			}
+			return jsonResult(map[string]any{"provider": l.Provider(), "model": res.Model, "text": res.Text, "usage": res.Usage, "stop": res.Stop})
+		})
+	}
 	if slices.Contains(cfg.Packs, pack.OfficialPrefix+"mail") && slices.Contains(cfg.Packs, pack.OfficialPrefix+"db") {
 		s.AddTool(mcp.NewTool("lidza_mail",
 			mcp.WithDescription("The mail pack's outbox, newest first: recipient, subject, status (queued, sent, failed), provider id, error, the text body. Shows what the app sent or would have sent (MAIL_PROVIDER=log or outbox keeps everything local). Needs DATABASE_URL in .env."),

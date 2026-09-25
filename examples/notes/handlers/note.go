@@ -25,6 +25,7 @@ func NoteRoutes(r *router.Router) {
 	router.Route(r, "GET /api/v1/notes", listNotes)
 	router.Route(r, "GET /api/v1/notes/{id}", getNote)
 	router.Route(r, "GET /api/v1/notes/{id}/stats", noteStats)
+	router.Route(r, "POST /api/v1/notes/{id}/tags", suggestTags)
 	router.Route(r, "POST /api/v1/notes", createNote)
 	router.Route(r, "PATCH /api/v1/notes/{id}", updateNote)
 	router.Route(r, "DELETE /api/v1/notes/{id}", deleteNote)

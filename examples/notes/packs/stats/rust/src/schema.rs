@@ -150,6 +150,11 @@ pub struct TextStats {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct NoteTags {
+    pub tags: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WordCount {
     pub word: String,
     pub count: i32,

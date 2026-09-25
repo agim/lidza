@@ -23,6 +23,7 @@ does not reimplement).
 | Automatic error boundaries | done | React error boundary in the template; Go panic recovery returning a JSON error |
 | Database schema migrations | done | `lidza gen` diffs `schema.lidza` against `db/schema.lock.json` into numbered up/down scripts; `lidza db migrate`, `rollback`, `status` apply them under an advisory lock |
 | Database connection pooling | done | `pgxpool` in the `db` pack, bounded by `DB_MAX_CONNS`; `/readyz` pings it, `/metrics` reports it |
+| Client SDKs | done | `@lidza/client` (TypeScript) always; `lidza_client` (Dart) when `lidza.json` names a directory under `sdk.dart` |
 | Object-relational mapping | done | `sqlc` via the `db` pack: SQL in `db/queries/*.sql`, `lidza gen` writes typed Go; see "Decisions" |
 | Dependency injection | done | `lidza.Services`: packs and `OnStart` provide values by type, handlers read them with `lidza.Service[T](ctx)`; explicit, no scanning |
 | Data binding | done | handlers publish over the `realtime` pack; `useLive(topics)` in the template invalidates the matching queries |

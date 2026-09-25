@@ -153,7 +153,7 @@ lidza/
 │   ├── resilience/   circuit breaker for outbound calls
 │   ├── scaffold/     `lidza new`: template copy plus generated Go and agent files
 │   ├── schema/       schema.lidza parser and generators (Go, SQL, migrations, Rust, JSON Schema)
-│   ├── sdk/          @lidza/client generator (TypeScript)
+│   ├── sdk/          client generators: @lidza/client (TypeScript), lidza_client (Dart)
 │   ├── telemetry/    /metrics, /healthz, /readyz, request metrics
 │   ├── validate/     rule helpers and the 422 error shape
 │   └── version/      build version
@@ -229,7 +229,7 @@ lists directories whose changes make `lidza dev` rebuild.
 | Go module | `github.com/agim/lidza` | `import "github.com/agim/lidza/pkg/router"` |
 | Rust crate | `lidza-core` | `core/Cargo.toml` |
 | Project config | `lidza.json` | routes, frontend proxy target |
-| Client SDKs | `@lidza/client`, `lidza-dart` | generated |
+| Client SDKs | `@lidza/client`, `lidza_client` (Dart) | generated |
 | Pack manifest | `pack.lidza.json` | per pack |
 | Context dump | `.lidza/context.json` | gitignored |
 

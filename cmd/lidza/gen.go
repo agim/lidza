@@ -132,7 +132,15 @@ func generateClient(dir string, cfg *config.Config, out io.Writer) error {
 	for _, w := range c.Warnings {
 		fmt.Fprintf(out, "[lidza] type-check: %s\n", w)
 	}
-	if cfg == nil || cfg.Frontend.Dist == "" {
+	if cfg == nil {
+		return nil
+	}
+	if cfg.SDK.Dart != "" {
+		if err := sdk.WriteDart(dir, cfg.SDK.Dart, c); err != nil {
+			return fmt.Errorf("dart client: %w", err)
+		}
+	}
+	if cfg.Frontend.Dist == "" {
 		return nil
 	}
 	if _, err := os.Stat(filepath.Join(dir, "package.json")); err != nil {

@@ -276,9 +276,18 @@ Every phase of the plan is delivered. Follow-up work, in Agim's order.
 - `lidza doctor`: toolchain, services and, in a project, `node_modules`,
   pack builds and the e2e browser, each missing item with its fix.
 
+### Dart client (done 2026-09-25)
+
+`lidza.json` `"sdk": {"dart": "clients/dart"}` makes `lidza gen` write a
+Dart package (`lidza_client`, on `package:http`) there: enums with wire
+values, classes with `fromJson`/`toJson` (`DateTime` for date-time),
+`LidzaClient` with one method per operation, `ApiException` with the
+field errors of a 422. A Flutter app depends on it by path. No Dart
+toolchain runs during `lidza gen`; the generated package is analyzed in
+the Flutter project. Validators are TypeScript only.
+
 ### Open
 
-- Dart client for Flutter (`@lidza/client` is TypeScript only).
 - Per-request SSR through an optional Node sidecar.
 - Publishing the CLI so `go install` works from `install.sh` (skipped
   for now by decision).

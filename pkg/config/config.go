@@ -21,9 +21,19 @@ type Config struct {
 	// Packs are the enabled packs under packs/, started in this order.
 	// `lidza pack scaffold` appends here; packs.go is generated from it.
 	Packs []string `json:"packs,omitempty"`
+	// SDK names extra generated clients: {"dart": "clients/dart"} writes
+	// the Dart package to that directory on every `lidza gen`.
+	SDK SDK `json:"sdk,omitempty"`
 
 	// Dir is the project root the file was read from. Not serialized.
 	Dir string `json:"-"`
+}
+
+// SDK lists generated clients besides the TypeScript one.
+type SDK struct {
+	// Dart is the directory, relative to the project root, of the
+	// generated Dart package (lidza_client). Empty disables it.
+	Dart string `json:"dart,omitempty"`
 }
 
 // Frontend is the "frontend" block: which template the app uses and how the

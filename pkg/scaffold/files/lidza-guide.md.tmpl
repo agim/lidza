@@ -190,6 +190,12 @@ Official Go packs, configured from `.env` (see `.env.example` after
 Order in `lidza.json` matters: `lidza/db` before `lidza/auth` and
 `lidza/jobs`.
 
+## Flutter or other Dart clients
+
+Set `"sdk": {"dart": "clients/dart"}` in `lidza.json`; `lidza gen` writes
+the `lidza_client` Dart package there with the same operations as
+`@lidza/client`.
+
 ## Models and migrations
 
 A `model` in `schema.lidza` is a table. `lidza gen` writes the full DDL to

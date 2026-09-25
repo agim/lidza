@@ -157,6 +157,14 @@ tool, so an agent can try one before wiring it. The first build of a pack
 downloads and compiles its crates (about a minute for `media`); later
 builds take seconds.
 
+## Flutter
+
+Add `"sdk": {"dart": "clients/dart"}` to `lidza.json`; `lidza gen` then
+keeps a Dart package there (`lidza_client`) with the same types and
+operations as the TypeScript client. The Flutter app depends on it with
+`lidza_client: {path: ../clients/dart}` and calls
+`LidzaClient(baseUrl: ...)`.
+
 ## Frontend
 
 The `react` template prerenders every parameterless route at build time

@@ -3,9 +3,11 @@ package lidza
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -122,16 +124,69 @@ func TestServeHooks(t *testing.T) {
 	var events []string
 	ctx, cancel := context.WithCancel(context.Background())
 	err := Serve(ctx, App{
-		OnStart:    func(context.Context) error { events = append(events, "start"); return nil },
+		Packs: []Pack{&testPack{events: &events}},
+		OnStart: func(ctx context.Context, s *Services) error {
+			if _, ok := s.Lookup(reflect.TypeFor[*testPack]()); !ok {
+				return errors.New("pack service missing at OnStart")
+			}
+			events = append(events, "start")
+			return nil
+		},
 		OnReady:    func() { events = append(events, "ready"); cancel() },
 		OnShutdown: func(context.Context) error { events = append(events, "shutdown"); return nil },
 	})
-	if err != nil || strings.Join(events, ",") != "start,ready,shutdown" {
+	if err != nil || strings.Join(events, ",") != "pack-start,start,ready,shutdown,pack-stop" {
 		t.Fatalf("err %v events %v", err, events)
 	}
-	err = Serve(context.Background(), App{OnStart: func(context.Context) error { return errors.New("no db") }})
+	err = Serve(context.Background(), App{OnStart: func(context.Context, *Services) error { return errors.New("no db") }})
 	if err == nil || !strings.Contains(err.Error(), "no db") {
 		t.Fatalf("start error: %v", err)
+	}
+}
+
+type testPack struct{ events *[]string }
+
+func (p *testPack) Name() string { return "test" }
+func (p *testPack) Start(ctx context.Context, s *Services) error {
+	*p.events = append(*p.events, "pack-start")
+	Provide(s, p)
+	return nil
+}
+func (p *testPack) Stop(context.Context) error {
+	*p.events = append(*p.events, "pack-stop")
+	return nil
+}
+
+func TestServices(t *testing.T) {
+	s := NewServices()
+	Provide(s, 42)
+	Provide[string](s, "x")
+	ctx := WithServices(context.Background(), s)
+	if Service[int](ctx) != 42 || Service[string](ctx) != "x" {
+		t.Fatal("lookup")
+	}
+	defer func() {
+		if r := recover(); r == nil || !strings.Contains(fmt.Sprint(r), "no service of type float64") {
+			t.Fatalf("missing service should panic with the type: %v", r)
+		}
+	}()
+	Service[float64](ctx)
+}
+
+func TestHandlerInjectsServices(t *testing.T) {
+	t.Setenv(devserver.EnvMode, "")
+	s := NewServices()
+	Provide(s, "injected")
+	h, err := handler(App{Routes: func(r *router.Router) {
+		r.HandleFunc("GET /api/v1/svc", func(w http.ResponseWriter, req *http.Request) {
+			io.WriteString(w, Service[string](req.Context()))
+		})
+	}}, s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if code, body := get(t, h, "/api/v1/svc"); code != 200 || body != "injected" {
+		t.Fatalf("%d %s", code, body)
 	}
 }
 

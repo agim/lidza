@@ -5,11 +5,14 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/agim/lidza/pkg/config"
 	"github.com/agim/lidza/pkg/diag"
 	"github.com/agim/lidza/pkg/inspect"
+	"github.com/agim/lidza/pkg/pack"
 	"github.com/agim/lidza/pkg/schema"
 	"github.com/agim/lidza/pkg/sdk"
 )
@@ -27,12 +30,47 @@ func runGen(_ context.Context, args []string) error {
 	return generateAll(abs, cfg, os.Stdout)
 }
 
-// generateAll runs the schema generators, then the handler-derived outputs.
+// generateAll runs the schema generators, the pack wrappers and builds,
+// then the handler-derived outputs.
 func generateAll(dir string, cfg *config.Config, out io.Writer) error {
 	if err := generateSchema(dir, out); err != nil {
 		return err
 	}
+	if err := generatePacks(context.Background(), dir, cfg, out); err != nil {
+		return err
+	}
 	return generateClient(dir, cfg, out)
+}
+
+// generatePacks writes packs.go and each enabled pack's wrapper and
+// schema.rs, then builds the modules that are missing or stale.
+func generatePacks(ctx context.Context, dir string, cfg *config.Config, out io.Writer) error {
+	if cfg == nil {
+		return nil
+	}
+	module := inspect.ModulePath(dir)
+	if module == "" {
+		return nil
+	}
+	s, err := schema.Load(dir)
+	if err != nil {
+		return err
+	}
+	changed, err := pack.Generate(dir, module, cfg.Packs, s)
+	if err != nil {
+		return fmt.Errorf("packs: %w", err)
+	}
+	if len(changed) > 0 {
+		fmt.Fprintf(out, "[lidza] packs: wrote %s\n", strings.Join(changed, ", "))
+		// A new pack imports the engine; the app's go.sum must learn its
+		// dependencies.
+		tidy := exec.CommandContext(ctx, "go", "mod", "tidy")
+		tidy.Dir = dir
+		if res, err := tidy.CombinedOutput(); err != nil {
+			fmt.Fprintf(out, "[lidza] go mod tidy: %v\n%s", err, res)
+		}
+	}
+	return pack.BuildStale(ctx, dir, cfg.Packs, out)
 }
 
 // generateSchema turns schema.lidza into the Go package, the SQL schema, a

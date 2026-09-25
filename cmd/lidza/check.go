@@ -9,7 +9,11 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/agim/lidza/pkg/config"
 	"github.com/agim/lidza/pkg/diag"
+	"github.com/agim/lidza/pkg/engine"
+	"github.com/agim/lidza/pkg/pack"
+	"github.com/agim/lidza/pkg/schema"
 )
 
 // errCheckFailed is returned by `lidza check` when there are errors; the
@@ -40,6 +44,12 @@ func runCheck(ctx context.Context, args []string) error {
 		}
 	}
 	report := diag.Run(ctx, layers)
+	if _, cfg, err := loadProject(abs); err == nil && cfg != nil {
+		report.Diagnostics = append(report.Diagnostics, packDiagnostics(ctx, abs, cfg)...)
+		if report.Errors() > 0 {
+			report.Status = "error"
+		}
+	}
 
 	if *asJSON {
 		enc := json.NewEncoder(os.Stdout)
@@ -77,4 +87,31 @@ func printReport(r diag.Report) {
 		}
 	}
 	fmt.Printf("%s: %d error(s), %d diagnostic(s)\n", r.Status, r.Errors(), len(r.Diagnostics))
+}
+
+// packDiagnostics validates every enabled pack's manifest against the
+// schema and the built module's exports.
+func packDiagnostics(ctx context.Context, dir string, cfg *config.Config) []diag.Diagnostic {
+	var out []diag.Diagnostic
+	s, _ := schema.Load(dir)
+	for _, name := range cfg.Packs {
+		m, err := pack.Load(dir, name)
+		if err != nil {
+			out = append(out, diag.Diagnostic{Layer: "pack", Tool: "lidza", Severity: "error", File: filepath.ToSlash(filepath.Join(pack.Dir, name, pack.ManifestFile)), Message: err.Error()})
+			continue
+		}
+		var exports []string
+		if wasm, err := os.ReadFile(filepath.Join(dir, m.WasmFile())); err == nil {
+			if mod, err := engine.Compile(ctx, wasm, engine.Options{}); err == nil {
+				exports = mod.Exports()
+				mod.Close(ctx)
+			} else {
+				out = append(out, diag.Diagnostic{Layer: "pack", Tool: "lidza", Severity: "error", File: filepath.ToSlash(m.WasmFile()), Message: err.Error()})
+			}
+		}
+		for _, p := range m.Validate(s, exports) {
+			out = append(out, diag.Diagnostic{Layer: "pack", Tool: "lidza", Severity: "error", File: m.Path, Message: p.Message})
+		}
+	}
+	return out
 }

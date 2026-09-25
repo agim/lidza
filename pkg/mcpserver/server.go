@@ -86,6 +86,8 @@ func New(dir string, cfg *config.Config) *server.MCPServer {
 		return jsonResult(cfg)
 	})
 
+	addPackTools(s, dir, cfg)
+
 	for _, r := range []struct{ name, uri, desc string }{
 		{"llms.txt", "lidza://llms.txt", "Short description of the app for language models: routes, commands, files."},
 		{"llms-full.txt", "lidza://llms-full.txt", "The project guide, every handler signature, Rust exports and configuration."},

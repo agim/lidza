@@ -408,6 +408,9 @@ func signature(lines []string, i int) string {
 	return strings.Join(parts, " ")
 }
 
+// ModulePath reads the module path from root/go.mod, or "".
+func ModulePath(root string) string { return modulePath(root) }
+
 func modulePath(root string) string {
 	data, err := os.ReadFile(filepath.Join(root, "go.mod"))
 	if err != nil {

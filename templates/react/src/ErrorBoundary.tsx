@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
+import type { ErrorComponentProps } from '@tanstack/react-router'
 
 interface Props {
   children: ReactNode
@@ -37,11 +38,11 @@ export class ErrorBoundary extends Component<Props, State> {
 }
 
 // TanStack Router's error component signature.
-export function RouteError({ error }: { error: Error }) {
+export function RouteError({ error }: ErrorComponentProps) {
   return (
     <div role="alert" className="error-boundary">
       <h2>This page failed to render</h2>
-      <pre>{error.message}</pre>
+      <pre>{error instanceof Error ? error.message : String(error)}</pre>
     </div>
   )
 }

@@ -21,6 +21,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/agim/lidza/pkg/config"
+	"github.com/agim/lidza/pkg/pack"
 	"github.com/agim/lidza/pkg/schema"
 	"github.com/agim/lidza/templates"
 )
@@ -128,6 +129,9 @@ func New(ctx context.Context, opt Options) error {
 		return err
 	}
 	if _, err := schema.Generate(opt.Dir, parsed, "", ""); err != nil {
+		return err
+	}
+	if _, err := pack.Generate(opt.Dir, opt.Name, nil, parsed); err != nil {
 		return err
 	}
 	fmt.Fprintf(opt.Out, "created %s (%s template)\n", opt.Dir, opt.Template)

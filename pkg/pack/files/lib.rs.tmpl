@@ -1,0 +1,21 @@
+//! Pack <<.Name>>. Each capability is one `lidza_export!`: it receives a
+//! type from schema.lidza (see the generated `schema` module) and returns
+//! another, or an error message. The Go side calls it through
+//! `packs/<<.Name>>/pack.go`, generated from pack.lidza.json.
+//!
+//! After editing: `lidza pack build <<.Name>>` (lidza dev does it on save).
+
+pub mod abi;
+pub mod schema;
+
+use schema::{ReverseInput, ReverseOutput};
+
+lidza_export!(reverse, |input: ReverseInput| -> Result<ReverseOutput, String> {
+    if input.text.is_empty() {
+        return Err("text is empty".to_string());
+    }
+    Ok(ReverseOutput {
+        reversed: input.text.chars().rev().collect(),
+        len: input.text.chars().count() as i32,
+    })
+});

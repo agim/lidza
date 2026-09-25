@@ -1,8 +1,9 @@
 //! Līdza compute core.
 //!
-//! Phase 1 ships the crate and its toolchain pin only. The Go binder
-//! (`pkg/engine`, wazero) and the first exports arrive with the packs in
-//! roadmap Phase 4.
+//! `abi` is the JSON-over-memory convention every pack's WASM module
+//! follows; `pkg/engine` on the Go side is its host.
+
+pub mod abi;
 
 /// The crate version, as a NUL-free ASCII string.
 pub fn version() -> &'static str {

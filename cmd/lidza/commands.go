@@ -13,6 +13,7 @@ import (
 	"github.com/agim/lidza/pkg/config"
 	"github.com/agim/lidza/pkg/devserver"
 	"github.com/agim/lidza/pkg/mcpserver"
+	"github.com/agim/lidza/pkg/pack"
 	"github.com/agim/lidza/pkg/scaffold"
 	"github.com/agim/lidza/pkg/schema"
 )
@@ -79,10 +80,15 @@ func runDev(ctx context.Context, args []string) error {
 	defer logFile.Close()
 	out := io.MultiWriter(os.Stdout, logFile)
 	return devserver.Dev(ctx, cfg, devserver.Options{
-		Addr:        *addr,
-		Out:         out,
-		Watch:       append([]string{schema.FileName}, cfg.Frontend.Watch...),
-		BeforeBuild: func() error { return generateSchema(cfg.Dir, out) },
+		Addr:  *addr,
+		Out:   out,
+		Watch: append(append([]string{schema.FileName}, cfg.Frontend.Watch...), packWatch(cfg)...),
+		BeforeBuild: func() error {
+			if err := generateSchema(cfg.Dir, out); err != nil {
+				return err
+			}
+			return generatePacks(ctx, cfg.Dir, cfg, out)
+		},
 		AfterBuild: func() {
 			if err := generateClient(cfg.Dir, cfg, out); err != nil {
 				fmt.Fprintf(out, "[lidza] %v\n", err)
@@ -150,4 +156,14 @@ func run(ctx context.Context, dir, name string, args ...string) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
+}
+
+// packWatch lists the enabled packs' crates and manifests, so a Rust edit
+// rebuilds the module and the app.
+func packWatch(cfg *config.Config) []string {
+	var out []string
+	for _, name := range cfg.Packs {
+		out = append(out, filepath.Join(pack.Dir, name, pack.ManifestFile), filepath.Join(pack.Dir, name, "rust", "src"), filepath.Join(pack.Dir, name, "rust", "Cargo.toml"))
+	}
+	return out
 }

@@ -49,10 +49,14 @@ type App struct {
 	CSP string
 	// Logger receives request and error logs; default slog.Default().
 	Logger *slog.Logger
+	// Packs are started in order before OnStart and stopped in reverse
+	// after OnShutdown. packs.go, generated from lidza.json, lists them.
+	Packs []Pack
 
-	// OnStart runs before the listener opens: connect pools, warm caches.
-	// An error aborts the start.
-	OnStart func(ctx context.Context) error
+	// OnStart runs after the packs and before the listener opens: connect
+	// what the packs do not, warm caches, Provide services. An error
+	// aborts the start.
+	OnStart func(ctx context.Context, s *Services) error
 	// OnReady runs once the app is listening.
 	OnReady func()
 	// OnShutdown runs after in-flight requests finished, before exit:
@@ -77,21 +81,39 @@ func Run(app App) {
 // a termination signal arrives, then shuts the server down.
 func Serve(ctx context.Context, app App) error {
 	log := app.logger()
-	h, err := Handler(app)
+	services := NewServices()
+	h, err := handler(app, services)
 	if err != nil {
 		return err
 	}
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	var started []Pack
+	stopPacks := func(ctx context.Context) {
+		for i := len(started) - 1; i >= 0; i-- {
+			if err := started[i].Stop(ctx); err != nil {
+				log.Error("pack stop", "pack", started[i].Name(), "error", err)
+			}
+		}
+	}
+	for _, p := range app.Packs {
+		if err := p.Start(ctx, services); err != nil {
+			stopPacks(ctx)
+			return fmt.Errorf("pack %s: %w", p.Name(), err)
+		}
+		started = append(started, p)
+	}
 	if app.OnStart != nil {
-		if err := app.OnStart(ctx); err != nil {
+		if err := app.OnStart(ctx, services); err != nil {
+			stopPacks(ctx)
 			return fmt.Errorf("start: %w", err)
 		}
 	}
 	addr := envOr(devserver.EnvAddr, "127.0.0.1:3000")
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
+		stopPacks(ctx)
 		return err
 	}
 	srv := &http.Server{
@@ -124,16 +146,21 @@ func Serve(ctx context.Context, app App) error {
 	}
 	if app.OnShutdown != nil {
 		if err := app.OnShutdown(shutdown); err != nil {
+			stopPacks(shutdown)
 			return fmt.Errorf("shutdown: %w", err)
 		}
 	}
+	stopPacks(shutdown)
 	return nil
 }
 
 // Handler builds the app's http.Handler: the API router under /api with the
 // standard pipeline and, for every other path, the proxy to the frontend
 // dev server (dev mode), the embedded build, or the app's own Frontend.
-func Handler(app App) (http.Handler, error) {
+// Packs are not started; Serve does that.
+func Handler(app App) (http.Handler, error) { return handler(app, NewServices()) }
+
+func handler(app App, services *Services) (http.Handler, error) {
 	log := app.logger()
 	r := router.New()
 	if app.Routes != nil {
@@ -169,7 +196,10 @@ func Handler(app App) (http.Handler, error) {
 		frontend = devserver.AgentFiles(frontend)
 	}
 	all := devserver.Split(router.APIPrefix, api, frontend)
-	mw := append([]middleware.Middleware{middleware.SecureHeaders(middleware.SecureHeadersOptions{CSP: app.CSP})}, app.Middleware...)
+	mw := append([]middleware.Middleware{
+		middleware.SecureHeaders(middleware.SecureHeadersOptions{CSP: app.CSP}),
+		servicesMiddleware(services),
+	}, app.Middleware...)
 	return middleware.Chain(all, mw...), nil
 }
 

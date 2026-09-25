@@ -18,6 +18,9 @@ type Config struct {
 	// Name is the application name; also the output binary name.
 	Name     string   `json:"name"`
 	Frontend Frontend `json:"frontend"`
+	// Packs are the enabled packs under packs/, started in this order.
+	// `lidza pack scaffold` appends here; packs.go is generated from it.
+	Packs []string `json:"packs,omitempty"`
 
 	// Dir is the project root the file was read from. Not serialized.
 	Dir string `json:"-"`

@@ -4,6 +4,13 @@ Releases are git tags; `go install github.com/agim/lidza/cmd/lidza@<tag>`
 installs that CLI, and `lidza version` prints it. Apps depend on the same
 version in `go.mod`.
 
+## Unreleased
+
+- `lidza setup` and `lidza new --packs ... --agent ...`: packs, `.env` with
+  a random `AUTH_SECRET`, `.env.test`, generation, databases created and
+  migrated, `node_modules`, the agent CLI, the first commit.
+- `lidza ship`: verify, the browser suite, the production build.
+
 ## v0.1.1 (2026-09-25)
 
 - `install.sh` installs the prerequisites (git, curl, C toolchain), Node

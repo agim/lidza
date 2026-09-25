@@ -441,3 +441,50 @@ func mustRead(t *testing.T, rel string) string {
 	}
 	return string(data)
 }
+
+// TestSetup: lidza setup on a fresh app enables packs, writes the
+// environment files with real values, creates and migrates the databases
+// and installs node_modules. Skipped when Postgres is unreachable.
+func TestSetup(t *testing.T) {
+	if out, err := command(app, "pg_isready"); err != nil {
+		t.Skipf("postgres not reachable: %s", out)
+	}
+	tmp := t.TempDir()
+	if out, err := command(tmp, lidza, "new", "setupapp", "--no-setup", "--lidza-dir", root); err != nil {
+		t.Fatalf("lidza new: %v\n%s", err, out)
+	}
+	dir := filepath.Join(tmp, "setupapp")
+	args := []string{"setup", "--packs", "auth,mail", "--no-commit"}
+	if u := os.Getenv("DATABASE_URL"); u != "" {
+		args = append(args, "--database-url", u)
+	}
+	out, err := command(dir, lidza, args...)
+	if err != nil {
+		t.Fatalf("lidza setup: %v\n%s", err, out)
+	}
+	for _, want := range []string{"[setup] pack db:", "[setup] pack auth:", "[setup] pack mail:", ".env written", ".env.test written", "database setupapp_dev: created if missing", "database setupapp_test: created if missing", "node_modules: installed"} {
+		if !strings.Contains(string(out), want) {
+			t.Errorf("setup output lacks %q:\n%s", want, out)
+		}
+	}
+	env, _ := os.ReadFile(filepath.Join(dir, ".env"))
+	if !strings.Contains(string(env), "DATABASE_URL=") || !strings.Contains(string(env), "AUTH_SECRET=") || strings.Contains(string(env), "change-me") || !strings.Contains(string(env), "MAIL_FROM=\"setupapp <setupapp@example.com>\"") {
+		t.Errorf(".env:\n%s", env)
+	}
+	envTest, _ := os.ReadFile(filepath.Join(dir, ".env.test"))
+	if !strings.Contains(string(envTest), "setupapp_test") || !strings.Contains(string(envTest), "MAIL_PROVIDER=outbox") {
+		t.Errorf(".env.test:\n%s", envTest)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "node_modules")); err != nil {
+		t.Error("node_modules missing")
+	}
+	// Idempotent: a second run changes nothing and says so.
+	out, err = command(dir, lidza, args...)
+	if err != nil || !strings.Contains(string(out), "pack auth: already enabled") || !strings.Contains(string(out), ".env exists, left alone") {
+		t.Fatalf("second setup: %v\n%s", err, out)
+	}
+	// The app runs its tests against the databases setup created.
+	if out, err := command(dir, lidza, "test"); err != nil {
+		t.Fatalf("lidza test after setup: %v\n%s", err, out)
+	}
+}

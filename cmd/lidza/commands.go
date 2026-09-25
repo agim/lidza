@@ -22,6 +22,10 @@ func runNew(ctx context.Context, args []string) error {
 	fs := flags("new")
 	template := fs.String("template", "react", "template name")
 	lidzaDir := fs.String("lidza-dir", os.Getenv("LIDZA_DIR"), "local checkout of the framework to use instead of the published module (env LIDZA_DIR)")
+	packs := fs.String("packs", "", "official packs to enable, comma-separated (db is added when a pack needs it); runs lidza setup")
+	agent := fs.String("agent", "", "agent CLI to install when missing: claude, codex or gemini")
+	dbURL := fs.String("database-url", os.Getenv("LIDZA_DATABASE_URL"), "development DATABASE_URL for setup (default: a local socket database named after the app)")
+	noSetup := fs.Bool("no-setup", false, "scaffold only: no .env, databases, node_modules or first commit")
 	fs.Usage = func() {
 		fmt.Fprintln(fs.Output(), "usage: lidza new <name> [flags]")
 		fs.PrintDefaults()
@@ -56,12 +60,26 @@ func runNew(ctx context.Context, args []string) error {
 	}
 	// A repository with the pre-commit hook, unless the app is created
 	// inside an existing one.
-	if abs, err := filepath.Abs(name); err == nil {
-		if err := installGitHook(ctx, abs, os.Stdout, true); err != nil {
-			fmt.Printf("pre-commit hook not installed: %v\n", err)
-		}
+	abs, err := filepath.Abs(name)
+	if err != nil {
+		return err
 	}
-	fmt.Printf("\nnext:\n  cd %s\n  lidza dev\n", name)
+	if err := installGitHook(ctx, abs, os.Stdout, true); err != nil {
+		fmt.Printf("pre-commit hook not installed: %v\n", err)
+	}
+	if *noSetup {
+		fmt.Printf("\nnext:\n  cd %s\n  lidza setup --packs db,auth   # .env, databases, node_modules, first commit\n  lidza dev\n", name)
+		return nil
+	}
+	cfg, err := config.Load(abs)
+	if err != nil {
+		return err
+	}
+	fmt.Println()
+	if err := setup(ctx, abs, cfg, setupOptions{Packs: splitList(*packs), Agent: *agent, DatabaseURL: *dbURL, Commit: true, Out: os.Stdout}); err != nil {
+		return err
+	}
+	fmt.Printf("  (in %s)\n", name)
 	return nil
 }
 

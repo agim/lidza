@@ -17,7 +17,7 @@ structured diagnostics, no implicit magic.
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/agim/lidza/master/install.sh | sh -s -- --services
-lidza new myapp && cd myapp
+lidza new myapp --packs db,auth,mail --agent claude && cd myapp
 lidza dev
 claude        # or: codex, gemini
 ```

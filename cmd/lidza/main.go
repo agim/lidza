@@ -16,7 +16,9 @@ import (
 const usage = `Līdza: Go control plane, Rust core, any frontend.
 
 Usage:
-  lidza new <name> [--template react] [--lidza-dir <path>]
+  lidza new <name> [--template react] [--packs db,auth,mail] [--agent claude] [--no-setup]
+  lidza setup [--packs db,auth,mail] [--agent claude] [--database-url ...] [--no-commit]
+  lidza ship [--no-e2e] [--out bin/<name>]
   lidza dev   [--dir .] [--addr 127.0.0.1:3000]
   lidza build [--dir .] [--out bin/<name>]
   lidza check [--dir .] [--json]
@@ -35,7 +37,9 @@ Usage:
   lidza version
 
 Commands:
-  new      create an app from a template
+  new      create an app from a template, then set it up (packs, .env with a random AUTH_SECRET, databases created and migrated, node_modules, first commit)
+  setup    the same on an existing app: enable packs, write .env and .env.test, generate, create and migrate the databases, npm install, install an agent CLI, commit
+  ship     verify, the browser suite, the production build: what must be green before a deploy
   dev      run the app with hot reload (frontend dev server proxied behind /api)
   build    build the frontend and compile one production binary
   check    run go vet, staticcheck, cargo check and tsc; one diagnostics list
@@ -67,6 +71,10 @@ func main() {
 	switch cmd, args := os.Args[1], os.Args[2:]; cmd {
 	case "new":
 		err = runNew(ctx, args)
+	case "setup":
+		err = runSetup(ctx, args)
+	case "ship":
+		err = runShip(ctx, args)
 	case "dev":
 		err = runDev(ctx, args)
 	case "build":

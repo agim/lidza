@@ -200,6 +200,26 @@ args = ["mcp"]
 
 To add it to Claude Code by hand: `claude mcp add lidza -- lidza mcp`.
 
+## From nothing to a configured app
+
+```sh
+lidza new tracker --packs db,auth,jobs,mail,realtime --agent claude
+cd tracker
+lidza dev
+```
+
+`lidza new` with `--packs` runs `lidza setup`: the packs are enabled,
+`.env` is written from `.env.example` with a random `AUTH_SECRET` and a
+socket `DATABASE_URL` named after the app (`tracker_dev`; pass
+`--database-url` or set `LIDZA_DATABASE_URL` for a server elsewhere),
+`.env.test` points at `tracker_test` with mail kept in the outbox, the
+code is generated, both databases are created and migrated,
+`node_modules` is installed, the agent CLI is installed when missing
+(`--agent`; sign in once by running it), and the first commit is made
+through the pre-commit hook. `lidza setup` does the same on an existing
+app and is safe to rerun. When the app is ready for a server, `lidza
+ship` runs verify, the browser suite and the production build in one go.
+
 ## Resources
 
 With the `db` pack enabled, `lidza gen resource Post` turns a model into a

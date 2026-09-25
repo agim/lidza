@@ -580,6 +580,20 @@ and the package manager's one-liner when a service is missing. Verified
 in a clean `ubuntu:24.04` container as a non-root user: install, then an
 app with the db pack passing `lidza test` against the installed Postgres.
 
+### lidza setup and lidza ship (done 2026-09-25)
+
+`lidza new <name> --packs db,auth,jobs,mail,realtime --agent claude` is
+the whole first hour: packs enabled (db added when one needs it), `.env`
+written from `.env.example` with a random `AUTH_SECRET`, the app's
+database and `MAIL_FROM`, `.env.test` with the test database and the
+mail outbox, code generated, both databases created and migrated,
+`node_modules` installed, the agent CLI installed when missing, the
+first commit made through the hook. `lidza setup` does the same on an
+existing app and is idempotent; `--database-url` or
+`LIDZA_DATABASE_URL` points at a server elsewhere (CI uses it). `lidza
+ship` is the end of the road: verify, the browser suite, the production
+build, stopping at the first failure.
+
 ### Next
 
 Nothing queued.

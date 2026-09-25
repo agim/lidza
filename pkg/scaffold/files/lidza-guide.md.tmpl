@@ -53,6 +53,8 @@ app is always at one address: http://127.0.0.1:3000.
 | `lidza pack add <name>` | enables an official pack: `db`, `auth`, `jobs`, `cache`, `i18n`, `realtime`, `geo`, `media`. |
 | `lidza test [go test flags]` | creates and migrates the `.env.test` database, runs `go test ./...` with `LIDZA_MODE=test`, then the frontend check. |
 | `lidza test --e2e [--install]` | builds the app, starts the binary with `.env.test`, runs the Playwright suite in `e2e/`; `--install` fetches the browser when missing. |
+| `lidza setup [--packs db,auth,mail] [--agent claude]` | on an existing app: enables the packs (db added when one needs it), writes `.env` from `.env.example` with a random `AUTH_SECRET` and the app's database, writes `.env.test`, generates, creates and migrates the dev and test databases, installs `node_modules`, installs the agent CLI when asked, makes the first commit. `lidza new --packs ...` runs it for a new app. Rerunning is safe. |
+| `lidza ship [--no-e2e] [--out bin/{{.Name}}]` | before a deploy: `lidza verify`, the browser suite against the built binary, the production build; stops at the first failure. |
 | `lidza verify [--json] [--no-test]` | before a commit: regenerates and requires the generated files to be staged, runs the checks, runs the Go tests. The pre-commit hook in `.githooks/` runs it (`git commit --no-verify` skips once; `lidza verify --install-hook` sets it up again). |
 | `lidza doctor` | toolchain, services, `node_modules`, pack builds, e2e browser; each missing item with its fix. |
 | `lidza pack scaffold <name>` | creates `packs/<name>` with a crate and an example capability; `lidza pack build` compiles it. |

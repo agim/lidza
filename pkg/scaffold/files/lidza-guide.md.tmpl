@@ -45,7 +45,8 @@ app is always at one address: http://127.0.0.1:3000.
 | `lidza gen` | `schema.lidza` to `schema/schema.go`, `db/schema.sql`, a migration in `db/migrations` when models changed; handlers to `.lidza/openapi.json` and the client in `.lidza/client`. `lidza dev` runs it on every change. |
 | `lidza context` | writes `.lidza/context.json`: routes, handler signatures, Rust exports. |
 | `lidza mcp` | MCP server on stdio; see "Agent interface". |
-| `lidza pack add <name>` | enables an official pack: `db`, `realtime`, `geo`, `media`. |
+| `lidza pack add <name>` | enables an official pack: `db`, `auth`, `jobs`, `cache`, `i18n`, `realtime`, `geo`, `media`. |
+| `lidza test [go test flags]` | creates and migrates the `.env.test` database, runs `go test ./...` with `LIDZA_MODE=test`, then the frontend check. |
 | `lidza pack scaffold <name>` | creates `packs/<name>` with a crate and an example capability; `lidza pack build` compiles it. |
 | `lidza db migrate\|rollback\|status` | applies `db/migrations` (db pack, `DATABASE_URL` from `.env`). |
 | `lidza benchmark [--vus 500] [--duration 1m]` | runs `benchmarks/scale_test.js` with k6 against the running app; heap and goroutines must stay flat. |
@@ -97,6 +98,13 @@ signature. Both are regenerated after each Go rebuild.
 7. Keep the app stateless: no global mutable maps, no in-memory sessions.
    State goes to Postgres or Redis.
 
+## Tests
+
+`routes_test.go` shows the shape: `srv := lidzatest.Start(t, app())`
+boots the app with its packs (`.env.test`, `LIDZA_MODE=test`) and
+`srv.JSON(t, method, path, body, &out, lidzatest.Bearer(token))` calls it.
+Run `lidza test`.
+
 ## Adding an API route
 
 1. Declare the shapes in `schema.lidza`:
@@ -146,11 +154,29 @@ write `lidza_export!(capability, |input: In| -> Result<Out, String>)` in
 `lidza dev` rebuilds the module when the crate changes. The MCP tool
 `pack_<name>_<capability>` runs a capability directly.
 
-Official Go packs: `db` gives `db.From(ctx)` (a `*pgxpool.Pool`) and typed
-queries from `db/queries/*.sql` via sqlc (`queries.New(db.From(ctx))`);
-`realtime` gives `realtime.From(ctx).Publish(ctx, topic, value)` and the
-endpoint `r.Handle("GET /api/v1/realtime", realtime.Handler())`. Their
-settings come from `.env` (`DATABASE_URL`, `REALTIME_BUS_URL`).
+Official Go packs, configured from `.env` (see `.env.example` after
+`lidza pack add`):
+
+- `db`: `db.From(ctx)` is a `*pgxpool.Pool`; SQL in `db/queries/*.sql`
+  becomes typed Go via sqlc (`queries.New(db.From(ctx)).Name(ctx, ...)`).
+- `auth`: `auth.HashPassword`/`CheckPassword`; `auth.From(ctx).Login(ctx,
+  userID, claims)` returns tokens, `req.SetCookie` each of
+  `auth.From(ctx).Cookies(tokens)` for browsers; protect a sub-router with
+  `protected.Use(auth.Require())` and read `auth.CurrentUser(ctx)`.
+  Logout: `auth.From(ctx).Logout(ctx, user.SessionID)`.
+- `jobs`: register handlers in `OnStart` with
+  `jobs.FromServices(s).Handle("kind", fn)`; enqueue with
+  `jobs.From(ctx).Enqueue(ctx, "kind", payload, jobs.RunAt(t))`.
+- `cache`: `cache.Remember(ctx, cache.From(ctx), "key", ttl, load)`;
+  `cache.From(ctx).Invalidate(ctx, "prefix:")` after writes.
+- `i18n`: `i18n.From(ctx).T(ctx, "key", args...)`, `Number`, `Currency`,
+  `Date`; catalogs in `locales/<lang>.json`; serve them with
+  `r.Handle("GET /api/v1/i18n/{lang}", i18n.Handler())`.
+- `realtime`: `realtime.From(ctx).Publish(ctx, topic, value)` and
+  `r.Handle("GET /api/v1/realtime", realtime.Handler())`.
+
+Order in `lidza.json` matters: `lidza/db` before `lidza/auth` and
+`lidza/jobs`.
 
 ## Models and migrations
 

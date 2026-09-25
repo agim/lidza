@@ -62,6 +62,59 @@ var Officials = []Official{
 		},
 	},
 	{
+		Name:        "cache",
+		Description: "Cache on Valkey or Redis with TTL and read-through Remember; CACHE_URL=memory for tests.",
+		Env: []string{
+			"# lidza/cache",
+			"CACHE_URL=redis://127.0.0.1:6379",
+			"# CACHE_URL=memory   # bounded in-process cache for one node or tests",
+		},
+		Notes: []string{
+			"cache.Remember(ctx, cache.From(ctx), \"key\", ttl, load) caches a computed value",
+			"cache.From(ctx).Invalidate(ctx, \"prefix:\") after writes",
+		},
+	},
+	{
+		Name:        "auth",
+		Description: "Sessions and tokens: argon2id passwords, short-lived JWT access tokens, refresh sessions in Postgres, cookies or bearer, auth.Require middleware.",
+		Env: []string{
+			"# lidza/auth (needs lidza/db)",
+			"AUTH_SECRET=change-me-to-32-random-bytes-or-more-please",
+			"AUTH_ACCESS_TTL=15m",
+			"AUTH_REFRESH_TTL=720h",
+			"# AUTH_COOKIE_SECURE=true   # behind TLS",
+		},
+		Notes: []string{
+			"store password hashes with auth.HashPassword; check with auth.CheckPassword",
+			"login: tokens, err := auth.From(ctx).Login(ctx, userID, claims); for browsers add auth.From(ctx).Cookies(tokens) with req.SetCookie",
+			"protect routes: r.Use(auth.Require()) or wrap a sub-router; auth.CurrentUser(ctx) inside",
+			"run `lidza gen` and `lidza db migrate`: the auth_session table comes from schema.lidza",
+		},
+	},
+	{
+		Name:        "jobs",
+		Description: "Background jobs on Postgres: bounded workers per node, retries with backoff, scheduling, takeover of jobs whose node died.",
+		Env: []string{
+			"# lidza/jobs (needs lidza/db)",
+			"JOBS_WORKERS=4",
+			"JOBS_MAX_ATTEMPTS=5",
+		},
+		Notes: []string{
+			"register handlers in OnStart: jobs.FromServices(s).Handle(\"email\", func(ctx, payload) error {...})",
+			"enqueue from a handler: jobs.From(ctx).Enqueue(ctx, \"email\", payload, jobs.RunAt(t))",
+			"run `lidza gen` and `lidza db migrate`: the job table comes from schema.lidza",
+		},
+	},
+	{
+		Name:        "i18n",
+		Description: "Localization: catalogs in locales/<lang>.json embedded in the binary, locale per request, numbers, currency and dates.",
+		Env:         []string{"# lidza/i18n", "I18N_DEFAULT=en"},
+		Notes: []string{
+			"messages: i18n.From(ctx).T(ctx, \"greeting\", name); add locales/<lang>.json files",
+			"frontend catalog: r.Handle(\"GET /api/v1/i18n/{lang}\", i18n.Handler())",
+		},
+	},
+	{
 		Name:        "media",
 		Description: "Image processing in Rust: dimensions and format, resize with format conversion.",
 		Rust:        true,
@@ -110,6 +163,16 @@ func Add(root, name string) (entry string, o Official, err error) {
 	if !o.Rust {
 		if o.Name == "db" {
 			if err := writeSQLCConfig(root); err != nil {
+				return "", o, err
+			}
+		}
+		if fragment, err := officialFS.ReadFile("official/" + o.Name + "/schema.lidza"); err == nil {
+			if err := appendSchema(root, o.Name, fragment); err != nil {
+				return "", o, err
+			}
+		}
+		if o.Name == "i18n" {
+			if err := writeIfMissing(filepath.Join(root, "locales", "en.json"), "official/i18n/locales/en.json"); err != nil {
 				return "", o, err
 			}
 		}
@@ -189,6 +252,20 @@ func appendSchema(root, pack string, fragment []byte) error {
 	fmt.Fprintf(f, "// Types of the %s pack.\n", pack)
 	_, err = f.Write(bytes.TrimLeft(fragment, "\n"))
 	return err
+}
+
+func writeIfMissing(dst, src string) error {
+	if _, err := os.Stat(dst); err == nil {
+		return nil
+	}
+	data, err := officialFS.ReadFile(src)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(dst, data, 0o644)
 }
 
 func appendEnvExample(root string, lines []string) error {

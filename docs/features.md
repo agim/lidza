@@ -11,13 +11,13 @@ does not reimplement).
 | Hot module replacement | done | Vite HMR through the `lidza dev` proxy; Go handlers rebuild and restart, frontend state is kept |
 | API route parameter parsing | done | `net/http` patterns, `req.Param("id")` in typed handlers; the client takes them as a typed object |
 | Automated asset bundling | done | Vite: minify, hash, code split, `dist/` embedded in the binary. Image optimization: phase 3 template build |
-| Query caching | done (client) / phase 6 (server) | TanStack Query in the template; server-side cache pack on Valkey |
+| Query caching | done | TanStack Query in the template; `cache` pack (Valkey, `Remember`, prefix invalidation) on the server |
 | Virtual DOM / efficient diffing | template | React 19 (`react`), compiled updates (`svelte`) |
 | Component lifecycle hooks (frontend) | template | React effects; Svelte lifecycle |
 | Application lifecycle hooks (server) | done | `lidza.App.OnStart`, `OnReady`, `OnShutdown` |
 | HTTP middleware pipeline | done | `pkg/middleware`; request id, log, recovery and deadline on every API route; `router.Use`, `App.Middleware` |
 | CORS | done | `middleware.CORS`; off by default, same-origin is the normal case |
-| Built-in vulnerability shields | done (headers, SQL) / phase 6 (CSRF) | secure headers on every response, CSP and HSTS opt-in; body limits; SQL injection prevented by parameterized queries only (`sqlc`, `pgx`); XSS by template escaping plus CSP; CSRF tokens arrive with cookie sessions |
+| Built-in vulnerability shields | done | secure headers on every response, CSP and HSTS opt-in; body limits; SQL injection prevented by parameterized queries only (`sqlc`, `pgx`); XSS by template escaping plus CSP; CSRF tokens arrive with cookie sessions |
 | Environment configuration injection | done | `pkg/env`: typed struct from `.env`, `.env.<mode>` and the environment; secrets never in `lidza.json` |
 | Form validation | done (server) / phase 7 (client) | rules in `schema.lidza`; generated `Validate()` runs before every typed handler, 422 with field errors the client exposes as `ApiError.fields`; client-side validators from the same rules later |
 | Automatic error boundaries | done | React error boundary in the template; Go panic recovery returning a JSON error |
@@ -26,10 +26,10 @@ does not reimplement).
 | Object-relational mapping | done | `sqlc` via the `db` pack: SQL in `db/queries/*.sql`, `lidza gen` writes typed Go; see "Decisions" |
 | Dependency injection | done | `lidza.Services`: packs and `OnStart` provide values by type, handlers read them with `lidza.Service[T](ctx)`; explicit, no scanning |
 | Data binding | done (server) / phase 7 (client hook) | handlers publish over the `realtime` pack; a `useLive` hook in the template refetches on messages later |
-| Session management and token auth | phase 6 | `auth` pack: PASETO or JWT, refresh, Valkey-backed sessions, `lidza auth` commands |
-| Job queues and background workers | phase 6 | `jobs` pack on River (Postgres-backed); Rust workers for compute |
-| Localization | phase 6 | `i18n` pack: `Accept-Language` negotiation, message catalogs, `golang.org/x/text` for dates, numbers, currencies; template hook for the frontend |
-| Mocking and stubbing | phase 6 | `lidza test`: `lidza_test` database per run, `httptest` helpers, fake clock, recorded HTTP fixtures |
+| Session management and token auth | done | `auth` pack: argon2id, JWT access tokens, refresh sessions in Postgres, cookies or bearer, `auth.Require` |
+| Job queues and background workers | done | `jobs` pack: Postgres queue, bounded workers, retries, scheduling; heavy work in a pack capability |
+| Localization | done | `i18n` pack: catalogs embedded, locale per request, numbers, currency, dates, catalog endpoint for the frontend |
+| Mocking and stubbing | done (harness) | `lidza test` with the test database created and migrated; `lidzatest.Start` boots the app on httptest with a JSON client; `CACHE_URL=memory`; fake clock and recorded fixtures not built |
 | Accessibility checks | phase 7 | `eslint-plugin-jsx-a11y` in the template, findings ingested by `lidza check --json` |
 | State hydration and dehydration | phase 7 | TanStack Query `dehydrate`/`hydrate`; only meaningful with SSR or prerendering |
 | Observability | done | `/metrics`, `/healthz`, `/readyz`, request log with ids, `/debug/pprof/` in dev |

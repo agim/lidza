@@ -145,6 +145,7 @@ lidza/
 │   ├── engine/       wazero host: compiled module, bounded instance pool, JSON calls
 │   ├── env/          typed configuration from .env files and the environment
 │   ├── inspect/      routes and typed operations via go/ast and go/packages, OpenAPI, llms.txt
+│   ├── lidzatest/    boots an app for Go tests: packs, httptest server, JSON client
 │   ├── mcpserver/    `lidza mcp`
 │   ├── middleware/   request id, log, recovery, timeout, body limit, CORS, secure headers
 │   ├── pack/         pack manifests, validator, generators, scaffold, build, official pack sources
@@ -156,9 +157,13 @@ lidza/
 │   ├── telemetry/    /metrics, /healthz, /readyz, request metrics
 │   ├── validate/     rule helpers and the 422 error shape
 │   └── version/      build version
-├── packs/
-│   ├── db/           official Go pack: pgxpool, migrations
-│   └── realtime/     official Go pack: WebSocket topics, Valkey bus
+├── packs/            official Go packs
+│   ├── auth/         passwords, tokens, sessions, Require middleware
+│   ├── cache/        Valkey cache with Remember; memory backend for tests
+│   ├── db/           pgxpool, migrations
+│   ├── i18n/         catalogs, locale negotiation, formatting
+│   ├── jobs/         Postgres job queue with bounded workers
+│   └── realtime/     WebSocket topics, Valkey bus
 ├── core/             Rust crate `lidza-core`: the WASM ABI (src/abi.rs)
 ├── templates/
 │   ├── embed.go      embeds the template directories into the CLI
@@ -168,7 +173,7 @@ lidza/
 │   └── htmx/         Go html/template views, htmx vendored, no JS toolchain
 ├── docs/
 ├── install.sh
-├── go.mod            dependencies: mcp-go, x/tools, wazero, pgx, coder/websocket, valkey-go, prometheus/client_golang
+├── go.mod            dependencies: mcp-go, x/tools, wazero, pgx, coder/websocket, valkey-go, prometheus/client_golang, golang-jwt, x/crypto, x/text
 └── README.md
 ```
 

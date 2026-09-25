@@ -140,6 +140,9 @@ func TestOfficialGo(t *testing.T) {
 	if _, _, err := Add(root, "nope"); err == nil || !strings.Contains(err.Error(), "available") {
 		t.Errorf("unknown pack: %v", err)
 	}
+	if g := GeneratePacksGo("app", []string{"lidza/i18n"}); !strings.Contains(g, "//go:embed all:locales") || !strings.Contains(g, `i18n.Pack(lidza.Sub(locales, "locales"))`) {
+		t.Errorf("i18n packs.go:\n%s", g)
+	}
 	got := GeneratePacksGo("app", []string{"lidza/db", "lidza/realtime", "local"})
 	for _, want := range []string{`db "github.com/agim/lidza/packs/db"`, `realtime "github.com/agim/lidza/packs/realtime"`, `local "app/packs/local"`, "db.Pack(),", "realtime.Pack(),", "local.Pack(),"} {
 		if !strings.Contains(got, want) {

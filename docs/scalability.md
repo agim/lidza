@@ -13,7 +13,7 @@ distributed state tier (Postgres, Valkey, a queue).
 
 - No request state lives in process memory between requests: no session
   maps, no per-user caches, no in-memory queues. Sessions are signed
-  tokens (PASETO or JWT) or rows in Valkey. State goes to Postgres, Valkey
+  tokens (JWT) backed by rows in Postgres. State goes to Postgres, Valkey
   or the queue.
 - Any Go node can serve any request; nodes are added and removed without
   draining state. WebSocket fan-out goes through Valkey pub/sub, never
@@ -82,7 +82,7 @@ Apply to every Go package, Rust module, pack and template, now.
 | Dev-only process supervision bounded by contexts | Phase 1 (`pkg/devserver`) |
 | Owned goroutines, contexts on every command | Phase 1 and 2 (`diag`, `devserver`) |
 | Middleware pipeline: timeouts, body limits, request ids | in force since Phase 3 (`pkg/middleware`) |
-| Sessions as tokens or Valkey rows | Phase 6 (`auth` pack) |
+| Sessions as signed tokens plus Postgres rows | in force since Phase 6 (`auth` pack) |
 | `pgxpool` bounds, generated queries | in force since Phase 4 (`db` pack) |
 | Bounded wazero pool with per-call deadlines | in force since Phase 4 (`pkg/engine`) |
 | `/metrics`, `/healthz`, `/readyz` | in force since Phase 5 (`pkg/telemetry`) |
@@ -90,7 +90,7 @@ Apply to every Go package, Rust module, pack and template, now.
 | `lidza check` rules for global state and unbounded goroutines | in force since Phase 5 (L001, L002) |
 | `lidza benchmark`, flat-memory gate | in force since Phase 5 (warm-up, then heap and goroutines before and after) |
 | Valkey pub/sub fan-out for WebSockets | in force since Phase 4 (`realtime` pack, `REALTIME_BUS_URL`) |
-| Queue-backed background work | Phase 6 (`jobs` pack) |
+| Queue-backed background work | in force since Phase 6 (`jobs` pack) |
 
 ## Capacity reference
 

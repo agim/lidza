@@ -145,7 +145,8 @@ To add it to Claude Code by hand: `claude mcp add lidza -- lidza mcp`.
 ## Packs
 
 Packs add capabilities: official ones with `lidza pack add <name>` (`db`,
-`realtime`, `geo`, `media`), your own with `lidza pack scaffold <name>`.
+`auth`, `jobs`, `cache`, `i18n`, `realtime`, `geo`, `media`), your own with
+`lidza pack scaffold <name>`.
 A pack is a Rust crate compiled to WASM and run by the Go binary in a
 bounded pool; its manifest `pack.lidza.json` names each capability with
 input and output types from `schema.lidza`, and `lidza gen` writes the Go
@@ -155,6 +156,15 @@ imported from the framework. `lidza mcp` exposes every capability as a
 tool, so an agent can try one before wiring it. The first build of a pack
 downloads and compiles its crates (about a minute for `media`); later
 builds take seconds.
+
+## Tests
+
+`lidza test` runs the Go tests with `LIDZA_MODE=test`: the database named
+in `.env.test` is created and migrated first, then `go test ./...`, then
+the frontend check. A test boots the whole app with
+`lidzatest.Start(t, app())` and talks to it over HTTP with a JSON client
+that keeps cookies; `lidza new` writes `routes_test.go` as the example.
+`CACHE_URL=memory` in `.env.test` keeps the cache in-process.
 
 ## Operations
 

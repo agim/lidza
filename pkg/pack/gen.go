@@ -80,7 +80,17 @@ func GeneratePacksGo(module string, names []string) string {
 		b.WriteString("import \"github.com/agim/lidza\"\n\n// packs lists the packs lidza.json enables; none yet. `lidza pack scaffold <name>` adds one.\nfunc packs() []lidza.Pack { return nil }\n")
 		return b.String()
 	}
-	b.WriteString("import (\n\t\"github.com/agim/lidza\"\n\n")
+	hasI18n := false
+	for _, n := range names {
+		if n == OfficialPrefix+"i18n" {
+			hasI18n = true
+		}
+	}
+	b.WriteString("import (\n")
+	if hasI18n {
+		b.WriteString("\t\"embed\"\n\n")
+	}
+	b.WriteString("\t\"github.com/agim/lidza\"\n\n")
 	for _, n := range names {
 		if IsOfficialGo(n) {
 			base := strings.TrimPrefix(n, OfficialPrefix)
@@ -89,8 +99,16 @@ func GeneratePacksGo(module string, names []string) string {
 		}
 		fmt.Fprintf(&b, "\t%s \"%s/%s/%s\"\n", n, module, Dir, n)
 	}
-	b.WriteString(")\n\n// packs lists the packs lidza.json enables, started in this order.\nfunc packs() []lidza.Pack {\n\treturn []lidza.Pack{\n")
+	b.WriteString(")\n\n")
+	if hasI18n {
+		b.WriteString("// locales holds the message catalogs the i18n pack serves.\n//\n//go:embed all:locales\nvar locales embed.FS\n\n")
+	}
+	b.WriteString("// packs lists the packs lidza.json enables, started in this order.\nfunc packs() []lidza.Pack {\n\treturn []lidza.Pack{\n")
 	for _, n := range names {
+		if n == OfficialPrefix+"i18n" {
+			b.WriteString("\t\ti18n.Pack(lidza.Sub(locales, \"locales\")),\n")
+			continue
+		}
 		fmt.Fprintf(&b, "\t\t%s.Pack(),\n", strings.TrimPrefix(n, OfficialPrefix))
 	}
 	b.WriteString("\t}\n}\n")

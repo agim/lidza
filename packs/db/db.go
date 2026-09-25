@@ -10,6 +10,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/agim/lidza"
@@ -100,6 +101,35 @@ func (d *DB) TelemetryStats() map[string]float64 {
 		"acquire_wait_total":   float64(st.EmptyAcquireCount()),
 		"acquire_wait_seconds": st.AcquireDuration().Seconds(),
 	}
+}
+
+// EnsureDatabase creates the database named in url when it does not
+// exist, connecting to the "postgres" database on the same server.
+func EnsureDatabase(ctx context.Context, url string) error {
+	pc, err := pgxpool.ParseConfig(url)
+	if err != nil {
+		return fmt.Errorf("DATABASE_URL: %w", err)
+	}
+	name := pc.ConnConfig.Database
+	if name == "" {
+		return errors.New("DATABASE_URL has no database name")
+	}
+	admin := pc.ConnConfig.Copy()
+	admin.Database = "postgres"
+	conn, err := pgx.ConnectConfig(ctx, admin)
+	if err != nil {
+		return fmt.Errorf("connect to create %s: %w", name, err)
+	}
+	defer conn.Close(ctx)
+	var exists bool
+	if err := conn.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM pg_database WHERE datname = $1)`, name).Scan(&exists); err != nil {
+		return err
+	}
+	if exists {
+		return nil
+	}
+	_, err = conn.Exec(ctx, `CREATE DATABASE `+pgx.Identifier{name}.Sanitize())
+	return err
 }
 
 // Open creates a pool from cfg and verifies it with one ping.

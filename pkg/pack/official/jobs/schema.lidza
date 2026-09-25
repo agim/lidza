@@ -1,0 +1,14 @@
+model Job @table("job") {
+  id          uuid   @id @default(uuid())
+  kind        string
+  payload     json
+  state       string @default("pending")
+  runAt       time   @default(now())
+  attempts    int    @default(0)
+  maxAttempts int    @default(5)
+  lockedAt    time?
+  finishedAt  time?
+  lastError   text?
+  createdAt   time   @default(now())
+  @@index(state, runAt)
+}

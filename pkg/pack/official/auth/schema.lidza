@@ -1,0 +1,8 @@
+model AuthSession @table("auth_session") {
+  id          string @id
+  subject     string @index
+  refreshHash string @unique
+  expiresAt   time
+  revokedAt   time?
+  createdAt   time   @default(now())
+}

@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"reflect"
 	"sync"
+
+	"github.com/agim/lidza/pkg/middleware"
 )
 
 // Pack is a unit the app starts and stops: an official or local pack. Start
@@ -14,6 +16,13 @@ type Pack interface {
 	Name() string
 	Start(ctx context.Context, s *Services) error
 	Stop(ctx context.Context) error
+}
+
+// Middlewarer is implemented by packs that wrap every API request, such
+// as i18n's locale negotiation. The middleware resolves the running pack
+// from the request context, so it may be built before Start.
+type Middlewarer interface {
+	Middleware() middleware.Middleware
 }
 
 // Services holds what packs and OnStart provide, keyed by static type, and

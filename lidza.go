@@ -90,43 +90,78 @@ func Run(app App) {
 	}
 }
 
+// Booted is an app with its packs started and its handler built, not yet
+// listening: what Serve runs and what tests drive through lidzatest.
+type Booted struct {
+	Handler  http.Handler
+	Services *Services
+	app      App
+	started  []Pack
+}
+
+// Boot starts the packs in order, runs OnStart and builds the handler.
+// Close stops everything in reverse.
+func Boot(ctx context.Context, app App) (*Booted, error) {
+	services := NewServices()
+	h, err := handler(app, services)
+	if err != nil {
+		return nil, err
+	}
+	b := &Booted{Handler: h, Services: services, app: app}
+	for _, p := range app.Packs {
+		if err := p.Start(ctx, services); err != nil {
+			b.Close(ctx)
+			return nil, fmt.Errorf("pack %s: %w", p.Name(), err)
+		}
+		b.started = append(b.started, p)
+	}
+	if app.OnStart != nil {
+		if err := app.OnStart(ctx, services); err != nil {
+			b.Close(ctx)
+			return nil, fmt.Errorf("start: %w", err)
+		}
+	}
+	return b, nil
+}
+
+// Close runs OnShutdown, then stops the packs in reverse order. Every
+// error is logged; the first is returned.
+func (b *Booted) Close(ctx context.Context) error {
+	log := b.app.logger()
+	var first error
+	if b.app.OnShutdown != nil && len(b.started) == len(b.app.Packs) {
+		if err := b.app.OnShutdown(ctx); err != nil {
+			first = fmt.Errorf("shutdown: %w", err)
+		}
+	}
+	for i := len(b.started) - 1; i >= 0; i-- {
+		if err := b.started[i].Stop(ctx); err != nil {
+			log.Error("pack stop", "pack", b.started[i].Name(), "error", err)
+			if first == nil {
+				first = err
+			}
+		}
+	}
+	b.started = nil
+	return first
+}
+
 // Serve is Run without the process exit: it blocks until ctx is cancelled or
 // a termination signal arrives, then shuts the server down.
 func Serve(ctx context.Context, app App) error {
 	log := app.logger()
-	services := NewServices()
-	h, err := handler(app, services)
-	if err != nil {
-		return err
-	}
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	var started []Pack
-	stopPacks := func(ctx context.Context) {
-		for i := len(started) - 1; i >= 0; i-- {
-			if err := started[i].Stop(ctx); err != nil {
-				log.Error("pack stop", "pack", started[i].Name(), "error", err)
-			}
-		}
+	booted, err := Boot(ctx, app)
+	if err != nil {
+		return err
 	}
-	for _, p := range app.Packs {
-		if err := p.Start(ctx, services); err != nil {
-			stopPacks(ctx)
-			return fmt.Errorf("pack %s: %w", p.Name(), err)
-		}
-		started = append(started, p)
-	}
-	if app.OnStart != nil {
-		if err := app.OnStart(ctx, services); err != nil {
-			stopPacks(ctx)
-			return fmt.Errorf("start: %w", err)
-		}
-	}
+	h := booted.Handler
 	addr := envOr(devserver.EnvAddr, "127.0.0.1:3000")
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
-		stopPacks(ctx)
+		booted.Close(ctx)
 		return err
 	}
 	srv := &http.Server{
@@ -155,16 +190,10 @@ func Serve(ctx context.Context, app App) error {
 	shutdown, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(shutdown); err != nil && !errors.Is(err, context.DeadlineExceeded) {
+		booted.Close(shutdown)
 		return err
 	}
-	if app.OnShutdown != nil {
-		if err := app.OnShutdown(shutdown); err != nil {
-			stopPacks(shutdown)
-			return fmt.Errorf("shutdown: %w", err)
-		}
-	}
-	stopPacks(shutdown)
-	return nil
+	return booted.Close(shutdown)
 }
 
 // Handler builds the app's http.Handler: the API router under /api with the
@@ -184,13 +213,19 @@ func handler(app App, services *Services) (http.Handler, error) {
 		timeout = DefaultTimeout
 	}
 	tel := telemetry.New(services.Each)
-	api := middleware.Chain(r.Handler(),
+	chain := []middleware.Middleware{
 		middleware.RequestID(),
 		middleware.Logger(log),
 		middleware.Recover(log),
 		middleware.Timeout(timeout),
 		tel.Middleware(),
-	)
+	}
+	for _, p := range app.Packs {
+		if m, ok := p.(Middlewarer); ok {
+			chain = append(chain, m.Middleware())
+		}
+	}
+	api := middleware.Chain(r.Handler(), chain...)
 	readyTimeout := app.ReadyTimeout
 	if readyTimeout == 0 {
 		readyTimeout = 3 * time.Second

@@ -1,0 +1,6 @@
+{
+  "greeting": "Hello, %s",
+  "_formats": {
+    "date": "Jan 2, 2006"
+  }
+}

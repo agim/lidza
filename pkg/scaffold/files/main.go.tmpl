@@ -14,8 +14,11 @@ import (
 //go:embed all:{{.Dist}}
 var dist embed.FS
 {{end}}
-func main() {
-	lidza.Run(lidza.App{
+func main() { lidza.Run(app()) }
+
+// app describes the application; tests start it with lidzatest.Start.
+func app() lidza.App {
+	return lidza.App{
 		Name:   "{{.Name}}",
 {{- if .Dist}}
 		Dist:   lidza.Sub(dist, "{{.Dist}}"),
@@ -25,5 +28,5 @@ func main() {
 {{- end}}
 		Routes: routes,
 		Packs:  packs(),
-	})
+	}
 }

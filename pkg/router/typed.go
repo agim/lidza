@@ -25,8 +25,30 @@ type Request[In any] struct {
 	// method carries no body.
 	Body In
 	// Raw is the underlying request, for headers, path values and query.
-	Raw    *http.Request
-	status int
+	Raw     *http.Request
+	status  int
+	header  http.Header
+	cookies []*http.Cookie
+}
+
+// Header returns response headers to send with the reply.
+func (r *Request[In]) Header() http.Header {
+	if r.header == nil {
+		r.header = http.Header{}
+	}
+	return r.header
+}
+
+// SetCookie adds a cookie to the reply.
+func (r *Request[In]) SetCookie(c *http.Cookie) { r.cookies = append(r.cookies, c) }
+
+func (r *Request[In]) apply(w http.ResponseWriter) {
+	for k, v := range r.header {
+		w.Header()[k] = v
+	}
+	for _, c := range r.cookies {
+		http.SetCookie(w, c)
+	}
 }
 
 // Param returns a path parameter from the pattern, e.g. {id}.
@@ -91,6 +113,7 @@ func Route[In, Out any](r *Router, pattern string, h Handler[In, Out]) {
 			writeError(w, err)
 			return
 		}
+		typed.apply(w)
 		if noReply {
 			if typed.status == 0 {
 				typed.status = http.StatusNoContent

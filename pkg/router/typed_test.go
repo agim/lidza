@@ -38,6 +38,8 @@ func typedRouter() *Router {
 	})
 	Route(r, "POST /api/v1/posts", func(ctx context.Context, req *Request[createIn]) (post, error) {
 		req.Status(http.StatusCreated)
+		req.Header().Set("Location", "/api/v1/posts/new")
+		req.SetCookie(&http.Cookie{Name: "seen", Value: "1"})
 		return post{ID: "new", Title: req.Body.Title}, nil
 	})
 	Route(r, "DELETE /api/v1/posts/{id}", func(ctx context.Context, req *Request[None]) (None, error) {
@@ -80,6 +82,13 @@ func TestRoute(t *testing.T) {
 		if rec.Code != c.status || (c.want != "" && got != c.want) {
 			t.Errorf("%s %s %q: got %d %s, want %d %s", c.method, c.path, c.body, rec.Code, got, c.status, c.want)
 		}
+	}
+}
+
+func TestRouteReplyHeaders(t *testing.T) {
+	rec := do(t, typedRouter(), "POST", "/api/v1/posts", `{"title":"x"}`)
+	if rec.Header().Get("Location") != "/api/v1/posts/new" || len(rec.Result().Cookies()) != 1 || rec.Result().Cookies()[0].Name != "seen" {
+		t.Fatalf("headers %v cookies %v", rec.Header(), rec.Result().Cookies())
 	}
 }
 

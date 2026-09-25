@@ -186,19 +186,43 @@ failures, heap +0.8 MB, goroutines +0.
 
 ## Phase 6: Application services
 
-Official packs on the Phase 4 model:
+Done 2026-09-25.
 
-- `auth`: PASETO or JWT with refresh, Valkey-backed sessions, `lidza auth`
-  commands.
-- `jobs`: River (Postgres-backed queue), Rust workers for compute.
-- `cache`: server-side query cache on Valkey with invalidation hooks.
-- `i18n`: `Accept-Language` negotiation, message catalogs, dates, numbers
-  and currencies via `golang.org/x/text`, frontend catalog export.
-- `lidza test`: `lidza_test` database per run, `httptest` helpers, fake
-  clock, recorded HTTP fixtures.
+- `auth` pack: argon2id password hashing, JWT HS256 access tokens
+  (short-lived, `AUTH_SECRET` shared by every node), refresh sessions in
+  Postgres (`auth_session` from a schema fragment; rotate, revoke one,
+  revoke all), HttpOnly cookies or bearer header, `auth.Require`
+  middleware with `auth.CurrentUser(ctx)`; cookie-authenticated
+  state-changing requests must send `Content-Type: application/json`,
+  which is the CSRF shield. Sessions live in Postgres rather than Valkey
+  so the pack needs no second store; a login survives a restart because
+  the token is signed with the shared secret and the session is a row.
+- `jobs` pack: a Postgres queue (`job` table from a schema fragment,
+  `FOR UPDATE SKIP LOCKED`), bounded workers per node, retries with
+  exponential backoff, scheduling, takeover of jobs whose node died,
+  panics recorded as failures. Built in place of River: no second
+  migration system, one table the schema owns.
+- `cache` pack: Valkey or Redis with TTL, `Remember` read-through,
+  prefix invalidation; `CACHE_URL=memory` is a bounded in-process cache
+  for tests and single-node development.
+- `i18n` pack: `locales/<lang>.json` embedded by `packs.go`, locale per
+  request (`?lang`, cookie, `Accept-Language`) through a pack-provided
+  middleware, `T`, `Number`, `Currency`, `Date`, and the catalog served
+  at `/api/v1/i18n/{lang}`.
+- `lidza test`: `LIDZA_MODE=test`, the test database from `.env.test`
+  created and migrated, `go test ./...`, then the frontend check.
+  `pkg/lidzatest` boots the app with its packs on an httptest server
+  with a JSON client and cookie jar; `lidza new` writes `routes_test.go`.
+  `lidza.Boot` is the piece Serve and the tests share. Not done: a fake
+  clock and recorded HTTP fixtures; a test that needs them writes its
+  own for now.
+- Typed handlers can set reply headers and cookies (`req.Header()`,
+  `req.SetCookie`); packs can contribute API middleware
+  (`lidza.Middlewarer`).
 
-Check: the template app with `auth`, `jobs` and `cache` added passes
-`lidza test` offline, and a login survives a restart of the binary.
+Check (passes): the template app with `db`, `auth`, `jobs`, `cache` and
+`i18n` added passes `lidza test` against the local services, and a login
+(bearer and cookie) survives a restart of the binary.
 
 ## Phase 7: Frontend depth
 

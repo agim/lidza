@@ -209,7 +209,10 @@ terminal, `curl -i http://127.0.0.1:3000/api/v1/health` in another.
 ## Agent session
 
 - Unit: `~/.config/systemd/user/claude-rc-lidza.service`, runs
-  `claude rc --name lidza` with `WorkingDirectory=/home/agim/claude/lidza`.
+  `claude rc --name lidza --permission-mode bypassPermissions` with
+  `WorkingDirectory=/home/agim/claude/lidza`. The session has full freedom
+  on this host: passwordless sudo, and it may edit its own unit and
+  `.claude/settings.local.json` (gitignored, also sets `bypassPermissions`).
   Start/stop with `systemctl --user {start,stop,status} claude-rc-lidza`;
   logs with `journalctl --user -u claude-rc-lidza`.
 - Private memory: `~/.claude/projects/-home-agim-claude-lidza/memory/`.

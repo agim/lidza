@@ -5,8 +5,10 @@ package router
 import (
 	"encoding/json"
 	"net/http"
+	"sync"
 	"time"
 
+	"github.com/agim/lidza/pkg/middleware"
 	"github.com/agim/lidza/pkg/version"
 )
 
@@ -17,7 +19,10 @@ const APIPrefix = "/api/"
 // Router registers and serves API handlers. It wraps net/http's ServeMux, so
 // patterns take the "METHOD /path/{param}" form.
 type Router struct {
-	mux *http.ServeMux
+	mux  *http.ServeMux
+	mw   []middleware.Middleware
+	once sync.Once
+	h    http.Handler
 }
 
 // builtins are the routes every app serves, registered by New.
@@ -52,8 +57,18 @@ func (r *Router) Handle(pattern string, h http.Handler) { r.mux.Handle(pattern, 
 // HandleFunc registers a handler function for a ServeMux pattern.
 func (r *Router) HandleFunc(pattern string, h http.HandlerFunc) { r.mux.HandleFunc(pattern, h) }
 
+// Use adds middleware around every route, outermost first. Call it before
+// the router serves its first request; later calls have no effect.
+func (r *Router) Use(mw ...middleware.Middleware) { r.mw = append(r.mw, mw...) }
+
+// Handler returns the router with its middleware applied.
+func (r *Router) Handler() http.Handler {
+	r.once.Do(func() { r.h = middleware.Chain(r.mux, r.mw...) })
+	return r.h
+}
+
 // ServeHTTP implements http.Handler.
-func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) { r.mux.ServeHTTP(w, req) }
+func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) { r.Handler().ServeHTTP(w, req) }
 
 // Health is the response body of GET /api/v1/health.
 type Health struct {

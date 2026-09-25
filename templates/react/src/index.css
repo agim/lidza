@@ -41,3 +41,9 @@ pre {
 .error {
   color: #b00020;
 }
+
+.error-boundary {
+  padding: 1rem;
+  border: 1px solid #b00020;
+  border-radius: 4px;
+}

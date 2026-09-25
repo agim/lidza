@@ -99,22 +99,7 @@ func New(ctx context.Context, opt Options) error {
 	if err := cfg.Save(opt.Dir); err != nil {
 		return err
 	}
-	data := templateData{
-		Name:     opt.Name,
-		Module:   Module,
-		LidzaDir: opt.LidzaDir,
-		Template: opt.Template,
-		Dist:     cfg.Frontend.Dist,
-		DevCmd:   cfg.Frontend.Dev,
-		DevURL:   cfg.Frontend.URL,
-		Go:       goMinor(),
-		LidzaVersion: func() string {
-			if v := version.String(); strings.HasPrefix(v, "v") && !strings.Contains(v, "-") {
-				return v
-			}
-			return "latest"
-		}(),
-	}
+	data := dataFor(&cfg, opt.LidzaDir)
 	for _, f := range []struct{ src, dst string }{
 		{"go.mod.tmpl", "go.mod"},
 		{"main.go.tmpl", "main.go"},
@@ -139,11 +124,7 @@ func New(ctx context.Context, opt Options) error {
 	if err != nil {
 		return err
 	}
-	var names []string
-	for _, r := range rs {
-		names = append(names, "`"+r.Name+"`")
-	}
-	data.Recipes = strings.Join(names, ", ")
+	data.Recipes = RecipesLine(rs)
 	for _, dst := range []string{"CLAUDE.md", "AGENTS.md", "GEMINI.md"} {
 		if err := render("agent.md.tmpl", filepath.Join(opt.Dir, dst), data); err != nil {
 			return err
@@ -175,6 +156,123 @@ type templateData struct {
 	LidzaVersion string
 	// Recipes is the comma-separated list of recipe names from the guide.
 	Recipes string
+}
+
+// dataFor builds the template data for an app from its configuration.
+func dataFor(cfg *config.Config, lidzaDir string) templateData {
+	return templateData{
+		Name:     cfg.Name,
+		Module:   Module,
+		LidzaDir: lidzaDir,
+		Template: cfg.Frontend.Template,
+		Dist:     cfg.Frontend.Dist,
+		DevCmd:   cfg.Frontend.Dev,
+		DevURL:   cfg.Frontend.URL,
+		Go:       goMinor(),
+		LidzaVersion: func() string {
+			if v := version.String(); strings.HasPrefix(v, "v") && !strings.Contains(v, "-") {
+				return v
+			}
+			return "latest"
+		}(),
+	}
+}
+
+// RecipesLine lists recipe names for the agent files: the framework's,
+// then the app's own.
+func RecipesLine(rs []recipes.Recipe) string {
+	var fw, app []string
+	for _, r := range rs {
+		if r.Scope == recipes.ScopeApp {
+			app = append(app, "`"+r.Name+"`")
+		} else {
+			fw = append(fw, "`"+r.Name+"`")
+		}
+	}
+	line := strings.Join(fw, ", ")
+	if len(app) > 0 {
+		line += "; this app's own: " + strings.Join(app, ", ")
+	}
+	return line
+}
+
+// Agent-file markers around the recipe list, rewritten by lidza gen.
+const (
+	recipesOpen  = "<!-- lidza:recipes -->"
+	recipesClose = "<!-- /lidza:recipes -->"
+)
+
+// FrameworkRecipes renders the guide template for an app and returns the
+// body of its "## Recipes" section: the framework's recipes for this
+// framework version and template.
+func FrameworkRecipes(cfg *config.Config) (string, error) {
+	body, err := files.ReadFile("files/lidza-guide.md.tmpl")
+	if err != nil {
+		return "", err
+	}
+	t, err := template.New("guide").Parse(string(body))
+	if err != nil {
+		return "", err
+	}
+	var buf bytes.Buffer
+	if err := t.Execute(&buf, dataFor(cfg, "")); err != nil {
+		return "", err
+	}
+	guide := buf.String()
+	start := strings.Index(guide, "\n"+recipes.Heading+"\n")
+	if start < 0 {
+		return "", errors.New("guide template has no Recipes section")
+	}
+	start += len(recipes.Heading) + 2
+	end := len(guide)
+	if next := strings.Index(guide[start:], "\n## "); next >= 0 {
+		end = start + next + 1
+	}
+	return strings.TrimSpace(guide[start:end]), nil
+}
+
+// Refresh brings an existing app up to date after the framework or the
+// guide changed: the framework's recipes in the guide are replaced from
+// the template (the app's own section is untouched), the skills and
+// commands are rewritten, and the recipe list in the agent files is
+// updated between its markers. It returns what changed, for the log.
+func Refresh(dir string, cfg *config.Config) ([]string, error) {
+	var changed []string
+	if fw, err := FrameworkRecipes(cfg); err == nil {
+		replaced, err := recipes.ReplaceFramework(dir, fw)
+		if err != nil {
+			return nil, err
+		}
+		if replaced {
+			changed = append(changed, recipes.GuideFile+" (framework recipes)")
+		}
+	}
+	rs, err := recipes.Sync(dir)
+	if err != nil {
+		return nil, err
+	}
+	line := recipesOpen + RecipesLine(rs) + recipesClose
+	for _, name := range []string{"CLAUDE.md", "AGENTS.md", "GEMINI.md"} {
+		p := filepath.Join(dir, name)
+		data, err := os.ReadFile(p)
+		if err != nil {
+			continue
+		}
+		text := string(data)
+		i, j := strings.Index(text, recipesOpen), strings.Index(text, recipesClose)
+		if i < 0 || j < i {
+			continue
+		}
+		next := text[:i] + line + text[j+len(recipesClose):]
+		if next == text {
+			continue
+		}
+		if err := os.WriteFile(p, []byte(next), 0o644); err != nil {
+			return nil, err
+		}
+		changed = append(changed, name)
+	}
+	return changed, nil
 }
 
 func render(src, dst string, data templateData) error {

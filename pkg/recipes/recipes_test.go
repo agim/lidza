@@ -105,3 +105,55 @@ func TestWriteSkills(t *testing.T) {
 		t.Errorf("no guide: %v %v", rs, err)
 	}
 }
+
+func TestScopesAddAndReplace(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, "docs"), 0o755)
+	os.WriteFile(filepath.Join(dir, GuideFile), []byte("# Guide\n\n## Recipes\n\nIntro.\n\n### Add an API route\n\nOld body.\n\n## Packs\n\nText.\n"), 0o644)
+
+	// Add creates the App recipes section after Recipes.
+	r, err := Add(dir, "Paginate a list", "Lists take limit and offset.", []string{"Use PageParams.", "`lidza check`."})
+	if err != nil || r.Name != "paginate-list" || r.Scope != ScopeApp {
+		t.Fatalf("%+v %v", r, err)
+	}
+	rs, _ := Load(dir)
+	if len(rs) != 2 || rs[0].Scope != ScopeFramework || rs[1].Name != "paginate-list" || !strings.Contains(rs[1].Body, "1. Use PageParams.") {
+		t.Fatalf("recipes: %+v", rs)
+	}
+	guide, _ := os.ReadFile(filepath.Join(dir, GuideFile))
+	if i, j, k := strings.Index(string(guide), Heading), strings.Index(string(guide), AppHeading), strings.Index(string(guide), "## Packs"); !(i < j && j < k) {
+		t.Fatalf("section order:\n%s", guide)
+	}
+	if _, err := Add(dir, "Paginate a list", "", nil); err == nil {
+		t.Fatal("duplicate accepted")
+	}
+	// A second app recipe lands in the same section; skeleton steps when none given.
+	if _, err := Add(dir, "Verify a webhook", "", nil); err != nil {
+		t.Fatal(err)
+	}
+	rs, _ = Load(dir)
+	if len(rs) != 3 || rs[2].Name != "verify-webhook" || !strings.Contains(rs[2].Body, "1. The first step") {
+		t.Fatalf("second app recipe: %+v", rs)
+	}
+
+	// ReplaceFramework touches only the framework section.
+	changed, err := ReplaceFramework(dir, "Fresh intro.\n\n### Add an API route\n\nNew body.\n\n### Write a test\n\nBoot.")
+	if err != nil || !changed {
+		t.Fatal(changed, err)
+	}
+	rs, _ = Load(dir)
+	var names []string
+	for _, r := range rs {
+		names = append(names, r.Scope+":"+r.Name)
+	}
+	if strings.Join(names, ",") != "framework:add-api-route,framework:write-test,app:paginate-list,app:verify-webhook" || rs[0].Body != "New body." {
+		t.Fatalf("after replace: %v %q", names, rs[0].Body)
+	}
+	if again, _ := ReplaceFramework(dir, "Fresh intro.\n\n### Add an API route\n\nNew body.\n\n### Write a test\n\nBoot."); again {
+		t.Fatal("replace reported a change on identical content")
+	}
+	guide, _ = os.ReadFile(filepath.Join(dir, GuideFile))
+	if !strings.Contains(string(guide), "## Packs\n\nText.") {
+		t.Fatalf("later section damaged:\n%s", guide)
+	}
+}

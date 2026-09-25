@@ -123,7 +123,9 @@ signature. Both are regenerated after each Go rebuild.
    [package] [--filter name]` or the MCP tool `lidza_api`; `lidza api app`
    (or `./handlers`) does the same for this app's own packages. An import
    of a framework package that does not exist fails `lidza check` (L004).
-10. Before writing a handler, page, test or tool of a kind you have not
+10. A pattern this app uses twice is a recipe: write it under "App
+   recipes" (`lidza recipe add "Title"`) so the next task follows it.
+11. Before writing a handler, page, test or tool of a kind you have not
    written here, read the matching snippet (`lidza snippet` or the MCP
    tool `lidza_snippet`): it is the reference app's code, verified by its
    tests.
@@ -167,7 +169,9 @@ prints the install line; `lidza test --e2e --install` runs it.
 Step-by-step tasks. Each one is also a prompt in `lidza mcp`, a skill in
 `.claude/skills/<name>` and `.agents/skills/<name>`, and a Gemini command
 in `.gemini/commands/lidza/<name>.toml`; `lidza gen` rewrites them from
-this section, so edit it here. Every recipe ends the same way: `lidza check
+the guide. This section is the framework's: `lidza gen` refreshes it when
+the framework changes. This app's own recipes go under "App recipes"
+below, which the framework never touches. Every recipe ends the same way: `lidza check
 --json` until `"status": "ok"`, then `lidza test`.
 
 ### Add an API route
@@ -340,6 +344,24 @@ mail pack, never through a vendor SDK.
 5. `lidza check`, then `lidza test`. In dev, `lidza_mail` (MCP) shows the
    outbox.
 
+### Add a recipe
+
+Record a convention of this app so the next task follows it: a pattern
+used twice (how lists paginate, how ownership is checked, how a webhook
+is verified, how a report is built) is a recipe.
+
+1. `lidza recipe add "Paginate a list"` appends a skeleton under "App
+   recipes" in `docs/lidza-guide.md` (or write the `###` section by hand;
+   from an agent, the MCP tool `lidza_recipe_add` takes the title,
+   description and steps).
+2. Fill it in: one sentence on when it applies, then numbered steps that
+   name the file to open, the function or type to use, the command to
+   run, and the check at the end. Point at a file in this app that does
+   it already.
+3. `lidza gen` (or the next check) turns it into the prompt, the skills
+   and the command, and lists it in `CLAUDE.md`, `AGENTS.md` and
+   `GEMINI.md`. Restart `lidza mcp` to see the new prompt.
+
 ### Write a test
 
 Cover a handler with a Go test that boots the app, or a page with a
@@ -370,6 +392,22 @@ browser test.
    text or roles, and assert no `window` errors (see `e2e/home.spec.ts`).
    Run `lidza test --e2e` (add `--install` once if the browser is
    missing).
+
+## App recipes
+
+This app's own conventions, one recipe each; the framework never edits
+this section. Add one with `lidza recipe add "Title"` or by hand (see
+"Add a recipe").
+
+### Scope a query to the signed-in user
+
+Every query over a user's rows (notes, and anything owned) takes the owner id from the session, so one user never sees another's data; the generated resource handlers are adjusted this way.
+
+1. Take the owner from the request: `owner := auth.CurrentUser(ctx).ID` (the route runs behind `auth.Require()`, so it is never nil).
+2. Add `AND owner_id = $N` to every statement of the resource in `db/queries/<table>.sql` (list, count, get, update, delete) and pass the owner in the sqlc params; `db/queries/note.sql` is the pattern.
+3. Reply 404, not 403, for another user's row: `router.NotFound("note")` on `pgx.ErrNoRows` and on zero rows affected, as `handlers/note.go` does.
+4. Cover it in `routes_test.go`: a second user lists nothing and gets 404 on the first user's id.
+5. `lidza check`, then `lidza test`.
 
 ## Packs
 

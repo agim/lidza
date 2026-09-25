@@ -7,6 +7,7 @@
 package recipes
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -32,8 +33,19 @@ const (
 // OutputDirs lists every directory the recipes are written to.
 var OutputDirs = []string{SkillsDir, AgentsSkillsDir, GeminiCommandsDir}
 
-// Heading is the guide section that holds the recipes.
-const Heading = "## Recipes"
+// Heading is the guide section that holds the framework's recipes, which
+// `lidza gen` refreshes from the template; AppHeading holds the app's own,
+// which nothing but the app's developers touch.
+const (
+	Heading    = "## Recipes"
+	AppHeading = "## App recipes"
+)
+
+// Scopes of a recipe.
+const (
+	ScopeFramework = "framework"
+	ScopeApp       = "app"
+)
 
 // marker is the first body line of every generated skill; only files
 // carrying it are ever removed.
@@ -49,6 +61,9 @@ type Recipe struct {
 	Description string `json:"description"`
 	// Body is the markdown under the heading, trimmed.
 	Body string `json:"body"`
+	// Scope is "framework" (under "## Recipes") or "app" (under
+	// "## App recipes").
+	Scope string `json:"scope"`
 }
 
 // Parse extracts the recipes from the guide's markdown. A guide without a
@@ -56,7 +71,7 @@ type Recipe struct {
 func Parse(guide string) []Recipe {
 	lines := strings.Split(strings.ReplaceAll(guide, "\r\n", "\n"), "\n")
 	var out []Recipe
-	in := false
+	scope := ""
 	var cur *Recipe
 	var body []string
 	flush := func() {
@@ -72,12 +87,19 @@ func Parse(guide string) []Recipe {
 		switch {
 		case strings.HasPrefix(l, "## "):
 			flush()
-			in = strings.TrimSpace(l) == Heading
-		case in && strings.HasPrefix(l, "### "):
+			switch strings.TrimSpace(l) {
+			case Heading:
+				scope = ScopeFramework
+			case AppHeading:
+				scope = ScopeApp
+			default:
+				scope = ""
+			}
+		case scope != "" && strings.HasPrefix(l, "### "):
 			flush()
 			title := strings.TrimSpace(strings.TrimPrefix(l, "### "))
-			cur = &Recipe{Name: Slug(title), Title: title}
-		case in && cur != nil:
+			cur = &Recipe{Name: Slug(title), Title: title, Scope: scope}
+		case scope != "" && cur != nil:
 			body = append(body, l)
 		}
 	}
@@ -106,6 +128,102 @@ func firstParagraph(body string) string {
 		para = body[:i]
 	}
 	return strings.Join(strings.Fields(para), " ")
+}
+
+// section returns the byte range of a level-2 section's body (after the
+// heading line, up to the next "## " or the end); ok is false when the
+// heading is absent.
+func section(guide, heading string) (start, end int, ok bool) {
+	lines := strings.SplitAfter(guide, "\n")
+	pos := 0
+	for i, l := range lines {
+		if strings.TrimSpace(l) == heading {
+			start = pos + len(l)
+			end = len(guide)
+			for _, next := range lines[i+1:] {
+				if strings.HasPrefix(next, "## ") {
+					end = start + strings.Index(guide[start:], next)
+					break
+				}
+			}
+			return start, end, true
+		}
+		pos += len(l)
+	}
+	return 0, 0, false
+}
+
+// ReplaceFramework replaces the body of the "## Recipes" section of the
+// guide with body (the framework's current recipes) and reports whether
+// anything changed. A guide without the section is left alone.
+func ReplaceFramework(dir, body string) (bool, error) {
+	p := filepath.Join(dir, GuideFile)
+	data, err := os.ReadFile(p)
+	if err != nil {
+		return false, err
+	}
+	guide := string(data)
+	start, end, ok := section(guide, Heading)
+	if !ok {
+		return false, nil
+	}
+	body = "\n" + strings.TrimSpace(body) + "\n\n"
+	if guide[start:end] == body {
+		return false, nil
+	}
+	return true, os.WriteFile(p, []byte(guide[:start]+body+guide[end:]), 0o644)
+}
+
+// Add appends a recipe to the guide's "## App recipes" section, creating
+// the section after "## Recipes" when the guide has none. Steps become a
+// numbered list; an empty list leaves the steps to fill in. It returns
+// the recipe as parsed back.
+func Add(dir, title, description string, steps []string) (Recipe, error) {
+	title = strings.TrimSpace(title)
+	if title == "" || Slug(title) == "" {
+		return Recipe{}, errors.New("recipe: a title is required")
+	}
+	p := filepath.Join(dir, GuideFile)
+	data, err := os.ReadFile(p)
+	if err != nil {
+		return Recipe{}, err
+	}
+	guide := string(data)
+	for _, r := range Parse(guide) {
+		if r.Name == Slug(title) {
+			return Recipe{}, fmt.Errorf("recipe %s exists (%s) in %s", r.Name, r.Title, GuideFile)
+		}
+	}
+	if description == "" {
+		description = "When to use this recipe, in one or two sentences."
+	}
+	if len(steps) == 0 {
+		steps = []string{"The first step: the file to open and what to write.", "The next step.", "`lidza check`, then `lidza test`."}
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "\n### %s\n\n%s\n\n", title, strings.TrimSpace(description))
+	for i, step := range steps {
+		fmt.Fprintf(&b, "%d. %s\n", i+1, strings.TrimSpace(step))
+	}
+	if start, end, ok := section(guide, AppHeading); ok {
+		guide = guide[:start] + strings.TrimRight(guide[start:end], "\n") + "\n" + b.String() + "\n" + guide[end:]
+	} else {
+		intro := "\n" + AppHeading + "\n\nThis app's own conventions, one recipe each; the framework never edits\nthis section. Add one with `lidza recipe add \"Title\"` or by hand.\n"
+		if _, fend, ok := section(guide, Heading); ok {
+			guide = guide[:fend] + intro + b.String() + "\n" + guide[fend:]
+		} else {
+			guide = strings.TrimRight(guide, "\n") + "\n" + intro + b.String()
+		}
+	}
+	if err := os.WriteFile(p, []byte(guide), 0o644); err != nil {
+		return Recipe{}, err
+	}
+	for _, r := range Parse(guide) {
+		if r.Name == Slug(title) {
+			return r, nil
+		}
+	}
+	return Recipe{}, errors.New("recipe: written but not found back; is the guide's App recipes section well formed?")
 }
 
 // Load reads the guide in dir and parses it.

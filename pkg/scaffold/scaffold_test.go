@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/agim/lidza/pkg/config"
+	"github.com/agim/lidza/pkg/recipes"
 )
 
 func TestNewReact(t *testing.T) {
@@ -24,7 +25,7 @@ func TestNewReact(t *testing.T) {
 		"src/main.tsx", "src/router.tsx", "src/pages/Home.tsx", "src/ErrorBoundary.tsx", "playwright.config.ts", "e2e/home.spec.ts", "schema.lidza", "schema/schema.go", ".env.example", "packs.go", "benchmarks/scale_test.js",
 		".gitignore", "dist/.gitkeep", "Dockerfile", ".dockerignore", "deploy/demo.service",
 		".claude/skills/add-api-route/SKILL.md", ".claude/skills/add-resource/SKILL.md", ".claude/skills/add-page/SKILL.md",
-		".claude/skills/add-pack-capability/SKILL.md", ".claude/skills/add-mcp-tool/SKILL.md", ".claude/skills/write-test/SKILL.md",
+		".claude/skills/add-pack-capability/SKILL.md", ".claude/skills/add-mcp-tool/SKILL.md", ".claude/skills/write-test/SKILL.md", ".claude/skills/add-recipe/SKILL.md",
 		".agents/skills/add-api-route/SKILL.md", ".gemini/commands/lidza/add-api-route.toml", ".gemini/commands/lidza/write-test.toml",
 	} {
 		if _, err := os.Stat(filepath.Join(dir, f)); err != nil {
@@ -64,8 +65,34 @@ func TestNewReact(t *testing.T) {
 	if read("CLAUDE.md") != read("AGENTS.md") || read("CLAUDE.md") != read("GEMINI.md") {
 		t.Errorf("agent files should be identical")
 	}
-	if !strings.Contains(read("CLAUDE.md"), "`add-api-route`, `add-resource`, `add-page`, `add-pack-capability`, `add-mcp-tool`, `send-email`, `write-test`") {
+	if !strings.Contains(read("CLAUDE.md"), "<!-- lidza:recipes -->`add-api-route`, `add-resource`, `add-page`, `add-pack-capability`, `add-mcp-tool`, `send-email`, `add-recipe`, `write-test`<!-- /lidza:recipes -->") {
 		t.Errorf("CLAUDE.md should list the recipes: %s", read("CLAUDE.md"))
+	}
+	// An app recipe: added to the guide, generated, listed in the agent files.
+	if _, err := recipes.Add(dir, "Paginate a list", "Lists take limit and offset.", []string{"Use PageParams."}); err != nil {
+		t.Fatal(err)
+	}
+	changed, err := Refresh(dir, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(changed, ",") != "CLAUDE.md,AGENTS.md,GEMINI.md" {
+		t.Errorf("refresh changed %v", changed)
+	}
+	if !strings.Contains(read("CLAUDE.md"), "`write-test`; this app's own: `paginate-list`<!-- /lidza:recipes -->") {
+		t.Errorf("app recipe not listed: %s", read("CLAUDE.md"))
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".claude", "skills", "paginate-list", "SKILL.md")); err != nil {
+		t.Error("app recipe has no skill")
+	}
+	// A framework recipe edited by hand comes back on refresh; the app's stays.
+	guide := read("docs/lidza-guide.md")
+	os.WriteFile(filepath.Join(dir, "docs", "lidza-guide.md"), []byte(strings.Replace(guide, "### Add an MCP tool", "### Add an MCP tool (edited)", 1)), 0o644)
+	if changed, _ := Refresh(dir, cfg); strings.Join(changed, ",") != "docs/lidza-guide.md (framework recipes)" {
+		t.Errorf("framework recipes not refreshed: %v", changed)
+	}
+	if g := read("docs/lidza-guide.md"); strings.Contains(g, "(edited)") || !strings.Contains(g, "### Paginate a list") {
+		t.Errorf("refresh: %s", g)
 	}
 	if skill := read(".claude/skills/add-page/SKILL.md"); !strings.Contains(skill, "name: add-page\n") || !strings.Contains(skill, "src/router.tsx") || strings.Contains(skill, "{{") {
 		t.Errorf("skill: %s", skill)

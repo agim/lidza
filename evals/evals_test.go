@@ -217,7 +217,7 @@ func TestInaccessibleElement(t *testing.T) {
 }
 
 func TestGuidanceSurfaces(t *testing.T) {
-	for _, skill := range []string{"add-api-route", "add-resource", "add-page", "add-pack-capability", "add-mcp-tool", "send-email", "write-test"} {
+	for _, skill := range []string{"add-api-route", "add-resource", "add-page", "add-pack-capability", "add-mcp-tool", "send-email", "add-recipe", "write-test"} {
 		for _, p := range []string{filepath.Join(".claude", "skills", skill, "SKILL.md"), filepath.Join(".agents", "skills", skill, "SKILL.md"), filepath.Join(".gemini", "commands", "lidza", skill+".toml")} {
 			if _, err := os.Stat(filepath.Join(app, p)); err != nil {
 				t.Errorf("%s missing", p)
@@ -266,7 +266,7 @@ func TestGuidanceSurfaces(t *testing.T) {
 		t.Fatal(err)
 	}
 	prompts, err := c.ListPrompts(ctx, mcp.ListPromptsRequest{})
-	if err != nil || len(prompts.Prompts) != 7 {
+	if err != nil || len(prompts.Prompts) != 8 {
 		t.Errorf("prompts: %v %d", err, len(prompts.Prompts))
 	}
 	tools, err := c.ListTools(ctx, mcp.ListToolsRequest{})
@@ -383,4 +383,44 @@ func TestPackCapability(t *testing.T) {
 	if err != nil || res.IsError || !strings.Contains(mcp.GetTextFromContent(res.Content[0]), `"cba"`) {
 		t.Fatalf("pack_echo_reverse: %v %+v", err, res)
 	}
+}
+
+// TestRecipeAdd: an app convention recorded with lidza recipe add becomes
+// a skill, a Gemini command, a prompt after restart, and a line in the
+// agent files; the framework's own recipes stay separate.
+func TestRecipeAdd(t *testing.T) {
+	edit(t, map[string]string{"docs/lidza-guide.md": mustRead(t, "docs/lidza-guide.md"), "CLAUDE.md": mustRead(t, "CLAUDE.md"), "AGENTS.md": mustRead(t, "AGENTS.md"), "GEMINI.md": mustRead(t, "GEMINI.md")})
+	t.Cleanup(func() {
+		os.RemoveAll(filepath.Join(app, ".claude", "skills", "paginate-list"))
+		os.RemoveAll(filepath.Join(app, ".agents", "skills", "paginate-list"))
+		os.Remove(filepath.Join(app, ".gemini", "commands", "lidza", "paginate-list.toml"))
+	})
+	out, err := command(app, lidza, "recipe", "add", "Paginate a list", "--description", "Lists take limit and offset.", "--step", "Read them with PageParams.", "--step", "`lidza check`.")
+	if err != nil {
+		t.Fatalf("recipe add: %v\n%s", err, out)
+	}
+	for _, p := range []string{".claude/skills/paginate-list/SKILL.md", ".agents/skills/paginate-list/SKILL.md", ".gemini/commands/lidza/paginate-list.toml"} {
+		if _, err := os.Stat(filepath.Join(app, p)); err != nil {
+			t.Errorf("%s missing", p)
+		}
+	}
+	guide := mustRead(t, "docs/lidza-guide.md")
+	if !strings.Contains(guide, "## App recipes") || !strings.Contains(guide, "### Paginate a list") || strings.Index(guide, "## Recipes") > strings.Index(guide, "### Paginate a list") {
+		t.Errorf("guide:\n%s", guide)
+	}
+	if !strings.Contains(mustRead(t, "CLAUDE.md"), "this app's own: `paginate-list`") {
+		t.Errorf("CLAUDE.md does not list the app recipe")
+	}
+	if out, _ := command(app, lidza, "recipe", "list"); !strings.Contains(string(out), "paginate-list") || !strings.Contains(string(out), "app") {
+		t.Errorf("recipe list:\n%s", out)
+	}
+}
+
+func mustRead(t *testing.T, rel string) string {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(app, filepath.FromSlash(rel)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(data)
 }

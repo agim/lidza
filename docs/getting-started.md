@@ -142,6 +142,10 @@ Three things keep an agent from inventing what is not there:
   `fetch` of `/api` (L003) and a handler type not declared in
   `schema.lidza` (L005) are warnings.
 - The recipes: every step names the file, the command and the check.
+  The framework's live under "Recipes" in the app guide and follow the
+  framework version; the app's own live under "App recipes"
+  (`lidza recipe add "Title"`, or the MCP tool `lidza_recipe_add`) and
+  become prompts, skills and commands the same way.
 - `lidza snippet [name]` (and the MCP tool `lidza_snippet`) prints a
   file of the reference app in `examples/notes`, verified by its own
   tests: auth routes, an owned resource, a page on the generated client,

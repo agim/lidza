@@ -6,6 +6,9 @@ version in `go.mod`.
 
 ## Unreleased
 
+- App-scoped recipes: "App recipes" in the guide, `lidza recipe add`,
+  `lidza_recipe_add`; the framework's recipes are refreshed by `lidza gen`,
+  the app's are not; agent files list both.
 - `mail` pack: transactional email behind one `Send` (Mailgun, SendGrid,
   Postmark, Resend, SMTP; `log` and `outbox` providers), templates in
   `mail/`, outbox table, delivery through the jobs pack, `lidza_mail`,

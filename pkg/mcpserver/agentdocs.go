@@ -8,7 +8,9 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 
 	"github.com/agim/lidza/pkg/apidoc"
+	"github.com/agim/lidza/pkg/config"
 	"github.com/agim/lidza/pkg/recipes"
+	"github.com/agim/lidza/pkg/scaffold"
 	"github.com/agim/lidza/pkg/snippets"
 )
 
@@ -44,6 +46,36 @@ func addRecipes(s *server.MCPServer, dir string) {
 			return nil, errNoRecipe(name)
 		})
 	}
+}
+
+// addRecipeTool lets an agent record a convention of the app as a recipe
+// under "App recipes" in the guide; the prompts, skills and commands are
+// regenerated at once (the prompt list of this server updates on restart).
+func addRecipeTool(s *server.MCPServer, dir string, cfg *config.Config) {
+	if cfg == nil {
+		return
+	}
+	s.AddTool(mcp.NewTool("lidza_recipe_add",
+		mcp.WithDescription("Record one of this app's conventions as a recipe (a pattern used twice: how lists paginate, how ownership is checked, ...). It is appended under \"App recipes\" in docs/lidza-guide.md and becomes a prompt, a skill for Claude Code and Codex, and a Gemini command; the agent files list it. Give numbered steps that name files, functions and commands, and point at a file in this app that already does it."),
+		mcp.WithString("title", mcp.Required(), mcp.Description("Imperative title, e.g. \"Paginate a list\".")),
+		mcp.WithString("description", mcp.Description("When the recipe applies, one or two sentences.")),
+		mcp.WithArray("steps", mcp.Description("The steps in order; each names the file, the function or type, the command, and ends with the check."), mcp.Items(map[string]any{"type": "string"})),
+	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		var steps []string
+		for _, v := range req.GetStringSlice("steps", nil) {
+			if strings.TrimSpace(v) != "" {
+				steps = append(steps, v)
+			}
+		}
+		r, err := recipes.Add(dir, req.GetString("title", ""), req.GetString("description", ""), steps)
+		if err != nil {
+			return mcp.NewToolResultErrorFromErr("recipe", err), nil
+		}
+		if _, err := scaffold.Refresh(dir, cfg); err != nil {
+			return mcp.NewToolResultErrorFromErr("recipe", err), nil
+		}
+		return jsonResult(map[string]any{"name": r.Name, "title": r.Title, "scope": r.Scope, "skill": recipes.SkillsDir + "/" + r.Name + "/SKILL.md", "note": "the prompt appears after lidza mcp restarts; the skill and command are in place"})
+	})
 }
 
 type errNoRecipe string

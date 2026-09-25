@@ -68,6 +68,22 @@ var tasks = []task{
 		},
 	},
 	{
+		name: "add-recipe",
+		prompt: "This app paginates every list endpoint with limit and offset query parameters, capped at 200, read with the PageParams helper. " +
+			"Record that as a recipe named \"Paginate a list\" so the next developer follows it, the way the guide says recipes are added. " +
+			"Then run lidza check.",
+		probe: func(dir string) string {
+			if _, err := os.Stat(filepath.Join(dir, ".claude", "skills", "paginate-list", "SKILL.md")); err != nil {
+				return "no skill .claude/skills/paginate-list/SKILL.md (was the recipe added under App recipes and lidza gen run?)"
+			}
+			guide, _ := os.ReadFile(filepath.Join(dir, "docs", "lidza-guide.md"))
+			if !strings.Contains(string(guide), "### Paginate a list") {
+				return "docs/lidza-guide.md has no '### Paginate a list'"
+			}
+			return ""
+		},
+	},
+	{
 		name: "add-tool",
 		prompt: "Add an MCP tool named word_count to tools.go that takes { text string } and returns the number of words. " +
 			"Run lidza check until it passes.",

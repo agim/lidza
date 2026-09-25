@@ -16,6 +16,7 @@ import (
 	"github.com/agim/lidza/pkg/inspect"
 	"github.com/agim/lidza/pkg/pack"
 	"github.com/agim/lidza/pkg/recipes"
+	"github.com/agim/lidza/pkg/scaffold"
 	"github.com/agim/lidza/pkg/schema"
 	"github.com/agim/lidza/pkg/sdk"
 )
@@ -92,7 +93,15 @@ func generateAll(dir string, cfg *config.Config, out io.Writer) error {
 	if err := generatePacks(context.Background(), dir, cfg, out); err != nil {
 		return err
 	}
-	if _, err := recipes.Sync(dir); err != nil {
+	if cfg != nil {
+		changed, err := scaffold.Refresh(dir, cfg)
+		if err != nil {
+			return fmt.Errorf("recipes: %w", err)
+		}
+		if len(changed) > 0 {
+			fmt.Fprintf(out, "[lidza] recipes: updated %s\n", strings.Join(changed, ", "))
+		}
+	} else if _, err := recipes.Sync(dir); err != nil {
 		return fmt.Errorf("skills: %w", err)
 	}
 	return generateClient(dir, cfg, out)

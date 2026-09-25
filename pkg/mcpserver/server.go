@@ -96,6 +96,7 @@ func New(dir string, cfg *config.Config) *server.MCPServer {
 	addAPI(s, dir)
 	addSnippets(s)
 	addRecipes(s, dir)
+	addRecipeTool(s, dir, cfg)
 
 	for _, r := range []struct{ name, uri, desc string }{
 		{"llms.txt", "lidza://llms.txt", "Short description of the app for language models: routes, commands, files."},

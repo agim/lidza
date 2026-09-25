@@ -537,6 +537,21 @@ of a vendor SDK. The reference app sends its verification and reset
 links through it and its tests read the outbox; the guide has the recipe
 "Send an email".
 
+### App-scoped recipes (done 2026-09-25)
+
+Recipes have two scopes. "## Recipes" is the framework's and `lidza gen`
+refreshes it from the template when the framework changes; "## App
+recipes" is the app's and nothing but its developers touch it. `lidza
+recipe add "Title" [--description] [--step ...]` and the MCP tool
+`lidza_recipe_add` append a recipe there and regenerate the prompt, the
+skills and the command; `lidza recipe list` names them with their scope.
+The agent files keep their recipe list between markers that `lidza gen`
+rewrites, so a recipe added later is visible where an agent starts. The
+guide has the rule ("a pattern this app uses twice is a recipe") and the
+recipe "Add a recipe"; the reference app records how it scopes queries
+to the signed-in user; the evals cover `lidza recipe add`, and the
+agent-driven eval asks an agent to record a convention.
+
 ### Next
 
 Nothing queued.

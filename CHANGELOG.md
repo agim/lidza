@@ -6,7 +6,7 @@ version in `go.mod`. `install.sh` pins the newest release here;
 `scripts/release.sh vX.Y.Z` turns "Unreleased" into a release, bumps the
 pin, tags and pushes.
 
-## Unreleased
+## v0.1.7 (2026-09-25)
 
 - TLS without a proxy: `LIDZA_TLS_DOMAINS=app.example.com` makes the
   binary serve HTTPS on 443 with Let's Encrypt certificates

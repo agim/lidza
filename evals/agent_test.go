@@ -3,11 +3,11 @@
 // Agent-driven evals: a real coding agent gets a task on a fresh app and
 // the result is scored by `lidza verify` and a probe per task. Run with
 // the agent command in LIDZA_EVAL_AGENT, executed in the app directory
-// with the task as its last argument (or in place of {prompt}):
+// with the task on stdin (or in place of {prompt}):
 //
 //	LIDZA_EVAL_AGENT='claude -p --permission-mode acceptEdits' go test -tags agenteval ./evals -v -timeout 1h
 //	LIDZA_EVAL_AGENT='codex exec --full-auto' go test -tags agenteval ./evals -v -timeout 1h
-//	LIDZA_EVAL_AGENT='gemini --yolo -p' go test -tags agenteval ./evals -v -timeout 1h
+//	LIDZA_EVAL_AGENT='gemini --yolo' go test -tags agenteval ./evals -v -timeout 1h
 //
 // Each task runs on a fresh copy of the scaffolded app; the agent's output
 // is kept under the test's temporary directory and printed on failure.
@@ -95,6 +95,11 @@ func TestAgent(t *testing.T) {
 			if err != nil {
 				t.Fatalf("agent failed after %s: %v\n%s", time.Since(start).Round(time.Second), err, tail(out))
 			}
+			// Score as the pre-commit hook would see the agent's work: with
+			// everything it wrote staged, so the "generated files staged"
+			// step measures whether it left the generated files current,
+			// not whether it ran git add.
+			command(dir, "git", "add", "-A")
 			verify, _ := command(dir, lidza, "verify", "--json")
 			var rep struct {
 				Status      string `json:"status"`
@@ -142,7 +147,9 @@ func copyApp(t *testing.T) string {
 }
 
 // runAgent runs the agent command in dir with the prompt substituted for
-// {prompt} or appended.
+// {prompt}, or on stdin when the command has no placeholder (every agent
+// CLI reads its prompt there; appending it would let a variadic flag
+// swallow it).
 func runAgent(dir, agent, prompt string) ([]byte, error) {
 	args := strings.Fields(agent)
 	replaced := false
@@ -151,15 +158,12 @@ func runAgent(dir, agent, prompt string) ([]byte, error) {
 			args[i], replaced = prompt, true
 		}
 	}
-	if !replaced {
-		args = append(args, prompt)
-	}
 	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Dir = dir
-	// The scaffolded app depends on this checkout; the agent's own session
-	// variables must not leak into a nested run.
 	cmd.Env = append(os.Environ(), "LIDZA_DIR="+root)
-	cmd.Stdin = nil
+	if !replaced {
+		cmd.Stdin = strings.NewReader(prompt)
+	}
 	return cmd.CombinedOutput()
 }
 

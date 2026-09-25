@@ -35,14 +35,14 @@ on a fresh copy of the scaffolded app and scores the result: `lidza
 verify --json` must pass and a probe per task must find what was asked
 (a typed `GET /api/v1/time` with output `ServerTime`; a `/time` route in
 `src/router.tsx`; a `word_count` tool in `tools.go`). The agent command
-comes from `LIDZA_EVAL_AGENT`, run in the app directory with the task as
-its last argument (or in place of `{prompt}`); the permission mode is the
-operator's choice, the runner adds none:
+comes from `LIDZA_EVAL_AGENT`, run in the app directory with the task on
+stdin (or in place of `{prompt}`); the permission mode is the operator's
+choice, the runner adds none:
 
 ```sh
 LIDZA_EVAL_AGENT='claude -p --permission-mode acceptEdits' go test -tags agenteval ./evals -run TestAgent -v -timeout 1h
 LIDZA_EVAL_AGENT='codex exec --full-auto' go test -tags agenteval ./evals -run TestAgent -v -timeout 1h
-LIDZA_EVAL_AGENT='gemini --yolo -p' go test -tags agenteval ./evals -run TestAgent -v -timeout 1h
+LIDZA_EVAL_AGENT='gemini --yolo' go test -tags agenteval ./evals -run TestAgent -v -timeout 1h
 ```
 
 Each task's agent output is kept as `agent-output.txt` in its copy of the

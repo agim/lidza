@@ -5,7 +5,7 @@ Read `docs/lidza-guide.md` before changing anything; it has the layout, the
 commands and the rules.
 
 - `lidza dev`: run on http://127.0.0.1:3000 with hot reload for Go and the frontend.
-- `lidza check --json`: every Go, Rust and frontend error in one list; run it after each change until `"status": "ok"`.
+- `lidza check --json`: every Go, Rust and frontend error in one list; run it after each change until `"status": "ok"`. Every `lidza` command is also an MCP tool (`lidza_check`, `lidza_gen`, `lidza_gen_resource`, `lidza_pack_add`, `lidza_db_migrate`, `lidza_test`, `lidza_verify`, `lidza_build`): prefer the tool over a shell.
 - `lidza test` for Go tests, `lidza test --e2e` for the browser suite, `lidza doctor` when something is missing on the machine.
 - `lidza verify` before committing (the pre-commit hook runs it): generated files staged, check clean, tests green.
 - `lidza build`: production binary at `bin/{{.Name}}`.

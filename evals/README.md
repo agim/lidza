@@ -40,7 +40,7 @@ stdin (or in place of `{prompt}`); the permission mode is the operator's
 choice, the runner adds none:
 
 ```sh
-LIDZA_EVAL_AGENT='claude -p --permission-mode acceptEdits' go test -tags agenteval ./evals -run TestAgent -v -timeout 1h
+LIDZA_EVAL_AGENT='claude -p --permission-mode acceptEdits --mcp-config .mcp.json --allowedTools mcp__lidza__* Read Edit Write Glob Grep' go test -tags agenteval ./evals -run TestAgent -v -timeout 1h
 LIDZA_EVAL_AGENT='codex exec --full-auto' go test -tags agenteval ./evals -run TestAgent -v -timeout 1h
 LIDZA_EVAL_AGENT='gemini --yolo' go test -tags agenteval ./evals -run TestAgent -v -timeout 1h
 ```
@@ -51,6 +51,10 @@ key (`OPENAI_API_KEY`, `GEMINI_API_KEY`) that the runner does not have;
 their skill and command layouts (`.agents/skills`,
 `.gemini/commands/lidza`) are checked against their documentation and
 present in every app, not yet by a run.
+
+The Claude Code line above gives the agent no shell at all: every
+`lidza` command reaches it as an MCP tool from the app's `.mcp.json`, and
+the four tasks pass that way.
 
 The agent runs with the CLI built from this checkout first on its PATH,
 so it and the scorer generate the same files. Each task's agent output

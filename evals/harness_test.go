@@ -34,6 +34,8 @@ func TestMain(m *testing.M) {
 		fmt.Fprintf(os.Stderr, "build lidza: %v\n%s", err, out)
 		os.Exit(1)
 	}
+	// The MCP server's command tools and the agent run this CLI.
+	os.Setenv("PATH", filepath.Dir(lidza)+string(os.PathListSeparator)+os.Getenv("PATH"))
 	app = filepath.Join(tmp, "evalapp")
 	if out, err := command(tmp, lidza, "new", "evalapp", "--lidza-dir", root); err != nil {
 		fmt.Fprintf(os.Stderr, "lidza new: %v\n%s", err, out)

@@ -55,7 +55,7 @@ func main() {}
 	for _, tl := range tools.Tools {
 		names[tl.Name] = true
 	}
-	for _, want := range []string{"lidza_routes", "lidza_context", "lidza_check", "lidza_logs", "lidza_config"} {
+	for _, want := range []string{"lidza_routes", "lidza_context", "lidza_check", "lidza_logs", "lidza_config", "lidza_gen", "lidza_gen_resource", "lidza_pack_add", "lidza_db_migrate", "lidza_test", "lidza_verify", "lidza_build", "lidza_doctor", "lidza_recipes"} {
 		if !names[want] {
 			t.Errorf("tool %s missing; have %v", want, names)
 		}
@@ -170,6 +170,10 @@ func TestAgentDocs(t *testing.T) {
 	}
 	if got := call("lidza_snippet", nil); !strings.Contains(got, "handler-test (routes_test.go)") {
 		t.Fatalf("snippet catalog: %s", got)
+	}
+
+	if got := call("lidza_recipes", nil); !strings.Contains(got, `"Name": "add-api-route"`) || !strings.Contains(got, `"Scope": "framework"`) {
+		t.Fatalf("lidza_recipes: %s", got)
 	}
 
 	prompts, err := c.ListPrompts(ctx, mcp.ListPromptsRequest{})

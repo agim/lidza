@@ -17,11 +17,13 @@ backed by Postgres. Needs the `db` pack (`lidza pack add db`).
    }
    ```
 
-2. Run `lidza gen resource Post`: it writes `db/queries/post.sql`, the
+2. Run `lidza gen resource Post` (MCP: `lidza_gen_resource` with
+   `model: "Post"`): it writes `db/queries/post.sql`, the
    `CreatePost`, `UpdatePost` and `PostList` types in `schema.lidza`,
    `handlers/post.go` with the routes under `/api/v1/posts`, and the
    registration line in `routes.go`.
-3. Run `lidza db migrate` to apply the new migration in `db/migrations/`.
+3. Run `lidza db migrate` (MCP: `lidza_db_migrate`) to apply the new
+   migration in `db/migrations/`.
 4. The generated handlers file is ordinary code: mount the routes on a
    group (`handlers.PostRoutes(r.Group("/api/v1/posts", auth.Require()))`),
    add filters or ownership checks there (the snippet

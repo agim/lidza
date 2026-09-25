@@ -552,6 +552,21 @@ recipe "Add a recipe"; the reference app records how it scopes queries
 to the signed-in user; the evals cover `lidza recipe add`, and the
 agent-driven eval asks an agent to record a convention.
 
+### The CLI as MCP tools (done 2026-09-25)
+
+Every command an agent needs is a tool of `lidza mcp`: `lidza_check`,
+`lidza_gen`, `lidza_gen_resource`, `lidza_pack_add`, `lidza_pack_scaffold`,
+`lidza_pack_build`, `lidza_db_migrate`, `lidza_db_rollback`,
+`lidza_db_status`, `lidza_test`, `lidza_verify`, `lidza_build`,
+`lidza_doctor`, plus `lidza_recipes`. The server runs its own binary in
+the project with a timeout per tool, one project-changing command at a
+time, and answers with one JSON object: `ok`, `exit`, the parsed report
+for `check` and `verify`, the output tail otherwise. `lidza_check` now
+goes through the CLI too, so it regenerates and reports pack diagnostics
+like the terminal command. The guide's Agent interface table and the
+recipes name the tool beside each command; the agent-driven eval runs
+without shell access to `lidza`.
+
 ### Next
 
 Nothing queued.

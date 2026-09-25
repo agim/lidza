@@ -6,6 +6,10 @@ version in `go.mod`.
 
 ## Unreleased
 
+- Every CLI command is an MCP tool (`lidza_gen`, `lidza_gen_resource`,
+  `lidza_pack_*`, `lidza_db_*`, `lidza_test`, `lidza_verify`,
+  `lidza_build`, `lidza_doctor`, `lidza_recipes`); `lidza_check` runs the
+  CLI's check.
 - App-scoped recipes: "App recipes" in the guide, `lidza recipe add`,
   `lidza_recipe_add`; the framework's recipes are refreshed by `lidza gen`,
   the app's are not; agent files list both.

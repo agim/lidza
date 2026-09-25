@@ -17,7 +17,6 @@ import (
 
 	"github.com/agim/lidza/pkg/config"
 	"github.com/agim/lidza/pkg/devserver"
-	"github.com/agim/lidza/pkg/diag"
 	"github.com/agim/lidza/pkg/inspect"
 	"github.com/agim/lidza/pkg/version"
 )
@@ -27,12 +26,15 @@ import (
 const LogFile = devserver.BuildDir + "/dev.log"
 
 const instructions = `Līdza project. Go owns /api (routes.go); the frontend never defines API routes.
+Every lidza command is a tool here: prefer lidza_check, lidza_gen,
+lidza_gen_resource, lidza_pack_add, lidza_db_migrate, lidza_test, lidza_verify
+and lidza_build over running the CLI in a shell; each returns one JSON result.
 Use lidza_routes before adding a route, lidza_api before calling a framework
-function, lidza_check after every change (fix until its status is "ok"), and
-lidza_logs when a request misbehaves under lidza dev, and lidza_snippet for
-verified code of the reference app (auth routes, an owned resource, a page,
-tests, a tool). The prompts are the project's task recipes (add-api-route,
-add-resource, ...); follow one step by step.`
+function, lidza_check after every change (fix until its status is "ok"),
+lidza_logs when a request misbehaves under lidza dev, lidza_snippet for
+verified code of the reference app, and lidza_recipe_add to record a
+convention of this app. The prompts are the project's task recipes
+(add-api-route, add-resource, ...); follow one step by step.`
 
 // New builds the server for the project in dir. cfg may be nil for a plain
 // Go module.
@@ -64,12 +66,6 @@ func New(dir string, cfg *config.Config) *server.MCPServer {
 		return jsonResult(c)
 	})
 
-	s.AddTool(mcp.NewTool("lidza_check",
-		mcp.WithDescription("Run go vet, staticcheck, cargo check and tsc; return one list of diagnostics with layer, file, line, message. Status is \"ok\" when there are no errors."),
-	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return jsonResult(diag.Run(ctx, diag.Detect(dir)))
-	})
-
 	s.AddTool(mcp.NewTool("lidza_logs",
 		mcp.WithDescription("The last lines of the lidza dev output: [web] frontend dev server, [go] build errors, [app] the running app, [lidza] the coordinator."),
 		mcp.WithNumber("lines", mcp.Description("How many lines from the end (default 200)."), mcp.DefaultNumber(200)),
@@ -91,6 +87,7 @@ func New(dir string, cfg *config.Config) *server.MCPServer {
 		return jsonResult(cfg)
 	})
 
+	addCommandTools(s, dir, cfg)
 	addPackTools(s, dir, cfg)
 	addAppTools(s, dir, cfg)
 	addAPI(s, dir)

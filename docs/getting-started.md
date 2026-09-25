@@ -157,8 +157,13 @@ Three things keep an agent from inventing what is not there:
 
 ### MCP server
 
-Tools: `lidza_routes`, `lidza_context`, `lidza_check`, `lidza_logs`,
-`lidza_config`, `lidza_api`, `lidza_snippet`, `lidza_packs` and one tool per pack
+Tools: every CLI command (`lidza_check`, `lidza_gen`, `lidza_gen_resource`,
+`lidza_pack_add`, `lidza_pack_scaffold`, `lidza_pack_build`,
+`lidza_db_migrate`, `lidza_db_rollback`, `lidza_db_status`, `lidza_test`,
+`lidza_verify`, `lidza_build`, `lidza_doctor`), run in the project and
+answered with one JSON result, so an agent needs no shell; `lidza_routes`,
+`lidza_context`, `lidza_logs`, `lidza_config`, `lidza_api`, `lidza_snippet`,
+`lidza_recipes`, `lidza_recipe_add`, `lidza_packs` and one tool per pack
 capability, `lidza_errors` with the analytics pack, and the app's own
 tools from `tools.go` as `app_<name>`; resources `lidza://llms.txt`,
 `lidza://llms-full.txt`, `lidza://api` and `lidza://api/{package}`;

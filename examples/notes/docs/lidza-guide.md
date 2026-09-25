@@ -172,7 +172,8 @@ in `.gemini/commands/lidza/<name>.toml`; `lidza gen` rewrites them from
 the guide. This section is the framework's: `lidza gen` refreshes it when
 the framework changes. This app's own recipes go under "App recipes"
 below, which the framework never touches. Every recipe ends the same way: `lidza check
---json` until `"status": "ok"`, then `lidza test`.
+--json` (MCP: `lidza_check`) until `"status": "ok"`, then `lidza test`
+(`lidza_test`).
 
 ### Add an API route
 
@@ -210,7 +211,7 @@ is validated on the server and callable from the client by name.
    client method (`createThing` gives `api.createThing`).
 
 3. Save. `lidza dev` regenerates `schema/`, rebuilds, and rewrites the
-   client. Check with
+   client (without it: `lidza gen`, MCP `lidza_gen`). Check with
    `curl -s -X POST http://127.0.0.1:3000/api/v1/things -d '{"title":"x"}'`.
 
 4. Call it from the frontend as `api.createThing({ title })` from
@@ -235,11 +236,13 @@ backed by Postgres. Needs the `db` pack (`lidza pack add db`).
    }
    ```
 
-2. Run `lidza gen resource Post`: it writes `db/queries/post.sql`, the
+2. Run `lidza gen resource Post` (MCP: `lidza_gen_resource` with
+   `model: "Post"`): it writes `db/queries/post.sql`, the
    `CreatePost`, `UpdatePost` and `PostList` types in `schema.lidza`,
    `handlers/post.go` with the routes under `/api/v1/posts`, and the
    registration line in `routes.go`.
-3. Run `lidza db migrate` to apply the new migration in `db/migrations/`.
+3. Run `lidza db migrate` (MCP: `lidza_db_migrate`) to apply the new
+   migration in `db/migrations/`.
 4. The generated handlers file is ordinary code: mount the routes on a
    group (`handlers.PostRoutes(r.Group("/api/v1/posts", auth.Require()))`),
    add filters or ownership checks there (the snippet
@@ -320,7 +323,8 @@ Let an agent call a function of this app, with its packs, from
 Send a transactional email (verification, reset, receipt) through the
 mail pack, never through a vendor SDK.
 
-1. `lidza pack add mail` (after `db`, and `jobs` for background delivery);
+1. `lidza pack add mail` (MCP: `lidza_pack_add`; after `db`, and `jobs`
+   for background delivery);
    set `MAIL_FROM` and, in production, `MAIL_PROVIDER` with its key in
    `.env`. `.env.test` gets `MAIL_PROVIDER=outbox`.
 2. Write the bodies as Go templates: `mail/<name>.txt.tmpl` (always) and
@@ -386,8 +390,8 @@ browser test.
    when the handler uses `lidza.Now(ctx)`; replay outbound HTTP with
    `lidzatest.WithRecorder("name")` when it uses `lidza.HTTPClient(ctx)`
    (recorded once with `LIDZA_RECORD=1 lidza test`).
-2. Run `lidza test`: it creates and migrates the test database, runs
-   `go test ./...`, then the frontend check.
+2. Run `lidza test` (MCP: `lidza_test`): it creates and migrates the
+   test database, runs `go test ./...`, then the frontend check.
 3. Page: in `e2e/<name>.spec.ts` (Playwright) load the page, assert on
    text or roles, and assert no `window` errors (see `e2e/home.spec.ts`).
    Run `lidza test --e2e` (add `--install` once if the browser is

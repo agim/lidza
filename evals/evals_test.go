@@ -226,7 +226,7 @@ func TestGuidanceSurfaces(t *testing.T) {
 	}
 	for _, f := range []string{"CLAUDE.md", "AGENTS.md", "GEMINI.md"} {
 		data, _ := os.ReadFile(filepath.Join(app, f))
-		for _, want := range []string{"docs/lidza-guide.md", "lidza_api", "lidza_snippet", "lidza verify", "add-api-route"} {
+		for _, want := range []string{"docs/lidza-guide.md", "lidza_api", "lidza_snippet", "lidza verify", "lidza_verify", "add-api-route"} {
 			if !strings.Contains(string(data), want) {
 				t.Errorf("%s does not mention %s", f, want)
 			}
@@ -277,10 +277,27 @@ func TestGuidanceSurfaces(t *testing.T) {
 	for _, tl := range tools.Tools {
 		names[tl.Name] = true
 	}
-	for _, want := range []string{"lidza_routes", "lidza_check", "lidza_api", "lidza_snippet", "lidza_logs"} {
+	for _, want := range []string{"lidza_routes", "lidza_check", "lidza_api", "lidza_snippet", "lidza_logs", "lidza_gen", "lidza_gen_resource", "lidza_verify", "lidza_test", "lidza_recipe_add", "lidza_recipes"} {
 		if !names[want] {
 			t.Errorf("tool %s missing", want)
 		}
+	}
+	// A command tool runs the CLI and returns its report.
+	req := mcp.CallToolRequest{}
+	req.Params.Name = "lidza_check"
+	checkRes, err := c.CallTool(ctx, req)
+	if err != nil || checkRes.IsError {
+		t.Fatalf("lidza_check through MCP: %v %+v", err, checkRes)
+	}
+	var cmdRes struct {
+		Command string `json:"command"`
+		OK      bool   `json:"ok"`
+		Report  struct {
+			Status string `json:"status"`
+		} `json:"report"`
+	}
+	if err := json.Unmarshal([]byte(mcp.GetTextFromContent(checkRes.Content[0])), &cmdRes); err != nil || !cmdRes.OK || cmdRes.Report.Status != "ok" || cmdRes.Command != "lidza check --json" {
+		t.Fatalf("lidza_check result: %v %+v\n%s", err, cmdRes, mcp.GetTextFromContent(checkRes.Content[0]))
 	}
 	res, err := c.ReadResource(ctx, mcp.ReadResourceRequest{Params: mcp.ReadResourceParams{URI: "lidza://api/pkg/router"}})
 	if err != nil {

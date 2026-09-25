@@ -9,7 +9,8 @@ description: "Send a transactional email (verification, reset, receipt) through 
 Send a transactional email (verification, reset, receipt) through the
 mail pack, never through a vendor SDK.
 
-1. `lidza pack add mail` (after `db`, and `jobs` for background delivery);
+1. `lidza pack add mail` (MCP: `lidza_pack_add`; after `db`, and `jobs`
+   for background delivery);
    set `MAIL_FROM` and, in production, `MAIL_PROVIDER` with its key in
    `.env`. `.env.test` gets `MAIL_PROVIDER=outbox`.
 2. Write the bodies as Go templates: `mail/<name>.txt.tmpl` (always) and

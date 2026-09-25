@@ -37,7 +37,7 @@ is validated on the server and callable from the client by name.
    client method (`createThing` gives `api.createThing`).
 
 3. Save. `lidza dev` regenerates `schema/`, rebuilds, and rewrites the
-   client. Check with
+   client (without it: `lidza gen`, MCP `lidza_gen`). Check with
    `curl -s -X POST http://127.0.0.1:3000/api/v1/things -d '{"title":"x"}'`.
 
 4. Call it from the frontend as `api.createThing({ title })` from

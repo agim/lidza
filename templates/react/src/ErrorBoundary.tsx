@@ -26,10 +26,15 @@ export class ErrorBoundary extends Component<Props, State> {
   render() {
     if (this.state.error) {
       return (
-        <div role="alert" className="error-boundary">
-          <h2>Something went wrong</h2>
-          <pre>{this.state.error.message}</pre>
-          <button onClick={() => this.setState({ error: null })}>Try again</button>
+        <div role="alert" className="rounded-lg border border-danger p-4">
+          <h2 className="text-lg font-medium">Something went wrong</h2>
+          <pre className="my-2 overflow-x-auto text-sm">{this.state.error.message}</pre>
+          <button
+            className="rounded bg-brand px-3 py-1 text-white hover:bg-brand-strong"
+            onClick={() => this.setState({ error: null })}
+          >
+            Try again
+          </button>
         </div>
       )
     }
@@ -40,9 +45,9 @@ export class ErrorBoundary extends Component<Props, State> {
 // TanStack Router's error component signature.
 export function RouteError({ error }: ErrorComponentProps) {
   return (
-    <div role="alert" className="error-boundary">
-      <h2>This page failed to render</h2>
-      <pre>{error instanceof Error ? error.message : String(error)}</pre>
+    <div role="alert" className="rounded-lg border border-danger p-4">
+      <h2 className="text-lg font-medium">This page failed to render</h2>
+      <pre className="my-2 overflow-x-auto text-sm">{error instanceof Error ? error.message : String(error)}</pre>
     </div>
   )
 }

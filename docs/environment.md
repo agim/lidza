@@ -167,7 +167,7 @@ lidza/
 ├── core/             Rust crate `lidza-core`: the WASM ABI (src/abi.rs)
 ├── templates/
 │   ├── embed.go      embeds the template directories into the CLI
-│   ├── react/        default: Vite + React + TypeScript, TanStack Router and Query, prerendering, eslint with jsx-a11y
+│   ├── react/        default: Vite + React + TypeScript, TanStack Router and Query, Tailwind, prerendering, eslint with jsx-a11y
 │   ├── svelte/       Vite + Svelte 5 + TypeScript
 │   ├── astro/        Astro, static output only
 │   └── htmx/         Go html/template views, htmx vendored, no JS toolchain

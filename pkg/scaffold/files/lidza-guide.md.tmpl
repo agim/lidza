@@ -236,6 +236,10 @@ Statements that lose data or can fail on existing rows carry a
    field errors the server would, before the request.
 7. Every element must be accessible: `lidza check` fails on `jsx-a11y`
    errors (missing `alt`, click handlers on non-interactive elements, ...).
+8. Style with Tailwind utilities; colors and fonts come from the `@theme`
+   tokens in `src/index.css` (`bg-brand`, `text-ink`, `border-line`,
+   `text-muted`, `text-danger`). Change the tokens, not the classes, to
+   rebrand. No other CSS framework.
 {{- end}}
 
 ## Operations

@@ -1,11 +1,11 @@
 export function About() {
   return (
-    <>
-      <h1>About</h1>
+    <div className="space-y-4">
+      <h1 className="text-3xl font-semibold tracking-tight">About</h1>
       <p>
-        This page is a client-side route. In production the Go binary serves
-        <code> index.html</code> for it, so a direct visit or a reload works too.
+        This page is a client-side route, prerendered at build time. In production the Go binary serves its HTML, so a
+        direct visit or a reload works too.
       </p>
-    </>
+    </div>
   )
 }

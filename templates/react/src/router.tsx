@@ -14,14 +14,18 @@ import { RouteError } from './ErrorBoundary'
 // here, add it to the tree. Paths under /api are never routed here; they
 // belong to the Go control plane. Routes without parameters are prerendered
 // to static HTML by `npm run build` (scripts/prerender.mjs).
-const rootRoute = createRootRoute({
+export const rootRoute = createRootRoute({
   component: () => (
     <>
-      <nav>
-        <Link to="/">Home</Link>
-        <Link to="/about">About</Link>
+      <nav className="flex gap-4 border-b border-line px-6 py-3">
+        <Link to="/" className="text-ink no-underline [&.active]:font-semibold [&.active]:text-brand">
+          Home
+        </Link>
+        <Link to="/about" className="text-ink no-underline [&.active]:font-semibold [&.active]:text-brand">
+          About
+        </Link>
       </nav>
-      <main>
+      <main className="mx-auto max-w-3xl px-6 py-6">
         <Outlet />
       </main>
     </>

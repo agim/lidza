@@ -1,12 +1,13 @@
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
 
 // The Vite dev server sits behind `lidza dev` on port 3000: Go answers
 // /api, everything else (including the HMR WebSocket) is proxied here.
 // @lidza/client is the generated API client in .lidza/client.
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
       '@lidza/client': fileURLToPath(new URL('./.lidza/client/index.ts', import.meta.url)),

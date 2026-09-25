@@ -1,49 +1,20 @@
-:root {
-  font-family: system-ui, sans-serif;
-  line-height: 1.5;
-  color: #1a1a1a;
-  background: #fafafa;
+@import "tailwindcss";
+
+/* The theme: change these tokens, not the classes. Tailwind v4 turns each
+   --color-* into bg-*, text-* and border-* utilities (bg-brand, text-ink). */
+@theme {
+  --color-brand: #1d4ed8;
+  --color-brand-strong: #1e40af;
+  --color-ink: #1a1a1a;
+  --color-muted: #6b7280;
+  --color-surface: #fafafa;
+  --color-line: #e5e7eb;
+  --color-danger: #b00020;
+  --font-sans: system-ui, sans-serif;
 }
 
-body {
-  margin: 0;
-}
-
-nav {
-  display: flex;
-  gap: 1rem;
-  padding: 0.75rem 1.5rem;
-  border-bottom: 1px solid #ddd;
-}
-
-nav a {
-  color: #1a1a1a;
-  text-decoration: none;
-}
-
-nav a[data-status='active'] {
-  font-weight: 600;
-}
-
-main {
-  max-width: 48rem;
-  margin: 0 auto;
-  padding: 1.5rem;
-}
-
-pre {
-  padding: 1rem;
-  background: #eee;
-  border-radius: 4px;
-  overflow-x: auto;
-}
-
-.error {
-  color: #b00020;
-}
-
-.error-boundary {
-  padding: 1rem;
-  border: 1px solid #b00020;
-  border-radius: 4px;
+@layer base {
+  body {
+    @apply bg-surface text-ink font-sans antialiased;
+  }
 }

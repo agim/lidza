@@ -329,7 +329,14 @@ shared helpers in `handlers/convert.go`, and the registration line in
 (`--force` overwrites). Needs the `db` pack; sqlc maps uuid and
 timestamps to `string` and `time.Time` so rows and schema types line up.
 
+### Tailwind (done 2026-09-25)
+
+The `react` template uses Tailwind v4 through `@tailwindcss/vite`:
+`src/index.css` imports Tailwind and declares the theme as CSS variables
+(`--color-brand`, `--color-ink`, ...), pages use utilities, no component
+library. `svelte` and `astro` keep plain CSS; the same two lines (the
+plugin and the import) add Tailwind there.
+
 ### Next
 
-Tailwind in the `react` template, opt-in analytics and error reporting,
-app-defined MCP tools.
+Opt-in analytics and error reporting, app-defined MCP tools.

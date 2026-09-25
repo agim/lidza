@@ -169,6 +169,11 @@ func staleGenerated(ctx context.Context, dir string, cfg *config.Config) (string
 	if _, err := top.Output(); err != nil {
 		return "not a git repository", errSkipped
 	}
+	// Regeneration rewrites files moments after they were staged; refresh
+	// the index's stat cache first so only content differences count.
+	refresh := exec.CommandContext(ctx, "git", "update-index", "-q", "--refresh")
+	refresh.Dir = dir
+	_ = refresh.Run()
 	// --relative: paths as seen from the project, which may be a
 	// directory inside a larger repository.
 	args := append([]string{"diff", "--name-only", "--relative", "--"}, generatedPaths(cfg)...)

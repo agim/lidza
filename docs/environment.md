@@ -120,8 +120,7 @@ that predates the install needs `. ~/.lidza/env`.
 | Redis | 127.0.0.1:6379 | stand-in for Valkey; same protocol, `valkey-go` works against it. |
 | Docker | `/var/run/docker.sock` | root:docker; use `sg docker -c '<cmd>'`. |
 
-Nothing else runs on ports 3000 or 5173. Port 3100 belongs to another
-project on this host; do not use it for tests.
+Nothing else runs on ports 3000 or 5173.
 
 ## Ports
 

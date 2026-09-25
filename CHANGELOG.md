@@ -6,7 +6,7 @@ version in `go.mod`. `install.sh` pins the newest release here;
 `scripts/release.sh vX.Y.Z` turns "Unreleased" into a release, bumps the
 pin, tags and pushes.
 
-## Unreleased
+## v0.1.8 (2026-09-25)
 
 - `llm`: every call is recorded in `llm_usage` with the db pack
   (provider, model, `Request.Label`, tokens, time, status);

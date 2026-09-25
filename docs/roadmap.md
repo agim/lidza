@@ -6,11 +6,12 @@ Each phase has an acceptance check. A phase is done when its check passes on
 
 ## Phase 0: Environment
 
-Install the toolchain described in `docs/environment.md`; add the PATH line
-to `~/.profile`; create the `lidza_dev` and `lidza_test` databases.
+`install.sh` (done): automated setup of Go, Rust + wasm targets, helper
+tools and the CLI, with `--check` as the doctor. Remaining: run it on
+`ubuntu01`; create the `lidza_dev` and `lidza_test` databases.
 
-Check: every command in the "Verification" section of
-`docs/environment.md` passes.
+Check: `sh install.sh --check` shows `[ok]` for every toolchain line, and
+every command in the "Verification" section of `docs/environment.md` passes.
 
 ## Phase 1: CLI and dev proxy
 
@@ -18,7 +19,10 @@ Check: every command in the "Verification" section of
   `lidza-core`), `rust-toolchain.toml`.
 - `cmd/lidza`: `lidza dev`, `lidza version`, `lidza new --template <name>`
   (only `react` exists yet; the flag and `lidza.json` `frontend` block are
-  in place from the start).
+  in place from the start). `lidza new` also writes `CLAUDE.md`, `AGENTS.md`,
+  `GEMINI.md` and `docs/lidza-guide.md` (see `docs/getting-started.md`).
+- Publish the CLI so `go install github.com/agim/lidza/cmd/lidza@latest`
+  works from `install.sh` (repo public, or documented `GOPRIVATE` setup).
 - `templates/react`: Vite + React + TypeScript SPA.
 - `pkg/devserver`: reverse proxy to the frontend dev server with WebSocket
   (HMR) passthrough and `/api` routed to the in-process router; production
@@ -40,6 +44,8 @@ one binary that serves the app with no Node running.
 - `lidza mcp`: MCP server (`mark3labs/mcp-go`) exposing route map, schema
   and runtime logs.
 - `/llms.txt` and `/llms-full.txt` served by `lidza dev`.
+- `lidza new` writes `.mcp.json` (Claude Code) and `.gemini/settings.json`
+  (Gemini CLI) pointing at `lidza mcp`; Codex CLI snippet in the docs.
 
 Check: an agent connected to `lidza mcp` can list routes; introducing a Rust
 type error makes `lidza check --json` report it with the right file and line.

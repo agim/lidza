@@ -31,8 +31,10 @@ sqlc, wasm-tools, wasmtime, wasm-pack. No `~/go`, `~/.cargo`, `~/.rustup`,
 
 ## Toolchain plan
 
-Not yet run. Each step has a check command; Phase 0 is done when every
-check passes.
+Automated by `install.sh` at the repo root (`sh install.sh`; `--check` to
+report without installing). Not yet run on `ubuntu01`. The manual steps
+below are the reference the script implements; each has a check command,
+and Phase 0 is done when every check passes.
 
 ### Go → `/usr/local/go`
 

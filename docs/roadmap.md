@@ -74,8 +74,8 @@ right file and line.
 ## Feature matrix
 
 `docs/features.md` maps every capability a complete framework needs to the
-phase that delivers it, and lists the two open decisions (ORM, SSR). The
-phases below carry the items it assigns them.
+phase that delivers it and records the decisions taken (`sqlc`, build-time
+prerendering). The phases below carry the items it assigns them.
 
 ## Phase 3: Schema and SDKs
 

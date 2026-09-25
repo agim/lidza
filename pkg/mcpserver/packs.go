@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -13,8 +14,11 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
+	"github.com/agim/lidza/packs/analytics"
+	"github.com/agim/lidza/packs/db"
 	"github.com/agim/lidza/pkg/config"
 	"github.com/agim/lidza/pkg/engine"
+	"github.com/agim/lidza/pkg/env"
 	"github.com/agim/lidza/pkg/pack"
 	"github.com/agim/lidza/pkg/schema"
 )
@@ -106,6 +110,31 @@ func addPackTools(s *server.MCPServer, dir string, cfg *config.Config) {
 		}
 		return jsonResult(out)
 	})
+
+	if slices.Contains(cfg.Packs, pack.OfficialPrefix+"analytics") {
+		s.AddTool(mcp.NewTool("lidza_errors",
+			mcp.WithDescription("Recent errors captured by the analytics pack (server panics and 500s, frontend errors): message, route, request id, stack, time. Needs DATABASE_URL in .env."),
+			mcp.WithNumber("limit", mcp.Description("How many, newest first (default 20)."), mcp.DefaultNumber(20)),
+		), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			var dbcfg db.Config
+			if err := env.Load(dir, &dbcfg); err != nil {
+				return mcp.NewToolResultErrorFromErr("database", err), nil
+			}
+			pool, err := db.Open(ctx, dbcfg)
+			if err != nil {
+				return mcp.NewToolResultErrorFromErr("database", err), nil
+			}
+			defer pool.Close()
+			errs, err := analytics.Recent(ctx, pool, req.GetInt("limit", 20))
+			if err != nil {
+				return mcp.NewToolResultErrorFromErr("query", err), nil
+			}
+			if errs == nil {
+				errs = []analytics.StoredError{}
+			}
+			return jsonResult(errs)
+		})
+	}
 
 	sch, _ := schema.Load(dir)
 	var defs map[string]any

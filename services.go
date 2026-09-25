@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/agim/lidza/pkg/middleware"
+	"github.com/agim/lidza/pkg/report"
 )
 
 // Pack is a unit the app starts and stops: an official or local pack. Start
@@ -89,9 +90,16 @@ func Service[T any](ctx context.Context) T {
 }
 
 func servicesMiddleware(s *Services) func(http.Handler) http.Handler {
+	lookup := func() report.Reporter {
+		if v, ok := s.Lookup(typeOf[report.Reporter]()); ok {
+			return v.(report.Reporter)
+		}
+		return nil
+	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			next.ServeHTTP(w, r.WithContext(WithServices(r.Context(), s)))
+			ctx := report.WithLookup(WithServices(r.Context(), s), lookup)
+			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
 }

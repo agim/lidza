@@ -9,6 +9,8 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/agim/lidza/pkg/middleware"
+	"github.com/agim/lidza/pkg/report"
 	"github.com/agim/lidza/pkg/validate"
 )
 
@@ -103,14 +105,14 @@ func Route[In, Out any](r *Router, pattern string, h Handler[In, Out]) {
 			}
 			if v, ok := any(typed.Body).(validate.Validator); ok {
 				if err := v.Validate(); err != nil {
-					writeError(w, err)
+					writeError(w, req, err)
 					return
 				}
 			}
 		}
 		out, err := h(req.Context(), typed)
 		if err != nil {
-			writeError(w, err)
+			writeError(w, req, err)
 			return
 		}
 		typed.apply(w)
@@ -155,7 +157,7 @@ func decodeBody(req *http.Request, dst any) error {
 	return nil
 }
 
-func writeError(w http.ResponseWriter, err error) {
+func writeError(w http.ResponseWriter, req *http.Request, err error) {
 	var httpErr *HTTPError
 	var valErr *validate.Errors
 	switch {
@@ -165,6 +167,10 @@ func writeError(w http.ResponseWriter, err error) {
 		JSON(w, http.StatusUnprocessableEntity, valErr)
 	default:
 		log.Printf("handler error: %v", err)
+		report.Capture(req.Context(), report.Error{
+			Source: "server", Message: err.Error(), Route: req.Pattern, Method: req.Method,
+			URL: req.URL.RequestURI(), RequestID: middleware.GetRequestID(req.Context()),
+		})
 		Error(w, http.StatusInternalServerError, "internal error")
 	}
 }

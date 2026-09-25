@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 import type { ErrorComponentProps } from '@tanstack/react-router'
+import { reportError } from './analytics'
 
 interface Props {
   children: ReactNode
@@ -21,6 +22,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error(error, info.componentStack)
+    reportError(error, { componentStack: info.componentStack })
   }
 
   render() {

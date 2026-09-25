@@ -200,6 +200,11 @@ Official Go packs, configured from `.env` (see `.env.example` after
   times in UTC; format at the edge.
 - `realtime`: `realtime.From(ctx).Publish(ctx, topic, value)` and
   `r.Handle("GET /api/v1/realtime", realtime.Handler())`.
+- `analytics` (opt-in): server errors are captured on their own; register
+  `r.Handle("POST /api/v1/analytics/{kind}", analytics.Handler())`, set
+  `VITE_ANALYTICS=1`, and call `analytics.From(ctx).Track(ctx, "name",
+  props)` or `track()` from `src/analytics.ts`. The MCP tool
+  `lidza_errors` shows what broke.
 
 Order in `lidza.json` matters: `lidza/db` before `lidza/auth` and
 `lidza/jobs`.

@@ -15,6 +15,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/agim/lidza/pkg/report"
 )
 
 // Middleware wraps a handler.
@@ -71,8 +73,13 @@ func Recover(log *slog.Logger) Middleware {
 					if p == http.ErrAbortHandler {
 						panic(p)
 					}
+					stack := string(debug.Stack())
 					log.Error("panic", "error", fmt.Sprint(p), "method", r.Method, "path", r.URL.Path,
-						"request_id", GetRequestID(r.Context()), "stack", string(debug.Stack()))
+						"request_id", GetRequestID(r.Context()), "stack", stack)
+					report.Capture(r.Context(), report.Error{
+						Source: "server", Message: "panic: " + fmt.Sprint(p), Stack: stack, Route: r.Pattern,
+						Method: r.Method, URL: r.URL.RequestURI(), RequestID: GetRequestID(r.Context()),
+					})
 					w.Header().Set("Content-Type", "application/json")
 					w.WriteHeader(http.StatusInternalServerError)
 					_, _ = w.Write([]byte(`{"error":"internal error"}` + "\n"))

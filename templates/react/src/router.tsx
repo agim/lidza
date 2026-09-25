@@ -38,9 +38,17 @@ const aboutRoute = createRoute({ getParentRoute: () => rootRoute, path: '/about'
 const routeTree = rootRoute.addChildren([homeRoute, aboutRoute])
 
 // createAppRouter builds a router for the browser (no history given) or for
-// prerendering (a memory history at one path).
-export function createAppRouter(history?: RouterHistory) {
-  return createRouter({ routeTree, defaultErrorComponent: RouteError, history })
+// server rendering (a memory history at one path).
+export function createAppRouter(history?: RouterHistory, options: { hydrating?: boolean } = {}) {
+  const router = createRouter({ routeTree, defaultErrorComponent: RouteError, history })
+  if (options.hydrating) {
+    // The server renders without the router's top-level Suspense wrapper;
+    // a client router marked as hydrating server markup renders the same
+    // tree, so React keeps the prerendered DOM instead of rebuilding it.
+    // Each route keeps its own pending boundary.
+    Object.assign(router, { ssr: {} })
+  }
+  return router
 }
 
 declare module '@tanstack/react-router' {

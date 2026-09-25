@@ -35,6 +35,7 @@ does not reimplement).
 | Mocking and stubbing | done | `lidza test` with the test database created and migrated; `lidzatest.Start` boots the app with a JSON client, a controllable clock (`lidza.Now`) and recorded or stubbed outbound HTTP (`lidza.HTTPClient`); `lidza test --e2e` runs Playwright against the built binary; `CACHE_URL=memory` |
 | Accessibility checks | done | `eslint-plugin-jsx-a11y` in the `react` template; `lidza check` reports its findings as errors |
 | State hydration and dehydration | partial | prerendered pages carry markup; SSR pages carry markup rendered from loader data, and the client runs the loaders again on navigation (no dehydrated payload) |
+| Error reporting and analytics | done (opt-in) | `analytics` pack: panics, 500s, frontend errors and events in Postgres, OTLP export, `lidza_errors` MCP tool; off unless added |
 | Observability | done | `/metrics`, `/healthz`, `/readyz`, structured logs (`lidza.Log(ctx)` with request ids, JSON in production, `LIDZA_LOG_LEVEL`), `/debug/pprof/` in dev |
 | Time zones | done | UTC in storage and on the wire; `i18n` formats `Date`, `Time`, `DateTime` in the visitor's zone (`tz` cookie set by the template, `X-Timezone` header, `I18N_TIMEZONE` default) |
 | Rate limiting and circuit breakers | done | `middleware.RateLimit` (token bucket per key, bounded table), `resilience.Breaker` |

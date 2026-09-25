@@ -1,0 +1,26 @@
+model AppError @table("app_error") {
+  id          uuid   @id @default(uuid())
+  source      string
+  message     text
+  stack       text?
+  route       string?
+  method      string?
+  url         text?
+  requestId   string?
+  userId      string?
+  userAgent   string?
+  fingerprint string @index
+  extra       json
+  createdAt   time   @default(now()) @index
+}
+
+model AppEvent @table("app_event") {
+  id        uuid   @id @default(uuid())
+  name      string
+  props     json
+  url       text?
+  sessionId string?
+  userId    string?
+  createdAt time   @default(now())
+  @@index(name, createdAt)
+}

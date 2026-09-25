@@ -5,12 +5,16 @@ import { RouterProvider } from '@tanstack/react-router'
 import { createAppRouter } from './router'
 import { ErrorBoundary } from './ErrorBoundary'
 import { announceTimezone } from './timezone'
+import { enableAnalytics } from './analytics'
 import './index.css'
 
 announceTimezone()
+if (import.meta.env.VITE_ANALYTICS === '1') enableAnalytics()
 
 const queryClient = new QueryClient()
-const router = createAppRouter()
+const root = document.getElementById('root')!
+const hydrating = root.hasChildNodes()
+const router = createAppRouter(undefined, { hydrating })
 
 const app = (
   <StrictMode>
@@ -23,8 +27,7 @@ const app = (
 )
 
 // Prerendered pages arrive with markup: hydrate it; otherwise render.
-const root = document.getElementById('root')!
-if (root.hasChildNodes()) {
+if (hydrating) {
   hydrateRoot(root, app)
 } else {
   createRoot(root).render(app)

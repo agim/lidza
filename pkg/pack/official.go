@@ -115,6 +115,23 @@ var Officials = []Official{
 		},
 	},
 	{
+		Name:        "analytics",
+		Description: "Opt-in error reporting and product events: server panics and 500s, frontend errors and named events stored in Postgres, optional OTLP export.",
+		Env: []string{
+			"# lidza/analytics (needs lidza/db)",
+			"# ANALYTICS_OTLP_URL=http://127.0.0.1:4318/v1/logs   # export errors to a collector (Sentry, Grafana, GlitchTip accept OTLP)",
+			"ANALYTICS_RETENTION=720h",
+			"# VITE_ANALYTICS=1   # turn on the frontend reporter (react template)",
+		},
+		Notes: []string{
+			"register the endpoint in routes.go: r.Handle(\"POST /api/v1/analytics/{kind}\", analytics.Handler())",
+			"server errors are captured automatically (panics, 500s); events: analytics.From(ctx).Track(ctx, \"signup\", props)",
+			"frontend: set VITE_ANALYTICS=1 in .env; src/analytics.ts reports errors and pageviews, track(name, props) for events",
+			"run `lidza gen` and `lidza db migrate`: the app_error and app_event tables come from schema.lidza",
+			"agents: the MCP tool lidza_errors lists recent errors",
+		},
+	},
+	{
 		Name:        "media",
 		Description: "Image processing in Rust: dimensions and format, resize with format conversion.",
 		Rust:        true,

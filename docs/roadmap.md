@@ -337,6 +337,26 @@ The `react` template uses Tailwind v4 through `@tailwindcss/vite`:
 library. `svelte` and `astro` keep plain CSS; the same two lines (the
 plugin and the import) add Tailwind there.
 
+### Analytics and error reporting (done 2026-09-25)
+
+`lidza pack add analytics` (needs `db`): server panics and handler 500s
+are captured through `pkg/report` (a seam the recovery middleware and
+the typed router call), frontend errors and named events arrive at
+`POST /api/v1/analytics/{errors|events}` (size-capped, rate-limited), and
+everything is written to `app_error` and `app_event` by one bounded
+writer goroutine (drops are counted, never block a request). Optional
+OTLP/HTTP export of errors to any collector. `VITE_ANALYTICS=1` turns on
+the frontend reporter (errors, unhandled rejections, the error boundary,
+pageviews, `track(name, props)`); no third-party script, no IP stored,
+retention configurable. `lidza mcp` gains `lidza_errors`.
+
+Found by the analytics pack on its first run: the prerendered pages were
+being discarded at hydration (React error 418, reported through
+`window`'s error event, which the earlier browser checks did not watch).
+The client router is now marked as hydrating server markup so it renders
+the server's tree shape, and the template's e2e test asserts no window
+errors.
+
 ### Next
 
-Opt-in analytics and error reporting, app-defined MCP tools.
+App-defined MCP tools.

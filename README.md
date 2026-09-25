@@ -17,6 +17,13 @@ ancestor of modern Albanian *lidh* (Vladimir Orel, *Albanian Etymological
 Dictionary*, Brill 1998, p. 223). The framework's job is to bind Go, Rust
 and a frontend into one application.
 
+## Frontend
+
+Default template: Vite + React + TypeScript. `svelte`, `astro` (static) and
+`htmx` are selectable at `lidza new --template <name>`. All follow the same
+contract: Go owns `/api`, types come from the generated client, production
+is one binary.
+
 ## Status
 
 Phase 0: environment. No code yet. See `docs/roadmap.md`.

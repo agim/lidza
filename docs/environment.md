@@ -127,11 +127,48 @@ lidza/
 │   ├── engine/       binder to the Rust core (wazero, IPC, FFI)
 │   └── sdk/          TypeScript / Dart client generator
 ├── core/             Rust crate `lidza-core` (Cargo.toml, src/)
-├── templates/        starter frontends
+├── templates/
+│   ├── react/        default: Vite + React + TypeScript
+│   ├── svelte/       Vite + Svelte 5 + TypeScript
+│   ├── astro/        Astro, static output only
+│   └── htmx/         Go templ + HTMX, no JS toolchain
 ├── docs/
 ├── go.mod, go.sum
 └── README.md
 ```
+
+## Frontend
+
+Default template: **Vite + React + TypeScript SPA** with TanStack Router and
+Query. Chosen at `lidza new --template <name>`; `react` when omitted.
+Package manager: npm (already installed; no pnpm).
+
+| Template | Dev server | Production |
+|---|---|---|
+| `react` | Vite on 5173, proxied by `lidza dev` | `dist/` embedded in the Go binary (`embed.FS`) |
+| `svelte` | Vite on 5173, proxied | same |
+| `astro` | Astro dev on 5173, proxied; `output: 'static'` only | same |
+| `htmx` | none; Go renders `templ` views directly | Go binary only |
+
+Flutter/Dart is a client SDK target (`lidza-dart`), not a web template.
+
+Contract every template follows:
+
+- The frontend never defines `/api` routes; Go owns them.
+- Types come only from the generated client (`@lidza/client`); no hand-written
+  fetch wrappers.
+- Frontend build errors are ingested by `lidza check --json` alongside Go and
+  Rust diagnostics.
+- One binary in production: Go serves the built assets, no Node at runtime.
+
+`lidza.json`, `frontend` block:
+
+```json
+{ "template": "react", "dev": "npm run dev -- --port 5173",
+  "url": "http://127.0.0.1:5173", "dist": "dist" }
+```
+
+For `htmx`: `{ "template": "htmx" }`.
 
 ## Naming
 

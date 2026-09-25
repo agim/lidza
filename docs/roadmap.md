@@ -16,13 +16,19 @@ Check: every command in the "Verification" section of
 
 - `go mod init github.com/agim/lidza`, `cargo new --lib core` (crate
   `lidza-core`), `rust-toolchain.toml`.
-- `cmd/lidza`: `lidza dev`, `lidza version`.
+- `cmd/lidza`: `lidza dev`, `lidza version`, `lidza new --template <name>`
+  (only `react` exists yet; the flag and `lidza.json` `frontend` block are
+  in place from the start).
+- `templates/react`: Vite + React + TypeScript SPA.
 - `pkg/devserver`: reverse proxy to the frontend dev server with WebSocket
-  (HMR) passthrough and `/api` routed to the in-process router.
+  (HMR) passthrough and `/api` routed to the in-process router; production
+  serves `dist/` from `embed.FS`.
 - `pkg/router`: `/api/v1/health`.
 
-Check: `bin/lidza dev` running, `curl -i http://127.0.0.1:3000/api/v1/health`
-returns JSON, a Vite app on 5173 renders through port 3000 with HMR working.
+Check: `lidza new demo` then `bin/lidza dev` running,
+`curl -i http://127.0.0.1:3000/api/v1/health` returns JSON, the React app on
+5173 renders through port 3000 with HMR working, and `lidza build` yields
+one binary that serves the app with no Node running.
 
 ## Phase 2: Agent interface
 
@@ -44,10 +50,14 @@ type error makes `lidza check --json` report it with the right file and line.
   migrations.
 - OpenAPI 3.1 and JSON Schema regenerated on every reload.
 - `pkg/sdk`: TypeScript client (`@lidza/client`) first, Dart second.
+- Remaining templates, each using `@lidza/client` where it has a JS
+  toolchain: `svelte` (Vite + Svelte 5), `astro` (static output only),
+  `htmx` (Go `templ`, no proxy).
 
 Check: changing a handler's response struct updates the generated TypeScript
-types without manual steps; `tsc` on the template app fails if the frontend
-is out of date.
+types without manual steps; `tsc` on the `react` and `svelte` templates
+fails if the frontend is out of date; every template passes the Phase 1
+check (HMR through the proxy where applicable, single binary in production).
 
 ## Phase 4: Packs
 

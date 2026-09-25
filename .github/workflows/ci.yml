@@ -1,0 +1,151 @@
+# Continuous integration: the framework's own checks and tests, the
+# platform evals on a fresh app, and the reference app's verify and
+# browser test, against Postgres and Valkey. Mirrors docs/environment.md
+# "Verification"; a step that is skipped here is documented there.
+name: ci
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+env:
+  STATICCHECK_VERSION: "2026.2.1"
+  SQLC_VERSION: "v1.31.1"
+  LIDZA_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/lidza_test?sslmode=disable
+  LIDZA_TEST_CACHE_URL: redis://localhost:6379/0
+  LIDZA_TEST_BUS_URL: redis://localhost:6379/1
+
+jobs:
+  framework:
+    name: framework (vet, staticcheck, tests, core)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+      valkey:
+        image: valkey/valkey:8
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "valkey-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip1
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: core
+      - name: tools
+        run: |
+          go install honnef.co/go/tools/cmd/staticcheck@$STATICCHECK_VERSION
+          go install github.com/sqlc-dev/sqlc/cmd/sqlc@$SQLC_VERSION
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: gofmt
+        run: test -z "$(gofmt -l . | tee /dev/stderr)"
+      - name: go vet
+        run: go vet ./...
+      - name: staticcheck
+        run: staticcheck ./...
+      - name: go test
+        run: go test ./... -timeout 20m
+      - name: core crate
+        working-directory: core
+        run: |
+          cargo test
+          cargo build --release --target wasm32-wasip1
+
+  evals:
+    name: platform evals (fresh app)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip1
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: examples/notes/packs/stats/rust
+      - name: tools
+        run: |
+          go install honnef.co/go/tools/cmd/staticcheck@$STATICCHECK_VERSION
+          go install github.com/sqlc-dev/sqlc/cmd/sqlc@$SQLC_VERSION
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: evals
+        # The reference-app case needs its test database over TCP.
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/notes_test?sslmode=disable
+        run: go test -tags evals ./evals -v -timeout 40m
+
+  reference-app:
+    name: examples/notes (verify, browser test)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/notes_test?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: examples/notes/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip1
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: examples/notes/packs/stats/rust
+      - name: tools
+        run: |
+          go install honnef.co/go/tools/cmd/staticcheck@$STATICCHECK_VERSION
+          go install github.com/sqlc-dev/sqlc/cmd/sqlc@$SQLC_VERSION
+          go install ./cmd/lidza
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: npm ci
+        working-directory: examples/notes
+        run: npm ci --no-fund --no-audit
+      - name: lidza verify
+        working-directory: examples/notes
+        run: |
+          git add -A
+          lidza verify
+      - name: lidza test --e2e
+        working-directory: examples/notes
+        run: lidza test --e2e --install

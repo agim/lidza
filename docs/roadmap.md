@@ -6,33 +6,42 @@ Each phase has an acceptance check. A phase is done when its check passes on
 
 ## Phase 0: Environment
 
-`install.sh` (done): automated setup of Go, Rust + wasm targets, helper
-tools and the CLI, with `--check` as the doctor. Remaining: run it on
-`ubuntu01`; create the `lidza_dev` and `lidza_test` databases.
+Done 2026-09-25. `install.sh` ran on `ubuntu01` (Go 1.27.1, Rust 1.98.1
+with both wasm targets, staticcheck, golangci-lint, sqlc, wasm-tools);
+`lidza_dev` and `lidza_test` created; the `lidza` CLI installed from the
+checkout with `go install ./cmd/lidza`.
 
-Check: `sh install.sh --check` shows `[ok]` for every toolchain line, and
-every command in the "Verification" section of `docs/environment.md` passes.
+Check (passes): `sh install.sh --check` shows `[ok]` for every toolchain
+line, and every command in the "Verification" section of
+`docs/environment.md` passes.
 
 ## Phase 1: CLI and dev proxy
 
-- `go mod init github.com/agim/lidza`, `cargo new --lib core` (crate
-  `lidza-core`), `rust-toolchain.toml`.
-- `cmd/lidza`: `lidza dev`, `lidza version`, `lidza new --template <name>`
-  (only `react` exists yet; the flag and `lidza.json` `frontend` block are
-  in place from the start). `lidza new` also writes `CLAUDE.md`, `AGENTS.md`,
-  `GEMINI.md` and `docs/lidza-guide.md` (see `docs/getting-started.md`).
-- Publish the CLI so `go install github.com/agim/lidza/cmd/lidza@latest`
-  works from `install.sh` (repo public, or documented `GOPRIVATE` setup).
-- `templates/react`: Vite + React + TypeScript SPA.
-- `pkg/devserver`: reverse proxy to the frontend dev server with WebSocket
-  (HMR) passthrough and `/api` routed to the in-process router; production
-  serves `dist/` from `embed.FS`.
-- `pkg/router`: `/api/v1/health`.
+Done 2026-09-25, except publishing.
 
-Check: `lidza new demo` then `bin/lidza dev` running,
-`curl -i http://127.0.0.1:3000/api/v1/health` returns JSON, the React app on
-5173 renders through port 3000 with HMR working, and `lidza build` yields
-one binary that serves the app with no Node running.
+- `go.mod` (`github.com/agim/lidza`, no dependencies), `core/` (crate
+  `lidza-core`, `rust-toolchain.toml` pinning stable plus the wasm targets).
+- `cmd/lidza`: `new`, `dev`, `build`, `version`. `lidza new` copies the
+  template, writes `main.go`, `routes.go`, `lidza.json`, `CLAUDE.md`,
+  `AGENTS.md`, `GEMINI.md`, `docs/lidza-guide.md`, and resolves `go.mod`
+  (`--lidza-dir <checkout>` adds a `replace` for framework development).
+- `templates/react`: Vite 8 + React 19 + TypeScript, TanStack Router and
+  Query, `src/api.ts` as the single place that calls `/api` until the
+  generated client exists.
+- `pkg/devserver`: reverse proxy with WebSocket passthrough (HMR verified
+  through port 3000), static SPA server with `index.html` fallback, and the
+  coordinator: frontend dev command, `go build` into `.lidza/app`, restart
+  on Go changes (500 ms mtime poll, no watcher dependency).
+- `pkg/router`: `GET /api/v1/health`, `router.JSON`, `router.Error`.
+- Not done: publishing so `go install github.com/agim/lidza/cmd/lidza@latest`
+  works from `install.sh`. The repo is private; Agim decides between making
+  it public and documenting a `GOPRIVATE` setup. Until then `install.sh`
+  reports `[todo] lidza CLI` on any other machine.
+
+Check (passes): `lidza new demo --lidza-dir <checkout>` then `lidza dev`,
+`curl -i http://127.0.0.1:3000/api/v1/health` returns JSON, the React app
+on 5173 renders through port 3000 with HMR working, and `lidza build`
+yields one binary that serves the app with no Node running.
 
 ## Phase 2: Agent interface
 

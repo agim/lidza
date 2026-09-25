@@ -1,9 +1,9 @@
 # Environment
 
 Written 2026-09-25. Describes the development host for Līdza and the
-toolchain it needs. **Nothing in "Toolchain plan" has been run yet**; the
-install steps are the contract for Phase 0 and are executed only on Agim's
-explicit go-ahead.
+toolchain it needs. The toolchain plan was run on 2026-09-25
+(`sh install.sh`, on Agim's go-ahead); Phase 0 is done and every command
+under "Verification" passes.
 
 ## Host
 
@@ -13,6 +13,13 @@ explicit go-ahead.
 
 | Tool | Version | Path / notes |
 |---|---|---|
+| go | 1.27.1 | `/usr/local/go/bin/go`; `GOPATH=/home/agim/go` |
+| rustc, cargo | 1.98.1 | rustup, `stable`; `~/.cargo/bin`; targets `wasm32-wasip1`, `wasm32-unknown-unknown` |
+| staticcheck | 2026.2.1 | `~/go/bin` |
+| golangci-lint | 2.14.0 | `~/go/bin` |
+| sqlc | 1.31.1 | `~/go/bin` |
+| wasm-tools | 1.259.0 | `~/.cargo/bin` |
+| lidza | from this checkout | `~/go/bin/lidza`; `go install ./cmd/lidza` after pulling |
 | node | 22.23.2 | `/home/agim/.local/bin/node` |
 | npm | 10.9.8 | |
 | ruby | 3.4.5 | rbenv; not used by Līdza |
@@ -25,16 +32,14 @@ explicit go-ahead.
 
 ### Missing
 
-go, cargo, rustc, rustup, pnpm, bun, k6, hey, staticcheck, golangci-lint,
-sqlc, wasm-tools, wasmtime, wasm-pack. No `~/go`, `~/.cargo`, `~/.rustup`,
-`/usr/local/go`.
+k6 and hey (Phase 5 benchmarks), wasmtime, wasm-pack, pnpm, bun. None is
+needed before Phase 5.
 
 ## Toolchain plan
 
 Automated by `install.sh` at the repo root (`sh install.sh`; `--check` to
-report without installing). Not yet run on `ubuntu01`. The manual steps
-below are the reference the script implements; each has a check command,
-and Phase 0 is done when every check passes.
+report without installing). Run on `ubuntu01` 2026-09-25. The manual steps
+below are the reference the script implements; each has a check command.
 
 ### Go → `/usr/local/go`
 
@@ -64,7 +69,17 @@ Check: `cargo --version`, `rustc --version`,
 go install honnef.co/go/tools/cmd/staticcheck@latest
 go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
 go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
-cargo install wasm-tools
+cargo install wasm-tools --locked
+```
+
+Check: `staticcheck -version`, `golangci-lint --version`, `sqlc version`,
+`wasm-tools --version`.
+
+### k6 (Phase 5, not installed)
+
+`install.sh` does not install it. When Phase 5 starts:
+
+```sh
 sudo gpg -k && sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg \
   --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
 echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" \
@@ -72,8 +87,7 @@ echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.i
 sudo apt-get update && sudo apt-get install -y k6
 ```
 
-Check: `staticcheck -version`, `golangci-lint --version`, `sqlc version`,
-`wasm-tools --version`, `k6 version`.
+Check: `k6 version`.
 
 Optional, only when a phase needs them: `wasmtime` (run WASM outside Go),
 `pnpm` (frontend templates).
@@ -87,25 +101,27 @@ Optional, only when a phase needs them: `wasmtime` (run WASM outside Go),
 
 ## PATH
 
-Interactive shells (`~/.profile`), to add during Phase 0:
+`install.sh` wrote `~/.lidza/env`:
 
 ```sh
-export PATH="$HOME/.cargo/bin:$HOME/go/bin:/usr/local/go/bin:$PATH"
+export PATH="/usr/local/go/bin:$HOME/go/bin:$PATH"
+export PATH="$HOME/.cargo/bin:$PATH"
 ```
 
-The session unit already carries the same directories in
-`Environment=PATH` (see "Agent session"), so it needs no edit after the
-installs.
+and sources it from `~/.profile` and `~/.bashrc`. The session unit carries
+the same directories in `Environment=PATH` (see "Agent session"). A shell
+that predates the install needs `. ~/.lidza/env`.
 
 ## Local services
 
 | Service | Address | Notes |
 |---|---|---|
-| Postgres 17 | 127.0.0.1:5432 | cluster `main`, data on `/mnt/faststorage/pgdata`. Planned databases: `lidza_dev`, `lidza_test`. |
+| Postgres 17 | 127.0.0.1:5432 | cluster `main`, data on `/mnt/faststorage/pgdata`. Databases `lidza_dev` and `lidza_test` (created 2026-09-25). Auth: the Unix socket is `peer`, so `psql -U agim` works (`agim` is a superuser); TCP on 127.0.0.1 is `scram-sha-256` and `agim` has no password set yet. |
 | Redis | 127.0.0.1:6379 | stand-in for Valkey; same protocol, `valkey-go` works against it. |
 | Docker | `/var/run/docker.sock` | root:docker; use `sg docker -c '<cmd>'`. |
 
-Nothing else runs on ports 3000 or 5173.
+Nothing else runs on ports 3000 or 5173. Port 3100 belongs to another
+project on this host; do not use it for tests.
 
 ## Ports
 
@@ -118,26 +134,37 @@ Nothing else runs on ports 3000 or 5173.
 
 ## Repository layout
 
-Target layout once code exists:
-
 ```
 lidza/
-├── cmd/lidza/        Go CLI entrypoint (builds the `lidza` binary)
+├── lidza.go          package lidza: the runtime an app binary calls (lidza.Run)
+├── cmd/lidza/        CLI: new, dev, build, version
 ├── pkg/
-│   ├── devserver/    reverse proxy and hot-reload coordinator
-│   ├── router/       control plane: HTTP, WebSockets, sessions
-│   ├── engine/       binder to the Rust core (wazero, IPC, FFI)
-│   └── sdk/          TypeScript / Dart client generator
-├── core/             Rust crate `lidza-core` (Cargo.toml, src/)
+│   ├── config/       lidza.json
+│   ├── devserver/    reverse proxy, static SPA server, hot-reload coordinator
+│   ├── router/       control plane: HTTP router, /api/v1/health, JSON helpers
+│   ├── scaffold/     `lidza new`: template copy plus generated Go and agent files
+│   ├── version/      build version
+│   ├── engine/       (Phase 4) binder to the Rust core (wazero)
+│   └── sdk/          (Phase 3) TypeScript / Dart client generator
+├── core/             Rust crate `lidza-core` (Cargo.toml, rust-toolchain.toml, src/)
 ├── templates/
-│   ├── react/        default: Vite + React + TypeScript
-│   ├── svelte/       Vite + Svelte 5 + TypeScript
-│   ├── astro/        Astro, static output only
-│   └── htmx/         Go templ + HTMX, no JS toolchain
+│   ├── embed.go      embeds the template directories into the CLI
+│   ├── react/        default: Vite + React + TypeScript, TanStack Router and Query
+│   ├── svelte/       (Phase 3) Vite + Svelte 5 + TypeScript
+│   ├── astro/        (Phase 3) Astro, static output only
+│   └── htmx/         (Phase 3) Go templ + HTMX, no JS toolchain
 ├── docs/
-├── go.mod, go.sum
+├── install.sh
+├── go.mod            no dependencies outside the standard library so far
 └── README.md
 ```
+
+An app created by `lidza new` is a separate Go module that requires
+`github.com/agim/lidza`: `main.go` embeds `dist/` and calls `lidza.Run`,
+`routes.go` registers `/api` handlers, and the frontend lives at the app
+root (`package.json`, `src/`). `lidza dev` builds that module into
+`.lidza/app` and runs it with `LIDZA_MODE=dev`, so dev and production run
+the same binary.
 
 ## Frontend
 
@@ -189,22 +216,38 @@ Never put `ī` in a path, identifier, package name or domain.
 
 ## Verification
 
-Run after Phase 0 installs; all must pass.
+Phase 0, all passing since 2026-09-25:
 
 ```sh
+sh install.sh --check          # every Toolchain and Helper tools line [ok]
 go version
 go env GOPATH
 cargo --version && rustc --version
 rustup target list --installed | grep -E 'wasm32-(wasip1|unknown-unknown)'
 staticcheck -version && golangci-lint --version && sqlc version
-wasm-tools --version && k6 version
-psql -h 127.0.0.1 -U agim -d postgres -c 'select version();'
+wasm-tools --version
+psql -U agim -d postgres -c 'select version();'
 redis-cli -h 127.0.0.1 ping
 sg docker -c 'docker info --format "{{.ServerVersion}}"'
 ```
 
-Phase 1 adds: `go build -o bin/lidza ./cmd/lidza && bin/lidza dev` in one
-terminal, `curl -i http://127.0.0.1:3000/api/v1/health` in another.
+Framework build, from the repo root:
+
+```sh
+gofmt -l . && go vet ./... && staticcheck ./... && go test ./...
+(cd core && cargo test && cargo build --target wasm32-wasip1)
+go build -o bin/lidza ./cmd/lidza
+```
+
+Phase 1 acceptance, against this checkout rather than the published module:
+
+```sh
+bin/lidza new demo --lidza-dir "$PWD" && cd demo
+lidza dev                                   # then, in another terminal:
+curl -i http://127.0.0.1:3000/api/v1/health # JSON from Go
+curl -s http://127.0.0.1:3000/ | grep vite  # React app through the proxy
+lidza build && ./bin/demo                   # one binary, Node not running
+```
 
 ## Agent session
 

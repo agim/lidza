@@ -1,0 +1,245 @@
+package devserver
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"net"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/agim/lidza/pkg/config"
+)
+
+// Options configures a `lidza dev` run.
+type Options struct {
+	// Addr is where the app listens; the frontend is proxied behind it.
+	Addr string
+	// Out receives the interleaved, prefixed output of every process.
+	Out io.Writer
+	// Poll is how often the Go sources are checked for changes.
+	Poll time.Duration
+}
+
+// Environment the app binary reads, in dev (set by `lidza dev`) and in
+// production.
+const (
+	EnvMode        = "LIDZA_MODE"         // "dev" or unset
+	EnvAddr        = "LIDZA_ADDR"         // listen address
+	EnvFrontendURL = "LIDZA_FRONTEND_URL" // dev only: the dev server to proxy to
+)
+
+// BuildDir holds the dev build of the app binary, inside the project.
+const BuildDir = ".lidza"
+
+const stopGrace = 3 * time.Second
+
+// Dev runs the project in cfg.Dir until ctx is cancelled: starts the frontend
+// dev server if the template has one, builds the app binary, runs it in dev
+// mode, and rebuilds and restarts it whenever a Go source file changes.
+func Dev(ctx context.Context, cfg *config.Config, opt Options) error {
+	if opt.Out == nil {
+		opt.Out = os.Stdout
+	}
+	if opt.Poll == 0 {
+		opt.Poll = 500 * time.Millisecond
+	}
+	if opt.Addr == "" {
+		opt.Addr = "127.0.0.1:3000"
+	}
+	if err := checkPortFree(opt.Addr); err != nil {
+		return err
+	}
+	logf := func(format string, a ...any) { fmt.Fprintf(opt.Out, "[lidza] "+format+"\n", a...) }
+
+	if cfg.Frontend.HasDevServer() {
+		if err := EnsureNodeModules(ctx, cfg.Dir, opt.Out); err != nil {
+			return err
+		}
+		cmd := exec.Command("sh", "-c", cfg.Frontend.Dev)
+		cmd.Dir = cfg.Dir
+		cmd.Env = append(os.Environ(), "FORCE_COLOR=0", "BROWSER=none")
+		web, err := startProc(cmd, opt.Out, "[web]   ")
+		if err != nil {
+			return fmt.Errorf("frontend dev server: %w", err)
+		}
+		defer web.stop(stopGrace)
+		logf("frontend: %s  (%s)", cfg.Frontend.Dev, cfg.Frontend.URL)
+	}
+
+	app := &appProcess{
+		cfg: cfg,
+		out: opt.Out,
+		env: append(os.Environ(),
+			EnvMode+"=dev",
+			EnvAddr+"="+opt.Addr,
+			EnvFrontendURL+"="+cfg.Frontend.URL,
+		),
+	}
+	defer app.stop()
+
+	if err := app.build(ctx); err != nil {
+		logf("build failed; fix the errors above, watching for changes")
+	} else if err := app.start(); err != nil {
+		return err
+	} else {
+		logf("app: http://%s  (API under /api, frontend proxied from %s)", opt.Addr, cfg.Frontend.URL)
+	}
+
+	w := newWatcher(cfg.Dir)
+	w.scan()
+	ticker := time.NewTicker(opt.Poll)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			logf("stopping")
+			return nil
+		case <-ticker.C:
+			if !w.scan() {
+				continue
+			}
+			logf("Go sources changed, rebuilding")
+			if err := app.build(ctx); err != nil {
+				logf("build failed; keeping the previous binary running")
+				continue
+			}
+			app.stop()
+			if err := app.start(); err != nil {
+				logf("restart failed: %v", err)
+			} else {
+				logf("restarted")
+			}
+		}
+	}
+}
+
+// appProcess is the app binary under `lidza dev`: built into .lidza/app and
+// restarted after each successful rebuild.
+type appProcess struct {
+	cfg *config.Config
+	env []string
+	out io.Writer
+	p   *proc
+}
+
+func (a *appProcess) binPath() string {
+	return filepath.Join(a.cfg.Dir, BuildDir, "app")
+}
+
+func (a *appProcess) build(ctx context.Context) error {
+	if err := os.MkdirAll(filepath.Join(a.cfg.Dir, BuildDir), 0o755); err != nil {
+		return err
+	}
+	return runPrefixed(ctx, a.cfg.Dir, a.out, "[go]    ", "go", "build", "-o", a.binPath(), ".")
+}
+
+func (a *appProcess) start() error {
+	cmd := exec.Command(a.binPath())
+	cmd.Dir = a.cfg.Dir
+	cmd.Env = a.env
+	p, err := startProc(cmd, a.out, "[app]   ")
+	if err != nil {
+		return err
+	}
+	a.p = p
+	return nil
+}
+
+func (a *appProcess) stop() {
+	if a.p != nil {
+		a.p.stop(stopGrace)
+		a.p = nil
+	}
+}
+
+// runPrefixed runs a command to completion with its output prefixed.
+func runPrefixed(ctx context.Context, dir string, out io.Writer, prefix string, name string, args ...string) error {
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Dir = dir
+	w := prefixWriter(out, prefix)
+	defer w.Close()
+	cmd.Stdout = w
+	cmd.Stderr = w
+	return cmd.Run()
+}
+
+// EnsureNodeModules runs `npm install` in dir when it has a package.json but
+// no node_modules yet.
+func EnsureNodeModules(ctx context.Context, dir string, out io.Writer) error {
+	if _, err := os.Stat(filepath.Join(dir, "package.json")); err != nil {
+		return nil
+	}
+	if _, err := os.Stat(filepath.Join(dir, "node_modules")); err == nil {
+		return nil
+	}
+	fmt.Fprintln(out, "[lidza] node_modules missing, running npm install")
+	if err := runPrefixed(ctx, dir, out, "[npm]   ", "npm", "install", "--no-fund", "--no-audit"); err != nil {
+		return fmt.Errorf("npm install: %w", err)
+	}
+	return nil
+}
+
+func checkPortFree(addr string) error {
+	l, err := net.Listen("tcp", addr)
+	if err != nil {
+		return fmt.Errorf("cannot listen on %s: %w (is another lidza dev running?)", addr, err)
+	}
+	return l.Close()
+}
+
+// watcher polls the modification times of the Go sources in a project. A
+// poll keeps the dev server dependency-free and behaves the same on every
+// filesystem; the tree is small enough that a 500ms scan is cheap.
+type watcher struct {
+	root  string
+	mtime map[string]time.Time
+}
+
+func newWatcher(root string) *watcher {
+	return &watcher{root: root, mtime: map[string]time.Time{}}
+}
+
+var skipDirs = map[string]bool{
+	"node_modules": true, "dist": true, "bin": true, "target": true,
+}
+
+// scan walks the tree and reports whether any watched file changed since the
+// last scan (the first scan only records state).
+func (w *watcher) scan() bool {
+	seen := make(map[string]time.Time, len(w.mtime))
+	first := len(w.mtime) == 0
+	changed := false
+	_ = filepath.WalkDir(w.root, func(p string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			if p != w.root && (skipDirs[d.Name()] || strings.HasPrefix(d.Name(), ".")) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		name := d.Name()
+		if !strings.HasSuffix(name, ".go") && name != "go.mod" && name != "go.sum" {
+			return nil
+		}
+		info, err := d.Info()
+		if err != nil {
+			return nil
+		}
+		seen[p] = info.ModTime()
+		if old, ok := w.mtime[p]; !ok || !old.Equal(info.ModTime()) {
+			changed = true
+		}
+		return nil
+	})
+	if len(seen) != len(w.mtime) {
+		changed = true
+	}
+	w.mtime = seen
+	return changed && !first
+}

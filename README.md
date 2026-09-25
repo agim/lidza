@@ -40,8 +40,21 @@ is one binary.
 
 ## Status
 
-Phase 0: environment. `install.sh` works; the `lidza` CLI ships in Phase 1.
-See `docs/roadmap.md`.
+Phase 1 done: `lidza new`, `lidza dev` (Go and frontend hot reload behind
+one port), `lidza build` (one binary), the `react` template and the
+`lidza-core` crate. Next: Phase 2, the agent interface (`lidza check --json`,
+`lidza mcp`). See `docs/roadmap.md`.
+
+## Developing the framework
+
+```sh
+go vet ./... && staticcheck ./... && go test ./...
+(cd core && cargo test)
+go build -o bin/lidza ./cmd/lidza
+bin/lidza new demo --lidza-dir "$PWD"   # an app pointed at this checkout
+```
+
+`docs/environment.md` has the full check list and the host setup.
 
 ## Docs
 

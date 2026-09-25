@@ -3,9 +3,10 @@
 How a developer sets up Līdza and builds an app with an AI agent (Claude
 Code, Codex CLI or Gemini CLI) doing the coding.
 
-Status 2026-09-25: `install.sh` works. The `lidza` CLI lands in roadmap
-Phase 1 and the agent interface (`lidza mcp`, `lidza check --json`) in
-Phase 2; steps that need them are marked.
+Status 2026-09-25: `install.sh` and the `lidza` CLI (`new`, `dev`, `build`)
+work. Only the `react` template exists; `svelte`, `astro` and `htmx` come
+with roadmap Phase 3. The agent interface (`lidza mcp`, `lidza check
+--json`) is Phase 2; steps that need it are marked.
 
 ## Requirements
 
@@ -51,14 +52,22 @@ Every line under "Toolchain" should read `[ok]`.
 
 ```sh
 lidza new myapp                    # default template: react
-lidza new myapp --template svelte  # or astro, htmx
+lidza new myapp --template svelte  # astro, htmx: Phase 3
 cd myapp
 lidza dev
 ```
 
-`lidza dev` starts the Go control plane on http://127.0.0.1:3000 and the
-frontend dev server on 5173 behind it. API routes live under `/api`;
-everything else is the frontend with hot reload.
+`lidza dev` starts the frontend dev server on 5173, builds the app and runs
+it on http://127.0.0.1:3000 with the frontend proxied behind it. API routes
+live under `/api` (`routes.go`); everything else is the frontend with hot
+reload. A change to a Go file rebuilds and restarts the app; `npm install`
+runs on first start. `lidza build` produces `bin/myapp`, one binary with
+the frontend embedded.
+
+The app is its own Go module requiring `github.com/agim/lidza`. While the
+repo is private, `go get` needs `GOPRIVATE=github.com/agim/lidza` and git
+access, or pass `--lidza-dir <checkout>` to `lidza new` to use a local
+copy of the framework.
 
 `lidza new` writes the agent files for you:
 
@@ -72,7 +81,8 @@ everything else is the frontend with hot reload.
 | `docs/lidza-guide.md` | all three; the framework rules in one place |
 
 The three instruction files are short and point at `docs/lidza-guide.md`,
-so there is one source of truth.
+so there is one source of truth. `lidza new` also writes `main.go` (do not
+edit), `routes.go` (API handlers) and `lidza.json`.
 
 ## Build with an agent
 

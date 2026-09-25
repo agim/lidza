@@ -1,0 +1,12 @@
+[package]
+name = "lidza-core"
+version = "0.1.0"
+edition = "2024"
+description = "Līdza compute core: Rust functions the Go control plane calls natively or as WASM"
+license = "MIT"
+repository = "https://github.com/agim/lidza"
+
+[lib]
+crate-type = ["rlib", "cdylib"]
+
+[dependencies]

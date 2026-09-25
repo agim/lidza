@@ -1,0 +1,9 @@
+# {{.Name}}
+
+A Līdza application: Go control plane, {{.Template}} frontend, one binary.
+Read `docs/lidza-guide.md` before changing anything; it has the layout, the
+commands and the rules.
+
+- `lidza dev`: run on http://127.0.0.1:3000 with hot reload for Go and the frontend.
+- `lidza build`: production binary at `bin/{{.Name}}`.
+- Go owns `/api` (`routes.go`); the frontend never defines API routes.

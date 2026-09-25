@@ -1,0 +1,15 @@
+package main
+
+import (
+	"net/http"
+
+	"github.com/agim/lidza/pkg/router"
+)
+
+// routes registers the app's API. Every route lives under /api; the frontend
+// never defines one. GET /api/v1/health is built in.
+func routes(r *router.Router) {
+	r.HandleFunc("GET /api/v1/hello/{name}", func(w http.ResponseWriter, req *http.Request) {
+		router.JSON(w, http.StatusOK, map[string]string{"hello": req.PathValue("name")})
+	})
+}

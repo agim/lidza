@@ -1,0 +1,25 @@
+package main
+
+import (
+{{- if .Dist}}
+	"embed"
+
+{{- end}}
+	"github.com/agim/lidza"
+)
+{{if .Dist}}
+// The production binary carries the frontend build. `lidza build` fills
+// {{.Dist}}/ before compiling; in dev the frontend is proxied instead.
+//
+//go:embed all:{{.Dist}}
+var dist embed.FS
+{{end}}
+func main() {
+	lidza.Run(lidza.App{
+		Name:   "{{.Name}}",
+{{- if .Dist}}
+		Dist:   lidza.Sub(dist, "{{.Dist}}"),
+{{- end}}
+		Routes: routes,
+	})
+}

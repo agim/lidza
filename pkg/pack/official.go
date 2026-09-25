@@ -83,11 +83,17 @@ var Officials = []Official{
 			"AUTH_ACCESS_TTL=15m",
 			"AUTH_REFRESH_TTL=720h",
 			"# AUTH_COOKIE_SECURE=true   # behind TLS",
+			"# AUTH_LOGIN_RPS=1           # credential attempts per second per client (auth.Throttle)",
+			"# AUTH_LOGIN_BURST=5",
+			"# AUTH_MIN_PASSWORD=10       # auth.ValidatePassword floor",
+			"# AUTH_TOKEN_TTL=1h          # verification and reset links",
 		},
 		Notes: []string{
 			"store password hashes with auth.HashPassword; check with auth.CheckPassword",
 			"login: tokens, err := auth.From(ctx).Login(ctx, userID, claims); for browsers add auth.From(ctx).Cookies(tokens) with req.SetCookie",
 			"protect routes: g := r.Group(\"/api/v1/notes\", auth.Require()); auth.CurrentUser(ctx) inside; auth.Optional() where visitors are served too",
+			"throttle the credential routes: router.Route(r, \"POST /api/v1/auth/login\", login, auth.Throttle()); check passwords with auth.From(ctx).ValidatePassword(pw, email)",
+			"email verification and password reset: auth.From(ctx).IssueToken(ctx, auth.PurposeVerifyEmail, email, 0) and ConsumeToken; the app sends the link",
 			"working code: lidza snippet routes, lidza snippet auth-handlers",
 			"run `lidza gen` and `lidza db migrate`: the auth_session table comes from schema.lidza",
 		},
@@ -235,6 +241,82 @@ func Add(root, name string) (entry string, o Official, err error) {
 		}
 	}
 	return o.Name, o, nil
+}
+
+// SyncFragments appends to schema.lidza every model, type or enum of the
+// enabled official packs' schema fragments that the app does not declare
+// yet: a pack upgraded to a newer framework version may bring a table
+// (the auth pack's auth_token, for instance), and `lidza gen` picks it up
+// without a second `lidza pack add`. It returns the names it added.
+func SyncFragments(root string, packs []string) ([]string, error) {
+	p := filepath.Join(root, schema.FileName)
+	existing, err := os.ReadFile(p)
+	if err != nil {
+		return nil, nil
+	}
+	cur, err := schema.Parse(string(existing))
+	if err != nil {
+		return nil, err
+	}
+	var added []string
+	out := string(existing)
+	for _, entry := range packs {
+		name := strings.TrimPrefix(entry, OfficialPrefix)
+		fragment, err := officialFS.ReadFile("official/" + name + "/schema.lidza")
+		if err != nil {
+			continue
+		}
+		for _, block := range schemaBlocks(string(fragment)) {
+			if cur.Model(block.name) != nil || cur.Enum(block.name) != nil {
+				continue
+			}
+			if !strings.HasSuffix(out, "\n") {
+				out += "\n"
+			}
+			out += "\n" + block.text + "\n"
+			added = append(added, block.name)
+		}
+	}
+	if len(added) == 0 {
+		return nil, nil
+	}
+	return added, os.WriteFile(p, []byte(out), 0o644)
+}
+
+type schemaBlock struct{ name, text string }
+
+// schemaBlocks splits a schema source into its top-level declarations,
+// each with the comment lines above it.
+func schemaBlocks(src string) []schemaBlock {
+	var blocks []schemaBlock
+	var pending []string // comment lines above the next declaration
+	var current []string
+	name := ""
+	for _, line := range strings.Split(strings.ReplaceAll(src, "\r\n", "\n"), "\n") {
+		trimmed := strings.TrimSpace(line)
+		switch {
+		case name != "":
+			current = append(current, line)
+			if trimmed == "}" {
+				blocks = append(blocks, schemaBlock{name: name, text: strings.Join(current, "\n")})
+				name, current = "", nil
+			}
+		case strings.HasPrefix(trimmed, "model ") || strings.HasPrefix(trimmed, "type ") || strings.HasPrefix(trimmed, "enum "):
+			f := strings.Fields(trimmed)
+			name = f[1]
+			current = append(append([]string{}, pending...), line)
+			pending = nil
+			if strings.HasSuffix(trimmed, "}") {
+				blocks = append(blocks, schemaBlock{name: name, text: strings.Join(current, "\n")})
+				name, current = "", nil
+			}
+		case strings.HasPrefix(trimmed, "//"):
+			pending = append(pending, line)
+		default:
+			pending = nil
+		}
+	}
+	return blocks
 }
 
 // appendSchema adds the pack's types to schema.lidza unless they exist.

@@ -15,6 +15,7 @@ CREATE TABLE app_user (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   email varchar(200) NOT NULL UNIQUE,
   password_hash text NOT NULL,
+  verified_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
@@ -26,4 +27,16 @@ CREATE TABLE note (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX note_owner_id_idx ON note (owner_id);
+
+CREATE TABLE auth_token (
+  id text PRIMARY KEY,
+  purpose text NOT NULL,
+  subject text NOT NULL,
+  hash text NOT NULL UNIQUE,
+  expires_at timestamptz NOT NULL,
+  used_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX auth_token_purpose_idx ON auth_token (purpose);
+CREATE INDEX auth_token_subject_idx ON auth_token (subject);
 

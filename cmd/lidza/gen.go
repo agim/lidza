@@ -77,6 +77,15 @@ func runGenResource(_ context.Context, args []string) error {
 // generateAll runs the schema generators, the pack wrappers and builds,
 // then the handler-derived outputs.
 func generateAll(dir string, cfg *config.Config, out io.Writer) error {
+	if cfg != nil {
+		added, err := pack.SyncFragments(dir, cfg.Packs)
+		if err != nil {
+			return fmt.Errorf("pack schemas: %w", err)
+		}
+		if len(added) > 0 {
+			fmt.Fprintf(out, "[lidza] schema.lidza: added %s from the packs' schemas\n", strings.Join(added, ", "))
+		}
+	}
 	if err := generateSchema(dir, out); err != nil {
 		return err
 	}

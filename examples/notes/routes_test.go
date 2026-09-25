@@ -1,13 +1,16 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/agim/lidza/pkg/lidzatest"
 
+	"notes/handlers"
 	"notes/schema"
 )
 
@@ -29,10 +32,34 @@ func TestNotes(t *testing.T) {
 	if res := srv.JSON(t, http.MethodPost, "/api/v1/auth/register", schema.Credentials{Email: "x", Password: "short"}, nil); res.StatusCode != http.StatusUnprocessableEntity {
 		t.Fatalf("invalid credentials: %d %s", res.StatusCode, body(res))
 	}
+	// The password policy: long enough for the schema, refused by the pack.
+	if res := srv.JSON(t, http.MethodPost, "/api/v1/auth/register", schema.Credentials{Email: creds.Email, Password: "password123"}, nil); res.StatusCode != http.StatusUnprocessableEntity || !strings.Contains(body(res), "too common") {
+		t.Fatalf("weak password: %d %s", res.StatusCode, body(res))
+	}
 
+	// Emails are captured instead of sent.
+	var mails []string
+	handlers.Mail = func(ctx context.Context, to, subject, body string) error {
+		mails = append(mails, body)
+		return nil
+	}
 	var session schema.Session
-	if res := srv.JSON(t, http.MethodPost, "/api/v1/auth/register", creds, &session); res.StatusCode != http.StatusCreated || session.Email != creds.Email || session.AccessToken == "" {
+	if res := srv.JSON(t, http.MethodPost, "/api/v1/auth/register", creds, &session); res.StatusCode != http.StatusCreated || session.Email != creds.Email || session.AccessToken == "" || session.Verified {
 		t.Fatalf("register: %d %+v", res.StatusCode, session)
+	}
+	if len(mails) != 1 || !strings.Contains(mails[0], "/verify?token=") {
+		t.Fatalf("verification mail: %v", mails)
+	}
+	verifyToken := strings.TrimPrefix(strings.Fields(mails[0])[1], "/verify?token=")
+	if res := srv.JSON(t, http.MethodPost, "/api/v1/auth/verify", schema.VerifyEmail{Token: "nope"}, nil); res.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("bad verify token: %d", res.StatusCode)
+	}
+	if res := srv.JSON(t, http.MethodPost, "/api/v1/auth/verify", schema.VerifyEmail{Token: verifyToken}, nil); res.StatusCode != http.StatusNoContent {
+		t.Fatalf("verify: %d %s", res.StatusCode, body(res))
+	}
+	var afterVerify schema.Session
+	if res := srv.JSON(t, http.MethodPost, "/api/v1/auth/login", creds, &afterVerify); res.StatusCode != http.StatusOK || !afterVerify.Verified {
+		t.Fatalf("login after verify: %d %+v", res.StatusCode, afterVerify)
 	}
 	if res := srv.JSON(t, http.MethodPost, "/api/v1/auth/register", creds, nil); res.StatusCode != http.StatusConflict {
 		t.Fatalf("duplicate email: %d", res.StatusCode)
@@ -51,9 +78,9 @@ func TestNotes(t *testing.T) {
 	}
 
 	// The stats pack (Rust) over a note: "first" from the title plus the body.
-	body := "the cat and the dog and the bird"
+	noteBody := "the cat and the dog and the bird"
 	var withBody schema.Note
-	if res := srv.JSON(t, http.MethodPatch, "/api/v1/notes/"+note.ID, schema.UpdateNote{Body: &body}, &withBody); res.StatusCode != http.StatusOK || withBody.Body == nil {
+	if res := srv.JSON(t, http.MethodPatch, "/api/v1/notes/"+note.ID, schema.UpdateNote{Body: &noteBody}, &withBody); res.StatusCode != http.StatusOK || withBody.Body == nil {
 		t.Fatalf("patch: %d %+v", res.StatusCode, withBody)
 	}
 	var st schema.TextStats
@@ -90,6 +117,41 @@ func TestNotes(t *testing.T) {
 	}
 	if res := srv.JSON(t, http.MethodPost, "/api/v1/auth/login", schema.Credentials{Email: other.Email, Password: "wrong password"}, nil); res.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("wrong password: %d", res.StatusCode)
+	}
+
+	// Password reset: a link by mail, a new password, every session ended.
+	mails = nil
+	if res := srv.JSON(t, http.MethodPost, "/api/v1/auth/forgot", schema.ForgotPassword{Email: "nobody@example.com"}, nil); res.StatusCode != http.StatusNoContent || len(mails) != 0 {
+		t.Fatalf("forgot for unknown email: %d %v", res.StatusCode, mails)
+	}
+	if res := srv.JSON(t, http.MethodPost, "/api/v1/auth/forgot", schema.ForgotPassword{Email: other.Email}, nil); res.StatusCode != http.StatusNoContent || len(mails) != 1 {
+		t.Fatalf("forgot: %d %v", res.StatusCode, mails)
+	}
+	resetToken := strings.TrimPrefix(strings.Fields(mails[0])[1], "/reset?token=")
+	newPassword := "battery staple horse"
+	if res := srv.JSON(t, http.MethodPost, "/api/v1/auth/reset", schema.ResetPassword{Token: resetToken, Password: newPassword}, nil); res.StatusCode != http.StatusNoContent {
+		t.Fatalf("reset: %d %s", res.StatusCode, body(res))
+	}
+	if res := srv.JSON(t, http.MethodGet, "/api/v1/auth/me", nil, nil); res.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("session should be revoked after reset: %d", res.StatusCode)
+	}
+	if res := srv.JSON(t, http.MethodPost, "/api/v1/auth/login", schema.Credentials{Email: other.Email, Password: newPassword}, nil); res.StatusCode != http.StatusOK {
+		t.Fatalf("login with the new password: %d", res.StatusCode)
+	}
+}
+
+// TestThrottle: the credential routes are rate limited per client.
+func TestThrottle(t *testing.T) {
+	srv := lidzatest.Start(t, app())
+	var last int
+	for i := 0; i < 12; i++ {
+		last = srv.JSON(t, http.MethodPost, "/api/v1/auth/login", schema.Credentials{Email: "x@example.com", Password: "wrong password"}, nil).StatusCode
+		if last == http.StatusTooManyRequests {
+			break
+		}
+	}
+	if last != http.StatusTooManyRequests {
+		t.Fatalf("no 429 after repeated attempts: %d", last)
 	}
 }
 

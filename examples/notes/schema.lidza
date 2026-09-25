@@ -14,11 +14,13 @@ model AuthSession @table("auth_session") {
   createdAt   time   @default(now())
 }
 
-// A registered person. The password is stored as an argon2id hash.
+// A registered person. The password is stored as an argon2id hash;
+// verifiedAt is set when the emailed verification link is used.
 model User @table("app_user") {
   id           uuid   @id @default(uuid())
   email        string @unique @min(3) @max(200)
   passwordHash string
+  verifiedAt   time?
   createdAt    time   @default(now())
 }
 
@@ -61,7 +63,25 @@ type Credentials {
 type Session {
   userId      uuid
   email       string
+  verified    bool
   accessToken string
+}
+
+// Body of POST /api/v1/auth/verify: the token from the emailed link.
+type VerifyEmail {
+  token string @min(1)
+}
+
+// Body of POST /api/v1/auth/forgot: where to send the reset link.
+type ForgotPassword {
+  email string @email @max(200)
+}
+
+// Body of POST /api/v1/auth/reset: the token from the emailed link and
+// the new password.
+type ResetPassword {
+  token    string @min(1)
+  password string @min(8) @max(200)
 }
 
 // Reply of GET /api/v1/auth/session: the signed-in user, or null for a
@@ -87,4 +107,14 @@ type TextStats {
 type WordCount {
   word  string
   count int
+}
+
+model AuthToken @table("auth_token") {
+  id        string @id
+  purpose   string @index
+  subject   string @index
+  hash      string @unique
+  expiresAt time
+  usedAt    time?
+  createdAt time   @default(now())
 }

@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -25,7 +26,9 @@ import (
 	"github.com/agim/lidza"
 	"github.com/agim/lidza/packs/db"
 	"github.com/agim/lidza/pkg/env"
+	"github.com/agim/lidza/pkg/middleware"
 	"github.com/agim/lidza/pkg/router"
+	"github.com/agim/lidza/pkg/validate"
 )
 
 // Config comes from the environment.
@@ -40,6 +43,16 @@ type Config struct {
 	CookieSecure bool `env:"AUTH_COOKIE_SECURE"`
 	// Issuer is the JWT iss claim.
 	Issuer string `env:"AUTH_ISSUER" default:"lidza"`
+	// LoginRPS and LoginBurst bound credential attempts per client
+	// address on the routes wrapped with Throttle (login, register,
+	// password reset).
+	LoginRPS   float64 `env:"AUTH_LOGIN_RPS" default:"1"`
+	LoginBurst int     `env:"AUTH_LOGIN_BURST" default:"5"`
+	// MinPasswordLength is the floor ValidatePassword applies.
+	MinPasswordLength int `env:"AUTH_MIN_PASSWORD" default:"10"`
+	// TokenTTL bounds the one-time tokens IssueToken creates (email
+	// verification, password reset) unless the call says otherwise.
+	TokenTTL time.Duration `env:"AUTH_TOKEN_TTL" default:"1h"`
 }
 
 // Cookie names.
@@ -162,6 +175,108 @@ func (a *Auth) RevokeAll(ctx context.Context, subject string) error {
 	return err
 }
 
+// Token purposes for IssueToken and ConsumeToken.
+const (
+	PurposeVerifyEmail   = "verify_email"
+	PurposeResetPassword = "reset_password"
+)
+
+// IssueToken creates a one-time token for a purpose and subject (an
+// email address, a user id), valid for ttl (the configured TokenTTL when
+// zero). Only its hash is stored; the token goes to the user, in a link
+// the app sends. Issuing a new token for the same purpose and subject
+// invalidates the earlier ones.
+func (a *Auth) IssueToken(ctx context.Context, purpose, subject string, ttl time.Duration) (string, error) {
+	if ttl <= 0 {
+		ttl = a.cfg.TokenTTL
+	}
+	token := randomID() + randomID()
+	if _, err := a.pool.Exec(ctx, `UPDATE auth_token SET used_at = now() WHERE purpose = $1 AND subject = $2 AND used_at IS NULL`, purpose, subject); err != nil {
+		return "", fmt.Errorf("auth: invalidate tokens: %w", err)
+	}
+	_, err := a.pool.Exec(ctx, `INSERT INTO auth_token (id, purpose, subject, hash, expires_at) VALUES ($1, $2, $3, $4, $5)`,
+		randomID(), purpose, subject, hashToken(token), time.Now().Add(ttl))
+	if err != nil {
+		return "", fmt.Errorf("auth: create token: %w", err)
+	}
+	return token, nil
+}
+
+// ConsumeToken marks a token used and returns its subject. An unknown,
+// used or expired token is a 401 the client can show; the message does
+// not say which.
+func (a *Auth) ConsumeToken(ctx context.Context, purpose, token string) (string, error) {
+	var subject string
+	err := a.pool.QueryRow(ctx, `UPDATE auth_token SET used_at = now() WHERE purpose = $1 AND hash = $2 AND used_at IS NULL AND expires_at > now() RETURNING subject`,
+		purpose, hashToken(token)).Scan(&subject)
+	if err != nil {
+		return "", router.Errorf(http.StatusUnauthorized, "invalid or expired token")
+	}
+	return subject, nil
+}
+
+// Throttle is middleware for the routes that take credentials (login,
+// register, password reset): a token bucket per client address with
+// AUTH_LOGIN_RPS and AUTH_LOGIN_BURST, replying 429 beyond it. Wrap the
+// route: router.Route(r, "POST /api/v1/auth/login", login, auth.Throttle()).
+// Behind a proxy that sets X-Forwarded-For, key on it with ThrottleBy.
+func Throttle() middleware.Middleware {
+	return ThrottleBy(nil)
+}
+
+// ThrottleBy is Throttle with a key function (nil: the client address).
+func ThrottleBy(key func(r *http.Request) string) middleware.Middleware {
+	var once sync.Once
+	var limited http.Handler
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			once.Do(func() {
+				cfg := From(r.Context()).cfg
+				limited = middleware.RateLimit(middleware.RateLimitOptions{RPS: cfg.LoginRPS, Burst: cfg.LoginBurst, Key: key})(next)
+			})
+			limited.ServeHTTP(w, r)
+		})
+	}
+}
+
+// ValidatePassword applies the password policy: at least
+// AUTH_MIN_PASSWORD characters, not among the most common passwords, not
+// the email address or its local part. The error is a field error on
+// "password", so a handler returns it as is for a 422.
+func (a *Auth) ValidatePassword(password, email string) error {
+	problem := ""
+	switch lower := strings.ToLower(password); {
+	case len([]rune(password)) < a.cfg.MinPasswordLength:
+		problem = fmt.Sprintf("at least %d characters", a.cfg.MinPasswordLength)
+	case commonPasswords[lower]:
+		problem = "too common"
+	case email != "" && (lower == strings.ToLower(email) || lower == strings.ToLower(strings.SplitN(email, "@", 2)[0])):
+		problem = "must not be the email address"
+	}
+	if problem == "" {
+		return nil
+	}
+	return &validate.Errors{Fields: []validate.FieldError{{Field: "password", Rule: "policy", Message: problem}}}
+}
+
+// commonPasswords are the most used passwords of the last years' breach
+// lists, lowercased; anything here is refused whatever its length.
+var commonPasswords = map[string]bool{}
+
+func init() {
+	for _, p := range strings.Fields(commonPasswordList) {
+		commonPasswords[p] = true
+	}
+}
+
+const commonPasswordList = `123456 123456789 12345678 password qwerty 1234567890 1234567 111111 123123 abc123 1q2w3e4r
+password1 password123 iloveyou 12345678910 admin123 letmein welcome monkey dragon sunshine princess football
+qwerty123 1qaz2wsx passw0rd baseball master superman trustno1 whatever shadow michael jennifer 123qwe 654321
+qwertyuiop 000000 1234567891 zaq12wsx 1q2w3e4r5t asdfghjkl 987654321 password12 charlie donald access
+qazwsx starwars hello123 welcome1 adminadmin administrator changeme secret123 p@ssw0rd passw0rd1
+liverpool computer internet 123abc 1234qwer qwer1234 pokemon batman freedom mustang jordan23
+11111111 12341234 aaaaaaaa abcd1234 letmein1 password! password2 welcome123 summer2023 winter2023`
+
 func (a *Auth) tokens(subject string, claims map[string]any, sessionID, refresh string) (Tokens, error) {
 	expires := time.Now().Add(a.cfg.AccessTTL)
 	mc := jwt.MapClaims{"sub": subject, "iss": a.cfg.Issuer, "sid": sessionID, "iat": time.Now().Unix(), "exp": expires.Unix()}
@@ -231,7 +346,8 @@ func CurrentUser(ctx context.Context) *User {
 
 // Require is middleware that authenticates every request under it from
 // the Authorization: Bearer header or the access cookie and replies 401
-// otherwise. A cookie-authenticated state-changing request must carry
+// otherwise, also when the token's session has been ended (logout,
+// RevokeAll). A cookie-authenticated state-changing request must carry
 // Content-Type: application/json (the generated clients always do), which
 // a cross-site form cannot send, or a Sec-Fetch-Site header saying it is
 // same-origin; so the cookie cannot be ridden by another origin (CSRF).
@@ -265,6 +381,10 @@ func guard(required bool) func(http.Handler) http.Handler {
 				router.Error(w, http.StatusUnauthorized, "invalid or expired token")
 				return
 			}
+			if u.SessionID != "" && !a.sessionActive(r.Context(), u.SessionID) {
+				router.Error(w, http.StatusUnauthorized, "session ended")
+				return
+			}
 			if fromCookie && r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodOptions &&
 				!strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") && !sameOrigin(r) {
 				router.Error(w, http.StatusForbidden, "cookie sessions must send Content-Type: application/json")
@@ -273,6 +393,16 @@ func guard(required bool) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), userKey{}, u)))
 		})
 	}
+}
+
+// sessionActive reports whether the session behind an access token is
+// still open: one primary-key lookup per authenticated request, so a
+// logout, a password reset or RevokeAll takes effect at once instead of
+// when the access token expires.
+func (a *Auth) sessionActive(ctx context.Context, sessionID string) bool {
+	var one int
+	err := a.pool.QueryRow(ctx, `SELECT 1 FROM auth_session WHERE id = $1 AND revoked_at IS NULL AND expires_at > now()`, sessionID).Scan(&one)
+	return err == nil
 }
 
 // sameOrigin reports whether the browser declared the request same-origin

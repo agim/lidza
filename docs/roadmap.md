@@ -470,6 +470,41 @@ with a route and a test, served as the snippets `pack-capability` and
 check` swallowed generator errors (a `schema.lidza` that does not parse
 reported "ok"); they are diagnostics now, with file and line.
 
+### CI, templates, deployment, auth hardening (done 2026-09-25)
+
+GitHub Actions (`.github/workflows/ci.yml`): the framework's gofmt, vet,
+staticcheck, tests and the core crate; the platform evals on a fresh
+app; the reference app's verify and browser test; Postgres 17 and
+Valkey 8 as services, staticcheck and sqlc pinned. Green on the first
+run.
+
+Templates: svelte prerenders its page at build (`vite build --ssr` plus
+`scripts/prerender.mjs`) and hydrates it, astro lints with
+`eslint-plugin-astro` and `jsx-a11y` (TypeScript parsed), both ship the
+time zone and analytics modules and a Playwright suite; htmx sets the
+`tz` cookie in its layout, has an opt-in `static/analytics.js`
+(`ANALYTICS_FRONTEND=1`) and a Go page test. Svelte's compiler a11y
+warnings are errors in `lidza check`. The Go rules honour
+`lidza:ignore L00x` comments (the htmx template's read-only template map
+needed one). The guide has a Templates table.
+
+Deployment: `lidza new` writes a `Dockerfile` (static binary, distroless
+runtime, migrations copied), `.dockerignore` and `deploy/<name>.service`
+(systemd, hardened); `docs/deploy.md` and the guide's Deployment section
+cover configuration, `DB_MIGRATE=true`, the proxy, health endpoints and
+scaling out.
+
+Auth hardening: `auth.Throttle()` (per-client rate limit on the
+credential routes, `AUTH_LOGIN_RPS`), `ValidatePassword` (length, common
+passwords, the email), one-time tokens (`IssueToken`, `ConsumeToken`,
+table `auth_token`) for email verification and password reset, and
+`Require` now rejects the access token of an ended session at once
+(one primary-key lookup per authenticated request) instead of at
+expiry. `router.Route` takes per-route middleware. `lidza gen` appends
+the models a pack's newer schema fragment brings (`pack.SyncFragments`),
+so upgraded apps get the table with the next migration. The reference
+app runs all of it, with tests; its agent files are current.
+
 ### Next
 
 Nothing queued.

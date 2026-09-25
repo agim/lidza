@@ -31,10 +31,11 @@ func (v AuthSession) Validate() error {
 
 // User is a row of the app_user table.
 type User struct {
-	ID           string    `json:"id" db:"id"`
-	Email        string    `json:"email" db:"email"`
-	PasswordHash string    `json:"passwordHash" db:"password_hash"`
-	CreatedAt    time.Time `json:"createdAt" db:"created_at"`
+	ID           string     `json:"id" db:"id"`
+	Email        string     `json:"email" db:"email"`
+	PasswordHash string     `json:"passwordHash" db:"password_hash"`
+	VerifiedAt   *time.Time `json:"verifiedAt" db:"verified_at"`
+	CreatedAt    time.Time  `json:"createdAt" db:"created_at"`
 }
 
 // Validate applies the rules of User from schema.lidza.
@@ -78,6 +79,32 @@ func (v Note) Validate() error {
 	}
 	if len(v.Title) > 200 {
 		errs.Add("title", "max", "at most 200 character(s)")
+	}
+	return errs.Result()
+}
+
+// AuthToken is a row of the auth_token table.
+type AuthToken struct {
+	ID        string     `json:"id" db:"id"`
+	Purpose   string     `json:"purpose" db:"purpose"`
+	Subject   string     `json:"subject" db:"subject"`
+	Hash      string     `json:"hash" db:"hash"`
+	ExpiresAt time.Time  `json:"expiresAt" db:"expires_at"`
+	UsedAt    *time.Time `json:"usedAt" db:"used_at"`
+	CreatedAt time.Time  `json:"createdAt" db:"created_at"`
+}
+
+// Validate applies the rules of AuthToken from schema.lidza.
+func (v AuthToken) Validate() error {
+	var errs validate.Errors
+	if v.Purpose == "" {
+		errs.Add("purpose", "required", "required")
+	}
+	if v.Subject == "" {
+		errs.Add("subject", "required", "required")
+	}
+	if v.Hash == "" {
+		errs.Add("hash", "required", "required")
 	}
 	return errs.Result()
 }
@@ -176,6 +203,7 @@ func (v Credentials) Validate() error {
 type Session struct {
 	UserID      string `json:"userId"`
 	Email       string `json:"email"`
+	Verified    bool   `json:"verified"`
 	AccessToken string `json:"accessToken"`
 }
 
@@ -190,6 +218,70 @@ func (v Session) Validate() error {
 	}
 	if v.AccessToken == "" {
 		errs.Add("accessToken", "required", "required")
+	}
+	return errs.Result()
+}
+
+// VerifyEmail is an API type.
+type VerifyEmail struct {
+	Token string `json:"token"`
+}
+
+// Validate applies the rules of VerifyEmail from schema.lidza.
+func (v VerifyEmail) Validate() error {
+	var errs validate.Errors
+	if v.Token == "" {
+		errs.Add("token", "required", "required")
+	}
+	if len(v.Token) < 1 {
+		errs.Add("token", "min", "at least 1 character(s)")
+	}
+	return errs.Result()
+}
+
+// ForgotPassword is an API type.
+type ForgotPassword struct {
+	Email string `json:"email"`
+}
+
+// Validate applies the rules of ForgotPassword from schema.lidza.
+func (v ForgotPassword) Validate() error {
+	var errs validate.Errors
+	if v.Email == "" {
+		errs.Add("email", "required", "required")
+	}
+	if len(v.Email) > 200 {
+		errs.Add("email", "max", "at most 200 character(s)")
+	}
+	if v.Email != "" && !validate.Email(v.Email) {
+		errs.Add("email", "email", "not an email address")
+	}
+	return errs.Result()
+}
+
+// ResetPassword is an API type.
+type ResetPassword struct {
+	Token    string `json:"token"`
+	Password string `json:"password"`
+}
+
+// Validate applies the rules of ResetPassword from schema.lidza.
+func (v ResetPassword) Validate() error {
+	var errs validate.Errors
+	if v.Token == "" {
+		errs.Add("token", "required", "required")
+	}
+	if len(v.Token) < 1 {
+		errs.Add("token", "min", "at least 1 character(s)")
+	}
+	if v.Password == "" {
+		errs.Add("password", "required", "required")
+	}
+	if len(v.Password) < 8 {
+		errs.Add("password", "min", "at least 8 character(s)")
+	}
+	if len(v.Password) > 200 {
+		errs.Add("password", "max", "at most 200 character(s)")
 	}
 	return errs.Result()
 }

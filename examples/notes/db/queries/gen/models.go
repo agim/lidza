@@ -9,10 +9,11 @@ import (
 )
 
 type AppUser struct {
-	ID           string    `json:"id"`
-	Email        string    `json:"email"`
-	PasswordHash string    `json:"password_hash"`
-	CreatedAt    time.Time `json:"created_at"`
+	ID           string     `json:"id"`
+	Email        string     `json:"email"`
+	PasswordHash string     `json:"password_hash"`
+	VerifiedAt   *time.Time `json:"verified_at"`
+	CreatedAt    time.Time  `json:"created_at"`
 }
 
 type AuthSession struct {
@@ -22,6 +23,16 @@ type AuthSession struct {
 	ExpiresAt   time.Time  `json:"expires_at"`
 	RevokedAt   *time.Time `json:"revoked_at"`
 	CreatedAt   time.Time  `json:"created_at"`
+}
+
+type AuthToken struct {
+	ID        string     `json:"id"`
+	Purpose   string     `json:"purpose"`
+	Subject   string     `json:"subject"`
+	Hash      string     `json:"hash"`
+	ExpiresAt time.Time  `json:"expires_at"`
+	UsedAt    *time.Time `json:"used_at"`
+	CreatedAt time.Time  `json:"created_at"`
 }
 
 type Note struct {

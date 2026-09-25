@@ -11,7 +11,7 @@ import (
 
 const createUser = `-- name: CreateUser :one
 
-INSERT INTO app_user (email, password_hash) VALUES ($1, $2) RETURNING id, email, password_hash, created_at
+INSERT INTO app_user (email, password_hash) VALUES ($1, $2) RETURNING id, email, password_hash, verified_at, created_at
 `
 
 type CreateUserParams struct {
@@ -27,13 +27,14 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (AppUser
 		&i.ID,
 		&i.Email,
 		&i.PasswordHash,
+		&i.VerifiedAt,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email, password_hash, created_at FROM app_user WHERE email = $1
+SELECT id, email, password_hash, verified_at, created_at FROM app_user WHERE email = $1
 `
 
 func (q *Queries) GetUserByEmail(ctx context.Context, email string) (AppUser, error) {
@@ -43,7 +44,37 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (AppUser, er
 		&i.ID,
 		&i.Email,
 		&i.PasswordHash,
+		&i.VerifiedAt,
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const markVerified = `-- name: MarkVerified :execrows
+UPDATE app_user SET verified_at = now() WHERE email = $1 AND verified_at IS NULL
+`
+
+func (q *Queries) MarkVerified(ctx context.Context, email string) (int64, error) {
+	result, err := q.db.Exec(ctx, markVerified, email)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const setPassword = `-- name: SetPassword :execrows
+UPDATE app_user SET password_hash = $2 WHERE email = $1
+`
+
+type SetPasswordParams struct {
+	Email        string `json:"email"`
+	PasswordHash string `json:"password_hash"`
+}
+
+func (q *Queries) SetPassword(ctx context.Context, arg SetPasswordParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setPassword, arg.Email, arg.PasswordHash)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

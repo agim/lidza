@@ -20,7 +20,7 @@
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 14
+          "Line": 9
         },
         {
           "Name": "subject",
@@ -37,7 +37,7 @@
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 15
+          "Line": 10
         },
         {
           "Name": "refreshHash",
@@ -54,7 +54,7 @@
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 16
+          "Line": 11
         },
         {
           "Name": "expiresAt",
@@ -71,7 +71,7 @@
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 17
+          "Line": 12
         },
         {
           "Name": "revokedAt",
@@ -88,7 +88,7 @@
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 18
+          "Line": 13
         },
         {
           "Name": "createdAt",
@@ -105,11 +105,11 @@
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 19
+          "Line": 14
         }
       ],
       "Indexes": null,
-      "Line": 13,
+      "Line": 8,
       "Persisted": true
     },
     {
@@ -131,7 +131,7 @@
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 24
+          "Line": 20
         },
         {
           "Name": "email",
@@ -148,7 +148,7 @@
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 25
+          "Line": 21
         },
         {
           "Name": "passwordHash",
@@ -165,7 +165,24 @@
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 26
+          "Line": 22
+        },
+        {
+          "Name": "verifiedAt",
+          "Type": "time",
+          "Optional": true,
+          "Array": false,
+          "ID": false,
+          "Unique": false,
+          "Index": false,
+          "Default": "",
+          "Ref": "",
+          "Min": null,
+          "Max": null,
+          "Email": false,
+          "URL": false,
+          "Pattern": "",
+          "Line": 23
         },
         {
           "Name": "createdAt",
@@ -182,11 +199,11 @@
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 27
+          "Line": 24
         }
       ],
       "Indexes": null,
-      "Line": 23,
+      "Line": 19,
       "Persisted": true
     },
     {
@@ -208,7 +225,7 @@
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 32
+          "Line": 29
         },
         {
           "Name": "ownerId",
@@ -225,7 +242,7 @@
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 33
+          "Line": 30
         },
         {
           "Name": "title",
@@ -242,7 +259,7 @@
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 34
+          "Line": 31
         },
         {
           "Name": "body",
@@ -259,7 +276,7 @@
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 35
+          "Line": 32
         },
         {
           "Name": "createdAt",
@@ -276,11 +293,139 @@
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 36
+          "Line": 33
         }
       ],
       "Indexes": null,
-      "Line": 31,
+      "Line": 28,
+      "Persisted": true
+    },
+    {
+      "Name": "AuthToken",
+      "Table": "auth_token",
+      "Fields": [
+        {
+          "Name": "id",
+          "Type": "string",
+          "Optional": false,
+          "Array": false,
+          "ID": true,
+          "Unique": false,
+          "Index": false,
+          "Default": "",
+          "Ref": "",
+          "Min": null,
+          "Max": null,
+          "Email": false,
+          "URL": false,
+          "Pattern": "",
+          "Line": 113
+        },
+        {
+          "Name": "purpose",
+          "Type": "string",
+          "Optional": false,
+          "Array": false,
+          "ID": false,
+          "Unique": false,
+          "Index": true,
+          "Default": "",
+          "Ref": "",
+          "Min": null,
+          "Max": null,
+          "Email": false,
+          "URL": false,
+          "Pattern": "",
+          "Line": 114
+        },
+        {
+          "Name": "subject",
+          "Type": "string",
+          "Optional": false,
+          "Array": false,
+          "ID": false,
+          "Unique": false,
+          "Index": true,
+          "Default": "",
+          "Ref": "",
+          "Min": null,
+          "Max": null,
+          "Email": false,
+          "URL": false,
+          "Pattern": "",
+          "Line": 115
+        },
+        {
+          "Name": "hash",
+          "Type": "string",
+          "Optional": false,
+          "Array": false,
+          "ID": false,
+          "Unique": true,
+          "Index": false,
+          "Default": "",
+          "Ref": "",
+          "Min": null,
+          "Max": null,
+          "Email": false,
+          "URL": false,
+          "Pattern": "",
+          "Line": 116
+        },
+        {
+          "Name": "expiresAt",
+          "Type": "time",
+          "Optional": false,
+          "Array": false,
+          "ID": false,
+          "Unique": false,
+          "Index": false,
+          "Default": "",
+          "Ref": "",
+          "Min": null,
+          "Max": null,
+          "Email": false,
+          "URL": false,
+          "Pattern": "",
+          "Line": 117
+        },
+        {
+          "Name": "usedAt",
+          "Type": "time",
+          "Optional": true,
+          "Array": false,
+          "ID": false,
+          "Unique": false,
+          "Index": false,
+          "Default": "",
+          "Ref": "",
+          "Min": null,
+          "Max": null,
+          "Email": false,
+          "URL": false,
+          "Pattern": "",
+          "Line": 118
+        },
+        {
+          "Name": "createdAt",
+          "Type": "time",
+          "Optional": false,
+          "Array": false,
+          "ID": false,
+          "Unique": false,
+          "Index": false,
+          "Default": "now()",
+          "Ref": "",
+          "Min": null,
+          "Max": null,
+          "Email": false,
+          "URL": false,
+          "Pattern": "",
+          "Line": 119
+        }
+      ],
+      "Indexes": null,
+      "Line": 112,
       "Persisted": true
     }
   ],

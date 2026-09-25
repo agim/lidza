@@ -93,10 +93,10 @@ func NotFound(what string) error {
 // status 200 (or the status set on the request); None replies 204.
 // Errors: *HTTPError sends its status, *validate.Errors sends 422, anything
 // else sends 500 and is logged, its text never reaching the client.
-func Route[In, Out any](r *Router, pattern string, h Handler[In, Out]) {
+func Route[In, Out any](r *Router, pattern string, h Handler[In, Out], mw ...middleware.Middleware) {
 	_, noBody := any(*new(In)).(None)
 	_, noReply := any(*new(Out)).(None)
-	r.HandleFunc(pattern, func(w http.ResponseWriter, req *http.Request) {
+	var handler http.Handler = http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		typed := &Request[In]{Raw: req}
 		if !noBody && hasBody(req) {
 			if err := decodeBody(req, &typed.Body); err != nil {
@@ -128,6 +128,7 @@ func Route[In, Out any](r *Router, pattern string, h Handler[In, Out]) {
 		}
 		JSON(w, typed.status, out)
 	})
+	r.Handle(pattern, middleware.Chain(handler, mw...))
 }
 
 func hasBody(req *http.Request) bool {

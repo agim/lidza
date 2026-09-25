@@ -6,3 +6,13 @@ model AuthSession @table("auth_session") {
   revokedAt   time?
   createdAt   time   @default(now())
 }
+
+model AuthToken @table("auth_token") {
+  id        string @id
+  purpose   string @index
+  subject   string @index
+  hash      string @unique
+  expiresAt time
+  usedAt    time?
+  createdAt time   @default(now())
+}

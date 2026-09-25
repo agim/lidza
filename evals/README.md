@@ -45,6 +45,13 @@ LIDZA_EVAL_AGENT='codex exec --full-auto' go test -tags agenteval ./evals -run T
 LIDZA_EVAL_AGENT='gemini --yolo' go test -tags agenteval ./evals -run TestAgent -v -timeout 1h
 ```
 
+Claude Code has run it (three of three tasks pass). Codex CLI and Gemini
+CLI are installed on the development host but need an account or an API
+key (`OPENAI_API_KEY`, `GEMINI_API_KEY`) that the runner does not have;
+their skill and command layouts (`.agents/skills`,
+`.gemini/commands/lidza`) are checked against their documentation and
+present in every app, not yet by a run.
+
 The agent runs with the CLI built from this checkout first on its PATH,
 so it and the scorer generate the same files. Each task's agent output
 is kept as `agent-output.txt` in its copy of the app and printed when

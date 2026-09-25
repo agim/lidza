@@ -28,10 +28,11 @@ func testAuth(t *testing.T) *Auth {
 	}
 	t.Cleanup(pool.Close)
 	pool.Exec(ctx, `DROP TABLE IF EXISTS auth_session`)
-	if _, err := pool.Exec(ctx, SessionTable); err != nil {
+	pool.Exec(ctx, `DROP TABLE IF EXISTS auth_token`)
+	if _, err := pool.Exec(ctx, SessionTable+TokenTable); err != nil {
 		t.Fatal(err)
 	}
-	a, err := New(Config{Secret: testSecret, AccessTTL: time.Minute, RefreshTTL: time.Hour}, pool)
+	a, err := New(Config{Secret: testSecret, AccessTTL: time.Minute, RefreshTTL: time.Hour, LoginRPS: 1, LoginBurst: 2, MinPasswordLength: 10, TokenTTL: time.Hour}, pool)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +84,12 @@ func TestSessionsAndMiddleware(t *testing.T) {
 		t.Fatal("refresh after logout")
 	}
 
-	// Middleware: bearer, cookie, CSRF rule, missing.
+	// Middleware: bearer, cookie, CSRF rule, missing. The session above
+	// was logged out, so a live one is needed.
+	tokens, err = a.Login(ctx, "user-1", map[string]any{"role": "admin"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	s := lidza.NewServices()
 	lidza.Provide(s, a)
 	var seen *User
@@ -101,6 +107,17 @@ func TestSessionsAndMiddleware(t *testing.T) {
 	}
 	if code := call(func(r *http.Request) {}); code != 401 {
 		t.Fatalf("missing: %d", code)
+	}
+	// An access token stops working the moment its session ends.
+	ended, _ := a.Login(ctx, "user-2", nil)
+	if code := call(func(r *http.Request) { r.Header.Set("Authorization", "Bearer "+ended.Access) }); code != 200 {
+		t.Fatalf("fresh session: %d", code)
+	}
+	if err := a.RevokeAll(ctx, "user-2"); err != nil {
+		t.Fatal(err)
+	}
+	if code := call(func(r *http.Request) { r.Header.Set("Authorization", "Bearer "+ended.Access) }); code != 401 {
+		t.Fatalf("revoked session still accepted: %d", code)
 	}
 	if code := call(func(r *http.Request) { r.Header.Set("Authorization", "Bearer nope") }); code != 401 {
 		t.Fatalf("bad token: %d", code)
@@ -154,5 +171,83 @@ func TestSessionsAndMiddleware(t *testing.T) {
 	a.SetCookies(rec, tokens)
 	if len(rec.Result().Cookies()) != 2 || !rec.Result().Cookies()[0].HttpOnly || len(ClearedCookies()) != 2 {
 		t.Fatal("cookies")
+	}
+}
+
+func TestTokens(t *testing.T) {
+	a := testAuth(t)
+	ctx := context.Background()
+	tok, err := a.IssueToken(ctx, PurposeVerifyEmail, "a@example.com", 0)
+	if err != nil || len(tok) < 32 {
+		t.Fatal(tok, err)
+	}
+	if _, err := a.ConsumeToken(ctx, PurposeResetPassword, tok); err == nil {
+		t.Fatal("wrong purpose accepted")
+	}
+	subject, err := a.ConsumeToken(ctx, PurposeVerifyEmail, tok)
+	if err != nil || subject != "a@example.com" {
+		t.Fatal(subject, err)
+	}
+	if _, err := a.ConsumeToken(ctx, PurposeVerifyEmail, tok); err == nil {
+		t.Fatal("token reused")
+	}
+	// A new token invalidates the previous one for the same purpose and subject.
+	first, _ := a.IssueToken(ctx, PurposeResetPassword, "b@example.com", 0)
+	second, _ := a.IssueToken(ctx, PurposeResetPassword, "b@example.com", 0)
+	if _, err := a.ConsumeToken(ctx, PurposeResetPassword, first); err == nil {
+		t.Fatal("superseded token accepted")
+	}
+	if _, err := a.ConsumeToken(ctx, PurposeResetPassword, second); err != nil {
+		t.Fatal(err)
+	}
+	expired, _ := a.IssueToken(ctx, PurposeVerifyEmail, "c@example.com", time.Millisecond)
+	time.Sleep(5 * time.Millisecond)
+	if _, err := a.ConsumeToken(ctx, PurposeVerifyEmail, expired); err == nil {
+		t.Fatal("expired token accepted")
+	}
+}
+
+func TestPasswordPolicy(t *testing.T) {
+	a := &Auth{cfg: Config{MinPasswordLength: 10}}
+	for pw, want := range map[string]string{
+		"short":                  "at least 10 characters",
+		"password123":            "too common",
+		"Password123":            "too common",
+		"agim@example.com":       "must not be the email address",
+		"correct horse battery":  "",
+		"a very long passphrase": "",
+	} {
+		err := a.ValidatePassword(pw, "agim@example.com")
+		switch {
+		case want == "" && err != nil:
+			t.Errorf("%q: unexpected %v", pw, err)
+		case want != "" && (err == nil || !strings.Contains(err.Error(), want)):
+			t.Errorf("%q: got %v, want %q", pw, err, want)
+		}
+	}
+}
+
+func TestThrottle(t *testing.T) {
+	a := testAuth(t)
+	s := lidza.NewServices()
+	lidza.Provide(s, a)
+	h := Throttle()(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) }))
+	codes := []int{}
+	for i := 0; i < 4; i++ {
+		req := httptest.NewRequest("POST", "/api/v1/auth/login", nil)
+		req.RemoteAddr = "10.0.0.1:1234"
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req.WithContext(lidza.WithServices(req.Context(), s)))
+		codes = append(codes, rec.Code)
+	}
+	if codes[0] != 200 || codes[1] != 200 || codes[2] != 429 || codes[3] != 429 {
+		t.Fatalf("burst 2 then limited: %v", codes)
+	}
+	other := httptest.NewRequest("POST", "/api/v1/auth/login", nil)
+	other.RemoteAddr = "10.0.0.2:1234"
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, other.WithContext(lidza.WithServices(other.Context(), s)))
+	if rec.Code != 200 {
+		t.Fatalf("another client limited: %d", rec.Code)
 	}
 }

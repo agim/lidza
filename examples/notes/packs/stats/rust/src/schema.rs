@@ -24,6 +24,8 @@ pub struct User {
     pub email: String,
     #[serde(rename = "passwordHash")]
     pub password_hash: String,
+    #[serde(rename = "verifiedAt")]
+    pub verified_at: Option<String>,
     #[serde(rename = "createdAt")]
     pub created_at: String,
 }
@@ -35,6 +37,20 @@ pub struct Note {
     pub owner_id: String,
     pub title: String,
     pub body: Option<String>,
+    #[serde(rename = "createdAt")]
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AuthToken {
+    pub id: String,
+    pub purpose: String,
+    pub subject: String,
+    pub hash: String,
+    #[serde(rename = "expiresAt")]
+    pub expires_at: String,
+    #[serde(rename = "usedAt")]
+    pub used_at: Option<String>,
     #[serde(rename = "createdAt")]
     pub created_at: String,
 }
@@ -68,8 +84,25 @@ pub struct Session {
     #[serde(rename = "userId")]
     pub user_id: String,
     pub email: String,
+    pub verified: bool,
     #[serde(rename = "accessToken")]
     pub access_token: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct VerifyEmail {
+    pub token: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ForgotPassword {
+    pub email: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ResetPassword {
+    pub token: String,
+    pub password: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

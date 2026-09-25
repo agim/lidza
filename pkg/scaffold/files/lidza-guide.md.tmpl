@@ -432,8 +432,15 @@ Official Go packs, configured from `.env` (see `.env.example` after
   `g := r.Group("/api/v1/notes", auth.Require())` and read
   `auth.CurrentUser(ctx)`; `auth.Optional()` for a route that serves
   visitors too (the user is nil then). Logout:
-  `auth.From(ctx).Logout(ctx, user.SessionID)`. Working code: the
-  snippets `routes` and `auth-handlers`.
+  `auth.From(ctx).Logout(ctx, user.SessionID)`. Hardening: wrap the
+  credential routes with `auth.Throttle()` (per-client rate limit,
+  `AUTH_LOGIN_RPS`), refuse weak passwords with
+  `auth.From(ctx).ValidatePassword(password, email)` (length, common
+  passwords, the email itself), and run email verification and password
+  reset on one-time tokens: `IssueToken(ctx, auth.PurposeVerifyEmail,
+  email, 0)` makes the token the app mails, `ConsumeToken` redeems it
+  once; `RevokeAll` after a reset. Working code: the snippets `routes`
+  and `auth-handlers`.
 - `jobs`: register handlers in `OnStart` with
   `jobs.FromServices(s).Handle("kind", fn)`; enqueue with
   `jobs.From(ctx).Enqueue(ctx, "kind", payload, jobs.RunAt(t))`.

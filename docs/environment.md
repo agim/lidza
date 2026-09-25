@@ -22,6 +22,8 @@ under "Verification" passes.
 | k6 | 2.3.0 | apt, `dl.k6.io` repository (installed 2026-09-25 for Phase 5) |
 | lidza | from this checkout | `~/go/bin/lidza`; `go install ./cmd/lidza` after pulling |
 | node | 22.23.2 | `/home/agim/.local/bin/node` |
+| codex | 0.157.0 | `npm install -g @openai/codex` (installed 2026-09-25 for the agent evals); needs a ChatGPT login or `OPENAI_API_KEY` to run |
+| gemini | 0.61.0 | `npm install -g @google/gemini-cli` (installed 2026-09-25 for the agent evals); needs a Google login or `GEMINI_API_KEY` to run |
 | npm | 10.9.8 | |
 | ruby | 3.4.5 | rbenv; not used by Līdza |
 | psql | 17.11 | client for the local Postgres 17 |

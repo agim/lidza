@@ -12,9 +12,13 @@ import (
 // handler typed input and output: the client in .lidza/client is generated
 // from these types, so the frontend cannot drift from the API.
 func routes(r *router.Router) {
-	// Public: anyone can register or sign in.
-	router.Route(r, "POST /api/v1/auth/register", handlers.Register)
-	router.Route(r, "POST /api/v1/auth/login", handlers.Login)
+	// Public, and throttled per client address (AUTH_LOGIN_RPS): the
+	// routes that take credentials or send emails.
+	router.Route(r, "POST /api/v1/auth/register", handlers.Register, auth.Throttle())
+	router.Route(r, "POST /api/v1/auth/login", handlers.Login, auth.Throttle())
+	router.Route(r, "POST /api/v1/auth/verify", handlers.VerifyEmail, auth.Throttle())
+	router.Route(r, "POST /api/v1/auth/forgot", handlers.ForgotPassword, auth.Throttle())
+	router.Route(r, "POST /api/v1/auth/reset", handlers.ResetPassword, auth.Throttle())
 
 	// Visitors and users alike: auth.Optional() fills in the user when the
 	// request carries a valid token and continues without one otherwise.

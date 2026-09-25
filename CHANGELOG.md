@@ -6,7 +6,7 @@ version in `go.mod`. `install.sh` pins the newest release here;
 `scripts/release.sh vX.Y.Z` turns "Unreleased" into a release, bumps the
 pin, tags and pushes.
 
-## Unreleased
+## v0.1.6 (2026-09-25)
 
 - `llm` pack: language models behind one `Chat`, `Stream`, `Embed`,
   `Generate[T]` (structured output from a schema type, validated) and

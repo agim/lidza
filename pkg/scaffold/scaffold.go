@@ -170,7 +170,7 @@ func copyTemplate(name, dst, appName string) error {
 			return err
 		}
 		rel, _ := filepath.Rel(root, p)
-		target := filepath.Join(dst, rel)
+		target := filepath.Join(dst, strings.TrimSuffix(rel, ".tmpl"))
 		if d.IsDir() {
 			return os.MkdirAll(target, 0o755)
 		}

@@ -220,3 +220,24 @@ func atoi(s string) int {
 	n, _ := strconv.Atoi(s)
 	return n
 }
+
+// svelteRe matches svelte-check's machine output:
+// 1790304146947 ERROR "src/App.svelte" 2:9 "message".
+var svelteRe = regexp.MustCompile(`^\d+ (ERROR|WARNING) "([^"]+)" (\d+):(\d+) "(.*)"$`)
+
+// parseSvelteCheck reads `svelte-check --output machine`.
+func parseSvelteCheck(out []byte) []Diagnostic {
+	var diags []Diagnostic
+	sc := bufio.NewScanner(bytes.NewReader(out))
+	for sc.Scan() {
+		m := svelteRe.FindStringSubmatch(strings.TrimRight(sc.Text(), "\r"))
+		if m == nil {
+			continue
+		}
+		diags = append(diags, Diagnostic{
+			Layer: "frontend", Tool: "svelte-check", Severity: strings.ToLower(m[1]),
+			File: filepath.ToSlash(m[2]), Line: atoi(m[3]), Column: atoi(m[4]), Message: m[5],
+		})
+	}
+	return diags
+}

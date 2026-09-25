@@ -136,25 +136,32 @@ Nothing else runs on ports 3000 or 5173.
 ```
 lidza/
 ├── lidza.go          package lidza: the runtime an app binary calls (lidza.Run)
-├── cmd/lidza/        CLI: new, dev, build, version
+├── cmd/lidza/        CLI: new, dev, build, check, gen, context, mcp, version
 ├── pkg/
 │   ├── config/       lidza.json
 │   ├── devserver/    reverse proxy, static SPA server, hot-reload coordinator
-│   ├── router/       control plane: HTTP router, /api/v1/health, JSON helpers
+│   ├── diag/         `lidza check`: go vet, staticcheck, cargo check, tsc, svelte-check
+│   ├── env/          typed configuration from .env files and the environment
+│   ├── inspect/      routes and typed operations via go/ast and go/packages, OpenAPI, llms.txt
+│   ├── mcpserver/    `lidza mcp`
+│   ├── middleware/   request id, log, recovery, timeout, body limit, CORS, secure headers
+│   ├── router/       control plane: HTTP router, typed Route[In, Out], /api/v1/health
 │   ├── scaffold/     `lidza new`: template copy plus generated Go and agent files
+│   ├── schema/       schema.lidza parser and generators (Go, SQL, migrations, Rust, JSON Schema)
+│   ├── sdk/          @lidza/client generator (TypeScript)
+│   ├── validate/     rule helpers and the 422 error shape
 │   ├── version/      build version
-│   ├── engine/       (Phase 4) binder to the Rust core (wazero)
-│   └── sdk/          (Phase 3) TypeScript / Dart client generator
+│   └── engine/       (Phase 4) binder to the Rust core (wazero)
 ├── core/             Rust crate `lidza-core` (Cargo.toml, rust-toolchain.toml, src/)
 ├── templates/
 │   ├── embed.go      embeds the template directories into the CLI
 │   ├── react/        default: Vite + React + TypeScript, TanStack Router and Query
-│   ├── svelte/       (Phase 3) Vite + Svelte 5 + TypeScript
-│   ├── astro/        (Phase 3) Astro, static output only
-│   └── htmx/         (Phase 3) Go templ + HTMX, no JS toolchain
+│   ├── svelte/       Vite + Svelte 5 + TypeScript
+│   ├── astro/        Astro, static output only
+│   └── htmx/         Go html/template views, htmx vendored, no JS toolchain
 ├── docs/
 ├── install.sh
-├── go.mod            no dependencies outside the standard library so far
+├── go.mod            dependencies: mark3labs/mcp-go, golang.org/x/tools
 └── README.md
 ```
 
@@ -176,15 +183,15 @@ Package manager: npm (already installed; no pnpm).
 | `react` | Vite on 5173, proxied by `lidza dev` | `dist/` embedded in the Go binary (`embed.FS`) |
 | `svelte` | Vite on 5173, proxied | same |
 | `astro` | Astro dev on 5173, proxied; `output: 'static'` only | same |
-| `htmx` | none; Go renders `templ` views directly | Go binary only |
+| `htmx` | none; Go renders `html/template` views from `views/` | Go binary only |
 
 Flutter/Dart is a client SDK target (`lidza-dart`), not a web template.
 
 Contract every template follows:
 
 - The frontend never defines `/api` routes; Go owns them.
-- Types come only from the generated client (`@lidza/client`); no hand-written
-  fetch wrappers.
+- Types come only from the generated client (`@lidza/client`, in
+  `.lidza/client`, aliased in the template); no hand-written fetch wrappers.
 - Frontend build errors are ingested by `lidza check --json` alongside Go and
   Rust diagnostics.
 - One binary in production: Go serves the built assets, no Node at runtime.
@@ -196,7 +203,8 @@ Contract every template follows:
   "url": "http://127.0.0.1:5173", "dist": "dist" }
 ```
 
-For `htmx`: `{ "template": "htmx" }`.
+For `htmx`: `{ "template": "htmx", "watch": ["views", "static"] }`; `watch`
+lists directories whose changes make `lidza dev` rebuild.
 
 ## Naming
 

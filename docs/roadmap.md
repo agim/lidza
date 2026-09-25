@@ -79,27 +79,45 @@ prerendering). The phases below carry the items it assigns them.
 
 ## Phase 3: Schema and SDKs
 
-- Single schema source generating Go structs, Rust serde structs and
-  migrations.
-- OpenAPI 3.1 and JSON Schema regenerated on every reload.
-- `pkg/sdk`: TypeScript client (`@lidza/client`) first, Dart second.
-- Remaining templates, each using `@lidza/client` where it has a JS
-  toolchain: `svelte` (Vite + Svelte 5), `astro` (static output only),
-  `htmx` (Go `templ`, no proxy).
-- Middleware pipeline: `router.Use`; request log, panic recovery (JSON
-  error), request id, timeouts, CORS, secure headers and CSP; CSRF for
-  cookie sessions.
-- App lifecycle hooks on `lidza.App`: `OnStart`, `OnReady`, `OnShutdown`.
-- `pkg/env`: typed configuration from the environment and `.env.<mode>`.
-- Validation rules in the schema source; Go and generated TypeScript
-  validators share them.
-- Migrations generated from the schema source.
-- React error boundary in the template.
+Done 2026-09-25, except the Dart client.
 
-Check: changing a handler's response struct updates the generated TypeScript
-types without manual steps; `tsc` on the `react` and `svelte` templates
-fails if the frontend is out of date; every template passes the Phase 1
-check (HMR through the proxy where applicable, single binary in production).
+- `schema.lidza` (`pkg/schema`): enums, models (tables) and types (API
+  shapes) with validation rules. `lidza gen` writes `schema/schema.go`
+  (structs, enum constants, `Validate()`), `db/schema.sql`, a numbered
+  migration pair when the models changed since `db/schema.lock.json`
+  (statements that lose data carry a `-- review` comment), and
+  `core/src/schema.rs` when the project has a crate.
+- Typed handlers: `router.Route[In, Out]` decodes and validates the body
+  (422 with field errors), maps `HTTPError` and `validate.Errors` to
+  statuses, hides other errors behind a 500.
+- `pkg/inspect` type-checks the app with `go/packages`; each typed route
+  becomes an operation with JSON Schemas (schema.lidza definitions carry
+  their rules); `.lidza/openapi.json` (OpenAPI 3.1) and `/openapi.json`
+  in dev, regenerated after every rebuild.
+- `pkg/sdk`: `@lidza/client` in `.lidza/client` (types.ts, client.ts):
+  one typed function per operation, `ApiError` with the field errors.
+  `lidza check` regenerates before `tsc`, so a frontend call that no
+  longer matches a handler fails with file and line. Dart client: deferred
+  until a Flutter consumer exists.
+- Templates: `svelte` (Vite + Svelte 5 + TypeScript, `svelte-check` in
+  `lidza check`), `astro` (static output, client-side scripts use the
+  client), `htmx` (Go `html/template` views embedded in the binary, htmx
+  vendored, partials call the same handler functions as the API; `lidza.json`
+  `watch` rebuilds on view changes). `html/template` replaces `templ` from
+  the plan: no extra toolchain, and the views are plain files.
+- Middleware pipeline (`pkg/middleware`): request id, request log, panic
+  recovery, per-request deadline on every API route; secure headers on
+  every response; `CORS`, `MaxBody`, `SecureHeaders` with CSP and HSTS
+  opt-in. `router.Use` for API-only middleware, `App.Middleware` for all.
+- App lifecycle hooks: `OnStart`, `OnReady`, `OnShutdown`.
+- `pkg/env`: typed configuration from `.env`, `.env.<mode>` and the
+  process environment.
+- React error boundary around the app and per route.
+
+Check (passes): changing a handler's response struct updates the generated
+TypeScript types without manual steps; `tsc` (and `svelte-check`) fail if
+the frontend is out of date; every template passes the Phase 1 check (HMR
+through the proxy where applicable, single binary in production).
 
 ## Phase 4: Packs
 

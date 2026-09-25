@@ -1,0 +1,5 @@
+.lidza/
+bin/
+.env
+.env.*
+!.env.example

@@ -20,6 +20,9 @@ func main() {
 {{- if .Dist}}
 		Dist:   lidza.Sub(dist, "{{.Dist}}"),
 {{- end}}
+{{- if eq .Template "htmx"}}
+		Frontend: pages(),
+{{- end}}
 		Routes: routes,
 	})
 }

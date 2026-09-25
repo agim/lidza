@@ -81,7 +81,7 @@ func runDev(ctx context.Context, args []string) error {
 	return devserver.Dev(ctx, cfg, devserver.Options{
 		Addr:        *addr,
 		Out:         out,
-		Watch:       []string{schema.FileName},
+		Watch:       append([]string{schema.FileName}, cfg.Frontend.Watch...),
 		BeforeBuild: func() error { return generateSchema(cfg.Dir, out) },
 		AfterBuild: func() {
 			if err := generateClient(cfg.Dir, cfg, out); err != nil {

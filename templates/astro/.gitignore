@@ -1,0 +1,9 @@
+node_modules/
+dist/*
+!dist/.gitkeep
+.astro/
+.lidza/
+bin/
+.env
+.env.*
+!.env.example

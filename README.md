@@ -34,17 +34,19 @@ at once. Full guide: `docs/getting-started.md`.
 ## Frontend
 
 Default template: Vite + React + TypeScript. `svelte`, `astro` (static) and
-`htmx` are selectable at `lidza new --template <name>`. All follow the same
-contract: Go owns `/api`, types come from the generated client, production
-is one binary.
+`htmx` (Go-rendered) are selectable at `lidza new --template <name>`. All
+follow the same contract: Go owns `/api`, types come from the generated
+client, production is one binary.
 
 ## Status
 
-Phases 1 and 2 done: `lidza new`, `lidza dev` (Go and frontend hot reload
-behind one port), `lidza build` (one binary), the `react` template, the
-`lidza-core` crate, and the agent interface: `lidza check --json`,
-`lidza context`, `lidza mcp`, `/llms.txt`. Next: Phase 3, schema and SDKs.
-See `docs/roadmap.md`; `docs/features.md` maps every capability to a phase.
+Phases 1 to 3 done: `lidza new` with the `react`, `svelte`, `astro` and
+`htmx` templates, `lidza dev` (Go and frontend hot reload behind one port),
+`lidza build` (one binary), the agent interface (`lidza check --json`,
+`lidza context`, `lidza mcp`, `/llms.txt`), `schema.lidza` with generated
+Go, SQL, migrations and Rust, typed handlers, OpenAPI and the generated
+`@lidza/client`, the middleware pipeline. Next: Phase 4, packs. See
+`docs/roadmap.md`; `docs/features.md` maps every capability to a phase.
 
 ## Developing the framework
 

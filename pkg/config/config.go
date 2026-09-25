@@ -36,6 +36,10 @@ type Frontend struct {
 	// Dist is the build output directory, relative to the project root,
 	// embedded into the production binary.
 	Dist string `json:"dist,omitempty"`
+	// Watch lists directories, relative to the project root, whose files
+	// `lidza dev` rebuilds on besides the Go sources: views and static
+	// files a Go-rendered frontend embeds.
+	Watch []string `json:"watch,omitempty"`
 }
 
 // HasDevServer reports whether the template runs a separate dev server that
@@ -47,6 +51,7 @@ func Default(name, template string) Config {
 	c := Config{Name: name, Frontend: Frontend{Template: template}}
 	switch template {
 	case "htmx":
+		c.Frontend.Watch = []string{"views", "static"}
 	default:
 		c.Frontend.Dev = "npm run dev -- --port 5173"
 		c.Frontend.URL = "http://127.0.0.1:5173"

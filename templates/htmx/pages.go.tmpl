@@ -1,0 +1,71 @@
+package main
+
+import (
+	"embed"
+	"html/template"
+	"io/fs"
+	"log/slog"
+	"net/http"
+
+	"github.com/agim/lidza/pkg/router"
+)
+
+// Views and static files ship inside the binary. `lidza dev` rebuilds when
+// they change (lidza.json "watch").
+//
+//go:embed views static
+var assets embed.FS
+
+// Each page is layout.html plus its own file, which defines "content".
+// Partials are fragments htmx swaps into the page.
+var (
+	pageTemplates = map[string]*template.Template{
+		"index": template.Must(template.ParseFS(assets, "views/layout.html", "views/index.html")),
+		"about": template.Must(template.ParseFS(assets, "views/layout.html", "views/about.html")),
+	}
+	partials = template.Must(template.ParseFS(assets, "views/partials/*.html"))
+)
+
+// pages serves everything outside /api: full pages, htmx partials and
+// static files.
+func pages() http.Handler {
+	mux := http.NewServeMux()
+	static, _ := fs.Sub(assets, "static")
+	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServerFS(static)))
+	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
+		renderPage(w, "index", map[string]any{"Title": "__LIDZA_APP_NAME__"})
+	})
+	mux.HandleFunc("GET /about", func(w http.ResponseWriter, r *http.Request) {
+		renderPage(w, "about", map[string]any{"Title": "About"})
+	})
+	// A partial calls the same handler function as the JSON API, so the
+	// HTML and the API cannot disagree.
+	mux.HandleFunc("GET /partials/hello", func(w http.ResponseWriter, r *http.Request) {
+		name := r.URL.Query().Get("name")
+		if name == "" {
+			name = "world"
+		}
+		r.SetPathValue("name", name)
+		greeting, err := hello(r.Context(), &router.Request[router.None]{Raw: r})
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		renderPartial(w, "hello.html", greeting)
+	})
+	return mux
+}
+
+func renderPage(w http.ResponseWriter, name string, data any) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := pageTemplates[name].ExecuteTemplate(w, "layout", data); err != nil {
+		slog.Error("render page", "page", name, "error", err)
+	}
+}
+
+func renderPartial(w http.ResponseWriter, name string, data any) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := partials.ExecuteTemplate(w, name, data); err != nil {
+		slog.Error("render partial", "partial", name, "error", err)
+	}
+}

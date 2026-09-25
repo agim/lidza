@@ -9,19 +9,19 @@ does not reimplement).
 |---|---|---|
 | CLI tools | done | `lidza new`, `dev`, `build`, `check`; generators for handlers, pages and packs in phase 4 |
 | Hot module replacement | done | Vite HMR through the `lidza dev` proxy; Go handlers rebuild and restart, frontend state is kept |
-| API route parameter parsing | done | `net/http` patterns, `req.PathValue("id")`; typed parameters from the schema in phase 3 |
+| API route parameter parsing | done | `net/http` patterns, `req.Param("id")` in typed handlers; the client takes them as a typed object |
 | Automated asset bundling | done | Vite: minify, hash, code split, `dist/` embedded in the binary. Image optimization: phase 3 template build |
 | Query caching | done (client) / phase 6 (server) | TanStack Query in the template; server-side cache pack on Valkey |
 | Virtual DOM / efficient diffing | template | React 19 (`react`), compiled updates (`svelte`) |
 | Component lifecycle hooks (frontend) | template | React effects; Svelte lifecycle |
-| Application lifecycle hooks (server) | phase 3 | `lidza.App` gains `OnStart`, `OnReady`, `OnShutdown`; `lidza dev` reload hooks |
-| HTTP middleware pipeline | phase 3 | `router.Use(...)`; request log, panic recovery, request id, timeouts as the first middlewares |
-| CORS | phase 3 | `middleware.CORS` with origins from `lidza.json`; off by default, same-origin is the normal case |
-| Built-in vulnerability shields | phase 3 (headers, CSRF) / phase 4 (SQL) | secure headers and CSP middleware; CSRF tokens for cookie sessions; SQL injection prevented by parameterized queries only (`sqlc`, `pgx`), never string-built SQL; XSS by React escaping plus CSP |
-| Environment configuration injection | phase 3 | `pkg/env`: typed config struct filled from the environment and `.env.<mode>` files; secrets never in `lidza.json` |
-| Form validation | phase 3 | rules in the single schema source; Go validators and generated TypeScript validators from the same rules, one message catalog |
-| Automatic error boundaries | phase 3 | React error boundary in the template; Go panic recovery middleware returning a JSON error |
-| Database schema migrations | phase 3 / phase 4 | migrations generated from the schema source (phase 3); `lidza db migrate`, `rollback`, `status` in the `db` pack (phase 4) |
+| Application lifecycle hooks (server) | done | `lidza.App.OnStart`, `OnReady`, `OnShutdown` |
+| HTTP middleware pipeline | done | `pkg/middleware`; request id, log, recovery and deadline on every API route; `router.Use`, `App.Middleware` |
+| CORS | done | `middleware.CORS`; off by default, same-origin is the normal case |
+| Built-in vulnerability shields | done (headers) / phase 4 (SQL) / phase 6 (CSRF) | secure headers on every response, CSP and HSTS opt-in; body limits; SQL injection prevented by parameterized queries only (`sqlc`, `pgx`); XSS by template escaping plus CSP; CSRF tokens arrive with cookie sessions |
+| Environment configuration injection | done | `pkg/env`: typed struct from `.env`, `.env.<mode>` and the environment; secrets never in `lidza.json` |
+| Form validation | done (server) / phase 7 (client) | rules in `schema.lidza`; generated `Validate()` runs before every typed handler, 422 with field errors the client exposes as `ApiError.fields`; client-side validators from the same rules later |
+| Automatic error boundaries | done | React error boundary in the template; Go panic recovery returning a JSON error |
+| Database schema migrations | done (generate) / phase 4 (apply) | `lidza gen` diffs `schema.lidza` against `db/schema.lock.json` into numbered up/down scripts; `lidza db migrate`, `rollback`, `status` in the `db` pack |
 | Database connection pooling | phase 4 | `pgxpool` in the `db` pack, bounded by config; `/readyz` reports pool health |
 | Object-relational mapping | phase 4 | `sqlc` in the `db` pack: SQL in `.sql` files, generated typed Go functions and structs; see "Decisions" |
 | Dependency injection | phase 4 | `lidza.Services`: typed constructors registered once, resolved by type at startup and per request; packs register their services. Explicit, no reflection scanning |

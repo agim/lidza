@@ -4,9 +4,8 @@ How a developer sets up Līdza and builds an app with an AI agent (Claude
 Code, Codex CLI or Gemini CLI) doing the coding.
 
 Status 2026-09-25: `install.sh`, the `lidza` CLI (`new`, `dev`, `build`,
-`check`, `context`, `mcp`) and the agent interface work. Only the `react`
-template exists; `svelte`, `astro` and `htmx` come with roadmap Phase 3, the
-generated client too.
+`check`, `gen`, `context`, `mcp`), the agent interface, the four templates
+and the generated TypeScript client work.
 
 ## Requirements
 
@@ -52,7 +51,7 @@ Every line under "Toolchain" should read `[ok]`.
 
 ```sh
 lidza new myapp                    # default template: react
-lidza new myapp --template svelte  # astro, htmx: Phase 3
+lidza new myapp --template svelte  # or astro, htmx
 cd myapp
 lidza dev
 ```
@@ -82,7 +81,8 @@ copy of the framework.
 
 The three instruction files are short and point at `docs/lidza-guide.md`,
 so there is one source of truth. `lidza new` also writes `main.go` (do not
-edit), `routes.go` (API handlers) and `lidza.json`.
+edit), `routes.go` (API handlers), `schema.lidza` (data shapes) and
+`lidza.json`.
 
 ## Build with an agent
 
@@ -117,8 +117,9 @@ The agent loop Līdza is built for:
 1. The agent edits Go, Rust or frontend code.
 2. `lidza check --json` returns one JSON list of errors across all three
    layers, with file and line.
-3. `lidza dev` hot-reloads; the generated client keeps frontend types in sync
-   with the Go handlers (Phase 3).
+3. `lidza dev` hot-reloads; the generated client (`@lidza/client`) keeps
+   frontend types in sync with the Go handlers, and `schema.lidza` is the
+   one place data shapes are declared.
 4. `lidza mcp` lets the agent ask for the route map, diagnostics and logs
    instead of grepping.
 

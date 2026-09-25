@@ -22,8 +22,10 @@ func TestWatcher(t *testing.T) {
 	write("go.mod", "module x")
 	write("node_modules/x/index.go", "ignored")
 	write("src/App.tsx", "ignored")
+	write("views/index.html", "page")
+	write("schema.lidza", "type A { x int }")
 
-	w := newWatcher(dir)
+	w := newWatcher(dir, "schema.lidza", "views")
 	if w.scan() {
 		t.Fatal("first scan must not report a change")
 	}
@@ -57,5 +59,16 @@ func TestWatcher(t *testing.T) {
 	os.Remove(filepath.Join(dir, "routes.go"))
 	if !w.scan() {
 		t.Fatal("deleted Go file not reported")
+	}
+
+	// Extra files and directories trigger.
+	write("schema.lidza", "type A { x int y int }")
+	os.Chtimes(filepath.Join(dir, "schema.lidza"), future, future)
+	if !w.scan() {
+		t.Fatal("schema change not reported")
+	}
+	write("views/partials/new.html", "x")
+	if !w.scan() {
+		t.Fatal("new file in watched dir not reported")
 	}
 }

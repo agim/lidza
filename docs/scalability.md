@@ -80,7 +80,7 @@ Apply to every Go package, Rust module, pack and template, now.
 | Stateless handlers, `net/http` router, no global state | in force since Phase 1: `pkg/router` holds only the mux; `pkg/devserver` is dev-only |
 | Dev-only process supervision bounded by contexts | Phase 1 (`pkg/devserver`) |
 | Owned goroutines, contexts on every command | Phase 1 and 2 (`diag`, `devserver`) |
-| Middleware pipeline: timeouts, body limits, request ids | Phase 3 |
+| Middleware pipeline: timeouts, body limits, request ids | in force since Phase 3 (`pkg/middleware`) |
 | Sessions as tokens or Valkey rows | Phase 6 (`auth` pack) |
 | `pgxpool` bounds, generated queries | Phase 4 (`db` pack) |
 | Bounded wazero pool with per-call deadlines | Phase 5 |

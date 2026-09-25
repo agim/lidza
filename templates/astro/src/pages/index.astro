@@ -1,0 +1,35 @@
+---
+import Base from '../layouts/Base.astro'
+---
+
+<Base title="__LIDZA_APP_NAME__">
+  <h1>__LIDZA_APP_NAME__</h1>
+  <p>Astro frontend (static HTML at build time), Go control plane, one port.</p>
+  <section>
+    <h2>api.hello: GET /api/v1/hello/world</h2>
+    <p id="greeting">Loading…</p>
+  </section>
+  <section>
+    <h2>api.health: GET /api/v1/health</h2>
+    <pre id="health"></pre>
+  </section>
+  <p>
+    This page is prerendered; the data above is fetched in the browser through
+    <code>@lidza/client</code>. Edit <code>src/pages/index.astro</code> and save:
+    the page updates without a reload.
+  </p>
+</Base>
+
+<script>
+  import { api } from '@lidza/client'
+
+  const greeting = document.getElementById('greeting')!
+  const health = document.getElementById('health')!
+  try {
+    greeting.textContent = (await api.hello({ name: 'world' })).message
+    health.textContent = JSON.stringify(await api.health(), null, 2)
+  } catch (e) {
+    greeting.textContent = String(e)
+    greeting.className = 'error'
+  }
+</script>

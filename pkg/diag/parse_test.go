@@ -83,3 +83,15 @@ func TestDedupe(t *testing.T) {
 		t.Fatalf("got %+v", got)
 	}
 }
+
+func TestParseSvelteCheck(t *testing.T) {
+	out := []byte("1790304146944 START \"/x\"\n1790304146947 ERROR \"src/App.svelte\" 2:9 \"Type 'string' is not assignable to type 'number'.\"\n1790304146947 WARNING \"src/A.svelte\" 5:1 \"unused\"\n1790304146947 COMPLETED 80 FILES 1 ERRORS 1 WARNINGS 2 FILES_WITH_PROBLEMS\n")
+	got := parseSvelteCheck(out)
+	want := []Diagnostic{
+		{Layer: "frontend", Tool: "svelte-check", Severity: "error", File: "src/App.svelte", Line: 2, Column: 9, Message: "Type 'string' is not assignable to type 'number'."},
+		{Layer: "frontend", Tool: "svelte-check", Severity: "warning", File: "src/A.svelte", Line: 5, Column: 1, Message: "unused"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %+v", got)
+	}
+}

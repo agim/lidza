@@ -16,7 +16,7 @@ func TestRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Name != "demo" || got.Frontend != want.Frontend || got.Dir != dir {
+	if got.Name != "demo" || got.Frontend.Template != want.Frontend.Template || got.Frontend.Dev != want.Frontend.Dev || got.Dir != dir {
 		t.Fatalf("got %+v", got)
 	}
 	if !got.Frontend.HasDevServer() {
@@ -26,7 +26,7 @@ func TestRoundTrip(t *testing.T) {
 
 func TestHTMXHasNoDevServer(t *testing.T) {
 	c := Default("demo", "htmx")
-	if c.Frontend.HasDevServer() || c.Frontend.Dist != "" {
+	if c.Frontend.HasDevServer() || c.Frontend.Dist != "" || len(c.Frontend.Watch) != 2 {
 		t.Fatalf("got %+v", c.Frontend)
 	}
 }

@@ -71,7 +71,7 @@ func TestNewRejects(t *testing.T) {
 			t.Errorf("name %q accepted", name)
 		}
 	}
-	if err := New(ctx, Options{Name: "ok", Dir: filepath.Join(base, "y"), Template: "svelte", SkipModTidy: true}); err == nil || !strings.Contains(err.Error(), "svelte") {
+	if err := New(ctx, Options{Name: "ok", Dir: filepath.Join(base, "y"), Template: "vue", SkipModTidy: true}); err == nil || !strings.Contains(err.Error(), "vue") {
 		t.Errorf("unknown template: %v", err)
 	}
 	full := filepath.Join(base, "full")
@@ -85,5 +85,45 @@ func TestNewRejects(t *testing.T) {
 func TestGoMinor(t *testing.T) {
 	if v := goMinor(); !strings.HasPrefix(v, "1.") || strings.Count(v, ".") != 1 {
 		t.Fatalf("goMinor = %q", v)
+	}
+}
+
+func TestNewEveryTemplate(t *testing.T) {
+	for _, tpl := range []string{"svelte", "astro", "htmx"} {
+		dir := filepath.Join(t.TempDir(), tpl)
+		if err := New(context.Background(), Options{Name: "app", Dir: dir, Template: tpl, LidzaDir: "../..", SkipModTidy: true}); err != nil {
+			t.Fatalf("%s: %v", tpl, err)
+		}
+		cfg, err := config.Load(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.Frontend.Template != tpl {
+			t.Errorf("%s: template %q", tpl, cfg.Frontend.Template)
+		}
+		if tpl == "htmx" {
+			for _, f := range []string{"pages.go", "views/layout.html", "views/partials/hello.html", "static/htmx.min.js"} {
+				if _, err := os.Stat(filepath.Join(dir, f)); err != nil {
+					t.Errorf("htmx: missing %s", f)
+				}
+			}
+			if _, err := os.Stat(filepath.Join(dir, "pages.go.tmpl")); err == nil {
+				t.Error("htmx: .tmpl suffix not stripped")
+			}
+			main, _ := os.ReadFile(filepath.Join(dir, "main.go"))
+			if !strings.Contains(string(main), "Frontend: pages()") || strings.Contains(string(main), "go:embed") {
+				t.Errorf("htmx main.go:\n%s", main)
+			}
+			pages, _ := os.ReadFile(filepath.Join(dir, "pages.go"))
+			if strings.Contains(string(pages), namePlaceholder) {
+				t.Error("htmx: placeholder left in pages.go")
+			}
+		} else {
+			for _, f := range []string{"package.json", "dist/.gitkeep", ".env.example"} {
+				if _, err := os.Stat(filepath.Join(dir, f)); err != nil {
+					t.Errorf("%s: missing %s", tpl, f)
+				}
+			}
+		}
 	}
 }

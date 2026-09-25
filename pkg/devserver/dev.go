@@ -29,8 +29,8 @@ type Options struct {
 	// restart. `lidza dev` uses it to refresh the agent context files and
 	// the generated client.
 	AfterBuild func()
-	// Watch lists extra files, relative to the project root, whose change
-	// triggers a rebuild besides the Go sources.
+	// Watch lists extra files or directories, relative to the project
+	// root, whose change triggers a rebuild besides the Go sources.
 	Watch []string
 }
 
@@ -224,17 +224,36 @@ func checkPortFree(addr string) error {
 // poll keeps the dev server dependency-free and behaves the same on every
 // filesystem; the tree is small enough that a 500ms scan is cheap.
 type watcher struct {
-	root  string
-	extra map[string]bool // relative paths watched besides Go sources
-	mtime map[string]time.Time
+	root      string
+	extra     map[string]bool // files watched besides Go sources
+	extraDirs []string        // directories whose every file is watched
+	mtime     map[string]time.Time
 }
 
 func newWatcher(root string, extra ...string) *watcher {
 	w := &watcher{root: root, extra: map[string]bool{}, mtime: map[string]time.Time{}}
 	for _, e := range extra {
-		w.extra[filepath.Join(root, e)] = true
+		p := filepath.Join(root, e)
+		if info, err := os.Stat(p); err == nil && info.IsDir() {
+			w.extraDirs = append(w.extraDirs, p+string(filepath.Separator))
+		} else {
+			w.extra[p] = true
+		}
 	}
 	return w
+}
+
+func (w *watcher) watched(p string) bool {
+	name := filepath.Base(p)
+	if strings.HasSuffix(name, ".go") || name == "go.mod" || name == "go.sum" || w.extra[p] {
+		return true
+	}
+	for _, d := range w.extraDirs {
+		if strings.HasPrefix(p, d) {
+			return true
+		}
+	}
+	return false
 }
 
 var skipDirs = map[string]bool{
@@ -257,8 +276,7 @@ func (w *watcher) scan() bool {
 			}
 			return nil
 		}
-		name := d.Name()
-		if !strings.HasSuffix(name, ".go") && name != "go.mod" && name != "go.sum" && !w.extra[p] {
+		if !w.watched(p) {
 			return nil
 		}
 		info, err := d.Info()

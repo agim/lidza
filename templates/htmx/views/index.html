@@ -1,0 +1,17 @@
+{{define "content"}}
+<h1>{{.Title}}</h1>
+<p>HTML rendered in Go, htmx for interaction, one binary, no JavaScript toolchain.</p>
+<section>
+  <h2>GET /partials/hello</h2>
+  <form hx-get="/partials/hello" hx-target="#greeting" hx-trigger="submit, load">
+    <label>Name <input name="name" value="world" /></label>
+    <button type="submit">Greet</button>
+  </form>
+  <p id="greeting">Loading…</p>
+</section>
+<section>
+  <h2>The same data as JSON</h2>
+  <p>The partial above and <a href="/api/v1/hello/world"><code>/api/v1/hello/world</code></a> call the same Go function.</p>
+</section>
+<p>Edit <code>views/index.html</code> and save: <code>lidza dev</code> rebuilds and restarts the app.</p>
+{{end}}

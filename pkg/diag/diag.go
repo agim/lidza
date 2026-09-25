@@ -111,6 +111,7 @@ func Run(ctx context.Context, l Layers) Report {
 		{"staticcheck", "go", func(ctx context.Context) ([]Diagnostic, ToolRun) { return runStaticcheck(ctx, l) }},
 		{"cargo check", "rust", func(ctx context.Context) ([]Diagnostic, ToolRun) { return runCargo(ctx, l) }},
 		{"tsc", "frontend", func(ctx context.Context) ([]Diagnostic, ToolRun) { return runTSC(ctx, l) }},
+		{"svelte-check", "frontend", func(ctx context.Context) ([]Diagnostic, ToolRun) { return runSvelteCheck(ctx, l) }},
 	}
 	diags := make([][]Diagnostic, len(jobs))
 	runs := make([]ToolRun, len(jobs))
@@ -253,6 +254,23 @@ func runTSC(ctx context.Context, l Layers) ([]Diagnostic, ToolRun) {
 	stdout, stderr, err := command(ctx, l.Dir, tsc, "--noEmit", "--pretty", "false")
 	diags := parseTSC(stdout)
 	if err != nil && len(diags) == 0 {
+		return nil, ToolRun{Failed: true, Reason: firstLine(append(stdout, stderr...), err)}
+	}
+	return diags, ToolRun{}
+}
+
+// runSvelteCheck covers .svelte files, which tsc does not read.
+func runSvelteCheck(ctx context.Context, l Layers) ([]Diagnostic, ToolRun) {
+	if !l.TSConfig {
+		return nil, skip("no tsconfig.json")
+	}
+	bin := filepath.Join(l.Dir, "node_modules", ".bin", "svelte-check")
+	if !fileExists(bin) {
+		return nil, skip("not a svelte project")
+	}
+	stdout, stderr, err := command(ctx, l.Dir, bin, "--output", "machine", "--tsconfig", "./tsconfig.json")
+	diags := parseSvelteCheck(stdout)
+	if err != nil && len(diags) == 0 && !bytes.Contains(stdout, []byte("COMPLETED")) {
 		return nil, ToolRun{Failed: true, Reason: firstLine(append(stdout, stderr...), err)}
 	}
 	return diags, ToolRun{}

@@ -33,7 +33,7 @@ func TestRunGoModule(t *testing.T) {
 			if tr.Skipped || tr.Failed {
 				t.Errorf("go vet: %+v", tr)
 			}
-		case "cargo check", "tsc":
+		case "cargo check", "tsc", "svelte-check":
 			if !tr.Skipped {
 				t.Errorf("%s should be skipped: %+v", tr.Tool, tr)
 			}

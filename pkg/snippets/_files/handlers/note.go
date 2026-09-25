@@ -16,6 +16,7 @@ import (
 	"github.com/agim/lidza/pkg/router"
 
 	"notes/db/queries/gen"
+	"notes/packs/stats"
 	"notes/schema"
 )
 
@@ -23,9 +24,28 @@ import (
 func NoteRoutes(r *router.Router) {
 	router.Route(r, "GET /api/v1/notes", listNotes)
 	router.Route(r, "GET /api/v1/notes/{id}", getNote)
+	router.Route(r, "GET /api/v1/notes/{id}/stats", noteStats)
 	router.Route(r, "POST /api/v1/notes", createNote)
 	router.Route(r, "PATCH /api/v1/notes/{id}", updateNote)
 	router.Route(r, "DELETE /api/v1/notes/{id}", deleteNote)
+}
+
+// noteStats runs the stats pack (Rust, packs/stats) over a note: the
+// generated wrapper is called like any Go method and runs the capability
+// in a bounded pool with a deadline.
+func noteStats(ctx context.Context, req *router.Request[router.None]) (schema.TextStats, error) {
+	row, err := queries.New(db.From(ctx)).GetNote(ctx, queries.GetNoteParams{ID: req.Param("id"), OwnerID: auth.CurrentUser(ctx).ID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return schema.TextStats{}, router.NotFound("note")
+	}
+	if err != nil {
+		return schema.TextStats{}, err
+	}
+	text := row.Title
+	if row.Body != nil {
+		text += " " + *row.Body
+	}
+	return stats.From(ctx).TextStats(ctx, schema.TextStatsInput{Text: text})
 }
 
 func listNotes(ctx context.Context, req *router.Request[router.None]) (schema.NoteList, error) {

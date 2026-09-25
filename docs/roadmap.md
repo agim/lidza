@@ -449,6 +449,27 @@ page, an MCP tool) and scores each with `lidza verify` plus a probe; the
 agent command comes from `LIDZA_EVAL_AGENT`, run by the operator, since
 the runner adds no permission-skipping flag of its own.
 
+### Rust: measured, tuned, explained (done 2026-09-25)
+
+`pkg/engine` benchmarks (`go test ./pkg/engine -bench .`) measure the
+boundary at three payload sizes and two workloads written identically
+in Go and in a pack. The first run exposed two engine costs: every call
+looked up the capability's export through wazero, 37 µs each (now
+cached per instance), and the per-loop deadline checks behind
+`WithCloseOnContextDone` slow tight loops 3 to 8 times (now a per-pack
+manifest option, `uninterruptible`, set for the official `geo` and
+`media` packs and for input-bounded loops). Pack crates build with
+`opt-level = 3`. The honest result on this host: a pack runs 1.6 to 3
+times slower than Go on the same work and pays about 12 µs plus 14 µs
+per KB at the boundary; Rust's case is containment, crates and heap
+pressure, not speed. The app guide's "Rust: when and how" says so with
+the table and the rule; the agent files carry the one-line version.
+`examples/notes` gained a `stats` pack (word statistics over a note)
+with a route and a test, served as the snippets `pack-capability` and
+`pack-manifest`; the evals gained a pack case. Found on the way: `lidza
+check` swallowed generator errors (a `schema.lidza` that does not parse
+reported "ok"); they are diagnostics now, with file and line.
+
 ### Next
 
 Nothing queued.

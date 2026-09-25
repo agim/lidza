@@ -31,7 +31,8 @@ notes/
 ├── .lidza/client/   generated TypeScript client (gitignored, `lidza gen`)
 ├── dist/            frontend build output, embedded into the binary. Never edit.
 ├── .githooks/pre-commit  runs lidza verify before every commit
-├── .claude/skills/  one skill per recipe below, generated from this file
+├── .claude/skills/  one skill per recipe below (Claude Code), generated from this file
+├── .agents/skills/  the same skills for Codex; .gemini/commands/lidza/ the same as Gemini commands
 ├── docs/lidza-guide.md   this file
 └── .lidza/          dev build artifacts (gitignored)
 ```
@@ -73,10 +74,15 @@ notes/
 | `lidza_logs` | the last lines of the `lidza dev` output (`lines`, `filter`) |
 | `lidza_config` | `lidza.json` |
 | `lidza_api` | the framework's public Go API (`package`, `filter`), also the resource `lidza://api` |
+| `lidza_snippet` | a file of the reference app, verified by its tests (`name`: `schema`, `routes`, `auth-handlers`, `resource-handlers`, `queries`, `handler-test`, `mcp-tool`, `page`, `browser-test`); also `lidza snippet` |
 | `lidza_errors` | captured errors (analytics pack) |
 
 Its prompts are the recipes of this guide (`add-api-route`,
-`add-resource`, ...), also written as skills to `.claude/skills/`.
+`add-resource`, ...). The same recipes are skills for Claude Code
+(`.claude/skills/`) and Codex (`.agents/skills/`, invoked as
+`$add-api-route`) and commands for Gemini CLI (`.gemini/commands/lidza/`,
+invoked as `/lidza:add-api-route`); `lidza gen` rewrites all of them from
+this file.
 
 The app adds its own tools in `tools.go` with
 `lidza.ToolFunc("name", "what it does", func(ctx, In) (Out, error))`;
@@ -114,8 +120,13 @@ signature. Both are regenerated after each Go rebuild.
    carries the request id, so one request's lines are found together.
    Never `fmt.Println` in handlers.
 9. Before calling a framework function, read its signature: `lidza api
-   [package] [--filter name]` or the MCP tool `lidza_api`. An import of a
-   framework package that does not exist fails `lidza check` (L004).
+   [package] [--filter name]` or the MCP tool `lidza_api`; `lidza api app`
+   (or `./handlers`) does the same for this app's own packages. An import
+   of a framework package that does not exist fails `lidza check` (L004).
+10. Before writing a handler, page, test or tool of a kind you have not
+   written here, read the matching snippet (`lidza snippet` or the MCP
+   tool `lidza_snippet`): it is the reference app's code, verified by its
+   tests.
 
 ## Tests
 
@@ -136,9 +147,10 @@ prints the install line; `lidza test --e2e --install` runs it.
 
 ## Recipes
 
-Step-by-step tasks. Each one is also a prompt in `lidza mcp` and a skill
-in `.claude/skills/<name>`; `lidza gen` rewrites the skills from this
-section, so edit it here. Every recipe ends the same way: `lidza check
+Step-by-step tasks. Each one is also a prompt in `lidza mcp`, a skill in
+`.claude/skills/<name>` and `.agents/skills/<name>`, and a Gemini command
+in `.gemini/commands/lidza/<name>.toml`; `lidza gen` rewrites them from
+this section, so edit it here. Every recipe ends the same way: `lidza check
 --json` until `"status": "ok"`, then `lidza test`.
 
 ### Add an API route
@@ -207,8 +219,10 @@ backed by Postgres. Needs the `db` pack (`lidza pack add db`).
    `handlers/post.go` with the routes under `/api/v1/posts`, and the
    registration line in `routes.go`.
 3. Run `lidza db migrate` to apply the new migration in `db/migrations/`.
-4. The generated handlers file is ordinary code: add authorization
-   (`auth.Require()` on a sub-router), filters or ownership checks there.
+4. The generated handlers file is ordinary code: mount the routes on a
+   group (`handlers.PostRoutes(r.Group("/api/v1/posts", auth.Require()))`),
+   add filters or ownership checks there (the snippet
+   `resource-handlers` scopes every query to the signed-in user).
    Regenerate with `--force` to reset it.
 5. `lidza check`, then `lidza test`.
 
@@ -241,8 +255,9 @@ Add a client-side route rendered by React, prerendered at build time.
 
 ### Add a pack capability
 
-Run CPU-heavy or memory-heavy work in Rust, compiled to WASM and called
-from a handler with a deadline.
+Run work in Rust, compiled to WASM and called from a handler with a
+deadline: for code that must be contained, a crate Go lacks, or heap
+pressure. Read "Rust: when and how" first; it is not for speed.
 
 1. `lidza pack scaffold <name>` creates `packs/<name>` with a crate and
    an example capability (skip when the pack exists).
@@ -321,6 +336,62 @@ out, err := geo.From(ctx).GeoDistance(ctx, req.Body)
 To add one, follow the recipe "Add a pack capability". `lidza dev`
 rebuilds the module when the crate changes.
 
+## Rust: when and how
+
+Go first. Handlers, queries, jobs, anything that talks to the database,
+the network or the file system is Go, and stays Go. Rust is the compute
+plane, reached only through a pack, and it is not there for speed: the
+WASM sandbox costs more than it saves on this kind of work.
+
+Measured (`go test ./pkg/engine -bench .` in the framework, one core of
+an Intel Xeon E5-2407 v2, wazero 1.12, opt-level 3; treat as orders of
+magnitude):
+
+| | Go | Rust pack, `uninterruptible` | Rust pack, default |
+|---|---|---|---|
+| boundary: call with 100 B of JSON | | 12 µs | 44 µs |
+| boundary: 1 MB of JSON | | 15 ms | 129 ms |
+| brute-force nearest neighbours, 2000×500 points | 4.1 ms | 11.5 ms | 56 ms |
+| word frequencies over 200 KB of text | 10.3 ms | 16.5 ms | 91 ms |
+
+So reach for a pack when one of these is true, not otherwise:
+
+1. **The code must be contained.** It transforms user-supplied input
+   (images, documents, uploads, formulas) where a bug or a hostile input
+   could loop, blow up memory or panic. A capability runs with a memory
+   cap and a deadline; the worst case is one failed call, never a crashed
+   process.
+2. **A Rust crate does what you need** and Go has no equivalent worth
+   the port: image codecs, geospatial indexes, parsers.
+3. **The Go heap is the bottleneck**: a workload that allocates in the
+   hundreds of megabytes and pins the garbage collector. The pack's
+   memory is its own and freed as a block.
+
+Not for: anything under a millisecond of work (the boundary costs more),
+anything that needs I/O, or a hot path where the numbers above matter.
+Measure with `lidza benchmark` before and after.
+
+How, in short (the recipe "Add a pack capability" has the steps; the
+snippets `pack-capability` and `pack-manifest` are working code):
+
+- Types in `schema.lidza`; the capability in
+  `packs/<name>/rust/src/lib.rs` as `lidza_export!`; the manifest lists
+  it; the handler calls `<name>.From(ctx).<Capability>(ctx, in)`.
+- Keep the input small and the output smaller: JSON crosses the boundary
+  at roughly 70 MB/s. Send an id and let Go fetch, or send the bytes
+  once, not per item.
+- Set `"uninterruptible": true` in the manifest when every loop is
+  bounded by the input (one pass over a text, over the pixels of an
+  image, over a list): loops then run 3 to 8 times faster. Leave it off
+  for code whose loops depend on the data's shape (parsers, solvers,
+  anything recursive): the default inserts a deadline check in every
+  loop, so a runaway call is cut off at `timeout_ms` instead of holding
+  an instance until it returns.
+- Errors: return `Err("message")` for input problems (the caller sees a
+  400 with that text); panics are contained and reported as an error.
+- Never do I/O in Rust: the sandbox has no network and no file system,
+  by design.
+
 Official Go packs, configured from `.env` (see `.env.example` after
 `lidza pack add`):
 
@@ -328,9 +399,12 @@ Official Go packs, configured from `.env` (see `.env.example` after
   becomes typed Go via sqlc (`queries.New(db.From(ctx)).Name(ctx, ...)`).
 - `auth`: `auth.HashPassword`/`CheckPassword`; `auth.From(ctx).Login(ctx,
   userID, claims)` returns tokens, `req.SetCookie` each of
-  `auth.From(ctx).Cookies(tokens)` for browsers; protect a sub-router with
-  `protected.Use(auth.Require())` and read `auth.CurrentUser(ctx)`.
-  Logout: `auth.From(ctx).Logout(ctx, user.SessionID)`.
+  `auth.From(ctx).Cookies(tokens)` for browsers; protect a group with
+  `g := r.Group("/api/v1/notes", auth.Require())` and read
+  `auth.CurrentUser(ctx)`; `auth.Optional()` for a route that serves
+  visitors too (the user is nil then). Logout:
+  `auth.From(ctx).Logout(ctx, user.SessionID)`. Working code: the
+  snippets `routes` and `auth-handlers`.
 - `jobs`: register handlers in `OnStart` with
   `jobs.FromServices(s).Handle("kind", fn)`; enqueue with
   `jobs.From(ctx).Enqueue(ctx, "kind", payload, jobs.RunAt(t))`.

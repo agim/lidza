@@ -210,3 +210,56 @@ func (v SessionState) Validate() error {
 	}
 	return errs.Result()
 }
+
+// TextStatsInput is an API type.
+type TextStatsInput struct {
+	Text string `json:"text"`
+	Top  *int   `json:"top"`
+}
+
+// Validate applies the rules of TextStatsInput from schema.lidza.
+func (v TextStatsInput) Validate() error {
+	var errs validate.Errors
+	if v.Text == "" {
+		errs.Add("text", "required", "required")
+	}
+	if len(v.Text) > 100000 {
+		errs.Add("text", "max", "at most 100000 character(s)")
+	}
+	return errs.Result()
+}
+
+// TextStats is an API type.
+type TextStats struct {
+	Words          int         `json:"words"`
+	Unique         int         `json:"unique"`
+	ReadingMinutes float64     `json:"readingMinutes"`
+	TopWords       []WordCount `json:"topWords"`
+}
+
+// Validate applies the rules of TextStats from schema.lidza.
+func (v TextStats) Validate() error {
+	var errs validate.Errors
+	for _, x := range v.TopWords {
+		if err := x.Validate(); err != nil {
+			errs.Add("topWords", "nested", err.Error())
+			break
+		}
+	}
+	return errs.Result()
+}
+
+// WordCount is an API type.
+type WordCount struct {
+	Word  string `json:"word"`
+	Count int    `json:"count"`
+}
+
+// Validate applies the rules of WordCount from schema.lidza.
+func (v WordCount) Validate() error {
+	var errs validate.Errors
+	if v.Word == "" {
+		errs.Add("word", "required", "required")
+	}
+	return errs.Result()
+}

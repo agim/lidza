@@ -28,5 +28,6 @@ What to read, in order:
 | `db/queries/note.sql` | sqlc queries with owner checks |
 | `routes_test.go` | `lidzatest.Start`, cookies across calls, validation and authorization failures |
 | `tools.go` | an MCP tool that runs inside the app |
+| `packs/stats/` | a Rust pack: `rust/src/lib.rs` is the capability, `pack.lidza.json` the manifest; `noteStats` in `handlers/note.go` calls it |
 | `src/pages/Home.tsx` | `api.*` and `validators.*` from `@lidza/client`, sign-in and notes |
 | `e2e/notes.spec.ts` | a Playwright test that also asserts no window errors |

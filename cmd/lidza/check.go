@@ -8,6 +8,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 
 	"github.com/agim/lidza/pkg/config"
 	"github.com/agim/lidza/pkg/diag"
@@ -36,14 +38,18 @@ func runCheck(ctx context.Context, args []string) error {
 		return fmt.Errorf("nothing to check in %s: no go.mod, Cargo.toml or tsconfig.json", abs)
 	}
 	// Generated code must be current before the checkers see it: the
-	// schema package for go vet, the client for tsc.
+	// schema package for go vet, the client for tsc. A generator that
+	// fails (a schema.lidza that does not parse, a pack that does not
+	// build) is a diagnostic like any other, not a note on stderr.
+	var generateErr error
 	if _, cfg, err := loadProject(abs); err == nil {
-		quiet := io.Discard
-		if err := generateAll(abs, cfg, quiet); err != nil && !*asJSON {
-			fmt.Println("generate:", err)
-		}
+		generateErr = generateAll(abs, cfg, io.Discard)
 	}
 	report := diag.Run(ctx, layers)
+	if generateErr != nil {
+		report.Diagnostics = append([]diag.Diagnostic{generateDiagnostic(generateErr)}, report.Diagnostics...)
+		report.Status = "error"
+	}
 	if _, cfg, err := loadProject(abs); err == nil && cfg != nil {
 		report.Diagnostics = append(report.Diagnostics, packDiagnostics(ctx, abs, cfg)...)
 		if report.Errors() > 0 {
@@ -64,6 +70,24 @@ func runCheck(ctx context.Context, args []string) error {
 		return errCheckFailed
 	}
 	return nil
+}
+
+// generateDiagnostic turns a generator error into a diagnostic. Schema
+// errors carry "schema.lidza: line N: message"; the file and line are
+// lifted out so an agent lands on the spot.
+func generateDiagnostic(err error) diag.Diagnostic {
+	d := diag.Diagnostic{Layer: "schema", Tool: "lidza gen", Severity: "error", Message: err.Error()}
+	msg := err.Error()
+	if rest, ok := strings.CutPrefix(msg, schema.FileName+": "); ok {
+		d.File = schema.FileName
+		if lineText, after, ok := strings.Cut(rest, ": "); ok {
+			if n, err := strconv.Atoi(strings.TrimPrefix(lineText, "line ")); err == nil {
+				d.Line = n
+				d.Message = after
+			}
+		}
+	}
+	return d
 }
 
 func printReport(r diag.Report) {

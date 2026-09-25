@@ -8,7 +8,8 @@
   },
   "packs": [
     "lidza/db",
-    "lidza/auth"
+    "lidza/auth",
+    "stats"
   ],
   "sdk": {}
 }

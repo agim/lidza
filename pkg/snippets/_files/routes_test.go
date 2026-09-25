@@ -50,6 +50,17 @@ func TestNotes(t *testing.T) {
 		t.Fatalf("list: %d %+v", res.StatusCode, list)
 	}
 
+	// The stats pack (Rust) over a note: "first" from the title plus the body.
+	body := "the cat and the dog and the bird"
+	var withBody schema.Note
+	if res := srv.JSON(t, http.MethodPatch, "/api/v1/notes/"+note.ID, schema.UpdateNote{Body: &body}, &withBody); res.StatusCode != http.StatusOK || withBody.Body == nil {
+		t.Fatalf("patch: %d %+v", res.StatusCode, withBody)
+	}
+	var st schema.TextStats
+	if res := srv.JSON(t, http.MethodGet, "/api/v1/notes/"+note.ID+"/stats", nil, &st); res.StatusCode != http.StatusOK || st.Words != 9 || st.Unique != 6 || len(st.TopWords) != 5 || st.TopWords[0].Word != "the" || st.TopWords[0].Count != 3 {
+		t.Fatalf("stats: %d %+v", res.StatusCode, st)
+	}
+
 	// A bearer token works without the cookies.
 	var me schema.Session
 	if res := srv.JSON(t, http.MethodGet, "/api/v1/auth/me", nil, &me, lidzatest.Bearer(session.AccessToken)); res.StatusCode != http.StatusOK || me.UserID != session.UserID {

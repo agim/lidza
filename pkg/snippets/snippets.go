@@ -35,6 +35,8 @@ var Index = []Snippet{
 	{"queries", "db/queries/note.sql", "sqlc queries for an owned resource: owner checks on every statement, COALESCE with sqlc.narg for a partial update, :execrows for delete."},
 	{"handler-test", "routes_test.go", "A Go test with lidzatest.Start: cookies carried across calls, a bearer token, and the expected 401, 409, 422 and 404 replies."},
 	{"mcp-tool", "tools.go", "An app MCP tool (lidza.ToolFunc) that queries the database through the db pack."},
+	{"pack-capability", "packs/stats/rust/src/lib.rs", "A Rust pack capability (lidza_export!) over types from schema.lidza: one CPU pass over user text, no I/O; the handler noteStats in resource-handlers calls it through the generated wrapper."},
+	{"pack-manifest", "packs/stats/pack.lidza.json", "The pack manifest: capability names with their input and output types, the pool size, memory cap, timeout, and uninterruptible for input-bounded loops."},
 	{"page", "src/pages/Home.tsx", "A React page on @lidza/client only: useQuery and useMutation with api.*, validators.* before a request, labelled inputs, sign in and sign out."},
 	{"browser-test", "e2e/notes.spec.ts", "A Playwright test: register, add a note, reload, sign out, and no console or window errors."},
 }

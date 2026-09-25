@@ -69,3 +69,22 @@ type Session {
 type SessionState {
   user Session?
 }
+
+// Input of the stats pack's text_stats capability (Rust, packs/stats).
+type TextStatsInput {
+  text string @max(100000)
+  top  int?
+}
+
+// Word statistics of a text: reply of GET /api/v1/notes/{id}/stats.
+type TextStats {
+  words          int
+  unique         int
+  readingMinutes float
+  topWords       WordCount[]
+}
+
+type WordCount {
+  word  string
+  count int
+}

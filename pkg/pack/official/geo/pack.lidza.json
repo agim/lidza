@@ -6,7 +6,8 @@
     "dir": "rust",
     "memory_mb": 128,
     "instances": 4,
-    "timeout_ms": 5000
+    "timeout_ms": 5000,
+    "uninterruptible": true
   },
   "capabilities": [
     {

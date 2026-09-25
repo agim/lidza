@@ -32,7 +32,7 @@ func GeneratePackGo(m *Manifest, module string) string {
 	fmt.Fprintf(&b, `// Start compiles the module, warms the instance pool and registers the
 // pack as a service.
 func (p *%s) Start(ctx context.Context, s *lidza.Services) error {
-	m, err := engine.Compile(ctx, wasm, engine.Options{MemoryMB: %d})
+	m, err := engine.Compile(ctx, wasm, engine.Options{MemoryMB: %d, Uninterruptible: %t})
 	if err != nil {
 		return err
 	}
@@ -60,7 +60,7 @@ func (p *%s) Stop(ctx context.Context) error {
 // TelemetryStats reports the pool to /metrics.
 func (p *%s) TelemetryStats() map[string]float64 { return p.pool.Stats() }
 
-`, typ, m.Rust.MemoryMB, m.Rust.Instances, m.Rust.TimeoutMS, typ, typ)
+`, typ, m.Rust.MemoryMB, m.Rust.Uninterruptible, m.Rust.Instances, m.Rust.TimeoutMS, typ, typ)
 	for _, c := range m.Capabilities {
 		fmt.Fprintf(&b, "// %s: %s\n", exported(c.Name), c.Description)
 		if c.Rules != "" {

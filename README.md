@@ -1,8 +1,9 @@
 # Līdza
 
-Līdza is a web framework with two engines: a Go control plane (HTTP routing,
-dev proxy, CLI, MCP server) bound to a Rust compute core (native or WASM via
-wazero), serving any frontend (Vite, Astro, Svelte, HTMX, Flutter). It is
+Līdza is a web framework with a Go control plane (HTTP routing, dev proxy,
+CLI, MCP server), an optional Rust compute plane (packs compiled to WASM,
+run by wazero in a bounded, deadlined pool, for code that must be
+contained), and any frontend (Vite, Astro, Svelte, HTMX, Flutter). It is
 built for AI agents as the primary developers: machine-readable contracts,
 structured diagnostics, no implicit magic.
 

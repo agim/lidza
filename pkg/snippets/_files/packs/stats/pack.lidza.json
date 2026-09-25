@@ -1,0 +1,21 @@
+{
+  "name": "stats",
+  "version": "0.1.0",
+  "description": "Word statistics for a note: counts, reading time, top words. Rust, because it is one CPU pass over user text with no I/O.",
+  "rust": {
+    "dir": "rust",
+    "memory_mb": 64,
+    "instances": 4,
+    "timeout_ms": 2000,
+    "uninterruptible": true
+  },
+  "capabilities": [
+    {
+      "name": "text_stats",
+      "description": "Word count, unique words, reading minutes at 200 words a minute, and the most frequent words of a text.",
+      "input": "TextStatsInput",
+      "output": "TextStats",
+      "rules": "text up to 100000 characters; top (default 5, at most 50) caps topWords."
+    }
+  ]
+}

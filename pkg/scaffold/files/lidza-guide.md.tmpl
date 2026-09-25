@@ -265,8 +265,9 @@ Add a client-side route rendered by React, prerendered at build time.
 
 ### Add a pack capability
 
-Run CPU-heavy or memory-heavy work in Rust, compiled to WASM and called
-from a handler with a deadline.
+Run work in Rust, compiled to WASM and called from a handler with a
+deadline: for code that must be contained, a crate Go lacks, or heap
+pressure. Read "Rust: when and how" first; it is not for speed.
 
 1. `lidza pack scaffold <name>` creates `packs/<name>` with a crate and
    an example capability (skip when the pack exists).
@@ -346,6 +347,62 @@ out, err := geo.From(ctx).GeoDistance(ctx, req.Body)
 
 To add one, follow the recipe "Add a pack capability". `lidza dev`
 rebuilds the module when the crate changes.
+
+## Rust: when and how
+
+Go first. Handlers, queries, jobs, anything that talks to the database,
+the network or the file system is Go, and stays Go. Rust is the compute
+plane, reached only through a pack, and it is not there for speed: the
+WASM sandbox costs more than it saves on this kind of work.
+
+Measured (`go test ./pkg/engine -bench .` in the framework, one core of
+an Intel Xeon E5-2407 v2, wazero 1.12, opt-level 3; treat as orders of
+magnitude):
+
+| | Go | Rust pack, `uninterruptible` | Rust pack, default |
+|---|---|---|---|
+| boundary: call with 100 B of JSON | | 12 µs | 44 µs |
+| boundary: 1 MB of JSON | | 15 ms | 129 ms |
+| brute-force nearest neighbours, 2000×500 points | 4.1 ms | 11.5 ms | 56 ms |
+| word frequencies over 200 KB of text | 10.3 ms | 16.5 ms | 91 ms |
+
+So reach for a pack when one of these is true, not otherwise:
+
+1. **The code must be contained.** It transforms user-supplied input
+   (images, documents, uploads, formulas) where a bug or a hostile input
+   could loop, blow up memory or panic. A capability runs with a memory
+   cap and a deadline; the worst case is one failed call, never a crashed
+   process.
+2. **A Rust crate does what you need** and Go has no equivalent worth
+   the port: image codecs, geospatial indexes, parsers.
+3. **The Go heap is the bottleneck**: a workload that allocates in the
+   hundreds of megabytes and pins the garbage collector. The pack's
+   memory is its own and freed as a block.
+
+Not for: anything under a millisecond of work (the boundary costs more),
+anything that needs I/O, or a hot path where the numbers above matter.
+Measure with `lidza benchmark` before and after.
+
+How, in short (the recipe "Add a pack capability" has the steps; the
+snippets `pack-capability` and `pack-manifest` are working code):
+
+- Types in `schema.lidza`; the capability in
+  `packs/<name>/rust/src/lib.rs` as `lidza_export!`; the manifest lists
+  it; the handler calls `<name>.From(ctx).<Capability>(ctx, in)`.
+- Keep the input small and the output smaller: JSON crosses the boundary
+  at roughly 70 MB/s. Send an id and let Go fetch, or send the bytes
+  once, not per item.
+- Set `"uninterruptible": true` in the manifest when every loop is
+  bounded by the input (one pass over a text, over the pixels of an
+  image, over a list): loops then run 3 to 8 times faster. Leave it off
+  for code whose loops depend on the data's shape (parsers, solvers,
+  anything recursive): the default inserts a deadline check in every
+  loop, so a runaway call is cut off at `timeout_ms` instead of holding
+  an instance until it returns.
+- Errors: return `Err("message")` for input problems (the caller sees a
+  400 with that text); panics are contained and reported as an error.
+- Never do I/O in Rust: the sandbox has no network and no file system,
+  by design.
 
 Official Go packs, configured from `.env` (see `.env.example` after
 `lidza pack add`):

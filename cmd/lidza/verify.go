@@ -169,7 +169,9 @@ func staleGenerated(ctx context.Context, dir string, cfg *config.Config) (string
 	if _, err := top.Output(); err != nil {
 		return "not a git repository", errSkipped
 	}
-	args := append([]string{"diff", "--name-only", "--"}, generatedPaths(cfg)...)
+	// --relative: paths as seen from the project, which may be a
+	// directory inside a larger repository.
+	args := append([]string{"diff", "--name-only", "--relative", "--"}, generatedPaths(cfg)...)
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = dir
 	outb, err := cmd.Output()

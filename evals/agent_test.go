@@ -116,6 +116,9 @@ func TestAgent(t *testing.T) {
 				for _, d := range rep.Diagnostics {
 					t.Logf("  %s %s %s: %s", d.Severity, d.Code, d.File, d.Message)
 				}
+				status, _ := command(dir, "git", "status", "--porcelain")
+				diff, _ := command(dir, "git", "diff", "--stat")
+				t.Logf("git status after verify:\n%s%s", status, diff)
 			}
 			if problem != "" {
 				t.Error(problem)

@@ -14,4 +14,4 @@ commands and the rules.
 - Go owns `/api` (`routes.go`, `router.Route` with typed handlers); the frontend never defines API routes and calls them only through `@lidza/client`.
 - Data shapes live in `schema.lidza`; `schema/`, `db/`, `packs.go`, `packs/*/pack.go` and `.lidza/` are generated, never edited.
 - Add agent-callable functions in `tools.go` (`lidza.ToolFunc`); they show up in `lidza mcp` as `app_<name>`.
-- Heavy compute goes in a pack (`lidza pack scaffold`, Rust to WASM); `lidza pack add db|realtime|geo|media` enables the official ones.
+- Go first. Rust lives in packs (`lidza pack scaffold`, Rust to WASM) and is for code that must be contained (user-supplied input), a crate Go lacks, or heap pressure; not for speed (see "Rust: when and how" in the guide, with numbers). `lidza pack add db|auth|jobs|cache|i18n|realtime|analytics|geo|media` enables the official ones.

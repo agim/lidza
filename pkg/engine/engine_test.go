@@ -14,7 +14,7 @@ import (
 
 // buildTestWasm compiles a crate using the scaffold's abi.rs with one
 // capability, reverse, plus a busy loop for the deadline test.
-func buildTestWasm(t *testing.T) []byte {
+func buildTestWasm(t testing.TB) []byte {
 	t.Helper()
 	if _, err := exec.LookPath("cargo"); err != nil {
 		t.Skip("cargo not installed")
@@ -25,7 +25,7 @@ func buildTestWasm(t *testing.T) []byte {
 	}
 	dir := t.TempDir()
 	os.MkdirAll(filepath.Join(dir, "src"), 0o755)
-	os.WriteFile(filepath.Join(dir, "Cargo.toml"), []byte("[package]\nname = \"enginetest\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[lib]\ncrate-type = [\"cdylib\"]\n\n[dependencies]\nserde = { version = \"1\", features = [\"derive\"] }\nserde_json = \"1\"\n\n[profile.release]\nopt-level = \"s\"\n"), 0o644)
+	os.WriteFile(filepath.Join(dir, "Cargo.toml"), []byte("[package]\nname = \"enginetest\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[lib]\ncrate-type = [\"cdylib\"]\n\n[dependencies]\nserde = { version = \"1\", features = [\"derive\"] }\nserde_json = \"1\"\n\n[profile.release]\nopt-level = 3\nlto = true\n"), 0o644)
 	os.WriteFile(filepath.Join(dir, "src", "abi.rs"), abi, 0o644)
 	os.WriteFile(filepath.Join(dir, "src", "lib.rs"), []byte(`pub mod abi;
 use serde::{Deserialize, Serialize};
@@ -46,6 +46,43 @@ lidza_export!(spin, |s: Spin| -> Result<u64, String> {
     let mut x: u64 = 0;
     for i in 0..s.n { x = x.wrapping_add(i ^ (x >> 3)); }
     Ok(x)
+});
+
+// The benchmarks: the boundary alone, a numeric loop, an allocation-heavy
+// loop. bench_test.go has the same three in Go.
+#[derive(Deserialize, Serialize)]
+struct Echo { data: String }
+lidza_export!(echo, |e: Echo| -> Result<Echo, String> { Ok(e) });
+
+#[derive(Deserialize)]
+struct NearestIn { points: Vec<[f64; 2]>, queries: Vec<[f64; 2]> }
+#[derive(Serialize)]
+struct NearestOut { indices: Vec<usize> }
+lidza_export!(nearest, |i: NearestIn| -> Result<NearestOut, String> {
+    let indices = i.queries.iter().map(|q| {
+        let mut best = 0usize;
+        let mut best_d = f64::MAX;
+        for (idx, p) in i.points.iter().enumerate() {
+            let d = (p[0] - q[0]).powi(2) + (p[1] - q[1]).powi(2);
+            if d < best_d { best_d = d; best = idx; }
+        }
+        best
+    }).collect();
+    Ok(NearestOut { indices })
+});
+
+#[derive(Deserialize)]
+struct WordsIn { text: String }
+#[derive(Serialize)]
+struct WordsOut { unique: usize, top: Vec<(String, usize)> }
+lidza_export!(wordfreq, |i: WordsIn| -> Result<WordsOut, String> {
+    let mut counts: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
+    for w in i.text.split_whitespace() { *counts.entry(w).or_insert(0) += 1; }
+    let unique = counts.len();
+    let mut top: Vec<(String, usize)> = counts.into_iter().map(|(w, n)| (w.to_string(), n)).collect();
+    top.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+    top.truncate(10);
+    Ok(WordsOut { unique, top })
 });
 `), 0o644)
 	cmd := exec.Command("cargo", "build", "--release", "--target", "wasm32-wasip1", "--quiet")

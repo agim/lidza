@@ -20,6 +20,13 @@ import (
 type Options struct {
 	// MemoryMB caps each instance's linear memory; default 64.
 	MemoryMB int
+	// Uninterruptible drops the deadline checks the compiler otherwise
+	// inserts at every loop back-edge. Loops run several times faster; a
+	// call that overruns the pool deadline then returns an error to its
+	// caller but keeps running inside its instance until it finishes, and
+	// that instance is discarded afterwards. For capabilities whose loops
+	// are bounded by their input.
+	Uninterruptible bool
 }
 
 // Module is a compiled WASM module.
@@ -37,7 +44,7 @@ func Compile(ctx context.Context, wasm []byte, opt Options) (*Module, error) {
 		opt.MemoryMB = 64
 	}
 	cfg := wazero.NewRuntimeConfig().
-		WithCloseOnContextDone(true).
+		WithCloseOnContextDone(!opt.Uninterruptible).
 		WithMemoryLimitPages(uint32(opt.MemoryMB * 16)) // 64 KiB pages
 	rt := wazero.NewRuntimeWithConfig(ctx, cfg)
 	if _, err := wasi_snapshot_preview1.Instantiate(ctx, rt); err != nil {
@@ -65,11 +72,14 @@ func (m *Module) Exports() []string { return append([]string(nil), m.exports...)
 // Close releases the runtime and every instance made from the module.
 func (m *Module) Close(ctx context.Context) error { return m.rt.Close(ctx) }
 
-// instance is one instantiation with its own memory.
+// instance is one instantiation with its own memory. Its exported
+// functions are looked up once: wazero builds a wrapper per lookup, which
+// costs more than the call itself.
 type instance struct {
 	mod   api.Module
 	alloc api.Function
 	free  api.Function
+	fns   map[string]api.Function
 }
 
 func (m *Module) instantiate(ctx context.Context) (*instance, error) {
@@ -83,17 +93,22 @@ func (m *Module) instantiate(ctx context.Context) (*instance, error) {
 	if err != nil {
 		return nil, fmt.Errorf("instantiate: %w", err)
 	}
-	in := &instance{mod: mod, alloc: mod.ExportedFunction("lidza_alloc"), free: mod.ExportedFunction("lidza_free")}
+	in := &instance{mod: mod, alloc: mod.ExportedFunction("lidza_alloc"), free: mod.ExportedFunction("lidza_free"), fns: map[string]api.Function{}}
 	if in.alloc == nil || in.free == nil {
 		mod.Close(ctx)
 		return nil, errors.New("module does not export lidza_alloc and lidza_free (missing abi.rs?)")
+	}
+	for _, name := range m.exports {
+		if f := mod.ExportedFunction(name); f != nil {
+			in.fns[name] = f
+		}
 	}
 	return in, nil
 }
 
 // call runs fn with input and returns the output JSON.
 func (in *instance) call(ctx context.Context, fn string, input []byte) ([]byte, error) {
-	f := in.mod.ExportedFunction(fn)
+	f := in.fns[fn]
 	if f == nil {
 		return nil, fmt.Errorf("capability %q is not exported by the module", fn)
 	}

@@ -57,7 +57,7 @@ func (r *packRunner) pool(ctx context.Context, m *pack.Manifest) (*engine.Pool, 
 	if err != nil {
 		return nil, err
 	}
-	mod, err := engine.Compile(ctx, wasm, engine.Options{MemoryMB: m.Rust.MemoryMB})
+	mod, err := engine.Compile(ctx, wasm, engine.Options{MemoryMB: m.Rust.MemoryMB, Uninterruptible: m.Rust.Uninterruptible})
 	if err != nil {
 		return nil, err
 	}

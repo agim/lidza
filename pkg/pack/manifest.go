@@ -44,6 +44,12 @@ type Rust struct {
 	Instances int `json:"instances,omitempty"`
 	// TimeoutMS bounds each call, default 5000.
 	TimeoutMS int `json:"timeout_ms,omitempty"`
+	// Uninterruptible drops the per-loop deadline checks: loops run
+	// several times faster, and a call that overruns the timeout keeps
+	// its instance busy until it returns (the caller still gets the
+	// error at the deadline, and the instance is replaced afterwards).
+	// Set it for capabilities whose loops are bounded by their input.
+	Uninterruptible bool `json:"uninterruptible,omitempty"`
 }
 
 // Capability is one exported function: JSON in, JSON out, typed by

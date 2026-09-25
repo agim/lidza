@@ -329,3 +329,58 @@ func TestReferenceApp(t *testing.T) {
 		t.Fatalf("examples/notes: lidza verify failed:\n%s", out)
 	}
 }
+
+// TestPackCapability scaffolds a Rust pack: the check builds it, the
+// generated wrapper compiles, and the capability is an MCP tool that
+// runs. Skipped without cargo.
+func TestPackCapability(t *testing.T) {
+	if _, err := os.ReadFile(filepath.Join(app, "packs", "echo", "pack.lidza.json")); err == nil {
+		t.Fatal("pack already exists")
+	}
+	if out, err := command(app, "cargo", "--version"); err != nil {
+		t.Skipf("cargo not installed: %s", out)
+	}
+	out, err := command(app, lidza, "pack", "scaffold", "echo")
+	if err != nil {
+		t.Fatalf("pack scaffold: %v\n%s", err, out)
+	}
+	t.Cleanup(func() {
+		os.RemoveAll(filepath.Join(app, "packs", "echo"))
+		cfg, _ := os.ReadFile(filepath.Join(app, "lidza.json"))
+		os.WriteFile(filepath.Join(app, "lidza.json"), []byte(strings.Replace(string(cfg), "\"echo\"", "", 1)), 0o644)
+		command(app, lidza, "gen")
+	})
+	r := check(t)
+	if r.Status != "ok" {
+		t.Fatalf("check after pack scaffold:\n%s", dump(r))
+	}
+	for _, f := range []string{"packs/echo/pack.go", "packs/echo/echo.wasm", "packs/echo/rust/src/schema.rs"} {
+		if _, err := os.Stat(filepath.Join(app, f)); err != nil {
+			t.Errorf("%s missing", f)
+		}
+	}
+	cfg, err := config.Load(app)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := client.NewInProcessClient(mcpserver.New(app, cfg))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	if err := c.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	if _, err := c.Initialize(ctx, mcp.InitializeRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	req := mcp.CallToolRequest{}
+	req.Params.Name = "pack_echo_reverse"
+	req.Params.Arguments = map[string]any{"text": "abc"}
+	res, err := c.CallTool(ctx, req)
+	if err != nil || res.IsError || !strings.Contains(mcp.GetTextFromContent(res.Content[0]), `"cba"`) {
+		t.Fatalf("pack_echo_reverse: %v %+v", err, res)
+	}
+}

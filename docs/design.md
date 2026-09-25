@@ -20,12 +20,18 @@ CLI, the module path and the npm scope are plain ASCII.
   connections cheaply and the standard library covers the whole HTTP
   surface, so the router is `net/http` with typed handlers on top, no
   third-party web framework.
-- **Rust compute core.** Anything that allocates heavily or burns CPU
-  (media, geospatial indexes, graph work, vector math) runs in Rust,
-  compiled to WebAssembly and executed by the Go process through wazero
-  in a bounded pool. The Go garbage collector never sees that memory, a
-  bad computation cannot crash the host, and a call that overruns its
-  deadline is cut off and its instance replaced.
+- **Rust compute core.** Code that must be contained (transforms of
+  user-supplied input), needs a crate Go lacks, or would pin the Go
+  garbage collector runs in Rust, compiled to WebAssembly and executed
+  by the Go process through wazero in a bounded pool. The Go garbage
+  collector never sees that memory, a bad computation cannot crash the
+  host, and a call that overruns its deadline is cut off and its
+  instance replaced. It is opt-in and it is not a speed play: measured
+  on the same workloads, a pack runs 1.6 to 3 times slower than Go
+  (more with the default per-loop deadline checks) and every call pays
+  the JSON boundary. The app guide's "Rust: when and how" carries the
+  numbers and the rule: Go first, a pack when containment, a crate or
+  memory is the reason.
 - **Any frontend.** React, Svelte and Astro through a dev proxy and a
   build embedded in the binary; htmx rendered by Go templates. The
   contract is the same for all: Go owns `/api`, the frontend calls it

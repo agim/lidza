@@ -25,7 +25,9 @@ backed by Postgres. Needs the `db` pack (`lidza pack add db`).
    `handlers/post.go` with the routes under `/api/v1/posts`, and the
    registration line in `routes.go`.
 3. Run `lidza db migrate` to apply the new migration in `db/migrations/`.
-4. The generated handlers file is ordinary code: add authorization
-   (`auth.Require()` on a sub-router), filters or ownership checks there.
+4. The generated handlers file is ordinary code: mount the routes on a
+   group (`handlers.PostRoutes(r.Group("/api/v1/posts", auth.Require()))`),
+   add filters or ownership checks there (the snippet
+   `resource-handlers` scopes every query to the signed-in user).
    Regenerate with `--force` to reset it.
 5. `lidza check`, then `lidza test`.

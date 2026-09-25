@@ -5,7 +5,7 @@
 //   the Go binary with LIDZA_SSR=1) calls render with the request's path and
 //   headers; route loaders then run on the server against the Go API, with
 //   the visitor's cookies forwarded, so personalised pages arrive complete.
-import { StrictMode } from 'react'
+import { StrictMode, Suspense } from 'react'
 import { renderToString } from 'react-dom/server'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryHistory, RouterProvider } from '@tanstack/react-router'
@@ -27,10 +27,16 @@ export async function render(path: string, options: RenderOptions = {}): Promise
   const router = createAppRouter(createMemoryHistory({ initialEntries: [path] }))
   await router.load()
   const queryClient = new QueryClient()
+  // The router wraps its matches in a Suspense boundary in the browser but
+  // not on the server. This boundary sits at the same DOM position (context
+  // providers add no nodes), so the markup carries the marker the client
+  // expects and hydration keeps the prerendered DOM.
   return renderToString(
     <StrictMode>
       <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
+        <Suspense fallback={null}>
+          <RouterProvider router={router} />
+        </Suspense>
       </QueryClientProvider>
     </StrictMode>,
   )

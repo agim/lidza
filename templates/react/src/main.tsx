@@ -14,7 +14,7 @@ if (import.meta.env.VITE_ANALYTICS === '1') enableAnalytics()
 const queryClient = new QueryClient()
 const root = document.getElementById('root')!
 const hydrating = root.hasChildNodes()
-const router = createAppRouter(undefined, { hydrating })
+const router = createAppRouter()
 
 const app = (
   <StrictMode>

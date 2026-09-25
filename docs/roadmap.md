@@ -353,8 +353,10 @@ retention configurable. `lidza mcp` gains `lidza_errors`.
 Found by the analytics pack on its first run: the prerendered pages were
 being discarded at hydration (React error 418, reported through
 `window`'s error event, which the earlier browser checks did not watch).
-The client router is now marked as hydrating server markup so it renders
-the server's tree shape, and the template's e2e test asserts no window
+The router adds a Suspense boundary around its matches in the browser
+only; the server entry now renders inside a boundary at the same DOM
+position, so the prerendered HTML carries the marker the client expects
+and React keeps the DOM. The template's e2e test asserts no window
 errors.
 
 ### Next

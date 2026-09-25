@@ -311,7 +311,7 @@ import (
 
 // PageParams reads limit and offset from the query with a default and a
 // cap on the limit.
-func pageParams[In any](req *router.Request[In], def, max int) (limit, offset int32) {
+func PageParams[In any](req *router.Request[In], def, max int) (limit, offset int32) {
 	limit = int32(def)
 	if v, err := strconv.Atoi(req.Query("limit")); err == nil && v > 0 {
 		limit = int32(min(v, max))

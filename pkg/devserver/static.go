@@ -14,6 +14,11 @@ func Static(dist fs.FS) http.Handler {
 	files := http.FileServerFS(dist)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		name := strings.TrimPrefix(path.Clean("/"+r.URL.Path), "/")
+		// Dot directories (dist/.server) are build internals, never pages.
+		if strings.HasPrefix(name, ".") || strings.Contains(name, "/.") {
+			http.NotFound(w, r)
+			return
+		}
 		// A prerendered page lives at <path>/index.html.
 		if name != "" && exists(dist, name+"/index.html") {
 			page, err := fs.ReadFile(dist, name+"/index.html")

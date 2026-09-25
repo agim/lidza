@@ -286,8 +286,21 @@ field errors of a 422. A Flutter app depends on it by path. No Dart
 toolchain runs during `lidza gen`; the generated package is analyzed in
 the Flutter project. Validators are TypeScript only.
 
+### Per-request SSR sidecar (done 2026-09-25)
+
+`LIDZA_SSR=1` makes the binary start a Node sidecar (`dist/.server`,
+extracted to a temporary directory, reached over a Unix socket) that
+renders HTML page requests with the visitor's cookies, `Accept-Language`
+and `Authorization` forwarded to route loaders calling the API over
+loopback. Pages come back complete and personalised, `Cache-Control:
+no-store`. Anything else, and any failure or timeout (3 s), falls back to
+the prerendered or static page, so SSR is an optimisation the app never
+depends on. The SSR bundle carries its dependencies (`ssr.noExternal`),
+so production needs Node and `dist/.server` only, no `node_modules`.
+Renders run one at a time in the sidecar; loader data is not
+dehydrated, the client runs loaders again on navigation.
+
 ### Open
 
-- Per-request SSR through an optional Node sidecar.
 - Publishing the CLI so `go install` works from `install.sh` (skipped
   for now by decision).

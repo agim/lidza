@@ -194,7 +194,7 @@ Package manager: npm (already installed; no pnpm).
 
 | Template | Dev server | Production |
 |---|---|---|
-| `react` | Vite on 5173, proxied by `lidza dev` | `dist/` embedded in the Go binary, parameterless routes prerendered to `dist/<path>/index.html` |
+| `react` | Vite on 5173, proxied by `lidza dev` | `dist/` embedded in the Go binary, parameterless routes prerendered to `dist/<path>/index.html`; `LIDZA_SSR=1` renders per request through the Node sidecar in `dist/.server` |
 | `svelte` | Vite on 5173, proxied | same |
 | `astro` | Astro dev on 5173, proxied; `output: 'static'` only | same |
 | `htmx` | none; Go renders `html/template` views from `views/` | Go binary only |

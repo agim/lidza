@@ -177,7 +177,7 @@ func TestHandlerInjectsServices(t *testing.T) {
 	t.Setenv(devserver.EnvMode, "")
 	s := NewServices()
 	Provide(s, "injected")
-	h, err := handler(App{Routes: func(r *router.Router) {
+	h, _, err := handler(App{Routes: func(r *router.Router) {
 		r.HandleFunc("GET /api/v1/svc", func(w http.ResponseWriter, req *http.Request) {
 			io.WriteString(w, Service[string](req.Context()))
 		})
@@ -194,7 +194,7 @@ func TestOpsEndpoints(t *testing.T) {
 	t.Setenv(devserver.EnvMode, "")
 	s := NewServices()
 	Provide(s, &readyService{})
-	h, err := handler(App{Dist: fstest.MapFS{"index.html": {Data: []byte("app")}}}, s)
+	h, _, err := handler(App{Dist: fstest.MapFS{"index.html": {Data: []byte("app")}}}, s)
 	if err != nil {
 		t.Fatal(err)
 	}

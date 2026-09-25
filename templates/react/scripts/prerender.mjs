@@ -1,6 +1,8 @@
 // Writes static HTML for every parameterless route into dist/, using the
-// server bundle from `vite build --ssr`. Run by `npm run build`.
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+// server bundle from `vite build --ssr`, and keeps that bundle with the
+// sidecar script in dist/.server for per-request rendering (LIDZA_SSR=1).
+// Run by `npm run build`.
+import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
@@ -19,4 +21,5 @@ for (const path of staticPaths()) {
   await writeFile(file, page)
   console.log(`prerendered ${path}`)
 }
-await rm(server, { recursive: true, force: true })
+await copyFile(join('scripts', 'ssr-server.mjs'), join(server, 'ssr-server.mjs'))
+await writeFile(join(server, 'index.html'), template)

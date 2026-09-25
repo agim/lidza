@@ -212,7 +212,10 @@ Statements that lose data or can fail on existing rows carry a
 3. Fetch data with `useQuery({ queryKey: ['things'], queryFn: () => api.listThings() })`.
 4. Routes without parameters are prerendered by `npm run build`; keep
    the first render free of browser-only APIs (`window`, `localStorage`),
-   read them in effects.
+   read them in effects. With `LIDZA_SSR=1` at deploy time every page
+   renders per request in a Node sidecar: give a route a `loader` calling
+   `api.*` and its data is in the HTML, with the visitor's cookies
+   forwarded to the API.
 5. Live data: `useLive(['things'])` (src/live.ts) refetches the `things`
    queries when a handler publishes to that topic on the `realtime` pack.
 6. Forms: `validators.CreateThing(values)` from `@lidza/client` returns the
@@ -239,3 +242,4 @@ guard an outbound dependency with `resilience.New(...)`.
 | `LIDZA_ADDR` | listen address | `127.0.0.1:3000` |
 | `LIDZA_MODE` | `dev` proxies the frontend instead of serving the embedded build | unset (production) |
 | `LIDZA_FRONTEND_URL` | dev server to proxy to; set by `lidza dev` | |
+| `LIDZA_SSR` | `1` starts the Node SSR sidecar from `dist/.server` (react template) | unset |

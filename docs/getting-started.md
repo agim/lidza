@@ -170,6 +170,10 @@ operations as the TypeScript client. The Flutter app depends on it with
 The `react` template prerenders every parameterless route at build time
 (`npm run build`: client build, SSR build, `scripts/prerender.mjs`), so
 the binary serves complete HTML and the page hydrates in the browser.
+Per-request rendering is optional: `LIDZA_SSR=1` at deploy time makes the
+binary run the Node sidecar shipped in `dist/.server`; route loaders then
+execute on the server with the visitor's cookies and the page arrives
+complete. Without Node, or when a render fails, the static page is served.
 `lidza check` runs ESLint with `jsx-a11y`: an inaccessible element is an
 error. `useLive(['topic'])` keeps queries fresh from the `realtime` pack,
 and `@lidza/client` exports `validators` with the schema rules for forms.

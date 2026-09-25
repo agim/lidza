@@ -21,4 +21,9 @@ export default defineConfig({
     outDir: 'dist',
     emptyOutDir: true,
   },
+  // The SSR bundle carries its dependencies, so the sidecar needs only
+  // Node and the files under dist/.server.
+  ssr: {
+    noExternal: true,
+  },
 })

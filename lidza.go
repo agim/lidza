@@ -97,17 +97,23 @@ type Booted struct {
 	Services *Services
 	app      App
 	started  []Pack
+	sidecar  *devserver.Sidecar
 }
 
 // Boot starts the packs in order, runs OnStart and builds the handler.
 // Close stops everything in reverse.
 func Boot(ctx context.Context, app App) (*Booted, error) {
 	services := NewServices()
-	h, err := handler(app, services)
+	h, sidecar, err := handler(app, services)
 	if err != nil {
 		return nil, err
 	}
-	b := &Booted{Handler: h, Services: services, app: app}
+	b := &Booted{Handler: h, Services: services, app: app, sidecar: sidecar}
+	if sidecar != nil {
+		if err := sidecar.Start(ctx); err != nil {
+			return nil, fmt.Errorf("ssr sidecar: %w", err)
+		}
+	}
 	for _, p := range app.Packs {
 		if err := p.Start(ctx, services); err != nil {
 			b.Close(ctx)
@@ -143,6 +149,12 @@ func (b *Booted) Close(ctx context.Context) error {
 		}
 	}
 	b.started = nil
+	if b.sidecar != nil {
+		if err := b.sidecar.Stop(ctx); err != nil && first == nil {
+			first = err
+		}
+		b.sidecar = nil
+	}
 	return first
 }
 
@@ -200,9 +212,14 @@ func Serve(ctx context.Context, app App) error {
 // standard pipeline and, for every other path, the proxy to the frontend
 // dev server (dev mode), the embedded build, or the app's own Frontend.
 // Packs are not started; Serve does that.
-func Handler(app App) (http.Handler, error) { return handler(app, NewServices()) }
+func Handler(app App) (http.Handler, error) {
+	h, _, err := handler(app, NewServices())
+	return h, err
+}
 
-func handler(app App, services *Services) (http.Handler, error) {
+// handler also returns the SSR sidecar when LIDZA_SSR=1 asks for one;
+// Boot starts it.
+func handler(app App, services *Services) (http.Handler, *devserver.Sidecar, error) {
 	log := app.logger()
 	r := router.New()
 	if app.Routes != nil {
@@ -241,15 +258,24 @@ func handler(app App, services *Services) (http.Handler, error) {
 	}
 
 	var frontend http.Handler
+	var sidecar *devserver.Sidecar
 	switch {
 	case os.Getenv(devserver.EnvMode) == "dev" && os.Getenv(devserver.EnvFrontendURL) != "":
 		p, err := devserver.NewProxy(os.Getenv(devserver.EnvFrontendURL))
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		frontend = devserver.AgentFiles(p)
 	case app.Dist != nil:
 		frontend = devserver.Static(app.Dist)
+		if os.Getenv(devserver.EnvSSR) == "1" {
+			s, err := devserver.NewSidecar(app.Dist, "http://"+envOr(devserver.EnvAddr, "127.0.0.1:3000"), log)
+			if err != nil {
+				return nil, nil, err
+			}
+			sidecar = s
+			frontend = s.Handler(frontend)
+		}
 	case app.Frontend != nil:
 		frontend = app.Frontend
 	default:
@@ -263,7 +289,7 @@ func handler(app App, services *Services) (http.Handler, error) {
 		middleware.SecureHeaders(middleware.SecureHeadersOptions{CSP: app.CSP}),
 		servicesMiddleware(services),
 	}, app.Middleware...)
-	return middleware.Chain(all, mw...), nil
+	return middleware.Chain(all, mw...), sidecar, nil
 }
 
 // opsThenFrontend serves the operational endpoints and hands everything

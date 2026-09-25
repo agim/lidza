@@ -122,6 +122,7 @@ func TestStatic(t *testing.T) {
 		"assets/app-1a2b.js": {Data: []byte("js")},
 		"favicon.svg":        {Data: []byte("<svg/>")},
 		"about/index.html":   {Data: []byte("<html>about</html>")},
+		".server/entry.js":   {Data: []byte("secret")},
 	}
 	h := Static(dist)
 	cases := []struct{ path, body, cache string }{
@@ -146,6 +147,11 @@ func TestStatic(t *testing.T) {
 	}
 
 	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/.server/entry.js", nil))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("dot directory served: %d %s", rec.Code, rec.Body.String())
+	}
+	rec = httptest.NewRecorder()
 	Static(fstest.MapFS{}).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("empty dist: got %d", rec.Code)

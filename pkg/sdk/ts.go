@@ -237,14 +237,17 @@ export interface RequestOptions {
 }
 
 let baseUrl = ''
+let defaultHeaders: Record<string, string> = {}
 
-/** Set a base URL when the API is not on the page's origin. */
-export function configure(options: { baseUrl?: string }): void {
-  baseUrl = (options.baseUrl ?? '').replace(/\/$/, '')
+/** Set a base URL when the API is not on the page's origin, and headers
+ * sent with every request (the server renderer forwards the visitor's). */
+export function configure(options: { baseUrl?: string; headers?: Record<string, string> }): void {
+  if (options.baseUrl !== undefined) baseUrl = options.baseUrl.replace(/\/$/, '')
+  if (options.headers !== undefined) defaultHeaders = { ...options.headers }
 }
 
 async function request<R>(method: string, path: string, body: unknown, options?: RequestOptions): Promise<R> {
-  const headers: Record<string, string> = { Accept: 'application/json', ...options?.headers }
+  const headers: Record<string, string> = { Accept: 'application/json', ...defaultHeaders, ...options?.headers }
   const init: RequestInit = { method, headers, signal: options?.signal }
   if (body !== undefined) {
     headers['Content-Type'] = 'application/json'

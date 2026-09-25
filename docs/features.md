@@ -32,11 +32,11 @@ does not reimplement).
 | Localization | done | `i18n` pack: catalogs embedded, locale per request, numbers, currency, dates, catalog endpoint for the frontend |
 | Mocking and stubbing | done | `lidza test` with the test database created and migrated; `lidzatest.Start` boots the app with a JSON client, a controllable clock (`lidza.Now`) and recorded or stubbed outbound HTTP (`lidza.HTTPClient`); `lidza test --e2e` runs Playwright against the built binary; `CACHE_URL=memory` |
 | Accessibility checks | done | `eslint-plugin-jsx-a11y` in the `react` template; `lidza check` reports its findings as errors |
-| State hydration and dehydration | not needed | prerendered pages carry markup, not data; the client fetches once after hydration. TanStack Query `dehydrate`/`hydrate` would come with per-request SSR |
+| State hydration and dehydration | partial | prerendered pages carry markup; SSR pages carry markup rendered from loader data, and the client runs the loaders again on navigation (no dehydrated payload) |
 | Observability | done | `/metrics`, `/healthz`, `/readyz`, request log with ids, `/debug/pprof/` in dev |
 | Rate limiting and circuit breakers | done | `middleware.RateLimit` (token bucket per key, bounded table), `resilience.Breaker` |
 | Load testing | done | `lidza benchmark` on k6 with heap and goroutine comparison; `benchmarks/scale_test.js` in every app |
-| Server-side rendering | done (prerendering) | `react` and `astro` templates emit static HTML per route at build time, hydrated on the client, data from `/api`; see "Decisions" |
+| Server-side rendering | done | build-time prerendering for `react` and `astro`; per-request rendering with `LIDZA_SSR=1` through the Node sidecar (loaders run on the server with the visitor's cookies), falling back to the static page; see "Decisions" |
 
 ## Decisions
 
@@ -47,12 +47,11 @@ generates typed Go functions and structs checked against the schema. Rows
 map to structs, nothing is hidden, output is deterministic. No query
 builder, no lazy loading; a full ORM is not planned.
 
-**SSR: build-time prerendering.** The `astro` template (phase 3) and Vite
-prerendering for `react` produce static HTML at build time; the Go binary
-serves it and the page hydrates on the client. Dynamic data comes from
-`/api` (handlers on `sqlc` queries) through the generated client and
-TanStack Query, so interactive apps work unchanged; prerendering only
-replaces the empty `index.html` first paint. Per-request, per-user HTML
-(complete before JavaScript runs) is not covered; an optional Node SSR
-sidecar can be added later for apps that need it, at the cost of the
-single binary for those apps.
+**SSR: build-time prerendering, per-request rendering optional.** The
+`astro` template and Vite prerendering for `react` produce static HTML at
+build time; the Go binary serves it and the page hydrates on the client.
+Dynamic data comes from `/api` through the generated client and TanStack
+Query. Apps that need per-user HTML before JavaScript runs set
+`LIDZA_SSR=1`: the binary runs the Node sidecar from `dist/.server` and
+falls back to the static page whenever it cannot render. Those
+deployments need Node beside the binary.

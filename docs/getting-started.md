@@ -173,7 +173,23 @@ in `.env.test` is created and migrated first, then `go test ./...`, then
 the frontend check. A test boots the whole app with
 `lidzatest.Start(t, app())` and talks to it over HTTP with a JSON client
 that keeps cookies; `lidza new` writes `routes_test.go` as the example.
-`CACHE_URL=memory` in `.env.test` keeps the cache in-process.
+`CACHE_URL=memory` in `.env.test` keeps the cache in-process. In handlers,
+read time with `lidza.Now(ctx)` and call other services with
+`lidza.HTTPClient(ctx)`: the test then freezes the clock
+(`srv.Clock.Set`) and replays recorded HTTP (`lidzatest.WithRecorder`,
+recorded once with `LIDZA_RECORD=1`).
+
+Browser tests: `lidza test --e2e` builds the app, starts the binary and
+runs the Playwright suite in `e2e/`. Playwright pins a browser build per
+package version and finds it itself (`PLAYWRIGHT_BROWSERS_PATH` or its
+cache); when the build is missing, the command says so and prints the
+install command, or installs it with `--install`. On CI, run
+`npx playwright install --with-deps chromium` after `npm ci`, and cache
+`~/.cache/ms-playwright` keyed by the Playwright version.
+
+`lidza doctor` reports the toolchain, the services and the project's
+prerequisites (`node_modules`, built packs, the e2e browser), each missing
+item with the command that fixes it; run it first on a new machine.
 
 ## Operations
 

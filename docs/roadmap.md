@@ -255,8 +255,30 @@ its data once; an `img` without `alt` fails `lidza check`.
 
 ## Beyond the roadmap
 
-Every phase of the plan is delivered. Open items recorded along the way:
-the Dart client (`@lidza/client` has a TypeScript implementation only), a
-fake clock and recorded HTTP fixtures for tests, per-request SSR (an
-optional Node sidecar, see `docs/features.md`), publishing the CLI so
-`go install` works from `install.sh`.
+Every phase of the plan is delivered. Follow-up work, in Agim's order.
+
+### Test harness (done 2026-09-25)
+
+- `lidza.Now(ctx)` reads the app's clock; `lidzatest.Start` provides a
+  `Clock` the test freezes (`Set`) or moves (`Advance`).
+- `lidza.HTTPClient(ctx)` is the client for outbound calls;
+  `lidzatest.WithRecorder("name")` records them to
+  `testdata/http/name.json` with `LIDZA_RECORD=1` and replays them after,
+  so tests run offline. Authorization, Cookie and API-key headers are
+  never stored. `WithTransport` plugs any stub.
+- `lidza test --e2e`: builds the app, starts the binary on a free port
+  with `.env.test`, runs the Playwright suite in `e2e/` (the `react`
+  template ships `playwright.config.ts` and `e2e/home.spec.ts`, with
+  `@playwright/test` pinned). The browser is resolved by the app's own
+  Playwright, never by a guessed path: a missing build is reported with
+  `npx playwright install --with-deps chromium`, or installed with
+  `--install`.
+- `lidza doctor`: toolchain, services and, in a project, `node_modules`,
+  pack builds and the e2e browser, each missing item with its fix.
+
+### Open
+
+- Dart client for Flutter (`@lidza/client` is TypeScript only).
+- Per-request SSR through an optional Node sidecar.
+- Publishing the CLI so `go install` works from `install.sh` (skipped
+  for now by decision).

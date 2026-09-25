@@ -26,18 +26,61 @@ type Server struct {
 	*httptest.Server
 	// Services holds what the packs provided.
 	Services *lidza.Services
-	client   *http.Client
+	// Clock is what lidza.Now(ctx) reads inside handlers; freeze or
+	// advance it from the test.
+	Clock  *Clock
+	client *http.Client
+}
+
+// Option configures Start.
+type StartOption func(*lidza.App, *startOptions)
+
+type startOptions struct {
+	transport http.RoundTripper
+}
+
+// WithRecorder routes the app's outbound HTTP (lidza.HTTPClient) through
+// the fixture called name: recorded with LIDZA_RECORD=1, replayed after.
+func WithRecorder(name string) StartOption {
+	return func(_ *lidza.App, o *startOptions) {
+		r, err := NewRecorder(name)
+		if err != nil {
+			panic(err)
+		}
+		o.transport = r
+	}
+}
+
+// WithTransport routes outbound HTTP through any RoundTripper (a stub).
+func WithTransport(rt http.RoundTripper) StartOption {
+	return func(_ *lidza.App, o *startOptions) { o.transport = rt }
 }
 
 // Start boots app with LIDZA_MODE=test from the project root (found by
 // walking up to lidza.json, so tests in sub-packages work) and serves it.
 // Everything stops when the test ends.
-func Start(t testing.TB, app lidza.App) *Server {
+func Start(t testing.TB, app lidza.App, opts ...StartOption) *Server {
 	t.Helper()
 	if root := projectRoot(); root != "" {
 		t.Chdir(root)
 	}
 	t.Setenv(devserver.EnvMode, "test")
+	var o startOptions
+	for _, opt := range opts {
+		opt(&app, &o)
+	}
+	clock := &Clock{}
+	userStart := app.OnStart
+	app.OnStart = func(ctx context.Context, s *lidza.Services) error {
+		lidza.Provide[lidza.Clock](s, clock)
+		if o.transport != nil {
+			lidza.Provide[http.RoundTripper](s, o.transport)
+		}
+		if userStart != nil {
+			return userStart(ctx, s)
+		}
+		return nil
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	booted, err := lidza.Boot(ctx, app)
@@ -46,7 +89,7 @@ func Start(t testing.TB, app lidza.App) *Server {
 	}
 	srv := httptest.NewServer(booted.Handler)
 	jar, _ := cookiejar.New(nil)
-	s := &Server{Server: srv, Services: booted.Services, client: &http.Client{Jar: jar, Timeout: 10 * time.Second}}
+	s := &Server{Server: srv, Services: booted.Services, Clock: clock, client: &http.Client{Jar: jar, Timeout: 10 * time.Second}}
 	t.Cleanup(func() {
 		srv.Close()
 		stop, cancel := context.WithTimeout(context.Background(), 10*time.Second)

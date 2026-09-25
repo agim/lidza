@@ -21,7 +21,7 @@ func TestNewReact(t *testing.T) {
 		"CLAUDE.md", "AGENTS.md", "GEMINI.md", "docs/lidza-guide.md",
 		".mcp.json", ".gemini/settings.json",
 		"package.json", "index.html", "vite.config.ts", "tsconfig.json",
-		"src/main.tsx", "src/router.tsx", "src/pages/Home.tsx", "src/ErrorBoundary.tsx", "schema.lidza", "schema/schema.go", ".env.example", "packs.go", "benchmarks/scale_test.js",
+		"src/main.tsx", "src/router.tsx", "src/pages/Home.tsx", "src/ErrorBoundary.tsx", "playwright.config.ts", "e2e/home.spec.ts", "schema.lidza", "schema/schema.go", ".env.example", "packs.go", "benchmarks/scale_test.js",
 		".gitignore", "dist/.gitkeep",
 	} {
 		if _, err := os.Stat(filepath.Join(dir, f)); err != nil {

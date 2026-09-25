@@ -47,6 +47,8 @@ app is always at one address: http://127.0.0.1:3000.
 | `lidza mcp` | MCP server on stdio; see "Agent interface". |
 | `lidza pack add <name>` | enables an official pack: `db`, `auth`, `jobs`, `cache`, `i18n`, `realtime`, `geo`, `media`. |
 | `lidza test [go test flags]` | creates and migrates the `.env.test` database, runs `go test ./...` with `LIDZA_MODE=test`, then the frontend check. |
+| `lidza test --e2e [--install]` | builds the app, starts the binary with `.env.test`, runs the Playwright suite in `e2e/`; `--install` fetches the browser when missing. |
+| `lidza doctor` | toolchain, services, `node_modules`, pack builds, e2e browser; each missing item with its fix. |
 | `lidza pack scaffold <name>` | creates `packs/<name>` with a crate and an example capability; `lidza pack build` compiles it. |
 | `lidza db migrate\|rollback\|status` | applies `db/migrations` (db pack, `DATABASE_URL` from `.env`). |
 | `lidza benchmark [--vus 500] [--duration 1m]` | runs `benchmarks/scale_test.js` with k6 against the running app; heap and goroutines must stay flat. |
@@ -104,6 +106,16 @@ signature. Both are regenerated after each Go rebuild.
 boots the app with its packs (`.env.test`, `LIDZA_MODE=test`) and
 `srv.JSON(t, method, path, body, &out, lidzatest.Bearer(token))` calls it.
 Run `lidza test`.
+
+Time and outbound HTTP are testable when handlers use `lidza.Now(ctx)`
+instead of `time.Now()` and `lidza.HTTPClient(ctx)` instead of
+`http.DefaultClient`: `srv.Clock.Set(t)` freezes time, and
+`lidzatest.Start(t, app(), lidzatest.WithRecorder("name"))` replays
+`testdata/http/name.json`, recorded once with `LIDZA_RECORD=1 lidza test`.
+
+Browser tests live in `e2e/*.spec.ts` (Playwright); `lidza test --e2e`
+runs them against the built binary. If the browser is missing the command
+prints the install line; `lidza test --e2e --install` runs it.
 
 ## Adding an API route
 

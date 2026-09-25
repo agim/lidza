@@ -241,6 +241,7 @@ Phase 0, all passing since 2026-09-25:
 
 ```sh
 sh install.sh --check          # every Toolchain and Helper tools line [ok]
+lidza doctor                   # the same from the CLI, plus services and project checks
 go version
 go env GOPATH
 cargo --version && rustc --version

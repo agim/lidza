@@ -24,7 +24,8 @@ Usage:
   lidza pack add|scaffold|build|list [name]
   lidza db migrate|rollback|status
   lidza benchmark [scenario] [--vus 500] [--duration 1m]
-  lidza test [go test flags]
+  lidza test [go test flags] | lidza test --e2e [--install]
+  lidza doctor
   lidza context [--dir .] [--stdout]
   lidza mcp [--dir .]
   lidza version
@@ -38,7 +39,8 @@ Commands:
   pack     add official packs (db, realtime, media, geo), scaffold, build and list local ones
   db       apply, revert and list migrations (lidza/db pack)
   benchmark  run a k6 scenario from benchmarks/ against the running app; heap before and after
-  test     go test ./... with LIDZA_MODE=test, the test database created and migrated, then the frontend check
+  test     go test ./... with LIDZA_MODE=test, the test database created and migrated, then the frontend check; --e2e runs the Playwright suite against the built binary
+  doctor   report the toolchain, services and the project's prerequisites, each with its fix
   context  write .lidza/context.json: routes, handler signatures, Rust exports
   mcp      serve routes, context, diagnostics and dev logs over MCP on stdio
   version  print the framework version
@@ -72,6 +74,8 @@ func main() {
 		err = runBenchmark(ctx, args)
 	case "test":
 		err = runTest(ctx, args)
+	case "doctor":
+		err = runDoctor(ctx, args)
 	case "context":
 		err = runContext(ctx, args)
 	case "mcp":

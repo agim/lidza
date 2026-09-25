@@ -67,6 +67,8 @@ func (s *Services) Each(f func(any)) {
 
 type servicesKey struct{}
 
+func typeOf[T any]() reflect.Type { return reflect.TypeFor[T]() }
+
 // WithServices attaches s to ctx; the app handler does this for every
 // request, tests do it by hand.
 func WithServices(ctx context.Context, s *Services) context.Context {

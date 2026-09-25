@@ -29,7 +29,7 @@ does not reimplement).
 | Session management and token auth | done | `auth` pack: argon2id, JWT access tokens, refresh sessions in Postgres, cookies or bearer, `auth.Require` |
 | Job queues and background workers | done | `jobs` pack: Postgres queue, bounded workers, retries, scheduling; heavy work in a pack capability |
 | Localization | done | `i18n` pack: catalogs embedded, locale per request, numbers, currency, dates, catalog endpoint for the frontend |
-| Mocking and stubbing | done (harness) | `lidza test` with the test database created and migrated; `lidzatest.Start` boots the app on httptest with a JSON client; `CACHE_URL=memory`; fake clock and recorded fixtures not built |
+| Mocking and stubbing | done | `lidza test` with the test database created and migrated; `lidzatest.Start` boots the app with a JSON client, a controllable clock (`lidza.Now`) and recorded or stubbed outbound HTTP (`lidza.HTTPClient`); `lidza test --e2e` runs Playwright against the built binary; `CACHE_URL=memory` |
 | Accessibility checks | done | `eslint-plugin-jsx-a11y` in the `react` template; `lidza check` reports its findings as errors |
 | State hydration and dehydration | not needed | prerendered pages carry markup, not data; the client fetches once after hydration. TanStack Query `dehydrate`/`hydrate` would come with per-request SSR |
 | Observability | done | `/metrics`, `/healthz`, `/readyz`, request log with ids, `/debug/pprof/` in dev |

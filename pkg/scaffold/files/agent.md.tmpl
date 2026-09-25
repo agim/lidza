@@ -6,6 +6,7 @@ commands and the rules.
 
 - `lidza dev`: run on http://127.0.0.1:3000 with hot reload for Go and the frontend.
 - `lidza check --json`: every Go, Rust and frontend error in one list; run it after each change until `"status": "ok"`.
+- `lidza test` for Go tests, `lidza test --e2e` for the browser suite, `lidza doctor` when something is missing on the machine.
 - `lidza build`: production binary at `bin/{{.Name}}`.
 - MCP server `lidza mcp` (configured in `.mcp.json` and `.gemini/settings.json`): `lidza_routes`, `lidza_context`, `lidza_check`, `lidza_logs`, `lidza_config`.
 - Go owns `/api` (`routes.go`, `router.Route` with typed handlers); the frontend never defines API routes and calls them only through `@lidza/client`.

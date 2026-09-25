@@ -1,0 +1,10 @@
+// Data shapes for {{.Name}}: the single source for Go structs (schema/),
+// the Postgres DDL and migrations (db/), and the client types. Run
+// `lidza gen` after editing; `lidza dev` does it on save.
+//
+// model: a table and a struct. type: an API shape. enum: a fixed set.
+
+type Greeting {
+  name    string @min(1) @max(100)
+  message string
+}

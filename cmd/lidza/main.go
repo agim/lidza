@@ -20,6 +20,7 @@ Usage:
   lidza dev   [--dir .] [--addr 127.0.0.1:3000]
   lidza build [--dir .] [--out bin/<name>]
   lidza check [--dir .] [--json]
+  lidza gen [--dir .]
   lidza context [--dir .] [--stdout]
   lidza mcp [--dir .]
   lidza version
@@ -29,6 +30,7 @@ Commands:
   dev      run the app with hot reload (frontend dev server proxied behind /api)
   build    build the frontend and compile one production binary
   check    run go vet, staticcheck, cargo check and tsc; one diagnostics list
+  gen      generate from schema.lidza (Go, SQL, migrations, Rust) and the handlers (OpenAPI, @lidza/client)
   context  write .lidza/context.json: routes, handler signatures, Rust exports
   mcp      serve routes, context, diagnostics and dev logs over MCP on stdio
   version  print the framework version
@@ -52,6 +54,8 @@ func main() {
 		err = runBuild(ctx, args)
 	case "check":
 		err = runCheck(ctx, args)
+	case "gen":
+		err = runGen(ctx, args)
 	case "context":
 		err = runContext(ctx, args)
 	case "mcp":

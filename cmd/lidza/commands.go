@@ -12,9 +12,9 @@ import (
 
 	"github.com/agim/lidza/pkg/config"
 	"github.com/agim/lidza/pkg/devserver"
-	"github.com/agim/lidza/pkg/inspect"
 	"github.com/agim/lidza/pkg/mcpserver"
 	"github.com/agim/lidza/pkg/scaffold"
+	"github.com/agim/lidza/pkg/schema"
 )
 
 func runNew(ctx context.Context, args []string) error {
@@ -78,12 +78,17 @@ func runDev(ctx context.Context, args []string) error {
 	}
 	defer logFile.Close()
 	out := io.MultiWriter(os.Stdout, logFile)
-	refresh := func() {
-		if err := inspect.Refresh(cfg.Dir, cfg); err != nil {
-			fmt.Fprintf(out, "[lidza] context refresh failed: %v\n", err)
-		}
-	}
-	return devserver.Dev(ctx, cfg, devserver.Options{Addr: *addr, Out: out, AfterBuild: refresh})
+	return devserver.Dev(ctx, cfg, devserver.Options{
+		Addr:        *addr,
+		Out:         out,
+		Watch:       []string{schema.FileName},
+		BeforeBuild: func() error { return generateSchema(cfg.Dir, out) },
+		AfterBuild: func() {
+			if err := generateClient(cfg.Dir, cfg, out); err != nil {
+				fmt.Fprintf(out, "[lidza] %v\n", err)
+			}
+		},
+	})
 }
 
 func runBuild(ctx context.Context, args []string) error {
@@ -104,6 +109,9 @@ func runBuild(ctx context.Context, args []string) error {
 		*out = filepath.Join(cfg.Dir, *out)
 	}
 
+	if err := generateAll(cfg.Dir, cfg, os.Stdout); err != nil {
+		return err
+	}
 	if cfg.Frontend.Dist != "" {
 		if err := devserver.EnsureNodeModules(ctx, cfg.Dir, os.Stdout); err != nil {
 			return err

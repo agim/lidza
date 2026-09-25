@@ -49,6 +49,26 @@ func LLMS(c *Context, cfg *config.Config, guide string) (short, full string) {
 			f.WriteString("\n")
 		}
 	}
+	if len(c.Operations) > 0 {
+		f.WriteString("\n## Typed operations (the generated client, `import { api } from '@lidza/client'`)\n\n")
+		for _, op := range c.Operations {
+			in, out := "none", "204 No Content"
+			if op.Input != "" {
+				in = op.Input
+			}
+			if op.Output != "" {
+				out = op.Output
+			}
+			fmt.Fprintf(&f, "- `api.%s`: %s %s, body %s, returns %s\n", op.ID, op.Method, op.Path, in, out)
+		}
+		f.WriteString("\nSchemas (JSON Schema) are in .lidza/openapi.json, served at /openapi.json in dev.\n")
+	}
+	if len(c.Warnings) > 0 {
+		f.WriteString("\n## Type-check warnings\n\n")
+		for _, w := range c.Warnings {
+			f.WriteString("- " + w + "\n")
+		}
+	}
 	if c.Rust != nil {
 		fmt.Fprintf(&f, "\n## Rust crate %s (%s)\n\n", c.Rust.Crate, c.Rust.Dir)
 		if len(c.Rust.Exports) == 0 {

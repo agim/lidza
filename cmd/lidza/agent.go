@@ -49,14 +49,11 @@ func runContext(_ context.Context, args []string) error {
 		enc.SetIndent("", "  ")
 		return enc.Encode(c)
 	}
-	if err := inspect.Refresh(abs, cfg); err != nil {
-		return err
-	}
-	c, err := inspect.Project(abs, cfg)
+	c, err := inspect.Refresh(abs, cfg)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("wrote %s: %d route(s)", inspect.FileName, len(c.Routes))
+	fmt.Printf("wrote %s: %d route(s), %d typed operation(s)", inspect.FileName, len(c.Routes), len(c.Operations))
 	if c.Rust != nil {
 		fmt.Printf(", %d Rust export(s)", len(c.Rust.Exports))
 	}

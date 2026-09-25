@@ -8,4 +8,5 @@ commands and the rules.
 - `lidza check --json`: every Go, Rust and frontend error in one list; run it after each change until `"status": "ok"`.
 - `lidza build`: production binary at `bin/{{.Name}}`.
 - MCP server `lidza mcp` (configured in `.mcp.json` and `.gemini/settings.json`): `lidza_routes`, `lidza_context`, `lidza_check`, `lidza_logs`, `lidza_config`.
-- Go owns `/api` (`routes.go`); the frontend never defines API routes.
+- Go owns `/api` (`routes.go`, `router.Route` with typed handlers); the frontend never defines API routes and calls them only through `@lidza/client`.
+- Data shapes live in `schema.lidza`; `schema/`, `db/` and `.lidza/` are generated, never edited.

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -29,6 +30,14 @@ func runCheck(ctx context.Context, args []string) error {
 	layers := diag.Detect(abs)
 	if !layers.Go && layers.CargoDir == "" && !layers.TSConfig {
 		return fmt.Errorf("nothing to check in %s: no go.mod, Cargo.toml or tsconfig.json", abs)
+	}
+	// Generated code must be current before the checkers see it: the
+	// schema package for go vet, the client for tsc.
+	if _, cfg, err := loadProject(abs); err == nil {
+		quiet := io.Discard
+		if err := generateAll(abs, cfg, quiet); err != nil && !*asJSON {
+			fmt.Println("generate:", err)
+		}
 	}
 	report := diag.Run(ctx, layers)
 

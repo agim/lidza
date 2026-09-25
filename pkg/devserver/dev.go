@@ -22,9 +22,16 @@ type Options struct {
 	Out io.Writer
 	// Poll is how often the Go sources are checked for changes.
 	Poll time.Duration
+	// BeforeBuild runs before every build. `lidza dev` uses it to run the
+	// schema generators; an error is logged and the build still runs.
+	BeforeBuild func() error
 	// AfterBuild runs after every successful build of the app, before the
-	// restart. `lidza dev` uses it to refresh the agent context files.
+	// restart. `lidza dev` uses it to refresh the agent context files and
+	// the generated client.
 	AfterBuild func()
+	// Watch lists extra files, relative to the project root, whose change
+	// triggers a rebuild besides the Go sources.
+	Watch []string
 }
 
 // Environment the app binary reads, in dev (set by `lidza dev`) and in
@@ -89,7 +96,15 @@ func Dev(ctx context.Context, cfg *config.Config, opt Options) error {
 			opt.AfterBuild()
 		}
 	}
-	if err := app.build(ctx); err != nil {
+	build := func() error {
+		if opt.BeforeBuild != nil {
+			if err := opt.BeforeBuild(); err != nil {
+				logf("%v", err)
+			}
+		}
+		return app.build(ctx)
+	}
+	if err := build(); err != nil {
 		logf("build failed; fix the errors above, watching for changes")
 	} else {
 		afterBuild()
@@ -99,7 +114,7 @@ func Dev(ctx context.Context, cfg *config.Config, opt Options) error {
 		logf("app: http://%s  (API under /api, frontend proxied from %s)", opt.Addr, cfg.Frontend.URL)
 	}
 
-	w := newWatcher(cfg.Dir)
+	w := newWatcher(cfg.Dir, opt.Watch...)
 	w.scan()
 	ticker := time.NewTicker(opt.Poll)
 	defer ticker.Stop()
@@ -112,12 +127,15 @@ func Dev(ctx context.Context, cfg *config.Config, opt Options) error {
 			if !w.scan() {
 				continue
 			}
-			logf("Go sources changed, rebuilding")
-			if err := app.build(ctx); err != nil {
+			logf("sources changed, rebuilding")
+			if err := build(); err != nil {
 				logf("build failed; keeping the previous binary running")
 				continue
 			}
 			afterBuild()
+			// Generators may have written Go files; record them so they do
+			// not count as a second change.
+			w.scan()
 			app.stop()
 			if err := app.start(); err != nil {
 				logf("restart failed: %v", err)
@@ -207,11 +225,16 @@ func checkPortFree(addr string) error {
 // filesystem; the tree is small enough that a 500ms scan is cheap.
 type watcher struct {
 	root  string
+	extra map[string]bool // relative paths watched besides Go sources
 	mtime map[string]time.Time
 }
 
-func newWatcher(root string) *watcher {
-	return &watcher{root: root, mtime: map[string]time.Time{}}
+func newWatcher(root string, extra ...string) *watcher {
+	w := &watcher{root: root, extra: map[string]bool{}, mtime: map[string]time.Time{}}
+	for _, e := range extra {
+		w.extra[filepath.Join(root, e)] = true
+	}
+	return w
 }
 
 var skipDirs = map[string]bool{
@@ -235,7 +258,7 @@ func (w *watcher) scan() bool {
 			return nil
 		}
 		name := d.Name()
-		if !strings.HasSuffix(name, ".go") && name != "go.mod" && name != "go.sum" {
+		if !strings.HasSuffix(name, ".go") && name != "go.mod" && name != "go.sum" && !w.extra[p] {
 			return nil
 		}
 		info, err := d.Info()

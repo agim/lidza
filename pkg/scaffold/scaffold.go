@@ -21,6 +21,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/agim/lidza/pkg/config"
+	"github.com/agim/lidza/pkg/schema"
 	"github.com/agim/lidza/templates"
 )
 
@@ -115,10 +116,19 @@ func New(ctx context.Context, opt Options) error {
 		{"lidza-guide.md.tmpl", filepath.Join("docs", "lidza-guide.md")},
 		{"mcp.json.tmpl", ".mcp.json"},
 		{"gemini-settings.json.tmpl", filepath.Join(".gemini", "settings.json")},
+		{"schema.lidza.tmpl", schema.FileName},
 	} {
 		if err := render(f.src, filepath.Join(opt.Dir, f.dst), data); err != nil {
 			return err
 		}
+	}
+	// The generated schema package must exist before the app compiles.
+	parsed, err := schema.Load(opt.Dir)
+	if err != nil {
+		return err
+	}
+	if _, err := schema.Generate(opt.Dir, parsed, "", ""); err != nil {
+		return err
 	}
 	fmt.Fprintf(opt.Out, "created %s (%s template)\n", opt.Dir, opt.Template)
 

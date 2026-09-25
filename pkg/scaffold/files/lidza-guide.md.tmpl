@@ -16,14 +16,17 @@ app is always at one address: http://127.0.0.1:3000.
 {{.Name}}/
 ├── main.go          entrypoint: lidza.Run(...). Do not edit.
 ├── routes.go        API handlers. Add routes here (or in packages it calls).
+├── schema.lidza     data shapes: models (tables), types (API shapes), enums
+├── schema/          generated Go structs with Validate(). Do not edit.
+├── db/              generated schema.sql, migrations/, schema.lock.json
 ├── lidza.json       project config: name, frontend template, dev server, dist
 ├── go.mod           module {{.Name}}, requires {{.Module}}
 {{- if .Dist}}
 ├── package.json     frontend ({{.Template}}); npm scripts dev, build, check
 ├── src/             frontend source
-│   ├── api.ts       every call to /api goes through here
 │   ├── router.tsx   client-side routes
-│   └── pages/       one file per page
+│   └── pages/       one file per page; API calls via `import { api } from '@lidza/client'`
+├── .lidza/client/   generated TypeScript client (gitignored, `lidza gen`)
 ├── {{.Dist}}/            frontend build output, embedded into the binary. Never edit.
 {{- end}}
 ├── docs/lidza-guide.md   this file
@@ -36,7 +39,8 @@ app is always at one address: http://127.0.0.1:3000.
 |---|---|
 | `lidza dev` | starts the frontend dev server{{if .DevURL}} ({{.DevURL}}){{end}}, builds and runs the app on http://127.0.0.1:3000, rebuilds on Go changes. `npm install` runs automatically when `node_modules` is missing. |
 | `lidza build` | builds the frontend into `{{if .Dist}}{{.Dist}}/{{else}}(none){{end}}`, then compiles `bin/{{.Name}}`: one binary, no Node at runtime. |
-| `lidza check --json` | runs `go vet`, `staticcheck`, `cargo check` and `tsc`; prints one JSON list of diagnostics, each with `layer`, `file`, `line`, `message`. Exit 1 while there are errors. |
+| `lidza check --json` | regenerates, then runs `go vet`, `staticcheck`, `cargo check` and `tsc`; prints one JSON list of diagnostics, each with `layer`, `file`, `line`, `message`. Exit 1 while there are errors. A frontend call that no longer matches a handler fails here. |
+| `lidza gen` | `schema.lidza` to `schema/schema.go`, `db/schema.sql`, a migration in `db/migrations` when models changed; handlers to `.lidza/openapi.json` and the client in `.lidza/client`. `lidza dev` runs it on every change. |
 | `lidza context` | writes `.lidza/context.json`: routes, handler signatures, Rust exports. |
 | `lidza mcp` | MCP server on stdio; see "Agent interface". |
 | `lidza version` | prints the framework version. |
@@ -45,7 +49,6 @@ app is always at one address: http://127.0.0.1:3000.
 | `npm run check` | frontend type check (`tsc --noEmit`). |
 {{- end}}
 
-Coming with the framework's roadmap: the generated `@lidza/client`.
 
 ## Agent interface
 
@@ -68,31 +71,65 @@ signature. Both are regenerated after each Go rebuild.
 
 1. Go owns `/api`. The frontend never defines an API route and never proxies
    one; it calls `/api/...` on the same origin.
-2. Add an API route in `routes.go` with a `net/http` pattern
-   (`"GET /api/v1/things/{id}"`) and reply with `router.JSON`. Keep handlers
-   under `/api/v1/`.
+2. Add an API route in `routes.go` with `router.Route(r, "GET /api/v1/things/{id}", handler)`
+   where `handler` is `func(ctx context.Context, req *router.Request[In]) (Out, error)`.
+   `In` is the JSON body type (`router.None` without one) and `Out` the reply
+   (`router.None` for 204). Put the shapes in `schema.lidza` so they get
+   validation and reach the client. Return `router.NotFound("thing")` or
+   `router.Errorf(status, ...)` for client-visible errors; any other error is a
+   500 whose text stays on the server. Keep handlers under `/api/v1/`.
+3. Name handlers: the name becomes the client method (`listPosts` gives
+   `api.listPosts()`).
 {{- if .Dist}}
-3. Frontend calls to the API live in `src/api.ts` only. When the generated
-   client (`@lidza/client`) arrives, that file is replaced; nothing else
-   should need to change.
-4. Never edit `{{.Dist}}/`; `lidza build` regenerates it.
+4. The frontend calls the API only through `@lidza/client` (`api.<name>`),
+   never `fetch` by hand. The client is regenerated from the handlers; after
+   changing a handler's types, `lidza check` shows what the frontend must adapt.
+5. Never edit `{{.Dist}}/`, `schema/` or `.lidza/`; they are generated.
 {{- end}}
-5. Do not run the frontend dev server or the Go binary by hand; `lidza dev`
+6. Do not run the frontend dev server or the Go binary by hand; `lidza dev`
    starts both and keeps them in sync.
-6. Keep the app stateless: no global mutable maps, no in-memory sessions.
+7. Keep the app stateless: no global mutable maps, no in-memory sessions.
    State goes to Postgres or Redis.
 
 ## Adding an API route
 
-```go
-// routes.go
-r.HandleFunc("GET /api/v1/time", func(w http.ResponseWriter, req *http.Request) {
-	router.JSON(w, http.StatusOK, map[string]string{"now": time.Now().UTC().Format(time.RFC3339)})
-})
-```
+1. Declare the shapes in `schema.lidza`:
 
-Save; `lidza dev` rebuilds and restarts the binary. Check with
-`curl -s http://127.0.0.1:3000/api/v1/time`.
+   ```
+   type CreateThing {
+     title string @min(1) @max(200)
+   }
+   type Thing {
+     id    uuid
+     title string
+   }
+   ```
+
+2. Register the handler in `routes.go`:
+
+   ```go
+   router.Route(r, "POST /api/v1/things", createThing)
+
+   func createThing(ctx context.Context, req *router.Request[schema.CreateThing]) (schema.Thing, error) {
+   	req.Status(http.StatusCreated)
+   	return schema.Thing{ID: "1", Title: req.Body.Title}, nil
+   }
+   ```
+
+   The body is decoded and validated (422 with field errors on failure)
+   before the handler runs.
+
+3. Save. `lidza dev` regenerates `schema/`, rebuilds, and rewrites the client:
+   `api.createThing({ title })` now exists. Check with
+   `curl -s -X POST http://127.0.0.1:3000/api/v1/things -d '{"title":"x"}'`.
+
+## Models and migrations
+
+A `model` in `schema.lidza` is a table. `lidza gen` writes the full DDL to
+`db/schema.sql` and, when models changed since `db/schema.lock.json`, a
+numbered pair in `db/migrations/` (`NNNN_name.up.sql`, `.down.sql`).
+Statements that lose data or can fail on existing rows carry a
+`-- review` comment. Applying migrations is the `db` pack's job.
 {{- if .Dist}}
 
 ## Adding a page

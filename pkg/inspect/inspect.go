@@ -21,6 +21,7 @@ import (
 
 	"github.com/agim/lidza/pkg/config"
 	"github.com/agim/lidza/pkg/router"
+	"github.com/agim/lidza/pkg/schema"
 	"github.com/agim/lidza/pkg/version"
 )
 
@@ -31,10 +32,18 @@ const FileName = ".lidza/context.json"
 type Context struct {
 	Generated time.Time `json:"generated"`
 	// Lidza is the framework version that produced the dump.
-	Lidza  string  `json:"lidza"`
-	App    App     `json:"app"`
+	Lidza string `json:"lidza"`
+	App   App    `json:"app"`
+	// Routes lists every registration found in the source, typed or not.
 	Routes []Route `json:"routes"`
-	Rust   *Rust   `json:"rust,omitempty"`
+	// Operations are the typed routes with their schemas; Schemas holds the
+	// JSON Schema components they reference.
+	Operations []Operation    `json:"operations"`
+	Schemas    map[string]any `json:"schemas"`
+	Rust       *Rust          `json:"rust,omitempty"`
+	// Warnings are type-check errors: the operations may be incomplete
+	// until they are fixed.
+	Warnings []string `json:"warnings,omitempty"`
 }
 
 // App identifies the project.
@@ -56,6 +65,9 @@ type Route struct {
 	Handler Handler `json:"handler"`
 	// Builtin marks routes the framework registers in every app.
 	Builtin bool `json:"builtin,omitempty"`
+	// Typed marks routes registered with router.Route; their schemas are
+	// in Context.Operations.
+	Typed bool `json:"typed,omitempty"`
 }
 
 // Handler describes the function behind a route.
@@ -104,7 +116,7 @@ func Project(dir string, cfg *config.Config) (*Context, error) {
 
 	for _, p := range router.Builtins() {
 		method, path := splitPattern(p)
-		c.Routes = append(c.Routes, Route{Method: method, Path: path, Pattern: p, Builtin: true,
+		c.Routes = append(c.Routes, Route{Method: method, Path: path, Pattern: p, Builtin: true, Typed: true,
 			Handler: Handler{Name: "lidza/pkg/router", Signature: "func(w http.ResponseWriter, r *http.Request)"}})
 	}
 	routes, err := goRoutes(abs)
@@ -112,6 +124,24 @@ func Project(dir string, cfg *config.Config) (*Context, error) {
 		return nil, err
 	}
 	c.Routes = append(c.Routes, routes...)
+
+	lidzaSchema, err := schema.Load(abs)
+	if err != nil {
+		return nil, err
+	}
+	if c.App.Module != "" {
+		ops, defs, warnings, err := typedRoutes(abs, lidzaSchema, c.App.Module)
+		if err != nil {
+			return nil, err
+		}
+		c.Operations, c.Schemas, c.Warnings = ops, defs, warnings
+	}
+	if c.Operations == nil {
+		c.Operations = []Operation{}
+	}
+	if c.Schemas == nil {
+		c.Schemas = map[string]any{}
+	}
 
 	for _, d := range []string{"core", "."} {
 		if _, err := os.Stat(filepath.Join(abs, d, "Cargo.toml")); err == nil {
@@ -211,10 +241,23 @@ func goRoutes(root string) ([]Route, error) {
 					return true
 				}
 				sel, ok := call.Fun.(*ast.SelectorExpr)
-				if !ok || (sel.Sel.Name != "HandleFunc" && sel.Sel.Name != "Handle") {
+				if !ok {
 					return true
 				}
-				lit, ok := call.Args[0].(*ast.BasicLit)
+				// r.HandleFunc(pattern, h), r.Handle(pattern, h) and
+				// router.Route(r, pattern, h).
+				patternArg, handlerArg := 0, 1
+				switch sel.Sel.Name {
+				case "HandleFunc", "Handle":
+				case "Route":
+					if len(call.Args) < 3 {
+						return true
+					}
+					patternArg, handlerArg = 1, 2
+				default:
+					return true
+				}
+				lit, ok := call.Args[patternArg].(*ast.BasicLit)
 				if !ok || lit.Kind != token.STRING {
 					return true
 				}
@@ -223,8 +266,8 @@ func goRoutes(root string) ([]Route, error) {
 					return true
 				}
 				method, path := splitPattern(pattern)
-				h := describeHandler(fset, root, pkg.name, call.Args[1], decls)
-				routes = append(routes, Route{Method: method, Path: path, Pattern: pattern, Handler: h})
+				h := describeHandler(fset, root, pkg.name, call.Args[handlerArg], decls)
+				routes = append(routes, Route{Method: method, Path: path, Pattern: pattern, Handler: h, Typed: sel.Sel.Name == "Route"})
 				return true
 			})
 		}

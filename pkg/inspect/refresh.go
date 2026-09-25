@@ -1,6 +1,7 @@
 package inspect
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 
@@ -15,6 +16,7 @@ const GuideFile = "docs/lidza-guide.md"
 const (
 	LLMSFile     = ".lidza/llms.txt"
 	LLMSFullFile = ".lidza/llms-full.txt"
+	OpenAPIFile  = ".lidza/openapi.json"
 )
 
 // LLMSFor inspects the project and renders both llms documents.
@@ -28,17 +30,32 @@ func LLMSFor(dir string, cfg *config.Config) (short, full string, err error) {
 	return short, full, nil
 }
 
-// Refresh writes .lidza/context.json, .lidza/llms.txt and
-// .lidza/llms-full.txt. `lidza dev` calls it after every successful build.
-func Refresh(dir string, cfg *config.Config) error {
+// Refresh writes .lidza/context.json, .lidza/openapi.json, .lidza/llms.txt
+// and .lidza/llms-full.txt, and returns the context so callers can generate
+// clients from it. `lidza dev` calls it after every successful build.
+func Refresh(dir string, cfg *config.Config) (*Context, error) {
 	c, err := Write(dir, cfg)
 	if err != nil {
-		return err
+		return nil, err
+	}
+	doc, err := json.MarshalIndent(OpenAPI(c), "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	if err := writeIfChanged(filepath.Join(c.App.Dir, OpenAPIFile), append(doc, '\n')); err != nil {
+		return nil, err
 	}
 	guide, _ := os.ReadFile(filepath.Join(c.App.Dir, GuideFile))
 	short, full := LLMS(c, cfg, string(guide))
-	if err := os.WriteFile(filepath.Join(c.App.Dir, LLMSFile), []byte(short), 0o644); err != nil {
-		return err
+	if err := writeIfChanged(filepath.Join(c.App.Dir, LLMSFile), []byte(short)); err != nil {
+		return nil, err
 	}
-	return os.WriteFile(filepath.Join(c.App.Dir, LLMSFullFile), []byte(full), 0o644)
+	return c, writeIfChanged(filepath.Join(c.App.Dir, LLMSFullFile), []byte(full))
+}
+
+func writeIfChanged(path string, data []byte) error {
+	if old, err := os.ReadFile(path); err == nil && string(old) == string(data) {
+		return nil
+	}
+	return os.WriteFile(path, data, 0o644)
 }

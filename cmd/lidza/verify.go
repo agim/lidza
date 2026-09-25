@@ -192,6 +192,7 @@ func staleGenerated(ctx context.Context, dir string, cfg *config.Config) (string
 // goTest prepares the test database when the db pack is enabled and runs
 // `go test ./...` with extra arguments.
 func goTest(ctx context.Context, dir string, cfg *config.Config, extra []string, out io.Writer) error {
+	diag.IsolateNodeModules(dir)
 	if cfg != nil {
 		for _, p := range cfg.Packs {
 			if p == pack.OfficialPrefix+"db" {

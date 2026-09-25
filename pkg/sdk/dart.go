@@ -341,10 +341,10 @@ class LidzaClient {
   Future<dynamic> _send(String method, String path, {Object? body}) async {
     final request = http.Request(method, Uri.parse('$baseUrl$path'));
     request.headers.addAll({'Accept': 'application/json', ..._headers});
-    if (body != null) {
-      request.headers['Content-Type'] = 'application/json';
-      request.body = jsonEncode(body);
-    }
+    // Every request that can change state is declared JSON, body or not:
+    // a cookie session is only accepted with this content type.
+    if (method != 'GET' && method != 'HEAD') request.headers['Content-Type'] = 'application/json';
+    if (body != null) request.body = jsonEncode(body);
     final streamed = await _client.send(request);
     final response = await http.Response.fromStream(streamed);
     Object? parsed;

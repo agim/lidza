@@ -1,0 +1,71 @@
+// Data shapes for notes: the single source for Go structs (schema/),
+// the Postgres DDL and migrations (db/), and the client types. Run
+// `lidza gen` after editing; `lidza dev` does it on save.
+//
+// model: a table and a struct. type: an API shape. enum: a fixed set.
+
+// Types of the auth pack.
+model AuthSession @table("auth_session") {
+  id          string @id
+  subject     string @index
+  refreshHash string @unique
+  expiresAt   time
+  revokedAt   time?
+  createdAt   time   @default(now())
+}
+
+// A registered person. The password is stored as an argon2id hash.
+model User @table("app_user") {
+  id           uuid   @id @default(uuid())
+  email        string @unique @min(3) @max(200)
+  passwordHash string
+  createdAt    time   @default(now())
+}
+
+// A note belongs to the user who created it.
+model Note {
+  id        uuid    @id @default(uuid())
+  ownerId   uuid    @index
+  title     string  @min(1) @max(200)
+  body      string?
+  createdAt time    @default(now())
+}
+
+
+// Body of POST /api/v1/notes. The owner is the signed-in user.
+type CreateNote {
+  title string  @min(1) @max(200)
+  body  string?
+}
+
+// Body of PATCH /api/v1/notes/{id}: every field optional, absent fields keep their value.
+type UpdateNote {
+  title string? @min(1) @max(200)
+  body  string?
+}
+
+// Reply of GET /api/v1/notes.
+type NoteList {
+  items Note[]
+  total int
+}
+
+// Body of POST /api/v1/auth/register and /api/v1/auth/login.
+type Credentials {
+  email    string @email @max(200)
+  password string @min(8) @max(200)
+}
+
+// Who is signed in. Browsers get the session as cookies; other clients
+// send accessToken as a bearer token.
+type Session {
+  userId      uuid
+  email       string
+  accessToken string
+}
+
+// Reply of GET /api/v1/auth/session: the signed-in user, or null for a
+// visitor. A 200 either way, so a page can ask without an error.
+type SessionState {
+  user Session?
+}

@@ -198,6 +198,23 @@ func runPrefixed(ctx context.Context, dir string, out io.Writer, prefix string, 
 
 // EnsureNodeModules runs `npm install` in dir when it has a package.json but
 // no node_modules yet.
+// KeepDist restores dist/.gitkeep after a frontend build: the bundler
+// empties the directory, and the Go embed of dist needs it to exist in a
+// fresh clone, so the placeholder stays tracked.
+func KeepDist(dir, dist string) error {
+	if dist == "" {
+		return nil
+	}
+	p := filepath.Join(dir, dist, ".gitkeep")
+	if _, err := os.Stat(p); err == nil {
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(p, nil, 0o644)
+}
+
 func EnsureNodeModules(ctx context.Context, dir string, out io.Writer) error {
 	if _, err := os.Stat(filepath.Join(dir, "package.json")); err != nil {
 		return nil

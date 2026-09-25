@@ -165,6 +165,13 @@ func TestAgentDocs(t *testing.T) {
 		t.Fatalf("missing package: %v %+v", err, r)
 	}
 
+	if got := call("lidza_snippet", map[string]any{"name": "routes"}); !strings.HasPrefix(got, "From examples/notes/routes.go") || !strings.Contains(got, "auth.Require()") {
+		t.Fatalf("lidza_snippet: %s", got)
+	}
+	if got := call("lidza_snippet", nil); !strings.Contains(got, "handler-test (routes_test.go)") {
+		t.Fatalf("snippet catalog: %s", got)
+	}
+
 	prompts, err := c.ListPrompts(ctx, mcp.ListPromptsRequest{})
 	if err != nil || len(prompts.Prompts) != 1 || prompts.Prompts[0].Name != "add-api-route" || prompts.Prompts[0].Description != "Expose an operation." {
 		t.Fatalf("prompts: %v %+v", err, prompts)

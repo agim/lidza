@@ -65,7 +65,8 @@ func TestGenerate(t *testing.T) {
 		"Meta: json.RawMessage(row.Meta),",
 		"CreatedAt: row.CreatedAt,",
 	} {
-		if !strings.Contains(string(h), want) {
+		// The output is gofmt-formatted, so struct fields are aligned.
+		if !strings.Contains(collapse(string(h)), want) {
 			t.Errorf("handlers missing %q\n%s", want, h)
 		}
 	}
@@ -98,4 +99,12 @@ func TestGenerate(t *testing.T) {
 	if plural("Category") != "Categories" || plural("Box") != "Boxes" || plural("Day") != "Days" {
 		t.Error("plural")
 	}
+}
+
+// collapse joins runs of spaces after a colon, undoing gofmt's alignment.
+func collapse(s string) string {
+	for strings.Contains(s, ":  ") {
+		s = strings.ReplaceAll(s, ":  ", ": ")
+	}
+	return s
 }

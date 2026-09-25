@@ -124,6 +124,9 @@ func runE2E(ctx context.Context, dir string, cfg *config.Config, install bool, e
 		if err := run(ctx, dir, "npm", "run", "build"); err != nil {
 			return fmt.Errorf("frontend build failed: %w", err)
 		}
+		if err := devserver.KeepDist(dir, cfg.Frontend.Dist); err != nil {
+			return err
+		}
 	}
 	fmt.Println("[lidza] go build")
 	if err := run(ctx, dir, "go", "build", "-o", bin, "."); err != nil {

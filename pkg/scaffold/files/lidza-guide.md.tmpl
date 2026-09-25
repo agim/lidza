@@ -77,6 +77,7 @@ app is always at one address: http://127.0.0.1:3000.
 | `lidza_logs` | the last lines of the `lidza dev` output (`lines`, `filter`) |
 | `lidza_config` | `lidza.json` |
 | `lidza_api` | the framework's public Go API (`package`, `filter`), also the resource `lidza://api` |
+| `lidza_snippet` | a file of the reference app, verified by its tests (`name`: `schema`, `routes`, `auth-handlers`, `resource-handlers`, `queries`, `handler-test`, `mcp-tool`, `page`, `browser-test`); also `lidza snippet` |
 | `lidza_errors` | captured errors (analytics pack) |
 
 Its prompts are the recipes of this guide (`add-api-route`,
@@ -122,6 +123,10 @@ signature. Both are regenerated after each Go rebuild.
 9. Before calling a framework function, read its signature: `lidza api
    [package] [--filter name]` or the MCP tool `lidza_api`. An import of a
    framework package that does not exist fails `lidza check` (L004).
+10. Before writing a handler, page, test or tool of a kind you have not
+   written here, read the matching snippet (`lidza snippet` or the MCP
+   tool `lidza_snippet`): it is the reference app's code, verified by its
+   tests.
 
 ## Tests
 
@@ -215,8 +220,10 @@ backed by Postgres. Needs the `db` pack (`lidza pack add db`).
    `handlers/post.go` with the routes under `/api/v1/posts`, and the
    registration line in `routes.go`.
 3. Run `lidza db migrate` to apply the new migration in `db/migrations/`.
-4. The generated handlers file is ordinary code: add authorization
-   (`auth.Require()` on a sub-router), filters or ownership checks there.
+4. The generated handlers file is ordinary code: mount the routes on a
+   group (`handlers.PostRoutes(r.Group("/api/v1/posts", auth.Require()))`),
+   add filters or ownership checks there (the snippet
+   `resource-handlers` scopes every query to the signed-in user).
    Regenerate with `--force` to reset it.
 5. `lidza check`, then `lidza test`.
 {{- if .Dist}}
@@ -340,9 +347,12 @@ Official Go packs, configured from `.env` (see `.env.example` after
   becomes typed Go via sqlc (`queries.New(db.From(ctx)).Name(ctx, ...)`).
 - `auth`: `auth.HashPassword`/`CheckPassword`; `auth.From(ctx).Login(ctx,
   userID, claims)` returns tokens, `req.SetCookie` each of
-  `auth.From(ctx).Cookies(tokens)` for browsers; protect a sub-router with
-  `protected.Use(auth.Require())` and read `auth.CurrentUser(ctx)`.
-  Logout: `auth.From(ctx).Logout(ctx, user.SessionID)`.
+  `auth.From(ctx).Cookies(tokens)` for browsers; protect a group with
+  `g := r.Group("/api/v1/notes", auth.Require())` and read
+  `auth.CurrentUser(ctx)`; `auth.Optional()` for a route that serves
+  visitors too (the user is nil then). Logout:
+  `auth.From(ctx).Logout(ctx, user.SessionID)`. Working code: the
+  snippets `routes` and `auth-handlers`.
 - `jobs`: register handlers in `OnStart` with
   `jobs.FromServices(s).Handle("kind", fn)`; enqueue with
   `jobs.From(ctx).Enqueue(ctx, "kind", payload, jobs.RunAt(t))`.

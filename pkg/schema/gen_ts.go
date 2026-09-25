@@ -68,7 +68,11 @@ func JSONSchema(s *Schema) map[string]any {
 		var required []string
 		for _, f := range m.Fields {
 			props[f.Name] = jsonSchemaType(s, f)
-			required = append(required, f.Name)
+			// An optional field may be omitted as well as null: the Go
+			// side decodes both as nil, the TypeScript side gets `?`.
+			if !f.Optional {
+				required = append(required, f.Name)
+			}
 		}
 		// x-lidza marks definitions that carry validation rules, so the
 		// client generates validators for them and not for plain Go types.

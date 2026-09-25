@@ -5,6 +5,7 @@ package router
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -60,6 +61,30 @@ func (r *Router) HandleFunc(pattern string, h http.HandlerFunc) { r.mux.HandleFu
 // Use adds middleware around every route, outermost first. Call it before
 // the router serves its first request; later calls have no effect.
 func (r *Router) Use(mw ...middleware.Middleware) { r.mw = append(r.mw, mw...) }
+
+// Group returns a router for the routes at prefix and below it
+// ("/api/v1/notes" covers "/api/v1/notes" and "/api/v1/notes/{id}") with
+// middleware of its own, run after the parent's. Routes registered on the
+// group use full patterns, as on the parent:
+//
+//	notes := r.Group("/api/v1/notes", auth.Require())
+//	router.Route(notes, "GET /api/v1/notes", listNotes)
+//
+// A route the parent registers under the same prefix with a method wins
+// over the group, being the more specific pattern.
+func (r *Router) Group(prefix string, mw ...middleware.Middleware) *Router {
+	g := &Router{mux: http.NewServeMux()}
+	g.Use(mw...)
+	prefix = strings.TrimSuffix(prefix, "/")
+	if prefix == "" {
+		prefix = "/"
+	}
+	r.mux.Handle(prefix, g)
+	if prefix != "/" {
+		r.mux.Handle(prefix+"/", g)
+	}
+	return g
+}
 
 // Handler returns the router with its middleware applied.
 func (r *Router) Handler() http.Handler {

@@ -87,7 +87,8 @@ var Officials = []Official{
 		Notes: []string{
 			"store password hashes with auth.HashPassword; check with auth.CheckPassword",
 			"login: tokens, err := auth.From(ctx).Login(ctx, userID, claims); for browsers add auth.From(ctx).Cookies(tokens) with req.SetCookie",
-			"protect routes: r.Use(auth.Require()) or wrap a sub-router; auth.CurrentUser(ctx) inside",
+			"protect routes: g := r.Group(\"/api/v1/notes\", auth.Require()); auth.CurrentUser(ctx) inside; auth.Optional() where visitors are served too",
+			"working code: lidza snippet routes, lidza snippet auth-handlers",
 			"run `lidza gen` and `lidza db migrate`: the auth_session table comes from schema.lidza",
 		},
 	},

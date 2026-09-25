@@ -2,9 +2,20 @@ package schema
 
 import (
 	"fmt"
+	"go/format"
 	"os"
 	"path/filepath"
 )
+
+// Gofmt formats generated Go source. On a syntax error the source is
+// returned as is, so the compiler reports it.
+func Gofmt(src string) string {
+	out, err := format.Source([]byte(src))
+	if err != nil {
+		return src
+	}
+	return string(out)
+}
 
 // Result says what Generate wrote.
 type Result struct {
@@ -32,7 +43,7 @@ func Generate(root string, s *Schema, cargoDir, tsFile string) (*Result, error) 
 		return os.WriteFile(p, []byte(content), 0o644)
 	}
 
-	if err := write(GoFile, GenerateGo(s)); err != nil {
+	if err := write(GoFile, Gofmt(GenerateGo(s))); err != nil {
 		return nil, err
 	}
 	if len(s.Models) > 0 || len(s.Enums) > 0 {

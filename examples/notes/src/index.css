@@ -1,0 +1,20 @@
+@import "tailwindcss";
+
+/* The theme: change these tokens, not the classes. Tailwind v4 turns each
+   --color-* into bg-*, text-* and border-* utilities (bg-brand, text-ink). */
+@theme {
+  --color-brand: #1d4ed8;
+  --color-brand-strong: #1e40af;
+  --color-ink: #1a1a1a;
+  --color-muted: #6b7280;
+  --color-surface: #fafafa;
+  --color-line: #e5e7eb;
+  --color-danger: #b00020;
+  --font-sans: system-ui, sans-serif;
+}
+
+@layer base {
+  body {
+    @apply bg-surface text-ink font-sans antialiased;
+  }
+}

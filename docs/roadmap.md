@@ -400,6 +400,25 @@ inside an existing repository it explains what to add to that
 repository's hook instead. `lidza verify --install-hook` does the setup on
 an existing project.
 
+### Reference app and snippets (done 2026-09-25)
+
+`examples/notes` is a real app in its own module (`replace => ../..`):
+the `db` and `auth` packs, registration and login with cookies and a
+bearer token, a `Note` resource generated and then scoped to its owner,
+a React page on the generated client and validators, a handler test
+covering 401, 409, 422 and 404, a browser test, an MCP tool. Its files
+are embedded in the CLI (`pkg/snippets`, synced by `go generate`, a test
+fails when they drift) and served by `lidza snippet [name]` and the MCP
+tool `lidza_snippet` with a catalog resource. Building it surfaced and
+fixed: `Router.Group(prefix, mw...)` for protected sub-trees (the old
+advice re-registered builtins on a second router), `auth.Optional()`,
+the CSRF guard rejecting body-less POSTs from the generated clients (the
+clients now always declare JSON on state-changing requests, and the
+guard accepts a same-origin `Sec-Fetch-Site`), optional schema fields
+required in TypeScript, generated Go never gofmt-formatted, and
+`go test ./...` descending into a Go package shipped inside
+`node_modules` (isolated with a `go.mod` there).
+
 ### Next
 
-Pending: an example app with a snippet tool; platform evals.
+Pending: platform evals.

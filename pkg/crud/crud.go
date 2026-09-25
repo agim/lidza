@@ -67,7 +67,7 @@ func Generate(root string, opt Options) (*Result, error) {
 	if err := write(filepath.Join(pack.QueriesDir, m.Table+".sql"), r.SQL(), true); err != nil {
 		return nil, err
 	}
-	if err := write(filepath.Join("handlers", m.Table+".go"), r.Handlers(), opt.Force); err != nil {
+	if err := write(filepath.Join("handlers", m.Table+".go"), schema.Gofmt(r.Handlers()), opt.Force); err != nil {
 		return nil, err
 	}
 	if _, err := os.Stat(filepath.Join(root, "handlers", "convert.go")); err != nil {
@@ -442,13 +442,21 @@ func registerRoutes(root, module, line string) (bool, error) {
 	src = strings.Replace(src, marker, marker+"\t"+line+"\n", 1)
 	imp := fmt.Sprintf("\t%q\n", module+"/handlers")
 	if !strings.Contains(src, imp) {
-		if i := strings.Index(src, "import (\n"); i >= 0 {
-			src = src[:i+len("import (\n")] + imp + src[i+len("import (\n"):]
+		// Into the app's own import group when there is one, else a group
+		// of its own at the end of the block.
+		if own := fmt.Sprintf("\t%q\n", module+"/schema"); strings.Contains(src, own) {
+			src = strings.Replace(src, own, imp+own, 1)
+		} else if i := strings.Index(src, "import (\n"); i >= 0 {
+			if end := strings.Index(src[i:], "\n)\n"); end >= 0 {
+				src = src[:i+end] + "\n\n" + strings.TrimSuffix(imp, "\n") + src[i+end:]
+			} else {
+				return false, nil
+			}
 		} else {
 			return false, nil
 		}
 	}
-	return true, os.WriteFile(p, []byte(src), 0o644)
+	return true, os.WriteFile(p, []byte(schema.Gofmt(src)), 0o644)
 }
 
 // Naming helpers, matching pkg/schema for the schema side and sqlc for

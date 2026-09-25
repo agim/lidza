@@ -1,0 +1,11 @@
+node_modules/
+dist/*
+!dist/.gitkeep
+.lidza/
+bin/
+.env
+.env.*
+!.env.example
+playwright-report/
+test-results/
+!.env.test

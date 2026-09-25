@@ -133,6 +133,9 @@ func runBuild(ctx context.Context, args []string) error {
 		if err := run(ctx, cfg.Dir, "npm", "run", "build"); err != nil {
 			return fmt.Errorf("frontend build failed: %w", err)
 		}
+		if err := devserver.KeepDist(cfg.Dir, cfg.Frontend.Dist); err != nil {
+			return err
+		}
 		if _, err := os.Stat(filepath.Join(cfg.Dir, cfg.Frontend.Dist, "index.html")); err != nil {
 			return fmt.Errorf("frontend build produced no %s/index.html", cfg.Frontend.Dist)
 		}

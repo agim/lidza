@@ -9,6 +9,7 @@ import (
 
 	"github.com/agim/lidza/pkg/apidoc"
 	"github.com/agim/lidza/pkg/recipes"
+	"github.com/agim/lidza/pkg/snippets"
 )
 
 // addRecipes serves the guide's recipes as prompts: one per level-3
@@ -118,4 +119,29 @@ type errNoPackage string
 
 func (e errNoPackage) Error() string {
 	return "no package " + string(e) + " in this version of Līdza; lidza_api without arguments lists the packages"
+}
+
+// addSnippets serves the reference app's files: the tool lidza_snippet
+// (by name; without one, the catalog) and the resource lidza://snippets.
+func addSnippets(s *server.MCPServer) {
+	s.AddTool(mcp.NewTool("lidza_snippet",
+		mcp.WithDescription("A file of the Līdza reference app (examples/notes), verified by its tests: how an owned resource, auth routes, a page on the generated client, a handler test, a browser test or an MCP tool are written. Copy from it instead of guessing. Names: "+strings.Join(snippets.Names(), ", ")+". Without a name, the catalog."),
+		mcp.WithString("name", mcp.Description("Which snippet: "+strings.Join(snippets.Names(), ", ")+"."), mcp.Enum(snippets.Names()...)),
+	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		name := req.GetString("name", "")
+		if name == "" {
+			return mcp.NewToolResultText(snippets.Catalog()), nil
+		}
+		sn, content, ok := snippets.Get(name)
+		if !ok {
+			return mcp.NewToolResultError("no snippet " + name + "; names: " + strings.Join(snippets.Names(), ", ")), nil
+		}
+		return mcp.NewToolResultText(snippets.Header(sn) + "\n\n" + content), nil
+	})
+	s.AddResource(mcp.NewResource("lidza://snippets", "snippets",
+		mcp.WithResourceDescription("Catalog of the reference app's files served by lidza_snippet."),
+		mcp.WithMIMEType("text/plain")),
+		func(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+			return []mcp.ResourceContents{mcp.TextResourceContents{URI: req.Params.URI, MIMEType: "text/plain", Text: snippets.Catalog()}}, nil
+		})
 }

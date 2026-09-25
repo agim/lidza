@@ -114,6 +114,41 @@ func TestSessionsAndMiddleware(t *testing.T) {
 	}); code != 200 {
 		t.Fatalf("cookie with JSON: %d", code)
 	}
+	if code := call(func(r *http.Request) {
+		r.AddCookie(&http.Cookie{Name: AccessCookie, Value: tokens.Access})
+		r.Header.Set("Sec-Fetch-Site", "same-origin")
+	}); code != 200 {
+		t.Fatalf("cookie from a same-origin fetch: %d", code)
+	}
+	if code := call(func(r *http.Request) {
+		r.AddCookie(&http.Cookie{Name: AccessCookie, Value: tokens.Access})
+		r.Header.Set("Sec-Fetch-Site", "cross-site")
+	}); code != 403 {
+		t.Fatalf("cookie from a cross-site request: %d", code)
+	}
+
+	var optionalUser *User
+	optional := Optional()(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { optionalUser = CurrentUser(r.Context()) }))
+	anon := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec0 := httptest.NewRecorder()
+	optional.ServeHTTP(rec0, anon.WithContext(lidza.WithServices(ctx, s)))
+	if rec0.Code != 200 || optionalUser != nil {
+		t.Fatalf("optional without token: %d %+v", rec0.Code, optionalUser)
+	}
+	withToken := httptest.NewRequest(http.MethodGet, "/", nil)
+	withToken.Header.Set("Authorization", "Bearer "+tokens.Access)
+	rec0 = httptest.NewRecorder()
+	optional.ServeHTTP(rec0, withToken.WithContext(lidza.WithServices(ctx, s)))
+	if rec0.Code != 200 || optionalUser == nil || optionalUser.ID != "user-1" {
+		t.Fatalf("optional with token: %d %+v", rec0.Code, optionalUser)
+	}
+	bad := httptest.NewRequest(http.MethodGet, "/", nil)
+	bad.Header.Set("Authorization", "Bearer nope")
+	rec0 = httptest.NewRecorder()
+	optional.ServeHTTP(rec0, bad.WithContext(lidza.WithServices(ctx, s)))
+	if rec0.Code != 401 {
+		t.Fatalf("optional with a bad token: %d", rec0.Code)
+	}
 
 	rec := httptest.NewRecorder()
 	a.SetCookies(rec, tokens)

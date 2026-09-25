@@ -231,16 +231,33 @@ func CurrentUser(ctx context.Context) *User {
 
 // Require is middleware that authenticates every request under it from
 // the Authorization: Bearer header or the access cookie and replies 401
-// otherwise. Cookie-authenticated state-changing requests must carry
-// Content-Type: application/json, which a cross-site form cannot send,
-// so the cookie cannot be ridden by another origin (CSRF).
+// otherwise. A cookie-authenticated state-changing request must carry
+// Content-Type: application/json (the generated clients always do), which
+// a cross-site form cannot send, or a Sec-Fetch-Site header saying it is
+// same-origin; so the cookie cannot be ridden by another origin (CSRF).
 func Require() func(http.Handler) http.Handler {
+	return guard(true)
+}
+
+// Optional is middleware for routes that serve both visitors and users:
+// a request with a valid token gets its user (CurrentUser), one without
+// a token continues anonymously (CurrentUser is nil), and an invalid
+// token or a cross-site cookie is refused as with Require.
+func Optional() func(http.Handler) http.Handler {
+	return guard(false)
+}
+
+func guard(required bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			a := From(r.Context())
 			token, fromCookie := bearer(r)
 			if token == "" {
-				router.Error(w, http.StatusUnauthorized, "authentication required")
+				if required {
+					router.Error(w, http.StatusUnauthorized, "authentication required")
+					return
+				}
+				next.ServeHTTP(w, r)
 				return
 			}
 			u, err := a.Verify(token)
@@ -249,13 +266,23 @@ func Require() func(http.Handler) http.Handler {
 				return
 			}
 			if fromCookie && r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodOptions &&
-				!strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
+				!strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") && !sameOrigin(r) {
 				router.Error(w, http.StatusForbidden, "cookie sessions must send Content-Type: application/json")
 				return
 			}
 			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), userKey{}, u)))
 		})
 	}
+}
+
+// sameOrigin reports whether the browser declared the request same-origin
+// (or user-initiated) through Sec-Fetch-Site.
+func sameOrigin(r *http.Request) bool {
+	switch r.Header.Get("Sec-Fetch-Site") {
+	case "same-origin", "none":
+		return true
+	}
+	return false
 }
 
 func bearer(r *http.Request) (token string, fromCookie bool) {

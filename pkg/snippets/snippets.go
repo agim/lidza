@@ -1,0 +1,78 @@
+// Package snippets embeds the files of the reference app (examples/notes)
+// that show how the common tasks are done: an owned resource, auth routes,
+// a page on the generated client, a handler test, a browser test, an MCP
+// tool. `lidza mcp` serves them as lidza_snippet and `lidza snippet`
+// prints them, so an agent copies code that compiles and passes its tests
+// instead of guessing. `go generate ./pkg/snippets` refreshes the copies in _files (the
+// underscore keeps the go tool from building them as packages).
+package snippets
+
+import (
+	"embed"
+	"strings"
+)
+
+//go:generate go run ./internal/sync
+
+//go:embed all:_files
+var files embed.FS
+
+// Snippet is one file of the reference app.
+type Snippet struct {
+	// Name is the key an agent asks for.
+	Name string `json:"name"`
+	// File is the path in examples/notes.
+	File        string `json:"file"`
+	Description string `json:"description"`
+}
+
+// Index lists the snippets in reading order.
+var Index = []Snippet{
+	{"schema", "schema.lidza", "Models, API types with rules, optional fields, and the types the auth routes reply with."},
+	{"routes", "routes.go", "Public routes; a group behind auth.Optional() for a page that serves visitors too; groups behind auth.Require(); a resource mounted on a group."},
+	{"auth-handlers", "handlers/auth.go", "Register, login, logout and the session route: password hashing, HttpOnly cookies plus a bearer token, 409 on a taken email, 401 on a wrong password."},
+	{"resource-handlers", "handlers/note.go", "The handlers `lidza gen resource` writes, scoped to the signed-in user: list, get, create, patch, delete with 404 for another user's rows."},
+	{"queries", "db/queries/note.sql", "sqlc queries for an owned resource: owner checks on every statement, COALESCE with sqlc.narg for a partial update, :execrows for delete."},
+	{"handler-test", "routes_test.go", "A Go test with lidzatest.Start: cookies carried across calls, a bearer token, and the expected 401, 409, 422 and 404 replies."},
+	{"mcp-tool", "tools.go", "An app MCP tool (lidza.ToolFunc) that queries the database through the db pack."},
+	{"page", "src/pages/Home.tsx", "A React page on @lidza/client only: useQuery and useMutation with api.*, validators.* before a request, labelled inputs, sign in and sign out."},
+	{"browser-test", "e2e/notes.spec.ts", "A Playwright test: register, add a note, reload, sign out, and no console or window errors."},
+}
+
+// Names lists the snippet names.
+func Names() []string {
+	out := make([]string, len(Index))
+	for i, s := range Index {
+		out[i] = s.Name
+	}
+	return out
+}
+
+// Get returns a snippet's description and content.
+func Get(name string) (Snippet, string, bool) {
+	for _, s := range Index {
+		if s.Name == name {
+			data, err := files.ReadFile("_files/" + s.File)
+			if err != nil {
+				return s, "", false
+			}
+			return s, string(data), true
+		}
+	}
+	return Snippet{}, "", false
+}
+
+// Header is the line that opens every snippet when printed: where it
+// comes from and that it is verified code.
+func Header(s Snippet) string {
+	return "From examples/notes/" + s.File + " of Līdza (verified by its tests). " + s.Description
+}
+
+// Catalog renders the index as text.
+func Catalog() string {
+	var b strings.Builder
+	for _, s := range Index {
+		b.WriteString(s.Name + " (" + s.File + "): " + s.Description + "\n")
+	}
+	return b.String()
+}

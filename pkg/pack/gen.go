@@ -131,7 +131,7 @@ func Generate(root, module string, names []string, s *schema.Schema) ([]string, 
 		changed = append(changed, filepath.ToSlash(rel))
 		return os.WriteFile(p, []byte(content), 0o644)
 	}
-	if err := write(PacksFile, GeneratePacksGo(module, names)); err != nil {
+	if err := write(PacksFile, schema.Gofmt(GeneratePacksGo(module, names))); err != nil {
 		return nil, err
 	}
 	for _, name := range names {
@@ -142,7 +142,7 @@ func Generate(root, module string, names []string, s *schema.Schema) ([]string, 
 		if err != nil {
 			return nil, err
 		}
-		if err := write(m.GoFile(), GeneratePackGo(m, module)); err != nil {
+		if err := write(m.GoFile(), schema.Gofmt(GeneratePackGo(m, module))); err != nil {
 			return nil, err
 		}
 		if s != nil {

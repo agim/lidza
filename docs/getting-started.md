@@ -139,6 +139,10 @@ Three things keep an agent from inventing what is not there:
   `fetch` of `/api` (L003) and a handler type not declared in
   `schema.lidza` (L005) are warnings.
 - The recipes: every step names the file, the command and the check.
+- `lidza snippet [name]` (and the MCP tool `lidza_snippet`) prints a
+  file of the reference app in `examples/notes`, verified by its own
+  tests: auth routes, an owned resource, a page on the generated client,
+  a handler test, a browser test, an MCP tool.
 - `lidza verify`, run by the pre-commit hook `lidza new` installs:
   regenerate and refuse a commit whose generated files are not staged,
   `lidza check` clean, `go test ./...` green. `--json` for agents,
@@ -147,7 +151,7 @@ Three things keep an agent from inventing what is not there:
 ### MCP server
 
 Tools: `lidza_routes`, `lidza_context`, `lidza_check`, `lidza_logs`,
-`lidza_config`, `lidza_api`, `lidza_packs` and one tool per pack
+`lidza_config`, `lidza_api`, `lidza_snippet`, `lidza_packs` and one tool per pack
 capability, `lidza_errors` with the analytics pack, and the app's own
 tools from `tools.go` as `app_<name>`; resources `lidza://llms.txt`,
 `lidza://llms-full.txt`, `lidza://api` and `lidza://api/{package}`;

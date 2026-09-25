@@ -7,7 +7,7 @@ does not reimplement).
 
 | Capability | Status | Where |
 |---|---|---|
-| CLI tools | done | `lidza new`, `dev`, `build`, `check`, `gen`, `gen resource`, `pack`, `db`, `test`, `verify`, `benchmark`, `doctor`, `api`, `mcp` |
+| CLI tools | done | `lidza new`, `dev`, `build`, `check`, `gen`, `gen resource`, `pack`, `db`, `test`, `verify`, `benchmark`, `doctor`, `api`, `snippet`, `mcp` |
 | CRUD | done | `lidza gen resource <Model>`: queries, Create/Update/List types with the model's rules, five typed routes, row mapping, registration; edited freely after |
 | Hot module replacement | done | Vite HMR through the `lidza dev` proxy; Go handlers rebuild and restart, frontend state is kept |
 | API route parameter parsing | done | `net/http` patterns, `req.Param("id")` in typed handlers; the client takes them as a typed object |
@@ -36,7 +36,8 @@ does not reimplement).
 | Accessibility checks | done | `eslint-plugin-jsx-a11y` in the `react` template; `lidza check` reports its findings as errors |
 | State hydration and dehydration | partial | prerendered pages carry markup; SSR pages carry markup rendered from loader data, and the client runs the loaders again on navigation (no dehydrated payload) |
 | Agent tools | done | `lidza mcp` (framework tools, pack capabilities, `lidza_errors`, `lidza_api`) plus the app's own `lidza.Tool`s as `app_<name>`; the binary serves them at `/mcp` behind `LIDZA_MCP_TOKEN` |
-| Agent guidance | done | the app guide's recipes as MCP prompts and `.claude/skills`; `lidza api` and `lidza://api` for the framework's real signatures; rules L003 (hand-written `fetch`), L004 (nonexistent or undeclared imports), L005 (handler types outside the schema) |
+| Agent guidance | done | the app guide's recipes as MCP prompts and `.claude/skills`; `lidza api` and `lidza://api` for the framework's real signatures; `lidza snippet` and `lidza_snippet` for the reference app's verified code; rules L003 (hand-written `fetch`), L004 (nonexistent or undeclared imports), L005 (handler types outside the schema); `lidza verify` in the pre-commit hook |
+| Authorization | done | `auth.Require()` and `auth.Optional()` middleware, `r.Group(prefix, mw...)` for a protected sub-tree, `auth.CurrentUser(ctx)`; the CSRF guard accepts JSON content or a same-origin `Sec-Fetch-Site` |
 | Error reporting and analytics | done (opt-in) | `analytics` pack: panics, 500s, frontend errors and events in Postgres, OTLP export, `lidza_errors` MCP tool; off unless added |
 | Observability | done | `/metrics`, `/healthz`, `/readyz`, structured logs (`lidza.Log(ctx)` with request ids, JSON in production, `LIDZA_LOG_LEVEL`), `/debug/pprof/` in dev |
 | Time zones | done | UTC in storage and on the wire; `i18n` formats `Date`, `Time`, `DateTime` in the visitor's zone (`tz` cookie set by the template, `X-Timezone` header, `I18N_TIMEZONE` default) |

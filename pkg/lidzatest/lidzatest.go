@@ -136,7 +136,9 @@ func (s *Server) JSON(t testing.TB, method, path string, body any, out any, opts
 		t.Fatal(err)
 	}
 	req.Header.Set("Accept", "application/json")
-	if body != nil {
+	// As the generated clients do: state-changing requests are JSON even
+	// without a body, which the auth pack's cookie sessions require.
+	if body != nil || (method != http.MethodGet && method != http.MethodHead) {
 		req.Header.Set("Content-Type", "application/json")
 	}
 	for _, o := range opts {

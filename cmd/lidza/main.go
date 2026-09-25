@@ -29,6 +29,7 @@ Usage:
   lidza doctor
   lidza context [--dir .] [--stdout]
   lidza api [package] [--filter name] [--list]
+  lidza snippet [name]
   lidza mcp [--dir .]
   lidza version
 
@@ -47,6 +48,7 @@ Commands:
   doctor   report the toolchain, services and the project's prerequisites, each with its fix
   context  write .lidza/context.json: routes, handler signatures, Rust exports
   api      print the framework's public Go API as the project resolves it (one package, or all that app code imports)
+  snippet  print a file of the reference app (examples/notes): auth routes, an owned resource, a page, tests, a tool
   mcp      serve routes, context, diagnostics, dev logs, the API and the guide's recipes over MCP on stdio
   version  print the framework version
 `
@@ -87,6 +89,8 @@ func main() {
 		err = runContext(ctx, args)
 	case "api":
 		err = runAPI(ctx, args)
+	case "snippet":
+		err = runSnippet(ctx, args)
 	case "mcp":
 		err = runMCP(ctx, args)
 	case "version", "--version", "-v":

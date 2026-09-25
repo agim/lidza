@@ -1,0 +1,33 @@
+package main
+
+import (
+	"github.com/agim/lidza/packs/auth"
+	"github.com/agim/lidza/pkg/router"
+
+	"notes/handlers"
+)
+
+// routes registers the API. Every route lives under /api; the frontend
+// never defines one. GET /api/v1/health is built in. router.Route gives a
+// handler typed input and output: the client in .lidza/client is generated
+// from these types, so the frontend cannot drift from the API.
+func routes(r *router.Router) {
+	// Public: anyone can register or sign in.
+	router.Route(r, "POST /api/v1/auth/register", handlers.Register)
+	router.Route(r, "POST /api/v1/auth/login", handlers.Login)
+
+	// Visitors and users alike: auth.Optional() fills in the user when the
+	// request carries a valid token and continues without one otherwise.
+	session := r.Group("/api/v1/auth/session", auth.Optional())
+	router.Route(session, "GET /api/v1/auth/session", handlers.CurrentSession)
+
+	// Signed in only: auth.Require() reads the access cookie set at login,
+	// or an Authorization: Bearer header, and replies 401 otherwise. The
+	// two public routes above are more specific than the group's prefix,
+	// so they stay public.
+	account := r.Group("/api/v1/auth", auth.Require())
+	router.Route(account, "GET /api/v1/auth/me", handlers.Me)
+	router.Route(account, "POST /api/v1/auth/logout", handlers.Logout)
+
+	handlers.NoteRoutes(r.Group("/api/v1/notes", auth.Require()))
+}

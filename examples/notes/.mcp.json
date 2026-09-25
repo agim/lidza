@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "lidza": {
+      "command": "lidza",
+      "args": ["mcp"]
+    }
+  }
+}

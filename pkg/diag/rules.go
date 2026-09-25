@@ -176,7 +176,19 @@ func isHandler(ft *ast.FuncType) bool {
 // that are not router.None, a schema.lidza type, or a basic type.
 func foreignTypes(ft *ast.FuncType, routerPkg, schemaPkg string) []ast.Expr {
 	var out []ast.Expr
+	// A generic helper over *router.Request[In] is not a handler.
+	typeParams := map[string]bool{}
+	if ft.TypeParams != nil {
+		for _, f := range ft.TypeParams.List {
+			for _, n := range f.Names {
+				typeParams[n.Name] = true
+			}
+		}
+	}
 	check := func(e ast.Expr) {
+		if id, ok := e.(*ast.Ident); ok && typeParams[id.Name] {
+			return
+		}
 		if e != nil && !contractType(e, routerPkg, schemaPkg) {
 			out = append(out, e)
 		}

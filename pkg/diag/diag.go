@@ -83,6 +83,7 @@ type Layers struct {
 
 // Detect looks at dir and reports which layers exist.
 func Detect(dir string) Layers {
+	IsolateNodeModules(dir)
 	l := Layers{Dir: dir}
 	l.Go = fileExists(filepath.Join(dir, "go.mod"))
 	for _, c := range []string{".", "core"} {
@@ -94,6 +95,18 @@ func Detect(dir string) Layers {
 	l.TSConfig = fileExists(filepath.Join(dir, "tsconfig.json"))
 	l.NodeModules = fileExists(filepath.Join(dir, "node_modules"))
 	return l
+}
+
+// IsolateNodeModules writes node_modules/go.mod when node_modules exists
+// without one: some npm packages ship Go files, and a go.mod there makes
+// the go tool treat the directory as another module, so `./...` patterns
+// (go test, go vet, staticcheck) stay within the app.
+func IsolateNodeModules(dir string) {
+	nm := filepath.Join(dir, "node_modules")
+	if !fileExists(nm) || fileExists(filepath.Join(nm, "go.mod")) {
+		return
+	}
+	_ = os.WriteFile(filepath.Join(nm, "go.mod"), []byte("// Written by lidza: keeps go tools out of node_modules.\nmodule node_modules\n"), 0o644)
 }
 
 func fileExists(p string) bool {

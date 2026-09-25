@@ -1,0 +1,17 @@
+# notes
+
+A Līdza application: Go control plane, react frontend, one binary.
+Read `docs/lidza-guide.md` before changing anything; it has the layout, the
+commands and the rules.
+
+- `lidza dev`: run on http://127.0.0.1:3000 with hot reload for Go and the frontend.
+- `lidza check --json`: every Go, Rust and frontend error in one list; run it after each change until `"status": "ok"`.
+- `lidza test` for Go tests, `lidza test --e2e` for the browser suite, `lidza doctor` when something is missing on the machine.
+- `lidza verify` before committing (the pre-commit hook runs it): generated files staged, check clean, tests green.
+- `lidza build`: production binary at `bin/notes`.
+- MCP server `lidza mcp` (configured in `.mcp.json` and `.gemini/settings.json`): `lidza_routes`, `lidza_context`, `lidza_check`, `lidza_logs`, `lidza_config`, `lidza_api` (the framework's Go API; read it before calling a lidza function).
+- Task recipes, step by step, in `docs/lidza-guide.md` under "Recipes", as `lidza mcp` prompts and as skills in `.claude/skills/`: `add-api-route`, `add-resource`, `add-page`, `add-pack-capability`, `add-mcp-tool`, `write-test`.
+- Go owns `/api` (`routes.go`, `router.Route` with typed handlers); the frontend never defines API routes and calls them only through `@lidza/client`.
+- Data shapes live in `schema.lidza`; `schema/`, `db/`, `packs.go`, `packs/*/pack.go` and `.lidza/` are generated, never edited.
+- Add agent-callable functions in `tools.go` (`lidza.ToolFunc`); they show up in `lidza mcp` as `app_<name>`.
+- Heavy compute goes in a pack (`lidza pack scaffold`, Rust to WASM); `lidza pack add db|realtime|geo|media` enables the official ones.

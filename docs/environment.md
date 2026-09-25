@@ -137,7 +137,7 @@ Nothing else runs on ports 3000 or 5173.
 ```
 lidza/
 ├── lidza.go          package lidza: the runtime an app binary calls (lidza.Run)
-├── cmd/lidza/        CLI: new, dev, build, check, gen, context, mcp, version
+├── cmd/lidza/        CLI: new, dev, build, check, gen, pack, db, test, verify, benchmark, doctor, context, api, snippet, mcp, version
 ├── pkg/
 │   ├── config/       lidza.json
 │   ├── devserver/    reverse proxy, static SPA server, hot-reload coordinator
@@ -147,6 +147,9 @@ lidza/
 │   ├── inspect/      routes and typed operations via go/ast and go/packages, OpenAPI, llms.txt
 │   ├── lidzatest/    boots an app for Go tests: packs, httptest server, JSON client
 │   ├── mcpserver/    `lidza mcp`
+│   ├── apidoc/       the framework's public API rendered from its sources (`lidza api`, lidza://api)
+│   ├── recipes/      the guide's recipes as MCP prompts and Claude Code skills
+│   ├── snippets/     the reference app's files embedded for lidza_snippet (`go generate` syncs _files/)
 │   ├── middleware/   request id, log, recovery, timeout, body limit, CORS, secure headers
 │   ├── pack/         pack manifests, validator, generators, scaffold, build, official pack sources
 │   ├── router/       control plane: HTTP router, typed Route[In, Out], /api/v1/health
@@ -165,6 +168,7 @@ lidza/
 │   ├── jobs/         Postgres job queue with bounded workers
 │   └── realtime/     WebSocket topics, Valkey bus
 ├── core/             Rust crate `lidza-core`: the WASM ABI (src/abi.rs)
+├── examples/notes/   the reference app (its own module, replace => ../..): auth, an owned resource, a page, tests, a tool
 ├── templates/
 │   ├── embed.go      embeds the template directories into the CLI
 │   ├── react/        default: Vite + React + TypeScript, TanStack Router and Query, Tailwind, prerendering, eslint with jsx-a11y

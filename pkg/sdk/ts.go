@@ -249,10 +249,10 @@ export function configure(options: { baseUrl?: string; headers?: Record<string, 
 async function request<R>(method: string, path: string, body: unknown, options?: RequestOptions): Promise<R> {
   const headers: Record<string, string> = { Accept: 'application/json', ...defaultHeaders, ...options?.headers }
   const init: RequestInit = { method, headers, signal: options?.signal }
-  if (body !== undefined) {
-    headers['Content-Type'] = 'application/json'
-    init.body = JSON.stringify(body)
-  }
+  // Every request that can change state is declared JSON, body or not: a
+  // cookie session is only accepted with this content type (CSRF guard).
+  if (method !== 'GET' && method !== 'HEAD') headers['Content-Type'] = 'application/json'
+  if (body !== undefined) init.body = JSON.stringify(body)
   const res = await fetch(baseUrl + path, init)
   const text = await res.text()
   let parsed: unknown = undefined

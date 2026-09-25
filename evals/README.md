@@ -45,7 +45,9 @@ LIDZA_EVAL_AGENT='codex exec --full-auto' go test -tags agenteval ./evals -run T
 LIDZA_EVAL_AGENT='gemini --yolo' go test -tags agenteval ./evals -run TestAgent -v -timeout 1h
 ```
 
-Each task's agent output is kept as `agent-output.txt` in its copy of the
-app and printed when the task fails. Without `LIDZA_EVAL_AGENT` the test
+The agent runs with the CLI built from this checkout first on its PATH,
+so it and the scorer generate the same files. Each task's agent output
+is kept as `agent-output.txt` in its copy of the app and printed when
+the task fails. Without `LIDZA_EVAL_AGENT` the test
 skips. Compare agents, or the same agent before and after a change to the
 guide, the rules or the snippets.

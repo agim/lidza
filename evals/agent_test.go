@@ -163,7 +163,9 @@ func runAgent(dir, agent, prompt string) ([]byte, error) {
 	}
 	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "LIDZA_DIR="+root)
+	// The agent must run the CLI the scorer runs: the one built from this
+	// checkout, ahead of any lidza on the PATH.
+	cmd.Env = append(os.Environ(), "LIDZA_DIR="+root, "PATH="+filepath.Dir(lidza)+string(os.PathListSeparator)+os.Getenv("PATH"))
 	if !replaced {
 		cmd.Stdin = strings.NewReader(prompt)
 	}

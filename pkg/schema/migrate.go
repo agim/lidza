@@ -117,6 +117,22 @@ func Diff(prev, cur *Schema, seq int) *Migration {
 				}
 				changed = true
 			}
+			if oref, nref := references(prev, of), references(cur, f); oref != nref {
+				// The constraint carries Postgres' name for an inline REFERENCES.
+				name := t.Table + "_" + col + "_fkey"
+				var up, down []string
+				if oref != "" {
+					up = append(up, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s;", table, name))
+					down = append(down, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s FOREIGN KEY (%s) %s;", table, name, col, oref))
+				}
+				if nref != "" {
+					up = append(up, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s FOREIGN KEY (%s) %s;", table, name, col, nref))
+					down = append([]string{fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s;", table, name)}, down...)
+				}
+				m.Up = append(m.Up, up...)
+				m.Down = append(down, m.Down...)
+				changed = true
+			}
 			if od, nd := defaultOf(prev, of), defaultOf(cur, f); od != nd {
 				m.Up = append(m.Up, alterDefault(table, col, nd))
 				m.Down = append([]string{alterDefault(table, col, od)}, m.Down...)

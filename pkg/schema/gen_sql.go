@@ -83,15 +83,7 @@ func columnDef(s *Schema, f *Field) string {
 	if f.Default != "" {
 		parts = append(parts, "DEFAULT "+sqlDefault(s, f))
 	}
-	if f.Ref != "" {
-		target := s.Model(f.Ref)
-		ref := fmt.Sprintf("REFERENCES %s(%s)", qid(target.Table), col(target.IDField()))
-		switch f.OnDelete {
-		case "cascade":
-			ref += " ON DELETE CASCADE"
-		case "setnull":
-			ref += " ON DELETE SET NULL"
-		}
+	if ref := references(s, f); ref != "" {
 		parts = append(parts, ref)
 	}
 	return strings.Join(parts, " ")
@@ -190,4 +182,23 @@ func indexName(m *Model, fields []string, unique bool) string {
 
 func quoteLit(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
+}
+
+// references is the foreign-key clause of a field, "" without @ref.
+func references(s *Schema, f *Field) string {
+	if f.Ref == "" {
+		return ""
+	}
+	target := s.Model(f.Ref)
+	if target == nil {
+		return ""
+	}
+	ref := fmt.Sprintf("REFERENCES %s(%s)", qid(target.Table), col(target.IDField()))
+	switch f.OnDelete {
+	case "cascade":
+		ref += " ON DELETE CASCADE"
+	case "setnull":
+		ref += " ON DELETE SET NULL"
+	}
+	return ref
 }

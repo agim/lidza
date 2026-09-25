@@ -6,6 +6,12 @@ version in `go.mod`. `install.sh` pins the newest release here;
 `scripts/release.sh vX.Y.Z` turns "Unreleased" into a release, bumps the
 pin, tags and pushes.
 
+## Unreleased
+
+- A change to a foreign key's delete rule (`@ref(Model)` to `@ref(Model,
+  cascade)` or back) gets a migration: the constraint is dropped and
+  added again with the new rule.
+
 ## v0.1.3 (2026-09-25)
 
 Lessons from the first app built by an agent on v0.1.2 (a team task

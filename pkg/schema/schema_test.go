@@ -395,3 +395,33 @@ model Task {
 		}
 	}
 }
+
+func TestDiffRef(t *testing.T) {
+	v1, err := Parse("model Project {\n  id uuid @id\n}\nmodel Task {\n  id uuid @id\n  projectId uuid @ref(Project)\n}")
+	if err != nil {
+		t.Fatal(err)
+	}
+	v2, err := Parse("model Project {\n  id uuid @id\n}\nmodel Task {\n  id uuid @id\n  projectId uuid @ref(Project, cascade)\n}")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := Diff(v1, v2, 2)
+	if m == nil {
+		t.Fatal("expected a migration")
+	}
+	up := strings.Join(m.Up, "\n")
+	for _, want := range []string{
+		"ALTER TABLE task DROP CONSTRAINT task_project_id_fkey;",
+		"ALTER TABLE task ADD CONSTRAINT task_project_id_fkey FOREIGN KEY (project_id) REFERENCES project(id) ON DELETE CASCADE;",
+	} {
+		if !strings.Contains(up, want) {
+			t.Errorf("up missing %q\n%s", want, up)
+		}
+	}
+	if down := strings.Join(m.Down, "\n"); !strings.Contains(down, "ADD CONSTRAINT task_project_id_fkey FOREIGN KEY (project_id) REFERENCES project(id);") {
+		t.Errorf("down:\n%s", down)
+	}
+	if Diff(v2, v2, 3) != nil {
+		t.Fatal("no change should give no migration")
+	}
+}

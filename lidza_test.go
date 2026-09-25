@@ -190,6 +190,34 @@ func TestHandlerInjectsServices(t *testing.T) {
 	}
 }
 
+func TestOpsEndpoints(t *testing.T) {
+	t.Setenv(devserver.EnvMode, "")
+	s := NewServices()
+	Provide(s, &readyService{})
+	h, err := handler(App{Dist: fstest.MapFS{"index.html": {Data: []byte("app")}}}, s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	get(t, h, "/api/v1/health")
+	if code, body := get(t, h, "/healthz"); code != 200 || !strings.Contains(body, "ok") {
+		t.Fatalf("healthz %d %s", code, body)
+	}
+	if code, body := get(t, h, "/readyz"); code != 503 || !strings.Contains(body, `"ready":"not yet"`) {
+		t.Fatalf("readyz %d %s", code, body)
+	}
+	if code, body := get(t, h, "/metrics"); code != 200 || !strings.Contains(body, `lidza_http_requests_total{method="GET",route="GET /api/v1/health",status="200"} 1`) {
+		t.Fatalf("metrics %d", code)
+	}
+	if code, body := get(t, h, "/debug/pprof/"); code != 200 || body != "app" {
+		t.Fatalf("pprof must be dev-only: %d %s", code, body)
+	}
+}
+
+type readyService struct{}
+
+func (*readyService) Name() string                { return "ready" }
+func (*readyService) Ready(context.Context) error { return errors.New("not yet") }
+
 func TestHandlerNoFrontend(t *testing.T) {
 	t.Setenv(devserver.EnvMode, "")
 	h, err := Handler(App{})

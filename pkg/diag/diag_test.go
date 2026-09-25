@@ -23,7 +23,12 @@ func TestRunGoModule(t *testing.T) {
 	if r.Status != "error" || r.Errors() != 1 {
 		t.Fatalf("report: %+v", r)
 	}
-	d := r.Diagnostics[0]
+	var d Diagnostic
+	for _, x := range r.Diagnostics {
+		if x.Severity == "error" {
+			d = x
+		}
+	}
 	if d.Layer != "go" || d.File != "main.go" || d.Line != 4 || d.Severity != "error" {
 		t.Fatalf("diagnostic: %+v", d)
 	}

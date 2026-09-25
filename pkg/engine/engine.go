@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/tetratelabs/wazero"
@@ -144,6 +145,20 @@ type Pool struct {
 	m       *Module
 	idle    chan *instance
 	timeout time.Duration
+
+	calls, errors, timeouts, busy atomic.Int64
+}
+
+// Stats reports counters and the pool state for /metrics.
+func (p *Pool) Stats() map[string]float64 {
+	return map[string]float64{
+		"pool_size":      float64(cap(p.idle)),
+		"pool_idle":      float64(len(p.idle)),
+		"calls_total":    float64(p.calls.Load()),
+		"errors_total":   float64(p.errors.Load()),
+		"timeouts_total": float64(p.timeouts.Load()),
+		"busy_total":     float64(p.busy.Load()),
+	}
 }
 
 // NewPool instantiates size instances up front. timeout bounds every call.
@@ -169,16 +184,22 @@ func NewPool(ctx context.Context, m *Module, size int, timeout time.Duration) (*
 // Call runs the capability fn with a JSON input and returns its JSON
 // output. It waits for an instance no longer than the pool timeout.
 func (p *Pool) Call(ctx context.Context, fn string, input []byte) ([]byte, error) {
+	p.calls.Add(1)
 	ctx, cancel := context.WithTimeout(ctx, p.timeout)
 	defer cancel()
 	var in *instance
 	select {
 	case in = <-p.idle:
 	case <-ctx.Done():
+		p.busy.Add(1)
 		return nil, fmt.Errorf("%w (%v)", ErrPoolBusy, ctx.Err())
 	}
 	out, err := in.call(ctx, fn, input)
+	if err != nil {
+		p.errors.Add(1)
+	}
 	if err != nil && ctx.Err() != nil {
+		p.timeouts.Add(1)
 		// The deadline closed the instance mid-call; make a fresh one.
 		in.mod.Close(context.Background())
 		fresh, ierr := p.m.instantiate(context.Background())

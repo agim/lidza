@@ -40,14 +40,17 @@ client, production is one binary.
 
 ## Status
 
-Phases 1 to 4 done: `lidza new` with the `react`, `svelte`, `astro` and
+Phases 1 to 5 done: `lidza new` with the `react`, `svelte`, `astro` and
 `htmx` templates, `lidza dev` (Go and frontend hot reload behind one port),
 `lidza build` (one binary), the agent interface (`lidza check --json`,
 `lidza context`, `lidza mcp`, `/llms.txt`), `schema.lidza` with generated
 Go, SQL, migrations and Rust, typed handlers, OpenAPI and the generated
 `@lidza/client`, the middleware pipeline, and packs: Rust capabilities
 run as WASM in a bounded pool, official `db`, `realtime`, `geo` and
-`media`. Next: Phase 5, scale primitives. See `docs/roadmap.md`;
+`media`; scale primitives: `/metrics`, `/healthz`, `/readyz`, rate
+limiting, circuit breaker, `lidza check` rules for unbounded state,
+`lidza benchmark` on k6. Next: Phase 6, application services. See
+`docs/roadmap.md`;
 `docs/features.md` maps every capability to a phase.
 
 ## Developing the framework

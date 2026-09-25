@@ -23,6 +23,7 @@ Usage:
   lidza gen [--dir .]
   lidza pack add|scaffold|build|list [name]
   lidza db migrate|rollback|status
+  lidza benchmark [scenario] [--vus 500] [--duration 1m]
   lidza context [--dir .] [--stdout]
   lidza mcp [--dir .]
   lidza version
@@ -35,6 +36,7 @@ Commands:
   gen      generate from schema.lidza (Go, SQL, migrations, Rust), the packs and the handlers (OpenAPI, @lidza/client)
   pack     add official packs (db, realtime, media, geo), scaffold, build and list local ones
   db       apply, revert and list migrations (lidza/db pack)
+  benchmark  run a k6 scenario from benchmarks/ against the running app; heap before and after
   context  write .lidza/context.json: routes, handler signatures, Rust exports
   mcp      serve routes, context, diagnostics and dev logs over MCP on stdio
   version  print the framework version
@@ -64,6 +66,8 @@ func main() {
 		err = runPack(ctx, args)
 	case "db":
 		err = runDB(ctx, args)
+	case "benchmark":
+		err = runBenchmark(ctx, args)
 	case "context":
 		err = runContext(ctx, args)
 	case "mcp":

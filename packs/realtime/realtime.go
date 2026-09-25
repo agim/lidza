@@ -198,6 +198,25 @@ func (h *Hub) Connections() int {
 	return h.conns
 }
 
+// TelemetryStats reports connections and topics to /metrics.
+func (h *Hub) TelemetryStats() map[string]float64 {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return map[string]float64{
+		"connections":     float64(h.conns),
+		"connections_max": float64(h.cfg.MaxConns),
+		"topics":          float64(len(h.topics)),
+	}
+}
+
+// Ready implements telemetry.Ready: the bus, when configured, must be up.
+func (h *Hub) Ready(ctx context.Context) error {
+	if b, ok := h.bus.(*ValkeyBus); ok {
+		return b.client.Do(ctx, b.client.B().Ping().Build()).Error()
+	}
+	return nil
+}
+
 func (h *Hub) subscribe(c *client, topics []string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()

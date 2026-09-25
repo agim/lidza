@@ -156,6 +156,14 @@ tool, so an agent can try one before wiring it. The first build of a pack
 downloads and compiles its crates (about a minute for `media`); later
 builds take seconds.
 
+## Operations
+
+Every app serves `/healthz`, `/readyz` (every pack's readiness check) and
+`/metrics` (Prometheus). `lidza benchmark` runs `benchmarks/scale_test.js`
+with k6 against the running app, warms it up, then reports requests,
+latency, heap and goroutines before and after; a release should read
+"memory flat".
+
 ## Local services
 
 The first app runs without a database. When you need one:

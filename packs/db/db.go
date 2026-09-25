@@ -82,8 +82,25 @@ func (d *DB) Stop(context.Context) error {
 	return nil
 }
 
-// Ping checks the database is reachable; /readyz uses it.
+// Ping checks the database is reachable.
 func (d *DB) Ping(ctx context.Context) error { return d.Pool.Ping(ctx) }
+
+// Ready implements telemetry.Ready for /readyz.
+func (d *DB) Ready(ctx context.Context) error { return d.Pool.Ping(ctx) }
+
+// TelemetryStats reports the pool to /metrics.
+func (d *DB) TelemetryStats() map[string]float64 {
+	st := d.Pool.Stat()
+	return map[string]float64{
+		"pool_max":             float64(st.MaxConns()),
+		"pool_total":           float64(st.TotalConns()),
+		"pool_idle":            float64(st.IdleConns()),
+		"pool_acquired":        float64(st.AcquiredConns()),
+		"acquire_total":        float64(st.AcquireCount()),
+		"acquire_wait_total":   float64(st.EmptyAcquireCount()),
+		"acquire_wait_seconds": st.AcquireDuration().Seconds(),
+	}
+}
 
 // Open creates a pool from cfg and verifies it with one ping.
 func Open(ctx context.Context, cfg Config) (*pgxpool.Pool, error) {

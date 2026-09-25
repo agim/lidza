@@ -11,14 +11,17 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/http/pprof"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/agim/lidza/pkg/devserver"
 	"github.com/agim/lidza/pkg/middleware"
 	"github.com/agim/lidza/pkg/router"
+	"github.com/agim/lidza/pkg/telemetry"
 )
 
 // DefaultTimeout is the per-request deadline for API handlers.
@@ -62,7 +65,17 @@ type App struct {
 	// OnShutdown runs after in-flight requests finished, before exit:
 	// close pools, flush queues.
 	OnShutdown func(ctx context.Context) error
+
+	// ReadyTimeout bounds the checks behind /readyz; default 3s.
+	ReadyTimeout time.Duration
 }
+
+// Paths every app serves besides /api and the frontend.
+const (
+	MetricsPath = "/metrics"
+	HealthzPath = "/healthz"
+	ReadyzPath  = "/readyz"
+)
 
 // Run serves the app until SIGINT or SIGTERM and exits the process with a
 // non-zero status on error. Configuration comes from the environment:
@@ -170,12 +183,27 @@ func handler(app App, services *Services) (http.Handler, error) {
 	if timeout == 0 {
 		timeout = DefaultTimeout
 	}
+	tel := telemetry.New(services.Each)
 	api := middleware.Chain(r.Handler(),
 		middleware.RequestID(),
 		middleware.Logger(log),
 		middleware.Recover(log),
 		middleware.Timeout(timeout),
+		tel.Middleware(),
 	)
+	readyTimeout := app.ReadyTimeout
+	if readyTimeout == 0 {
+		readyTimeout = 3 * time.Second
+	}
+	ops := http.NewServeMux()
+	ops.Handle("GET "+MetricsPath, tel.Metrics())
+	ops.Handle("GET "+HealthzPath, telemetry.Healthz())
+	ops.Handle("GET "+ReadyzPath, tel.Readyz(readyTimeout))
+	if os.Getenv(devserver.EnvMode) == "dev" {
+		ops.Handle("GET /debug/pprof/", http.HandlerFunc(pprof.Index))
+		ops.Handle("GET /debug/pprof/profile", http.HandlerFunc(pprof.Profile))
+		ops.Handle("GET /debug/pprof/trace", http.HandlerFunc(pprof.Trace))
+	}
 
 	var frontend http.Handler
 	switch {
@@ -195,12 +223,26 @@ func handler(app App, services *Services) (http.Handler, error) {
 	if os.Getenv(devserver.EnvMode) == "dev" && app.Dist == nil {
 		frontend = devserver.AgentFiles(frontend)
 	}
-	all := devserver.Split(router.APIPrefix, api, frontend)
+	all := devserver.Split(router.APIPrefix, api, opsThenFrontend(ops, frontend, os.Getenv(devserver.EnvMode) == "dev"))
 	mw := append([]middleware.Middleware{
 		middleware.SecureHeaders(middleware.SecureHeadersOptions{CSP: app.CSP}),
 		servicesMiddleware(services),
 	}, app.Middleware...)
 	return middleware.Chain(all, mw...), nil
+}
+
+// opsThenFrontend serves the operational endpoints and hands everything
+// else to the frontend.
+func opsThenFrontend(ops *http.ServeMux, frontend http.Handler, dev bool) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == MetricsPath, r.URL.Path == HealthzPath, r.URL.Path == ReadyzPath,
+			dev && strings.HasPrefix(r.URL.Path, "/debug/pprof/"):
+			ops.ServeHTTP(w, r)
+		default:
+			frontend.ServeHTTP(w, r)
+		}
+	})
 }
 
 // Sub returns the subdirectory dir of fsys, for `//go:embed all:dist`

@@ -22,7 +22,7 @@ does not reimplement).
 | Form validation | done (server) / phase 7 (client) | rules in `schema.lidza`; generated `Validate()` runs before every typed handler, 422 with field errors the client exposes as `ApiError.fields`; client-side validators from the same rules later |
 | Automatic error boundaries | done | React error boundary in the template; Go panic recovery returning a JSON error |
 | Database schema migrations | done | `lidza gen` diffs `schema.lidza` against `db/schema.lock.json` into numbered up/down scripts; `lidza db migrate`, `rollback`, `status` apply them under an advisory lock |
-| Database connection pooling | done | `pgxpool` in the `db` pack, bounded by `DB_MAX_CONNS`; `/readyz` reports pool health in phase 5 |
+| Database connection pooling | done | `pgxpool` in the `db` pack, bounded by `DB_MAX_CONNS`; `/readyz` pings it, `/metrics` reports it |
 | Object-relational mapping | done | `sqlc` via the `db` pack: SQL in `db/queries/*.sql`, `lidza gen` writes typed Go; see "Decisions" |
 | Dependency injection | done | `lidza.Services`: packs and `OnStart` provide values by type, handlers read them with `lidza.Service[T](ctx)`; explicit, no scanning |
 | Data binding | done (server) / phase 7 (client hook) | handlers publish over the `realtime` pack; a `useLive` hook in the template refetches on messages later |
@@ -32,6 +32,9 @@ does not reimplement).
 | Mocking and stubbing | phase 6 | `lidza test`: `lidza_test` database per run, `httptest` helpers, fake clock, recorded HTTP fixtures |
 | Accessibility checks | phase 7 | `eslint-plugin-jsx-a11y` in the template, findings ingested by `lidza check --json` |
 | State hydration and dehydration | phase 7 | TanStack Query `dehydrate`/`hydrate`; only meaningful with SSR or prerendering |
+| Observability | done | `/metrics`, `/healthz`, `/readyz`, request log with ids, `/debug/pprof/` in dev |
+| Rate limiting and circuit breakers | done | `middleware.RateLimit` (token bucket per key, bounded table), `resilience.Breaker` |
+| Load testing | done | `lidza benchmark` on k6 with heap and goroutine comparison; `benchmarks/scale_test.js` in every app |
 | Server-side rendering | phase 7 | build-time prerendering, hydration on the client, dynamic data from `/api`; see "Decisions" |
 
 ## Decisions

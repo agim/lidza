@@ -19,6 +19,7 @@ under "Verification" passes.
 | golangci-lint | 2.14.0 | `~/go/bin` |
 | sqlc | 1.31.1 | `~/go/bin` |
 | wasm-tools | 1.259.0 | `~/.cargo/bin` |
+| k6 | 2.3.0 | apt, `dl.k6.io` repository (installed 2026-09-25 for Phase 5) |
 | lidza | from this checkout | `~/go/bin/lidza`; `go install ./cmd/lidza` after pulling |
 | node | 22.23.2 | `/home/agim/.local/bin/node` |
 | npm | 10.9.8 | |
@@ -32,8 +33,7 @@ under "Verification" passes.
 
 ### Missing
 
-k6 and hey (Phase 5 benchmarks), wasmtime, wasm-pack, pnpm, bun. None is
-needed before Phase 5.
+hey, wasmtime, wasm-pack, pnpm, bun. None is needed.
 
 ## Toolchain plan
 
@@ -75,9 +75,10 @@ cargo install wasm-tools --locked
 Check: `staticcheck -version`, `golangci-lint --version`, `sqlc version`,
 `wasm-tools --version`.
 
-### k6 (Phase 5, not installed)
+### k6
 
-`install.sh` does not install it. When Phase 5 starts:
+`install.sh` does not install it; `lidza benchmark` needs it. Installed
+on `ubuntu01` 2026-09-25 with:
 
 ```sh
 sudo gpg -k && sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg \
@@ -148,9 +149,11 @@ lidza/
 │   ├── middleware/   request id, log, recovery, timeout, body limit, CORS, secure headers
 │   ├── pack/         pack manifests, validator, generators, scaffold, build, official pack sources
 │   ├── router/       control plane: HTTP router, typed Route[In, Out], /api/v1/health
+│   ├── resilience/   circuit breaker for outbound calls
 │   ├── scaffold/     `lidza new`: template copy plus generated Go and agent files
 │   ├── schema/       schema.lidza parser and generators (Go, SQL, migrations, Rust, JSON Schema)
 │   ├── sdk/          @lidza/client generator (TypeScript)
+│   ├── telemetry/    /metrics, /healthz, /readyz, request metrics
 │   ├── validate/     rule helpers and the 422 error shape
 │   └── version/      build version
 ├── packs/
@@ -165,7 +168,7 @@ lidza/
 │   └── htmx/         Go html/template views, htmx vendored, no JS toolchain
 ├── docs/
 ├── install.sh
-├── go.mod            dependencies: mcp-go, x/tools, wazero, pgx, coder/websocket, valkey-go
+├── go.mod            dependencies: mcp-go, x/tools, wazero, pgx, coder/websocket, valkey-go, prometheus/client_golang
 └── README.md
 ```
 
@@ -238,7 +241,7 @@ go env GOPATH
 cargo --version && rustc --version
 rustup target list --installed | grep -E 'wasm32-(wasip1|unknown-unknown)'
 staticcheck -version && golangci-lint --version && sqlc version
-wasm-tools --version
+wasm-tools --version && k6 version
 psql -U agim -d postgres -c 'select version();'
 redis-cli -h 127.0.0.1 ping
 sg docker -c 'docker info --format "{{.ServerVersion}}"'

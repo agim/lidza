@@ -73,6 +73,7 @@ func TestScaffoldValidateGenerate(t *testing.T) {
 	for _, want := range []string{
 		"package demo", "//go:embed demo.wasm", "type Demo struct", "func From(ctx context.Context) *Demo",
 		"engine.NewPool(ctx, m, 4, 5000*time.Millisecond)",
+		"func (p *Demo) TelemetryStats() map[string]float64 { return p.pool.Stats() }",
 		"func (p *Demo) Reverse(ctx context.Context, in schema.ReverseInput) (schema.ReverseOutput, error)",
 		`"app/schema"`,
 	} {

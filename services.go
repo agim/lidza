@@ -43,6 +43,19 @@ func (s *Services) Lookup(t reflect.Type) (any, bool) {
 	return v, ok
 }
 
+// Each calls f with every provided value, in no particular order.
+func (s *Services) Each(f func(any)) {
+	s.mu.RLock()
+	values := make([]any, 0, len(s.values))
+	for _, v := range s.values {
+		values = append(values, v)
+	}
+	s.mu.RUnlock()
+	for _, v := range values {
+		f(v)
+	}
+}
+
 type servicesKey struct{}
 
 // WithServices attaches s to ctx; the app handler does this for every

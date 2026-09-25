@@ -20,13 +20,13 @@ distributed state tier (Postgres, Valkey, a queue).
   node-to-node.
 - Package-level variables are constants, registries filled at init, or
   guarded pools with a bound. `lidza check` flags global mutable maps and
-  unbounded goroutine spawns (Phase 5).
+  goroutines started in handlers (rules L001 and L002).
 
 ### 2. Bounded compute
 
 - Rust runs in a bounded pool of pre-warmed wazero instances
-  (`pkg/engine/pool.go`, Phase 5). The pool size is configuration, never
-  "one per request".
+  (`pkg/engine`). The pool size is configuration (`pack.lidza.json`),
+  never "one per request".
 - Every call into the pool carries a `context.Context` with a deadline; a
   slow computation is cancelled, its instance recycled, and the request gets
   an error. Memory stays flat under load.
@@ -45,9 +45,10 @@ distributed state tier (Postgres, Valkey, a queue).
 
 ### 4. Observability and resilience
 
-- Every app exposes `/metrics` (Prometheus, OpenTelemetry), `/healthz`
-  (liveness) and `/readyz` (readiness that checks the pools) from
-  `pkg/telemetry` (Phase 5).
+- Every app exposes `/metrics` (Prometheus exposition), `/healthz`
+  (liveness) and `/readyz` (readiness: every service's `Ready` check) from
+  `pkg/telemetry`. Put `/metrics` behind the ingress rules of the
+  deployment; the app does not authenticate it.
 - Token-bucket rate limiting on routes and circuit breakers on outbound
   dependencies shed load before saturation.
 - `lidza benchmark` runs k6 scenarios from `benchmarks/` against `lidza dev`
@@ -84,10 +85,10 @@ Apply to every Go package, Rust module, pack and template, now.
 | Sessions as tokens or Valkey rows | Phase 6 (`auth` pack) |
 | `pgxpool` bounds, generated queries | in force since Phase 4 (`db` pack) |
 | Bounded wazero pool with per-call deadlines | in force since Phase 4 (`pkg/engine`) |
-| `/metrics`, `/healthz`, `/readyz` | Phase 5 |
-| Rate limiting, circuit breakers | Phase 5 |
-| `lidza check` rules for global state and unbounded goroutines | Phase 5 |
-| `lidza benchmark`, flat-memory gate | Phase 5 |
+| `/metrics`, `/healthz`, `/readyz` | in force since Phase 5 (`pkg/telemetry`) |
+| Rate limiting, circuit breakers | in force since Phase 5 (`middleware.RateLimit`, `pkg/resilience`) |
+| `lidza check` rules for global state and unbounded goroutines | in force since Phase 5 (L001, L002) |
+| `lidza benchmark`, flat-memory gate | in force since Phase 5 (warm-up, then heap and goroutines before and after) |
 | Valkey pub/sub fan-out for WebSockets | in force since Phase 4 (`realtime` pack, `REALTIME_BUS_URL`) |
 | Queue-backed background work | Phase 6 (`jobs` pack) |
 

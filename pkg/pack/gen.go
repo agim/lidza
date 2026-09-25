@@ -57,7 +57,10 @@ func (p *%s) Stop(ctx context.Context) error {
 	return nil
 }
 
-`, typ, m.Rust.MemoryMB, m.Rust.Instances, m.Rust.TimeoutMS, typ)
+// TelemetryStats reports the pool to /metrics.
+func (p *%s) TelemetryStats() map[string]float64 { return p.pool.Stats() }
+
+`, typ, m.Rust.MemoryMB, m.Rust.Instances, m.Rust.TimeoutMS, typ, typ)
 	for _, c := range m.Capabilities {
 		fmt.Fprintf(&b, "// %s: %s\n", exported(c.Name), c.Description)
 		if c.Rules != "" {

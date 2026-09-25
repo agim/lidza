@@ -157,17 +157,32 @@ the capability shows up in the MCP tool list with a matching Go call.
 
 ## Phase 5: Scale primitives
 
-- `pkg/engine/pool.go`: bounded pool of pre-warmed wazero instances with
-  per-call timeouts.
-- `pkg/telemetry`: `/metrics` (Prometheus/OpenTelemetry), `/healthz`,
-  `/readyz`.
-- Token-bucket rate limiting on routes; `lidza check` flags global mutable
-  maps and unbounded goroutine spawns.
-- `lidza benchmark` wrapping k6 scenarios in `benchmarks/`.
+Done 2026-09-25.
 
-Check: `k6 run --vus 500 --duration 1m benchmarks/scale_test.js` against
-`lidza dev` completes with flat memory (`go tool pprof` heap before and
-after within noise).
+- `pkg/telemetry`: `/metrics` (Prometheus exposition via client_golang:
+  Go runtime, process, requests by method, route pattern and status, a
+  duration histogram, in-flight gauge, and `lidza_service_stat` gauges
+  from every service that reports stats: engine pools, the db pool, the
+  realtime hub); `/healthz`; `/readyz` runs every service's `Ready` check
+  with a deadline and replies 503 while one fails. `/debug/pprof/` in dev.
+- `middleware.RateLimit`: token bucket per key (client IP by default),
+  429 with Retry-After, bounded key table. `pkg/resilience.Breaker`:
+  circuit breaker for outbound calls (closed, open, half-open with one
+  trial call).
+- `lidza check` rules (warnings): L001 package-level map or slice, L002
+  goroutine started inside a handler. Generated files and tests excluded.
+- `pkg/engine.Pool` counters (calls, errors, timeouts, busy) exposed as
+  stats; the bounded pool with per-call deadlines itself arrived in
+  Phase 4.
+- `lidza benchmark [scenario] [--vus 500] [--duration 1m] [--warmup 10s]`:
+  runs `benchmarks/<scenario>.js` with k6 after a warm-up at the same load
+  and compares heap (after a forced GC in dev) and goroutines before and
+  after; `lidza new` writes `benchmarks/scale_test.js`. k6 installed on
+  `ubuntu01`.
+
+Check (passes): `lidza benchmark --vus 500 --duration 1m` against `lidza
+dev` on `ubuntu01`: 273,030 requests at 4,535 req/s, p95 140 ms, no
+failures, heap +0.8 MB, goroutines +0.
 
 ## Phase 6: Application services
 

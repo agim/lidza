@@ -48,6 +48,7 @@ app is always at one address: http://127.0.0.1:3000.
 | `lidza pack add <name>` | enables an official pack: `db`, `realtime`, `geo`, `media`. |
 | `lidza pack scaffold <name>` | creates `packs/<name>` with a crate and an example capability; `lidza pack build` compiles it. |
 | `lidza db migrate\|rollback\|status` | applies `db/migrations` (db pack, `DATABASE_URL` from `.env`). |
+| `lidza benchmark [--vus 500] [--duration 1m]` | runs `benchmarks/scale_test.js` with k6 against the running app; heap and goroutines must stay flat. |
 | `lidza version` | prints the framework version. |
 | `go test ./...` | Go tests. |
 {{- if .Dist}}
@@ -166,6 +167,17 @@ Statements that lose data or can fail on existing rows carry a
 2. In `src/router.tsx`, declare `createRoute({ getParentRoute: () => rootRoute, path: '/things', component: Things })` and add it to `addChildren([...])`.
 3. Fetch data with `useQuery` and a function from `src/api.ts`.
 {{- end}}
+
+## Operations
+
+The binary serves `/healthz` (liveness), `/readyz` (503 while a pack's
+check fails: database ping, bus) and `/metrics` (Prometheus: requests by
+route pattern, durations, pool and connection gauges). In dev,
+`/debug/pprof/` too. `lidza check` warns on package-level maps or slices
+(L001) and goroutines started in handlers (L002): state belongs in
+Postgres or Valkey, background work in a bounded worker or the jobs pack.
+Rate limit a route group with `r.Use(middleware.RateLimit(middleware.RateLimitOptions{RPS: 10, Burst: 20}))`;
+guard an outbound dependency with `resilience.New(...)`.
 
 ## Environment the binary reads
 

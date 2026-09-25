@@ -112,6 +112,12 @@ func Run(ctx context.Context, l Layers) Report {
 		{"cargo check", "rust", func(ctx context.Context) ([]Diagnostic, ToolRun) { return runCargo(ctx, l) }},
 		{"tsc", "frontend", func(ctx context.Context) ([]Diagnostic, ToolRun) { return runTSC(ctx, l) }},
 		{"svelte-check", "frontend", func(ctx context.Context) ([]Diagnostic, ToolRun) { return runSvelteCheck(ctx, l) }},
+		{"lidza rules", "go", func(ctx context.Context) ([]Diagnostic, ToolRun) {
+			if !l.Go {
+				return nil, skip("no go.mod")
+			}
+			return Rules(l.Dir), ToolRun{}
+		}},
 	}
 	diags := make([][]Diagnostic, len(jobs))
 	runs := make([]ToolRun, len(jobs))

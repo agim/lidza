@@ -4,7 +4,7 @@ Releases are git tags; `go install github.com/agim/lidza/cmd/lidza@<tag>`
 installs that CLI, and `lidza version` prints it. Apps depend on the same
 version in `go.mod`.
 
-## Unreleased
+## v0.1.1 (2026-09-25)
 
 - `install.sh` installs the prerequisites (git, curl, C toolchain), Node
   22, and with `--services` Postgres and Valkey with a role for the user;

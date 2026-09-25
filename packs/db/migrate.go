@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"sort"
@@ -24,9 +25,14 @@ type Migration struct {
 	AppliedAt time.Time
 }
 
-// files lists the migration names (NNNN_name) that have an up script.
+// files lists the migration names (NNNN_name) that have an up script. A
+// directory that does not exist yet (no model in schema.lidza so far)
+// holds no migrations.
 func files(fsys fs.FS) ([]string, error) {
 	entries, err := fs.ReadDir(fsys, ".")
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
 	if err != nil {
 		return nil, fmt.Errorf("migrations: %w", err)
 	}

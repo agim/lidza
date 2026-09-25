@@ -16,7 +16,7 @@ structured diagnostics, no implicit magic.
 ## Quick start
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/agim/lidza/master/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/agim/lidza/master/install.sh | sh -s -- --services
 lidza new myapp && cd myapp
 lidza dev
 claude        # or: codex, gemini

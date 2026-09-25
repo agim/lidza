@@ -40,8 +40,39 @@ hey, wasmtime, wasm-pack, pnpm, bun. None is needed.
 ## Toolchain plan
 
 Automated by `install.sh` at the repo root (`sh install.sh`; `--check` to
-report without installing). Run on `ubuntu01` 2026-09-25. The manual steps
-below are the reference the script implements; each has a check command.
+report without installing; `--services` to also install and start
+Postgres and Valkey and create a database role for the current user;
+`--minimal` to skip the helper tools; `--no-sudo` to print the root
+steps instead of running them). Run on `ubuntu01` 2026-09-25, and
+verified the same day in a clean `ubuntu:24.04` container as a non-root
+user with sudo (`--yes --services --minimal`, then `lidza new`, `lidza
+pack add db`, `lidza test` against the installed Postgres). The `apt`
+branch is the one exercised; the `dnf`, `pacman` and Homebrew branches
+follow those systems' documented commands and have not been run here.
+The manual steps below are the reference the script implements; each
+has a check command.
+
+### Prerequisites
+
+`git`, `curl` and a C toolchain (Rust needs a linker): `build-essential`
+on Debian and Ubuntu, `gcc make` on Fedora, `base-devel` on Arch, the
+Xcode command line tools on macOS. The installer adds them when missing.
+
+### Node → `~/.local/opt/node-v22.23.2-<os>-<arch>`
+
+The official tarball from nodejs.org, pinned in the installer
+(`NODE_VERSION`), its `bin` on the PATH through `~/.lidza/env`. Check:
+`node --version`.
+
+### Services (optional, `--services`)
+
+Postgres from the system package manager, started (systemd, or the
+`service` scripts where systemd does not run), with a superuser role
+named after the current user so the templates' socket DSN
+`postgres:///app_dev?host=/var/run/postgresql` needs no password; Valkey
+(Redis where Valkey is not packaged) on 6379. `lidza doctor` prints the
+one-line install for the machine's package manager when a service is
+missing.
 
 ### Go → `/usr/local/go`
 

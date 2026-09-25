@@ -9,34 +9,45 @@ and the generated TypeScript client work.
 
 ## Requirements
 
-- Linux or macOS, amd64 or arm64. Windows: use WSL2.
-- `curl` and `git`.
-- Node 20+ for the `react`, `svelte` and `astro` templates (not for `htmx`).
-- Optional: Docker, to run Postgres and Redis locally.
+- Linux (apt, dnf or pacman) or macOS with Homebrew, amd64 or arm64.
+  Windows: use WSL2.
+- `curl`, to fetch the installer. Everything else the installer adds:
+  `git`, a C toolchain, Go, Rust, Node, the helper tools, the CLI, and
+  with `--services` Postgres and Valkey.
 - One agent CLI: `claude`, `codex` or `gemini`.
 
 ## Install
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/agim/lidza/master/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/agim/lidza/master/install.sh | sh -s -- --services
 ```
+
+Without `--services` the installer asks whether to install Postgres and
+Valkey when a terminal is attached, and skips them otherwise; the `db`,
+`auth`, `jobs`, `mail` and `analytics` packs need Postgres, `cache` and
+`realtime` need Valkey, and `lidza doctor` says what is missing with the
+command that fixes it.
 
 What it does, skipping anything already present:
 
 | Step | Where | Notes |
 |---|---|---|
+| git, curl, C toolchain | system packages | apt, dnf, pacman or Homebrew |
 | Go (current stable) | `/usr/local/go` with sudo, else `~/.local/go` | |
 | Rust via rustup | `~/.cargo`, `~/.rustup` | adds `wasm32-wasip1`, `wasm32-unknown-unknown` |
-| staticcheck, golangci-lint, sqlc | `~/go/bin` | skipped with `--minimal` |
+| Node 22 | `~/.local/opt/node-v22.x-<os>-<arch>` | the official tarball; needed by the react, svelte and astro templates |
+| staticcheck, golangci-lint, sqlc | `~/go/bin` | pinned versions; skipped with `--minimal` |
 | wasm-tools | `~/.cargo/bin` | skipped with `--minimal` |
-| `lidza` CLI | `~/go/bin` | `go install github.com/agim/lidza/cmd/lidza@latest` (Phase 1) |
+| `lidza` CLI | `~/go/bin` | `go install github.com/agim/lidza/cmd/lidza@latest` |
+| Postgres, Valkey | system services | with `--services`: installed, started, a superuser role named after you |
 
 PATH changes go to `~/.lidza/env`, sourced from `~/.profile`, `~/.bashrc`
-and `~/.zshrc`. Nothing else in your shell config is touched. Node,
-Postgres and Redis are checked, not installed; the report says what to run.
+and `~/.zshrc`. Nothing else in your shell config is touched. The
+report at the end lists every item; `lidza doctor` repeats it any time,
+with the command that fixes what is missing.
 
-Flags: `--check` (report only, install nothing), `--minimal`, `--no-sudo`,
-`--yes`.
+Flags: `--check` (report only, install nothing), `--services`,
+`--minimal`, `--no-sudo` (root steps are printed, not run), `--yes`.
 
 Verify:
 

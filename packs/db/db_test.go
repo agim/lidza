@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -41,6 +42,12 @@ func TestMigrations(t *testing.T) {
 		if !strings.HasPrefix(k, "0003") {
 			good[k] = v
 		}
+	}
+
+	// No migrations directory yet (a fresh app whose schema has no model):
+	// nothing to apply, not an error.
+	if applied, err := Migrate(ctx, pool, os.DirFS(filepath.Join(t.TempDir(), "missing"))); err != nil || len(applied) != 0 {
+		t.Fatalf("missing directory: %v %v", applied, err)
 	}
 
 	applied, err := Migrate(ctx, pool, good)

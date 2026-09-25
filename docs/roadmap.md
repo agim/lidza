@@ -567,6 +567,19 @@ like the terminal command. The guide's Agent interface table and the
 recipes name the tool beside each command; the agent-driven eval runs
 without shell access to `lidza`.
 
+### Installer: prerequisites, Node and services (done 2026-09-25)
+
+`install.sh` now covers the whole machine: `git`, `curl` and a C
+toolchain through the package manager it finds (apt, dnf, pacman,
+Homebrew), Node 22 from nodejs.org into `~/.local/opt`, and with
+`--services` Postgres and Valkey installed, started (systemd or the
+`service` scripts) and a superuser role created for the current user, so
+the templates' socket DSN works at once. Idempotent; `--no-sudo` prints
+the root steps instead. `lidza doctor` names `sh install.sh --services`
+and the package manager's one-liner when a service is missing. Verified
+in a clean `ubuntu:24.04` container as a non-root user: install, then an
+app with the db pack passing `lidza test` against the installed Postgres.
+
 ### Next
 
 Nothing queued.

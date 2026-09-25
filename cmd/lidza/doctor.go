@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -60,16 +61,16 @@ func runDoctor(ctx context.Context, args []string) error {
 			}
 		}
 	}
-	tool("node", "--version", "install Node 20+ (https://nodejs.org)", true)
+	tool("node", "--version", "sh install.sh (installs Node 22 into ~/.local/opt)", true)
 	tool("staticcheck", "-version", "go install honnef.co/go/tools/cmd/staticcheck@latest", false)
 	tool("sqlc", "version", "go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest", false)
 	tool("wasm-tools", "--version", "cargo install wasm-tools --locked", false)
 	tool("k6", "version", "see docs/environment.md (needed by lidza benchmark)", false)
 
-	fmt.Println("Services:")
+	fmt.Println("Services (Postgres for db, auth, jobs, mail, analytics; Valkey for cache, realtime):")
 	for _, s := range []struct{ name, addr, fix string }{
-		{"postgres", "127.0.0.1:5432", "docker run -d --name lidza-pg -e POSTGRES_PASSWORD=lidza -p 5432:5432 postgres:17"},
-		{"redis", "127.0.0.1:6379", "docker run -d --name lidza-redis -p 6379:6379 redis:7"},
+		{"postgres", "127.0.0.1:5432", "sh install.sh --services, or " + serviceHint("postgres")},
+		{"valkey", "127.0.0.1:6379", "sh install.sh --services, or " + serviceHint("valkey")},
 	} {
 		conn, err := net.DialTimeout("tcp", s.addr, time.Second)
 		if err != nil {
@@ -137,5 +138,44 @@ func browserPath(ctx context.Context, dir string) (string, error) {
 
 func fileExists(p string) bool {
 	_, err := os.Stat(p)
+	return err == nil
+}
+
+// serviceHint is the one-line install of a service for this machine's
+// package manager; the installer's --services does the same with the
+// service started and the database role created.
+func serviceHint(service string) string {
+	pm := ""
+	switch {
+	case runtime.GOOS == "darwin":
+		pm = "brew"
+	case lookPath("apt-get"):
+		pm = "apt"
+	case lookPath("dnf"):
+		pm = "dnf"
+	case lookPath("pacman"):
+		pm = "pacman"
+	}
+	hints := map[string]string{
+		"apt:postgres":    "sudo apt-get install -y postgresql && sudo -u postgres createuser -s $USER",
+		"dnf:postgres":    "sudo dnf install -y postgresql-server && sudo postgresql-setup --initdb && sudo systemctl enable --now postgresql && sudo -u postgres createuser -s $USER",
+		"pacman:postgres": "sudo pacman -S postgresql && sudo -u postgres initdb -D /var/lib/postgres/data && sudo systemctl enable --now postgresql && sudo -u postgres createuser -s $USER",
+		"brew:postgres":   "brew install postgresql@17 && brew services start postgresql@17",
+		"apt:valkey":      "sudo apt-get install -y valkey-server (or redis-server)",
+		"dnf:valkey":      "sudo dnf install -y valkey && sudo systemctl enable --now valkey",
+		"pacman:valkey":   "sudo pacman -S valkey && sudo systemctl enable --now valkey",
+		"brew:valkey":     "brew install valkey && brew services start valkey",
+	}
+	if h, ok := hints[pm+":"+service]; ok {
+		return h
+	}
+	if service == "postgres" {
+		return "install Postgres 15+ and create a superuser role named after your user"
+	}
+	return "install Valkey or Redis on 6379 (docker run -d -p 6379:6379 valkey/valkey:8)"
+}
+
+func lookPath(name string) bool {
+	_, err := exec.LookPath(name)
 	return err == nil
 }

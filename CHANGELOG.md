@@ -6,6 +6,11 @@ version in `go.mod`.
 
 ## Unreleased
 
+- `install.sh` installs the prerequisites (git, curl, C toolchain), Node
+  22, and with `--services` Postgres and Valkey with a role for the user;
+  `lidza doctor` names the fix per package manager.
+- `lidza test` and `DB_MIGRATE` no longer fail on an app whose schema has
+  no model yet (no `db/migrations` directory): nothing to apply.
 - Every CLI command is an MCP tool (`lidza_gen`, `lidza_gen_resource`,
   `lidza_pack_*`, `lidza_db_*`, `lidza_test`, `lidza_verify`,
   `lidza_build`, `lidza_doctor`, `lidza_recipes`); `lidza_check` runs the

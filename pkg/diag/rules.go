@@ -1,27 +1,41 @@
 package diag
 
 import (
+	"context"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+
+	"github.com/agim/lidza/pkg/apidoc"
 )
 
-// Rules are the scalability checks `lidza check` applies to the app's own
-// Go code (generated files, vendor and tests excluded):
+// Rules are the checks `lidza check` applies to the app's own Go code
+// (generated files, vendor and tests excluded):
 //
-//   - a package-level variable of map or slice type is state that grows
-//     with traffic and lives on one node; keep it in Postgres or Valkey,
-//     or make it a bounded, guarded structure;
-//   - a goroutine started inside a request handler is unbounded work;
-//     use the jobs pack or a worker pool with a size.
+//   - L001: a package-level variable of map or slice type is state that
+//     grows with traffic and lives on one node; keep it in Postgres or
+//     Valkey, or make it a bounded, guarded structure;
+//   - L002: a goroutine started inside a request handler is unbounded
+//     work; use the jobs pack or a worker pool with a size;
+//   - L004: an import under the framework's module path that names no
+//     package of the framework version the app uses (an error: it will
+//     not compile, and `go get` cannot help);
+//   - L005: a typed handler whose input or output type is not declared in
+//     schema.lidza, so it is neither validated nor known to the client.
 //
-// Findings are warnings: they point at the pattern, the author decides.
-func Rules(root string) []Diagnostic {
+// Except for L004 the findings are warnings: they point at the pattern,
+// the author decides.
+func Rules(ctx context.Context, root string) []Diagnostic {
 	var out []Diagnostic
 	fset := token.NewFileSet()
+	moduleDir, err := apidoc.ModuleDir(ctx, root)
+	if err != nil {
+		moduleDir = ""
+	}
 	_ = filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
 		if err != nil {
 			return nil
@@ -41,7 +55,7 @@ func Rules(root string) []Diagnostic {
 			return nil
 		}
 		rel := filepath.ToSlash(strings.TrimPrefix(strings.TrimPrefix(p, root), string(filepath.Separator)))
-		out = append(out, checkFile(fset, f, rel)...)
+		out = append(out, checkFile(fset, f, rel, moduleDir)...)
 		return nil
 	})
 	return out
@@ -49,11 +63,40 @@ func Rules(root string) []Diagnostic {
 
 var skipRuleDirs = map[string]bool{"node_modules": true, "dist": true, "bin": true, "target": true, "vendor": true, "testdata": true}
 
-func checkFile(fset *token.FileSet, f *ast.File, rel string) []Diagnostic {
+func checkFile(fset *token.FileSet, f *ast.File, rel, moduleDir string) []Diagnostic {
 	var out []Diagnostic
-	warn := func(pos token.Pos, code, msg string) {
+	report := func(pos token.Pos, severity, code, msg string) {
 		p := fset.Position(pos)
-		out = append(out, Diagnostic{Layer: "go", Tool: "lidza rules", Severity: "warning", Code: code, File: rel, Line: p.Line, Column: p.Column, Message: msg})
+		out = append(out, Diagnostic{Layer: "go", Tool: "lidza rules", Severity: severity, Code: code, File: rel, Line: p.Line, Column: p.Column, Message: msg})
+	}
+	warn := func(pos token.Pos, code, msg string) { report(pos, "warning", code, msg) }
+	schemaPkg, routerPkg := "", "router"
+	for _, imp := range f.Imports {
+		path, _ := strconv.Unquote(imp.Path.Value)
+		name := ""
+		if imp.Name != nil {
+			name = imp.Name.Name
+		}
+		switch {
+		case path == apidoc.Module+"/pkg/router":
+			if name != "" {
+				routerPkg = name
+			}
+		case strings.HasSuffix(path, "/schema") && !strings.HasPrefix(path, apidoc.Module+"/"):
+			schemaPkg = "schema"
+			if name != "" {
+				schemaPkg = name
+			}
+		}
+		if moduleDir != "" {
+			if _, ok := apidoc.Rel(path); ok && !apidoc.Exists(moduleDir, path) {
+				msg := "package " + path + " does not exist in this version of Līdza"
+				if s := apidoc.Suggest(moduleDir, path); s != "" {
+					msg += "; did you mean " + s + "?"
+				}
+				report(imp.Pos(), "error", "L004", msg+" (`lidza api` lists the packages and their API)")
+			}
+		}
 	}
 	for _, decl := range f.Decls {
 		switch d := decl.(type) {
@@ -73,6 +116,9 @@ func checkFile(fset *token.FileSet, f *ast.File, rel string) []Diagnostic {
 		case *ast.FuncDecl:
 			if d.Body == nil || !isHandler(d.Type) {
 				continue
+			}
+			for _, bad := range foreignTypes(d.Type, routerPkg, schemaPkg) {
+				warn(bad.Pos(), "L005", "handler "+d.Name.Name+": "+exprText(bad)+" is not a type from schema.lidza; declare it there so it is validated and reaches the generated client")
 			}
 			ast.Inspect(d.Body, func(n ast.Node) bool {
 				if g, ok := n.(*ast.GoStmt); ok {
@@ -126,6 +172,52 @@ func isHandler(ft *ast.FuncType) bool {
 	return false
 }
 
+// foreignTypes returns the In and Out types of a typed handler signature
+// that are not router.None, a schema.lidza type, or a basic type.
+func foreignTypes(ft *ast.FuncType, routerPkg, schemaPkg string) []ast.Expr {
+	var out []ast.Expr
+	check := func(e ast.Expr) {
+		if e != nil && !contractType(e, routerPkg, schemaPkg) {
+			out = append(out, e)
+		}
+	}
+	for _, p := range ft.Params.List {
+		star, ok := p.Type.(*ast.StarExpr)
+		if !ok {
+			continue
+		}
+		idx, ok := star.X.(*ast.IndexExpr)
+		if !ok || exprText(idx.X) != routerPkg+".Request" {
+			continue
+		}
+		check(idx.Index)
+	}
+	if ft.Results != nil && len(ft.Results.List) == 2 {
+		check(ft.Results.List[0].Type)
+	}
+	return out
+}
+
+func contractType(e ast.Expr, routerPkg, schemaPkg string) bool {
+	switch x := e.(type) {
+	case *ast.Ident:
+		return basicTypes[x.Name]
+	case *ast.SelectorExpr:
+		pkg := exprText(x.X)
+		return pkg == schemaPkg || (pkg == routerPkg && x.Sel.Name == "None")
+	case *ast.StarExpr:
+		return contractType(x.X, routerPkg, schemaPkg)
+	case *ast.ArrayType:
+		return contractType(x.Elt, routerPkg, schemaPkg)
+	case *ast.MapType:
+		return contractType(x.Value, routerPkg, schemaPkg)
+	}
+	return false
+}
+
+var basicTypes = map[string]bool{"string": true, "bool": true, "int": true, "int8": true, "int16": true, "int32": true, "int64": true,
+	"uint": true, "uint8": true, "uint16": true, "uint32": true, "uint64": true, "float32": true, "float64": true, "byte": true, "rune": true}
+
 func exprText(e ast.Expr) string {
 	switch x := e.(type) {
 	case *ast.StarExpr:
@@ -138,6 +230,14 @@ func exprText(e ast.Expr) string {
 		return exprText(x.X) + "[" + exprText(x.Index) + "]"
 	case *ast.IndexListExpr:
 		return exprText(x.X) + "[...]"
+	case *ast.ArrayType:
+		return "[]" + exprText(x.Elt)
+	case *ast.MapType:
+		return "map[" + exprText(x.Key) + "]" + exprText(x.Value)
+	case *ast.StructType:
+		return "struct{...}"
+	case *ast.InterfaceType:
+		return "any"
 	}
 	return ""
 }

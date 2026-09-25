@@ -52,6 +52,12 @@ error output, so:
 - **No hidden state.** Configuration is a JSON file and environment
   variables; generated files say so in their first line; conventions are
   written down in the app's own guide, which `lidza new` produces.
+- **Nothing to guess.** The guide's recipes are the steps for the common
+  tasks, served as MCP prompts and Claude Code skills; `lidza api`
+  renders the framework's exported API from the version the app depends
+  on; `lidza check` turns the usual inventions (a package that does not
+  exist, an undeclared import, a hand-written `fetch`, a handler type
+  outside the schema) into findings with the fix in the message.
 
 ## Packs
 

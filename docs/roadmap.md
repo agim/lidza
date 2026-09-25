@@ -371,11 +371,25 @@ framework's; the running binary serves the same tools at `/mcp`
 (Streamable HTTP) when `LIDZA_MCP_TOKEN` is set, for agents that present
 the token. No child MCP server is needed.
 
+### Agent platform: recipes, API, rules (done 2026-09-25)
+
+The app guide has a "Recipes" section (add an API route, a resource, a
+page, a pack capability, an MCP tool, a test); `pkg/recipes` parses it
+and `lidza mcp` serves each recipe as a prompt with an optional task
+argument, while `lidza new` and `lidza gen` write each as a Claude Code
+skill in `.claude/skills/<name>/SKILL.md`; `CLAUDE.md`, `AGENTS.md` and
+`GEMINI.md` list them. `pkg/apidoc` renders the framework's exported API
+from the sources the app resolves (a `replace` to a checkout or the
+module cache): `lidza api [package] [--filter name] [--list]`, the MCP
+tool `lidza_api`, the resources `lidza://api` and `lidza://api/{package}`.
+`lidza check` gained L003 (hand-written `fetch` of `/api` in `src/`,
+warning; `lidza:ignore L003` on the line before exempts one), L004 (an
+import of a framework package that does not exist, error with the closest
+real package, replacing the go tool's "go get" advice; a frontend import
+that `package.json` does not declare, error), L005 (a typed handler whose
+input or output type is not from `schema.lidza`, warning).
+
 ### Next
 
-Agent-platform work, pending Agim's go: task recipes as MCP prompts and
-Claude skills generated from the app guide; a `lidza://api` resource
-listing the framework's public API; check rules for hand-written `fetch`,
-undeclared imports and handler types outside the schema; `lidza verify`
-with a pre-commit hook; an example app with a snippet tool; platform
-evals.
+Pending: `lidza verify` with a pre-commit hook; an example app with a
+snippet tool; platform evals.

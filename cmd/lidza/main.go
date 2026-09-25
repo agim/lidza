@@ -27,6 +27,7 @@ Usage:
   lidza test [go test flags] | lidza test --e2e [--install]
   lidza doctor
   lidza context [--dir .] [--stdout]
+  lidza api [package] [--filter name] [--list]
   lidza mcp [--dir .]
   lidza version
 
@@ -43,7 +44,8 @@ Commands:
   test     go test ./... with LIDZA_MODE=test, the test database created and migrated, then the frontend check; --e2e runs the Playwright suite against the built binary
   doctor   report the toolchain, services and the project's prerequisites, each with its fix
   context  write .lidza/context.json: routes, handler signatures, Rust exports
-  mcp      serve routes, context, diagnostics and dev logs over MCP on stdio
+  api      print the framework's public Go API as the project resolves it (one package, or all that app code imports)
+  mcp      serve routes, context, diagnostics, dev logs, the API and the guide's recipes over MCP on stdio
   version  print the framework version
 `
 
@@ -79,6 +81,8 @@ func main() {
 		err = runDoctor(ctx, args)
 	case "context":
 		err = runContext(ctx, args)
+	case "api":
+		err = runAPI(ctx, args)
 	case "mcp":
 		err = runMCP(ctx, args)
 	case "version", "--version", "-v":

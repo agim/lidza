@@ -119,18 +119,37 @@ The agent loop Līdza is built for:
 3. `lidza dev` hot-reloads; the generated client (`@lidza/client`) keeps
    frontend types in sync with the Go handlers, and `schema.lidza` is the
    one place data shapes are declared.
-4. `lidza mcp` lets the agent ask for the route map, diagnostics and logs
-   instead of grepping.
+4. `lidza mcp` lets the agent ask for the route map, diagnostics, logs
+   and the framework's API instead of grepping or guessing.
+5. The app guide's recipes (add an API route, a resource, a page, a pack
+   capability, an MCP tool, a test) are MCP prompts and Claude Code
+   skills, so a task starts from the steps that work here.
+
+### Against hallucination
+
+Three things keep an agent from inventing what is not there:
+
+- `lidza api [package] [--filter name]` (and the MCP tool `lidza_api`,
+  resource `lidza://api`) prints the framework's exported functions, types
+  and methods with their doc comments, rendered from the version the app
+  depends on.
+- `lidza check` rules: an import of a framework package that does not
+  exist is an error with the closest real package (L004), as is a frontend
+  import that `package.json` does not declare (L004); a hand-written
+  `fetch` of `/api` (L003) and a handler type not declared in
+  `schema.lidza` (L005) are warnings.
+- The recipes: every step names the file, the command and the check.
 
 ### MCP server
 
 Tools: `lidza_routes`, `lidza_context`, `lidza_check`, `lidza_logs`,
-`lidza_config`, `lidza_packs` and one tool per pack capability,
-`lidza_errors` with the analytics pack, and the app's own tools from
-`tools.go` as `app_<name>`; resources `lidza://llms.txt` and
-`lidza://llms-full.txt`. With `LIDZA_MCP_TOKEN` set, the running binary
-serves the app's tools at `/mcp` to agents that send the token.
-While `lidza dev` runs, the same two documents are at
+`lidza_config`, `lidza_api`, `lidza_packs` and one tool per pack
+capability, `lidza_errors` with the analytics pack, and the app's own
+tools from `tools.go` as `app_<name>`; resources `lidza://llms.txt`,
+`lidza://llms-full.txt`, `lidza://api` and `lidza://api/{package}`;
+prompts, one per recipe in `docs/lidza-guide.md`. With `LIDZA_MCP_TOKEN`
+set, the running binary serves the app's tools at `/mcp` to agents that
+send the token. While `lidza dev` runs, the two llms documents are at
 http://127.0.0.1:3000/llms.txt and `/llms-full.txt`.
 
 `lidza new` configures it for Claude Code and Gemini CLI. Codex CLI reads a

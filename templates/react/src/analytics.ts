@@ -11,6 +11,7 @@ let disabledAfterMissingEndpoint = false
 
 function post(kind: 'errors' | 'events', body: unknown) {
   if (!enabled || disabledAfterMissingEndpoint) return
+  // lidza:ignore L003 (the analytics endpoint is a pack handler, not a typed operation)
   fetch(`/api/v1/analytics/${kind}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

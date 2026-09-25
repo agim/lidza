@@ -15,6 +15,7 @@ import (
 	"github.com/agim/lidza/pkg/diag"
 	"github.com/agim/lidza/pkg/inspect"
 	"github.com/agim/lidza/pkg/pack"
+	"github.com/agim/lidza/pkg/recipes"
 	"github.com/agim/lidza/pkg/schema"
 	"github.com/agim/lidza/pkg/sdk"
 )
@@ -81,6 +82,9 @@ func generateAll(dir string, cfg *config.Config, out io.Writer) error {
 	}
 	if err := generatePacks(context.Background(), dir, cfg, out); err != nil {
 		return err
+	}
+	if _, err := recipes.Sync(dir); err != nil {
+		return fmt.Errorf("skills: %w", err)
 	}
 	return generateClient(dir, cfg, out)
 }

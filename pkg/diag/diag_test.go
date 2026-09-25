@@ -64,3 +64,15 @@ func TestDetect(t *testing.T) {
 		t.Fatalf("got %+v", l)
 	}
 }
+
+func TestDropSuperseded(t *testing.T) {
+	in := []Diagnostic{
+		{Tool: "go vet", Severity: "error", Message: "no required module provides package github.com/agim/lidza/pkg/orm; to add it:\ngo get github.com/agim/lidza/pkg/orm"},
+		{Tool: "lidza rules", Layer: "go", Code: "L004", Severity: "error", Message: "package github.com/agim/lidza/pkg/orm does not exist in this version of Līdza"},
+		{Tool: "go vet", Severity: "error", Message: "no required module provides package github.com/x/y; to add it:\ngo get github.com/x/y"},
+	}
+	out := dropSuperseded(in)
+	if len(out) != 2 || out[0].Code != "L004" || out[1].Tool != "go vet" {
+		t.Fatalf("got %+v", out)
+	}
+}

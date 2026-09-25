@@ -73,6 +73,11 @@ app is always at one address: http://127.0.0.1:3000.
 | `lidza_check` | the diagnostics of `lidza check --json` |
 | `lidza_logs` | the last lines of the `lidza dev` output (`lines`, `filter`) |
 | `lidza_config` | `lidza.json` |
+| `lidza_api` | the framework's public Go API (`package`, `filter`), also the resource `lidza://api` |
+| `lidza_errors` | captured errors (analytics pack) |
+
+Its prompts are the recipes of this guide (`add-api-route`,
+`add-resource`, ...), also written as skills to `.claude/skills/`.
 
 The app adds its own tools in `tools.go` with
 `lidza.ToolFunc("name", "what it does", func(ctx, In) (Out, error))`;
@@ -111,6 +116,9 @@ signature. Both are regenerated after each Go rebuild.
 8. Log with `lidza.Log(ctx).Info("what happened", "key", value)`: the line
    carries the request id, so one request's lines are found together.
    Never `fmt.Println` in handlers.
+9. Before calling a framework function, read its signature: `lidza api
+   [package] [--filter name]` or the MCP tool `lidza_api`. An import of a
+   framework package that does not exist fails `lidza check` (L004).
 
 ## Tests
 
@@ -129,14 +137,17 @@ Browser tests live in `e2e/*.spec.ts` (Playwright); `lidza test --e2e`
 runs them against the built binary. If the browser is missing the command
 prints the install line; `lidza test --e2e --install` runs it.
 
-## Adding a resource
+## Recipes
 
-Declare a `model` in `schema.lidza`, run `lidza gen resource <Model>`,
-then `lidza db migrate`. The generated `handlers/<table>.go` is ordinary
-code: add authorization (`auth.Require()` on a sub-router), filters or
-ownership checks there. Regenerate with `--force` to reset it.
+Step-by-step tasks. Each one is also a prompt in `lidza mcp` and a skill
+in `.claude/skills/<name>`; `lidza gen` rewrites the skills from this
+section, so edit it here. Every recipe ends the same way: `lidza check
+--json` until `"status": "ok"`, then `lidza test`.
 
-## Adding an API route
+### Add an API route
+
+Expose one operation under `/api/v1/` with typed input and output, so it
+is validated on the server and callable from the client by name.
 
 1. Declare the shapes in `schema.lidza`:
 
@@ -161,12 +172,149 @@ ownership checks there. Regenerate with `--force` to reset it.
    }
    ```
 
-   The body is decoded and validated (422 with field errors on failure)
-   before the handler runs.
+   `In` is `router.None` without a body, `Out` is `router.None` for 204.
+   The body is decoded and validated (422 with field errors) before the
+   handler runs. Return `router.NotFound("thing")` or
+   `router.Errorf(status, ...)` for client-visible errors; any other error
+   is a 500 whose text stays on the server. The handler name becomes the
+   client method (`createThing` gives `api.createThing`).
 
-3. Save. `lidza dev` regenerates `schema/`, rebuilds, and rewrites the client:
-   `api.createThing({ title })` now exists. Check with
+3. Save. `lidza dev` regenerates `schema/`, rebuilds, and rewrites the
+   client. Check with
    `curl -s -X POST http://127.0.0.1:3000/api/v1/things -d '{"title":"x"}'`.
+{{- if .Dist}}
+
+4. Call it from the frontend as `api.createThing({ title })` from
+   `@lidza/client`; never `fetch` by hand (`lidza check` warns, L003).
+{{- end}}
+
+5. Add a test in `routes_test.go` (see "Write a test") and run
+   `lidza check`, then `lidza test`.
+
+### Add a resource
+
+Give a model the five standard routes (list, get, create, patch, delete)
+backed by Postgres. Needs the `db` pack (`lidza pack add db`).
+
+1. Declare a `model` in `schema.lidza`:
+
+   ```
+   model Post {
+     id        uuid     @id @default(uuid())
+     title     string   @min(1) @max(200)
+     body      string?
+     createdAt datetime @default(now())
+   }
+   ```
+
+2. Run `lidza gen resource Post`: it writes `db/queries/post.sql`, the
+   `CreatePost`, `UpdatePost` and `PostList` types in `schema.lidza`,
+   `handlers/post.go` with the routes under `/api/v1/posts`, and the
+   registration line in `routes.go`.
+3. Run `lidza db migrate` to apply the new migration in `db/migrations/`.
+4. The generated handlers file is ordinary code: add authorization
+   (`auth.Require()` on a sub-router), filters or ownership checks there.
+   Regenerate with `--force` to reset it.
+5. `lidza check`, then `lidza test`.
+{{- if .Dist}}
+
+### Add a page
+
+Add a client-side route rendered by React, prerendered at build time.
+
+1. Create `src/pages/Things.tsx` exporting a component.
+2. In `src/router.tsx`, declare `createRoute({ getParentRoute: () => rootRoute, path: '/things', component: Things })` and add it to the route tree.
+3. Fetch data with `useQuery({ queryKey: ['things'], queryFn: () => api.listThings() })`
+   from `@lidza/client`; never `fetch` by hand.
+4. Routes without parameters are prerendered by `npm run build`; keep
+   the first render free of browser-only APIs (`window`, `localStorage`),
+   read them in effects. With `LIDZA_SSR=1` at deploy time every page
+   renders per request in a Node sidecar: give a route a `loader` calling
+   `api.*` and its data is in the HTML, with the visitor's cookies
+   forwarded to the API.
+5. Live data: `useLive(['things'])` (src/live.ts) refetches the `things`
+   queries when a handler publishes to that topic on the `realtime` pack.
+6. Forms: `validators.CreateThing(values)` from `@lidza/client` returns the
+   field errors the server would, before the request.
+7. Every element must be accessible: `lidza check` fails on `jsx-a11y`
+   errors (missing `alt`, click handlers on non-interactive elements, ...).
+8. Style with Tailwind utilities; colors and fonts come from the `@theme`
+   tokens in `src/index.css` (`bg-brand`, `text-ink`, `border-line`,
+   `text-muted`, `text-danger`). Change the tokens, not the classes, to
+   rebrand. No other CSS framework.
+9. Add a browser test in `e2e/things.spec.ts` (see "Write a test"), then
+   `lidza check` and `lidza test --e2e`.
+{{- end}}
+
+### Add a pack capability
+
+Run CPU-heavy or memory-heavy work in Rust, compiled to WASM and called
+from a handler with a deadline.
+
+1. `lidza pack scaffold <name>` creates `packs/<name>` with a crate and
+   an example capability (skip when the pack exists).
+2. Declare the input and output types in `schema.lidza`.
+3. In `packs/<name>/rust/src/lib.rs` write
+   `lidza_export!(capability, |input: In| -> Result<Out, String>)`; the
+   Rust structs come from `packs/<name>/rust/src/schema.rs`, generated.
+4. List the capability in `packs/<name>/pack.lidza.json` with its input
+   and output type names.
+5. `lidza check` builds the module and writes `packs/<name>/pack.go`.
+   From a handler: `out, err := <name>.From(ctx).<Capability>(ctx, in)`.
+   The MCP tool `pack_<name>_<capability>` runs it directly.
+
+### Add an MCP tool
+
+Let an agent call a function of this app, with its packs, from
+`lidza mcp` (as `app_<name>`) and from the running binary at `/mcp`.
+
+1. In `tools.go` add to the list returned by `tools()`:
+
+   ```go
+   lidza.ToolFunc("count_posts", "Number of posts.", func(ctx context.Context, _ struct{}) (int, error) {
+   	var n int
+   	err := db.From(ctx).QueryRow(ctx, "SELECT count(*) FROM post").Scan(&n)
+   	return n, err
+   }),
+   ```
+
+2. Give the input a `schema.lidza` type to have its rules enforced; the
+   input schema shown to the agent comes from the Go type.
+3. `lidza check`; then restart `lidza mcp` (the MCP client reconnects) and
+   call `app_count_posts`.
+
+### Write a test
+
+Cover a handler with a Go test that boots the app, or a page with a
+browser test.
+
+1. Handler: in `routes_test.go` (or `handlers/<name>_test.go`):
+
+   ```go
+   func TestCreateThing(t *testing.T) {
+   	srv := lidzatest.Start(t, app())
+   	var out schema.Thing
+   	res := srv.JSON(t, "POST", "/api/v1/things", schema.CreateThing{Title: "x"}, &out)
+   	if res.StatusCode != http.StatusCreated || out.Title != "x" {
+   		t.Fatalf("%d %+v", res.StatusCode, out)
+   	}
+   }
+   ```
+
+   `lidzatest.Start` boots the app with its packs (`.env.test`,
+   `LIDZA_MODE=test`); `srv.JSON(t, method, path, body, &out,
+   lidzatest.Bearer(token))` calls it. Freeze time with `srv.Clock.Set(t)`
+   when the handler uses `lidza.Now(ctx)`; replay outbound HTTP with
+   `lidzatest.WithRecorder("name")` when it uses `lidza.HTTPClient(ctx)`
+   (recorded once with `LIDZA_RECORD=1 lidza test`).
+2. Run `lidza test`: it creates and migrates the test database, runs
+   `go test ./...`, then the frontend check.
+{{- if .Dist}}
+3. Page: in `e2e/<name>.spec.ts` (Playwright) load the page, assert on
+   text or roles, and assert no `window` errors (see `e2e/home.spec.ts`).
+   Run `lidza test --e2e` (add `--install` once if the browser is
+   missing).
+{{- end}}
 
 ## Packs
 
@@ -179,11 +327,8 @@ input and an output type from `schema.lidza`. `lidza gen` writes
 out, err := geo.From(ctx).GeoDistance(ctx, req.Body)
 ```
 
-To add one: `lidza pack scaffold <name>`, put the types in `schema.lidza`,
-write `lidza_export!(capability, |input: In| -> Result<Out, String>)` in
-`packs/<name>/rust/src/lib.rs`, list it in the manifest, run `lidza check`.
-`lidza dev` rebuilds the module when the crate changes. The MCP tool
-`pack_<name>_<capability>` runs a capability directly.
+To add one, follow the recipe "Add a pack capability". `lidza dev`
+rebuilds the module when the crate changes.
 
 Official Go packs, configured from `.env` (see `.env.example` after
 `lidza pack add`):
@@ -230,39 +375,17 @@ A `model` in `schema.lidza` is a table. `lidza gen` writes the full DDL to
 numbered pair in `db/migrations/` (`NNNN_name.up.sql`, `.down.sql`).
 Statements that lose data or can fail on existing rows carry a
 `-- review` comment. Applying migrations is the `db` pack's job.
-{{- if .Dist}}
-
-## Adding a page
-
-1. Create `src/pages/Things.tsx` exporting a component.
-2. In `src/router.tsx`, declare `createRoute({ getParentRoute: () => rootRoute, path: '/things', component: Things })` and add it to the route tree.
-3. Fetch data with `useQuery({ queryKey: ['things'], queryFn: () => api.listThings() })`.
-4. Routes without parameters are prerendered by `npm run build`; keep
-   the first render free of browser-only APIs (`window`, `localStorage`),
-   read them in effects. With `LIDZA_SSR=1` at deploy time every page
-   renders per request in a Node sidecar: give a route a `loader` calling
-   `api.*` and its data is in the HTML, with the visitor's cookies
-   forwarded to the API.
-5. Live data: `useLive(['things'])` (src/live.ts) refetches the `things`
-   queries when a handler publishes to that topic on the `realtime` pack.
-6. Forms: `validators.CreateThing(values)` from `@lidza/client` returns the
-   field errors the server would, before the request.
-7. Every element must be accessible: `lidza check` fails on `jsx-a11y`
-   errors (missing `alt`, click handlers on non-interactive elements, ...).
-8. Style with Tailwind utilities; colors and fonts come from the `@theme`
-   tokens in `src/index.css` (`bg-brand`, `text-ink`, `border-line`,
-   `text-muted`, `text-danger`). Change the tokens, not the classes, to
-   rebrand. No other CSS framework.
-{{- end}}
-
 ## Operations
 
 The binary serves `/healthz` (liveness), `/readyz` (503 while a pack's
 check fails: database ping, bus) and `/metrics` (Prometheus: requests by
 route pattern, durations, pool and connection gauges). In dev,
-`/debug/pprof/` too. `lidza check` warns on package-level maps or slices
-(L001) and goroutines started in handlers (L002): state belongs in
-Postgres or Valkey, background work in a bounded worker or the jobs pack.
+`/debug/pprof/` too. `lidza check` has rules of its own: package-level
+maps or slices (L001) and goroutines started in handlers (L002), because
+state belongs in Postgres or Valkey and background work in a bounded
+worker or the jobs pack; hand-written `fetch` of `/api` (L003); imports
+of packages that do not exist or are not declared (L004); handler types
+not declared in `schema.lidza` (L005).
 Rate limit a route group with `r.Use(middleware.RateLimit(middleware.RateLimitOptions{RPS: 10, Burst: 20}))`;
 guard an outbound dependency with `resilience.New(...)`.
 

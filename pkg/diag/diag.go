@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -117,7 +118,13 @@ func Run(ctx context.Context, l Layers) Report {
 			if !l.Go {
 				return nil, skip("no go.mod")
 			}
-			return Rules(l.Dir), ToolRun{}
+			return Rules(ctx, l.Dir), ToolRun{}
+		}},
+		{"lidza rules", "frontend", func(ctx context.Context) ([]Diagnostic, ToolRun) {
+			if !l.TSConfig {
+				return nil, skip("no tsconfig.json")
+			}
+			return WebRules(l.Dir), ToolRun{}
 		}},
 	}
 	diags := make([][]Diagnostic, len(jobs))
@@ -140,6 +147,7 @@ func Run(ctx context.Context, l Layers) Report {
 		all = append(all, d...)
 	}
 	all = dedupe(all)
+	all = dropSuperseded(all)
 	sort.SliceStable(all, func(i, j int) bool {
 		a, b := all[i], all[j]
 		if a.File != b.File {
@@ -158,6 +166,35 @@ func Run(ctx context.Context, l Layers) Report {
 		r.Status = "error"
 	}
 	return r
+}
+
+// dropSuperseded removes the go tool's "no required module provides
+// package X; to add it: go get X" for every X that L004 reports as
+// nonexistent: the advice is wrong there, and the rule's message says what
+// to do instead.
+func dropSuperseded(in []Diagnostic) []Diagnostic {
+	var missing []string
+	for _, d := range in {
+		if d.Code == "L004" && d.Layer == "go" {
+			if f := strings.Fields(d.Message); len(f) > 1 && f[0] == "package" {
+				missing = append(missing, "provides package "+f[1])
+			}
+		}
+	}
+	if len(missing) == 0 {
+		return in
+	}
+	out := in[:0]
+	for _, d := range in {
+		drop := false
+		for _, m := range missing {
+			drop = drop || (d.Code == "" && strings.Contains(d.Message, m))
+		}
+		if !drop {
+			out = append(out, d)
+		}
+	}
+	return out
 }
 
 // dedupe drops findings that two tools reported identically, which happens

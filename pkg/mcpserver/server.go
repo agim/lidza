@@ -27,8 +27,11 @@ import (
 const LogFile = devserver.BuildDir + "/dev.log"
 
 const instructions = `Līdza project. Go owns /api (routes.go); the frontend never defines API routes.
-Use lidza_routes before adding a route, lidza_check after every change (fix until
-its status is "ok"), and lidza_logs when a request misbehaves under lidza dev.`
+Use lidza_routes before adding a route, lidza_api before calling a framework
+function, lidza_check after every change (fix until its status is "ok"), and
+lidza_logs when a request misbehaves under lidza dev. The prompts are the
+project's task recipes (add-api-route, add-resource, ...); follow one step
+by step.`
 
 // New builds the server for the project in dir. cfg may be nil for a plain
 // Go module.
@@ -36,6 +39,7 @@ func New(dir string, cfg *config.Config) *server.MCPServer {
 	s := server.NewMCPServer("lidza", version.String(),
 		server.WithToolCapabilities(false),
 		server.WithResourceCapabilities(false, false),
+		server.WithPromptCapabilities(false),
 		server.WithInstructions(instructions),
 	)
 
@@ -88,6 +92,8 @@ func New(dir string, cfg *config.Config) *server.MCPServer {
 
 	addPackTools(s, dir, cfg)
 	addAppTools(s, dir, cfg)
+	addAPI(s, dir)
+	addRecipes(s, dir)
 
 	for _, r := range []struct{ name, uri, desc string }{
 		{"llms.txt", "lidza://llms.txt", "Short description of the app for language models: routes, commands, files."},

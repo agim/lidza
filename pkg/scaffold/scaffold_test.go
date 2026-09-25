@@ -23,6 +23,8 @@ func TestNewReact(t *testing.T) {
 		"package.json", "index.html", "vite.config.ts", "tsconfig.json",
 		"src/main.tsx", "src/router.tsx", "src/pages/Home.tsx", "src/ErrorBoundary.tsx", "playwright.config.ts", "e2e/home.spec.ts", "schema.lidza", "schema/schema.go", ".env.example", "packs.go", "benchmarks/scale_test.js",
 		".gitignore", "dist/.gitkeep",
+		".claude/skills/add-api-route/SKILL.md", ".claude/skills/add-resource/SKILL.md", ".claude/skills/add-page/SKILL.md",
+		".claude/skills/add-pack-capability/SKILL.md", ".claude/skills/add-mcp-tool/SKILL.md", ".claude/skills/write-test/SKILL.md",
 	} {
 		if _, err := os.Stat(filepath.Join(dir, f)); err != nil {
 			t.Errorf("missing %s", f)
@@ -60,6 +62,12 @@ func TestNewReact(t *testing.T) {
 	}
 	if read("CLAUDE.md") != read("AGENTS.md") || read("CLAUDE.md") != read("GEMINI.md") {
 		t.Errorf("agent files should be identical")
+	}
+	if !strings.Contains(read("CLAUDE.md"), "`add-api-route`, `add-resource`, `add-page`, `add-pack-capability`, `add-mcp-tool`, `write-test`") {
+		t.Errorf("CLAUDE.md should list the recipes: %s", read("CLAUDE.md"))
+	}
+	if skill := read(".claude/skills/add-page/SKILL.md"); !strings.Contains(skill, "name: add-page\n") || !strings.Contains(skill, "src/router.tsx") || strings.Contains(skill, "{{") {
+		t.Errorf("skill: %s", skill)
 	}
 }
 

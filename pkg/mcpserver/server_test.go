@@ -111,6 +111,74 @@ func main() {}
 	if txt, ok := res.Contents[0].(mcp.TextResourceContents); !ok || !strings.Contains(txt.Text, "GET /api/v1/hello/{name}: hello") {
 		t.Fatalf("llms.txt: %+v", res.Contents)
 	}
+
+}
+
+// TestAgentDocs covers lidza_api, lidza://api and the recipe prompts on a
+// project that depends on a local checkout of the framework.
+func TestAgentDocs(t *testing.T) {
+	dir := t.TempDir()
+	root, _ := filepath.Abs("../..")
+	os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module demo\n\ngo 1.27\n\nrequire github.com/agim/lidza v0.0.0\n\nreplace github.com/agim/lidza => "+root+"\n"), 0o644)
+	os.MkdirAll(filepath.Join(dir, "docs"), 0o755)
+	os.WriteFile(filepath.Join(dir, "docs", "lidza-guide.md"), []byte("# Guide\n\n## Recipes\n\n### Add an API route\n\nExpose an operation.\n\n1. Declare the shapes.\n"), 0o644)
+	c, err := client.NewInProcessClient(New(dir, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	if err := c.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	if _, err := c.Initialize(ctx, mcp.InitializeRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	call := func(name string, args map[string]any) string {
+		t.Helper()
+		req := mcp.CallToolRequest{}
+		req.Params.Name = name
+		req.Params.Arguments = args
+		res, err := c.CallTool(ctx, req)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if res.IsError {
+			t.Fatalf("%s: tool error: %s", name, mcp.GetTextFromContent(res.Content[0]))
+		}
+		return mcp.GetTextFromContent(res.Content[0])
+	}
+	if got := call("lidza_api", map[string]any{"package": "pkg/router", "filter": "notfound"}); !strings.Contains(got, "func NotFound(") || strings.Contains(got, "func Route[") {
+		t.Fatalf("lidza_api: %s", got)
+	}
+	res, err := c.ReadResource(ctx, mcp.ReadResourceRequest{Params: mcp.ReadResourceParams{URI: "lidza://api/packs/auth"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if txt, ok := res.Contents[0].(mcp.TextResourceContents); !ok || !strings.Contains(txt.Text, "func Require(") {
+		t.Fatalf("lidza://api/packs/auth: %+v", res.Contents)
+	}
+	req := mcp.CallToolRequest{}
+	req.Params.Name = "lidza_api"
+	req.Params.Arguments = map[string]any{"package": "pkg/orm"}
+	if r, err := c.CallTool(ctx, req); err != nil || !r.IsError || !strings.Contains(mcp.GetTextFromContent(r.Content[0]), "no package") {
+		t.Fatalf("missing package: %v %+v", err, r)
+	}
+
+	prompts, err := c.ListPrompts(ctx, mcp.ListPromptsRequest{})
+	if err != nil || len(prompts.Prompts) != 1 || prompts.Prompts[0].Name != "add-api-route" || prompts.Prompts[0].Description != "Expose an operation." {
+		t.Fatalf("prompts: %v %+v", err, prompts)
+	}
+	pr := mcp.GetPromptRequest{}
+	pr.Params.Name = "add-api-route"
+	pr.Params.Arguments = map[string]string{"task": "POST /api/v1/things"}
+	got, err := c.GetPrompt(ctx, pr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if text := mcp.GetTextFromContent(got.Messages[0].Content); !strings.HasPrefix(text, "# Add an API route\n\nExpose an operation.\n\n1. Declare the shapes.") || !strings.HasSuffix(text, "Task: POST /api/v1/things") {
+		t.Fatalf("prompt: %q", text)
+	}
 }
 
 func TestTail(t *testing.T) {

@@ -22,6 +22,7 @@ import (
 
 	"github.com/agim/lidza/pkg/config"
 	"github.com/agim/lidza/pkg/pack"
+	"github.com/agim/lidza/pkg/recipes"
 	"github.com/agim/lidza/pkg/schema"
 	"github.com/agim/lidza/templates"
 )
@@ -113,16 +114,28 @@ func New(ctx context.Context, opt Options) error {
 		{"routes.go.tmpl", "routes.go"},
 		{"routes_test.go.tmpl", "routes_test.go"},
 		{"tools.go.tmpl", "tools.go"},
-		{"agent.md.tmpl", "CLAUDE.md"},
-		{"agent.md.tmpl", "AGENTS.md"},
-		{"agent.md.tmpl", "GEMINI.md"},
-		{"lidza-guide.md.tmpl", filepath.Join("docs", "lidza-guide.md")},
+		{"lidza-guide.md.tmpl", filepath.FromSlash(recipes.GuideFile)},
 		{"mcp.json.tmpl", ".mcp.json"},
 		{"gemini-settings.json.tmpl", filepath.Join(".gemini", "settings.json")},
 		{"schema.lidza.tmpl", schema.FileName},
 		{"scale_test.js.tmpl", filepath.Join("benchmarks", "scale_test.js")},
 	} {
 		if err := render(f.src, filepath.Join(opt.Dir, f.dst), data); err != nil {
+			return err
+		}
+	}
+	// The guide's recipes become skills, and the agent files list them.
+	rs, err := recipes.Sync(opt.Dir)
+	if err != nil {
+		return err
+	}
+	var names []string
+	for _, r := range rs {
+		names = append(names, "`"+r.Name+"`")
+	}
+	data.Recipes = strings.Join(names, ", ")
+	for _, dst := range []string{"CLAUDE.md", "AGENTS.md", "GEMINI.md"} {
+		if err := render("agent.md.tmpl", filepath.Join(opt.Dir, dst), data); err != nil {
 			return err
 		}
 	}
@@ -147,6 +160,8 @@ func New(ctx context.Context, opt Options) error {
 
 type templateData struct {
 	Name, Module, LidzaDir, Template, Dist, DevCmd, DevURL, Go string
+	// Recipes is the comma-separated list of recipe names from the guide.
+	Recipes string
 }
 
 func render(src, dst string, data templateData) error {

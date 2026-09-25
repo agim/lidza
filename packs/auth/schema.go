@@ -7,6 +7,8 @@ const SessionTable = `CREATE TABLE IF NOT EXISTS auth_session (
   id text PRIMARY KEY,
   subject text NOT NULL,
   refresh_hash text NOT NULL UNIQUE,
+  prev_refresh_hash text,
+  rotated_at timestamptz,
   expires_at timestamptz NOT NULL,
   revoked_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now()

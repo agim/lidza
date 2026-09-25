@@ -16,7 +16,7 @@ backed by Postgres. Needs the `db` pack (`lidza pack add db`).
      id        uuid     @id @default(uuid())
      title     string   @min(1) @max(200)
      body      string?
-     createdAt datetime @default(now())
+     createdAt time     @default(now())
    }
    ```
 

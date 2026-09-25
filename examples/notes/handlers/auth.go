@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -20,10 +21,16 @@ import (
 // uniqueViolation is Postgres' code for a duplicate key.
 const uniqueViolation = "23505"
 
+// normalizeEmail is how an address is stored and looked up: lowercased
+// and trimmed, so a user signs in however they capitalize it.
+func normalizeEmail(email string) string { return strings.ToLower(strings.TrimSpace(email)) }
+
 // send mails one of the templates in mail/ through the mail pack: the
 // outbox keeps a copy (tests read it), the configured provider delivers.
-func send(ctx context.Context, to, subject, template, link string) error {
-	_, err := mail.From(ctx).Send(ctx, mail.Message{To: to, Subject: subject, Template: template, Data: map[string]string{"App": "notes", "Link": link}})
+// The link is a path of this app; Link makes it absolute with APP_URL.
+func send(ctx context.Context, to, subject, template, path string) error {
+	m := mail.From(ctx)
+	_, err := m.Send(ctx, mail.Message{To: to, Subject: subject, Template: template, Data: map[string]string{"App": "notes", "Link": m.Link(path)}})
 	return err
 }
 
@@ -38,7 +45,7 @@ func Register(ctx context.Context, req *router.Request[schema.Credentials]) (sch
 	if err != nil {
 		return schema.Session{}, err
 	}
-	user, err := queries.New(db.From(ctx)).CreateUser(ctx, queries.CreateUserParams{Email: req.Body.Email, PasswordHash: hash})
+	user, err := queries.New(db.From(ctx)).CreateUser(ctx, queries.CreateUserParams{Email: normalizeEmail(req.Body.Email), PasswordHash: hash})
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == uniqueViolation {
 		return schema.Session{}, router.Errorf(http.StatusConflict, "email already registered")
@@ -72,7 +79,7 @@ func VerifyEmail(ctx context.Context, req *router.Request[schema.VerifyEmail]) (
 // ForgotPassword sends a reset link when the email is registered, and
 // replies 204 either way so the reply does not reveal who is registered.
 func ForgotPassword(ctx context.Context, req *router.Request[schema.ForgotPassword]) (router.None, error) {
-	user, err := queries.New(db.From(ctx)).GetUserByEmail(ctx, req.Body.Email)
+	user, err := queries.New(db.From(ctx)).GetUserByEmail(ctx, normalizeEmail(req.Body.Email))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return router.None{}, nil
 	}
@@ -114,7 +121,7 @@ func ResetPassword(ctx context.Context, req *router.Request[schema.ResetPassword
 // Login checks the password and opens a session. The reply does not say
 // which of the two was wrong.
 func Login(ctx context.Context, req *router.Request[schema.Credentials]) (schema.Session, error) {
-	user, err := queries.New(db.From(ctx)).GetUserByEmail(ctx, req.Body.Email)
+	user, err := queries.New(db.From(ctx)).GetUserByEmail(ctx, normalizeEmail(req.Body.Email))
 	if errors.Is(err, pgx.ErrNoRows) || (err == nil && !auth.CheckPassword(user.PasswordHash, req.Body.Password)) {
 		return schema.Session{}, router.Errorf(http.StatusUnauthorized, "wrong email or password")
 	}
@@ -125,9 +132,11 @@ func Login(ctx context.Context, req *router.Request[schema.Credentials]) (schema
 }
 
 // signIn opens the session: HttpOnly cookies for browsers, and the access
-// token in the reply for clients that send it as a bearer token.
+// token in the reply for clients that send it as a bearer token. The
+// session slides: the auth pack renews an expired access cookie from the
+// refresh cookie on any request, so no refresh route is needed.
 func signIn[In any](ctx context.Context, req *router.Request[In], user queries.AppUser) (schema.Session, error) {
-	tokens, err := auth.From(ctx).Login(ctx, user.ID, map[string]any{"email": user.Email, "verified": user.VerifiedAt != nil})
+	tokens, err := auth.From(ctx).Login(ctx, user.ID, map[string]any{"email": user.Email})
 	if err != nil {
 		return schema.Session{}, err
 	}
@@ -144,20 +153,31 @@ func CurrentSession(ctx context.Context, req *router.Request[router.None]) (sche
 	if u == nil {
 		return schema.SessionState{}, nil
 	}
-	session := sessionOf(u)
+	session, err := sessionOf(ctx, u.ID)
+	if err != nil {
+		return schema.SessionState{}, err
+	}
 	return schema.SessionState{User: &session}, nil
 }
 
-// sessionOf reads the session claims set at login.
-func sessionOf(u *auth.User) schema.Session {
-	email, _ := u.Claims["email"].(string)
-	verified, _ := u.Claims["verified"].(bool)
-	return schema.Session{UserID: u.ID, Email: email, Verified: verified}
+// sessionOf reads the user from the database, not from the claims set at
+// login: the verified flag is current the moment the emailed link is
+// used, and a session renewed by the auth pack reads the same. An
+// account deleted since login is a 401.
+func sessionOf(ctx context.Context, userID string) (schema.Session, error) {
+	user, err := queries.New(db.From(ctx)).GetUser(ctx, userID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return schema.Session{}, router.Errorf(http.StatusUnauthorized, "account no longer exists")
+	}
+	if err != nil {
+		return schema.Session{}, err
+	}
+	return schema.Session{UserID: user.ID, Email: user.Email, Verified: user.VerifiedAt != nil}, nil
 }
 
 // Me returns the signed-in user; auth.Require() put them in the context.
 func Me(ctx context.Context, req *router.Request[router.None]) (schema.Session, error) {
-	return sessionOf(auth.CurrentUser(ctx)), nil
+	return sessionOf(ctx, auth.CurrentUser(ctx).ID)
 }
 
 // Logout revokes the session and clears the cookies.

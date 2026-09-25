@@ -367,3 +367,31 @@ func mustParse(src string) *Schema {
 	}
 	return s
 }
+
+func TestRefOnDelete(t *testing.T) {
+	s, err := Parse(`model Project {
+  id uuid @id
+}
+model Task {
+  id         uuid  @id
+  projectId  uuid  @ref(Project, cascade)
+  assigneeId uuid? @ref(Project, setnull)
+}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ddl := GenerateSQL(s)
+	for _, want := range []string{"REFERENCES project(id) ON DELETE CASCADE", "REFERENCES project(id) ON DELETE SET NULL"} {
+		if !strings.Contains(ddl, want) {
+			t.Errorf("DDL lacks %s:\n%s", want, ddl)
+		}
+	}
+	for _, bad := range []string{
+		"model Project {\n  id uuid @id\n}\nmodel Task {\n  id uuid @id\n  projectId uuid @ref(Project, setnull)\n}",
+		"model Project {\n  id uuid @id\n}\nmodel Task {\n  id uuid @id\n  projectId uuid @ref(Project, drop)\n}",
+	} {
+		if _, err := Parse(bad); err == nil {
+			t.Errorf("accepted:\n%s", bad)
+		}
+	}
+}

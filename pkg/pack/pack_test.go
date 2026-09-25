@@ -154,12 +154,15 @@ func TestOfficialGo(t *testing.T) {
 func TestSyncFragments(t *testing.T) {
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "schema.lidza"), []byte("type Greeting {\n  message string\n}\n\n// Types of the auth pack.\nmodel AuthSession @table(\"auth_session\") {\n  id string @id\n  subject string\n  refreshHash string @unique\n  expiresAt time\n  createdAt time @default(now())\n}\n"), 0o644)
+	// AuthSession is there but behind the pack's current declaration (no
+	// prevRefreshHash): it is updated in place; AuthToken is added.
 	added, err := SyncFragments(dir, []string{"lidza/db", "lidza/auth"})
-	if err != nil || strings.Join(added, ",") != "AuthToken" {
-		t.Fatalf("added %v, %v", added, err)
+	if err != nil || strings.Join(added, ",") != "AuthSession,AuthToken" {
+		t.Fatalf("synced %v, %v", added, err)
 	}
 	src, _ := os.ReadFile(filepath.Join(dir, "schema.lidza"))
-	if !strings.Contains(string(src), "model AuthToken @table(\"auth_token\")") || strings.Count(string(src), "model AuthSession") != 1 {
+	if !strings.Contains(string(src), "model AuthToken @table(\"auth_token\")") || strings.Count(string(src), "model AuthSession") != 1 ||
+		!strings.Contains(string(src), "prevRefreshHash") || !strings.HasPrefix(string(src), "type Greeting {") {
 		t.Fatalf("schema:\n%s", src)
 	}
 	if again, err := SyncFragments(dir, []string{"lidza/auth"}); err != nil || again != nil {

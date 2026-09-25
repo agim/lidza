@@ -2,6 +2,8 @@ model AuthSession @table("auth_session") {
   id          string @id
   subject     string @index
   refreshHash string @unique
+  prevRefreshHash string?
+  rotatedAt   time?
   expiresAt   time
   revokedAt   time?
   createdAt   time   @default(now())

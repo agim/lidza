@@ -55,9 +55,10 @@ type Job struct {
 
 // Queue is the running pack.
 type Queue struct {
-	cfg  Config
-	pool *pgxpool.Pool
-	log  *slog.Logger
+	cfg      Config
+	pool     *pgxpool.Pool
+	log      *slog.Logger
+	services *lidza.Services
 
 	mu       sync.RWMutex
 	handlers map[string]Handler
@@ -121,10 +122,16 @@ func (q *Queue) Start(ctx context.Context, s *lidza.Services) error {
 		return errors.New("jobs needs the db pack: list \"lidza/db\" before \"lidza/jobs\" in lidza.json")
 	}
 	q.pool = pool.(*pgxpool.Pool)
+	q.services = s
 	lidza.Provide(s, q)
 	q.Run()
 	return nil
 }
+
+// WithServices makes the packs reachable from job handlers (db.From,
+// mail.From, ...) the way they are from request handlers. Start does it;
+// a Queue built with New for a test calls it with the test's services.
+func (q *Queue) WithServices(s *lidza.Services) { q.services = s }
 
 // Run starts the workers; Start does it, tests call it directly.
 func (q *Queue) Run() {
@@ -154,8 +161,10 @@ func (q *Queue) Stop(ctx context.Context) error {
 	}
 }
 
-// Handle registers the handler for a kind. Register at OnStart; jobs of
-// kinds without a handler stay pending for a node that has one.
+// Handle registers the handler for a kind. Register in onStart (start.go:
+// jobs.FromServices(s).Handle(kind, fn)); jobs of kinds without a handler
+// stay pending for a node that has one. The handler's context carries
+// the packs, so db.From(ctx) and mail.From(ctx) work inside it.
 func (q *Queue) Handle(kind string, h Handler) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -179,6 +188,22 @@ func MaxAttempts(n int) Option { return func(e *enqueue) { e.maxAttempts = n } }
 
 // Enqueue stores a job and returns its id. payload is encoded as JSON.
 func (q *Queue) Enqueue(ctx context.Context, kind string, payload any, opts ...Option) (string, error) {
+	return q.enqueue(ctx, q.pool, kind, payload, opts...)
+}
+
+// EnqueueTx is Enqueue inside the caller's transaction: the job row is
+// committed or rolled back with the handler's own writes, so a job is
+// never queued for a write that did not happen, and never lost after one
+// that did.
+func (q *Queue) EnqueueTx(ctx context.Context, tx pgx.Tx, kind string, payload any, opts ...Option) (string, error) {
+	return q.enqueue(ctx, tx, kind, payload, opts...)
+}
+
+type rowQuerier interface {
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
+func (q *Queue) enqueue(ctx context.Context, db rowQuerier, kind string, payload any, opts ...Option) (string, error) {
 	e := enqueue{runAt: time.Now(), maxAttempts: q.cfg.MaxAttempts}
 	for _, o := range opts {
 		o(&e)
@@ -188,7 +213,7 @@ func (q *Queue) Enqueue(ctx context.Context, kind string, payload any, opts ...O
 		return "", err
 	}
 	var id string
-	err = q.pool.QueryRow(ctx, `INSERT INTO job (kind, payload, run_at, max_attempts) VALUES ($1, $2, $3, $4) RETURNING id`,
+	err = db.QueryRow(ctx, `INSERT INTO job (kind, payload, run_at, max_attempts) VALUES ($1, $2, $3, $4) RETURNING id`,
 		kind, data, e.runAt, e.maxAttempts).Scan(&id)
 	if err != nil {
 		return "", fmt.Errorf("jobs: enqueue: %w", err)
@@ -253,6 +278,9 @@ func (q *Queue) runOne(ctx context.Context) (bool, error) {
 	defer q.active.Add(-1)
 	jctx, cancel := context.WithTimeout(ctx, q.cfg.Timeout)
 	defer cancel()
+	if q.services != nil {
+		jctx = lidza.WithServices(jctx, q.services)
+	}
 	runErr := safeRun(jctx, handlers[j.Kind], j.Payload)
 	if runErr == nil {
 		q.done.Add(1)

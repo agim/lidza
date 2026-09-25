@@ -210,7 +210,21 @@ func (p *parser) field(line string) (*Field, error) {
 		case "default":
 			f.Default = arg
 		case "ref":
-			f.Ref = arg
+			refArgs := fields(arg)
+			if len(refArgs) > 0 {
+				f.Ref = refArgs[0]
+			}
+			if len(refArgs) > 1 {
+				switch refArgs[1] {
+				case "cascade", "setnull":
+					f.OnDelete = refArgs[1]
+				default:
+					return nil, fmt.Errorf("line %d: %s: @ref(%s, %s): the second argument is cascade or setnull", p.i, f.Name, refArgs[0], refArgs[1])
+				}
+			}
+			if len(refArgs) > 2 {
+				return nil, fmt.Errorf("line %d: %s: @ref takes a model and optionally cascade or setnull", p.i, f.Name)
+			}
 		case "min":
 			f.Min, err = num(arg)
 		case "max":

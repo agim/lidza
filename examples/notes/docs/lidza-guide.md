@@ -232,7 +232,7 @@ backed by Postgres. Needs the `db` pack (`lidza pack add db`).
      id        uuid     @id @default(uuid())
      title     string   @min(1) @max(200)
      body      string?
-     createdAt datetime @default(now())
+     createdAt time     @default(now())
    }
    ```
 
@@ -249,6 +249,40 @@ backed by Postgres. Needs the `db` pack (`lidza pack add db`).
    `resource-handlers` scopes every query to the signed-in user).
    Regenerate with `--force` to reset it.
 5. `lidza check`, then `lidza test`.
+
+### Scope a query to the signed-in user
+
+Make a resource answer only with the rows its user may see: the
+generated handlers are unscoped, and a row another user may not read is
+a 404, never a 403 (the reply must not confirm it exists).
+
+1. Mount the routes behind `auth.Require()` and take the user from the
+   context: `user := auth.CurrentUser(ctx).ID` (never from the body; drop
+   `ownerId` from the `Create` and `Update` types the generator wrote).
+2. Owned rows: add `AND owner_id = $N` to every statement in
+   `db/queries/<table>.sql` (list, count, get, update, delete) and pass
+   the user; set `owner_id` from the user on create. The snippets
+   `queries` and `resource-handlers` are this case.
+3. Shared rows (a team, a project): keep a membership table
+   (`Membership { projectId @ref(Project, cascade), userId @ref(User,
+   cascade), role }` with `@@unique(projectId, userId)`) and join on it:
+
+   ```sql
+   -- name: GetTask :one
+   SELECT t.* FROM task t JOIN membership m ON m.project_id = t.project_id
+   WHERE t.id = sqlc.arg('id') AND m.user_id = sqlc.arg('user_id');
+   ```
+
+   Lists and creates that take the parent id from the path check it
+   first with one helper (`requireMember(ctx, projectID)` in
+   `handlers/access.go`: a membership lookup, 404 when absent, 403 for a
+   role that may read but not do this). Qualify columns (`t.id`) in an
+   `UPDATE ... WHERE id IN (SELECT ...)`, or sqlc reports them ambiguous.
+4. Reply `router.NotFound("task")` on `pgx.ErrNoRows` and on zero rows
+   affected.
+5. Test it: a second user lists nothing and gets 404 on the first user's
+   id; a member of the project sees the row. `lidza check`, then
+   `lidza test`.
 
 ### Add a page
 
@@ -334,19 +368,90 @@ mail pack, never through a vendor SDK.
    ```go
    _, err := mail.From(ctx).Send(ctx, mail.Message{
    	To: user.Email, Subject: "Verify your email", Template: "verify",
-   	Data: map[string]string{"Link": link},
+   	Data: map[string]string{"Link": mail.From(ctx).Link("/verify?token=" + token)},
    })
    ```
 
-   Send returns once the row is in the outbox (queued for the jobs pack,
-   or delivered right away without it). Do not build the message with
-   `fmt.Sprintf` and do not call the vendor's API.
-4. Test it: `mail.From(lidza.WithServices(ctx, srv.Services)).Outbox(ctx, 5)`
-   returns the messages, newest first, with `Status`, `Text` and `HTML`;
-   read the link out of the text. The snippet `auth-handlers` and
-   `routes_test.go` in the reference app show both sides.
+   `Link` makes the path absolute with `APP_URL` (`.env`: the address
+   the app is reached at from an inbox), so the link works outside the
+   outbox. Send returns once the row is in the outbox (queued for the
+   jobs pack, or delivered right away without it). Do not build the
+   message with `fmt.Sprintf` and do not call the vendor's API.
+4. Test it: `mail.From(srv.Context()).WaitFor(ctx, to, "Verify", 5*time.Second)`
+   returns the newest message to that address whose subject contains the
+   text, waiting for one a job sends; `Outbox(ctx, 5)` lists them newest
+   first. Both have `Status`, `Text` and `HTML`; read the link out of the
+   text. The snippet `auth-handlers` and `routes_test.go` in the
+   reference app show both sides.
 5. `lidza check`, then `lidza test`. In dev, `lidza_mail` (MCP) shows the
    outbox.
+
+### Add a background job
+
+Do work outside the request (send a notification, resize an upload, call
+a slow API) through the jobs pack: the request enqueues, a worker runs
+the handler later with retries, on this node or another.
+
+1. `lidza pack add jobs` (MCP: `lidza_pack_add`; after `db`).
+2. Declare the payload in `schema.lidza` (`type NotifyTask { taskId uuid
+   actorId uuid }`) so both sides share it.
+3. Write the handler, `func NotifyTask(ctx context.Context, payload
+   json.RawMessage) error` in `handlers/notify.go`: decode the payload,
+   read the current state by id (the job runs after the request, so the
+   row may have changed or gone), do the work. The context carries the
+   packs: `db.From(ctx)`, `mail.From(ctx)`, `realtime.From(ctx)` work as
+   in a request handler. Return an error to retry (backoff, up to
+   `JOBS_MAX_ATTEMPTS`).
+4. Register it in `start.go`:
+
+   ```go
+   jobs.FromServices(s).Handle("notify.task", handlers.NotifyTask)
+   ```
+
+5. Enqueue from the handler that caused it: `jobs.From(ctx).Enqueue(ctx,
+   "notify.task", schema.NotifyTask{...})`, or inside a transaction
+   `EnqueueTx(ctx, tx, ...)` so the job is committed with the write and
+   never runs for one that rolled back. `jobs.RunAt(t)` schedules. Never
+   do the work in the request as a fallback.
+6. Test it: the job runs a moment after the reply. For mail,
+   `mail.From(srv.Context()).WaitFor(...)`; otherwise poll
+   `jobs.From(srv.Context()).Get(ctx, id)` until `State` is `done`.
+7. `lidza check`, then `lidza test`.
+
+### Publish live updates
+
+Let every open page of a resource see a change without reloading,
+through the realtime pack: handlers publish on a topic after a write,
+the page subscribes and refetches.
+
+1. `lidza pack add realtime` (MCP: `lidza_pack_add`). More than one
+   node needs `REALTIME_BUS_URL` (Valkey) so a publish on one reaches
+   the sockets on the others.
+2. Name topics by resource, `project:<id>`, in one function both sides
+   use.
+3. Mount the socket behind auth and authorize each topic; without
+   `Authorize`, any signed-in user can subscribe to any topic:
+
+   ```go
+   live := realtime.Handler(realtime.Authorize(func(r *http.Request, topic string) bool {
+   	id, ok := strings.CutPrefix(topic, "project:")
+   	return ok && isMember(r.Context(), id, auth.CurrentUser(r.Context()).ID)
+   }))
+   r.Group("/api/v1/realtime", auth.Require()).Handle("GET /api/v1/realtime", live)
+   ```
+
+4. Publish after the write is committed, ids and an event name only:
+   `realtime.From(ctx).Publish(ctx, topic, schema.Change{Kind: "task.moved",
+   ID: task.ID})`. The page refetches through the API, which enforces
+   access; the row itself never travels over the socket.
+5. In the page, key the queries by the topic and call `useLive([topic])`
+   (`src/live.ts`): every message invalidates the queries whose key
+   starts with it.
+6. Test it in Go: `websocket.Dial` (`github.com/coder/websocket`, already
+   a dependency) with `lidzatest.Bearer`'s header on
+   `ws://.../api/v1/realtime?topics=...`, make the change through the
+   API, read one message. A signed-out dial must be refused.
+7. `lidza check`, then `lidza test`.
 
 ### Add a recipe
 
@@ -402,16 +507,6 @@ browser test.
 This app's own conventions, one recipe each; the framework never edits
 this section. Add one with `lidza recipe add "Title"` or by hand (see
 "Add a recipe").
-
-### Scope a query to the signed-in user
-
-Every query over a user's rows (notes, and anything owned) takes the owner id from the session, so one user never sees another's data; the generated resource handlers are adjusted this way.
-
-1. Take the owner from the request: `owner := auth.CurrentUser(ctx).ID` (the route runs behind `auth.Require()`, so it is never nil).
-2. Add `AND owner_id = $N` to every statement of the resource in `db/queries/<table>.sql` (list, count, get, update, delete) and pass the owner in the sqlc params; `db/queries/note.sql` is the pattern.
-3. Reply 404, not 403, for another user's row: `router.NotFound("note")` on `pgx.ErrNoRows` and on zero rows affected, as `handlers/note.go` does.
-4. Cover it in `routes_test.go`: a second user lists nothing and gets 404 on the first user's id.
-5. `lidza check`, then `lidza test`.
 
 ## Packs
 

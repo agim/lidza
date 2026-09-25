@@ -9,12 +9,14 @@ import (
 
 // AuthSession is a row of the auth_session table.
 type AuthSession struct {
-	ID          string     `json:"id" db:"id"`
-	Subject     string     `json:"subject" db:"subject"`
-	RefreshHash string     `json:"refreshHash" db:"refresh_hash"`
-	ExpiresAt   time.Time  `json:"expiresAt" db:"expires_at"`
-	RevokedAt   *time.Time `json:"revokedAt" db:"revoked_at"`
-	CreatedAt   time.Time  `json:"createdAt" db:"created_at"`
+	ID              string     `json:"id" db:"id"`
+	Subject         string     `json:"subject" db:"subject"`
+	RefreshHash     string     `json:"refreshHash" db:"refresh_hash"`
+	PrevRefreshHash *string    `json:"prevRefreshHash" db:"prev_refresh_hash"`
+	RotatedAt       *time.Time `json:"rotatedAt" db:"rotated_at"`
+	ExpiresAt       time.Time  `json:"expiresAt" db:"expires_at"`
+	RevokedAt       *time.Time `json:"revokedAt" db:"revoked_at"`
+	CreatedAt       time.Time  `json:"createdAt" db:"created_at"`
 }
 
 // Validate applies the rules of AuthSession from schema.lidza.

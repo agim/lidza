@@ -17,17 +17,21 @@ mail pack, never through a vendor SDK.
    ```go
    _, err := mail.From(ctx).Send(ctx, mail.Message{
    	To: user.Email, Subject: "Verify your email", Template: "verify",
-   	Data: map[string]string{"Link": link},
+   	Data: map[string]string{"Link": mail.From(ctx).Link("/verify?token=" + token)},
    })
    ```
 
-   Send returns once the row is in the outbox (queued for the jobs pack,
-   or delivered right away without it). Do not build the message with
-   `fmt.Sprintf` and do not call the vendor's API.
-4. Test it: `mail.From(lidza.WithServices(ctx, srv.Services)).Outbox(ctx, 5)`
-   returns the messages, newest first, with `Status`, `Text` and `HTML`;
-   read the link out of the text. The snippet `auth-handlers` and
-   `routes_test.go` in the reference app show both sides.
+   `Link` makes the path absolute with `APP_URL` (`.env`: the address
+   the app is reached at from an inbox), so the link works outside the
+   outbox. Send returns once the row is in the outbox (queued for the
+   jobs pack, or delivered right away without it). Do not build the
+   message with `fmt.Sprintf` and do not call the vendor's API.
+4. Test it: `mail.From(srv.Context()).WaitFor(ctx, to, "Verify", 5*time.Second)`
+   returns the newest message to that address whose subject contains the
+   text, waiting for one a job sends; `Outbox(ctx, 5)` lists them newest
+   first. Both have `Status`, `Text` and `HTML`; read the link out of the
+   text. The snippet `auth-handlers` and `routes_test.go` in the
+   reference app show both sides.
 5. `lidza check`, then `lidza test`. In dev, `lidza_mail` (MCP) shows the
    outbox.
 

@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/agim/lidza"
 	"github.com/agim/lidza/packs/db"
 )
 
@@ -115,4 +116,50 @@ func TestQueue(t *testing.T) {
 	if st["done_total"] < 3 || st["failed_total"] != 2 || st["workers"] != 2 {
 		t.Fatalf("stats %v", st)
 	}
+}
+
+// TestServicesAndTx: a handler reaches the packs through its context, and
+// a job enqueued in a rolled-back transaction never runs.
+func TestServicesAndTx(t *testing.T) {
+	q := testQueue(t, 1)
+	s := lidza.NewServices()
+	lidza.Provide(s, q)
+	q.WithServices(s)
+	q.Run()
+	t.Cleanup(func() { q.Stop(context.Background()) })
+	var sawQueue atomic.Bool
+	q.Handle("probe", func(ctx context.Context, _ json.RawMessage) error {
+		sawQueue.Store(lidza.Service[*Queue](ctx) == q)
+		return nil
+	})
+	ctx := context.Background()
+	id, err := q.Enqueue(ctx, "probe", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitState(t, q, id, "done")
+	if !sawQueue.Load() {
+		t.Fatal("handler context has no services")
+	}
+	tx, err := q.pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lost, err := q.EnqueueTx(ctx, tx, "probe", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tx.Rollback(ctx)
+	if _, err := q.Get(ctx, lost); err == nil {
+		t.Fatal("job enqueued in a rolled-back transaction exists")
+	}
+	tx, _ = q.pool.Begin(ctx)
+	kept, err := q.EnqueueTx(ctx, tx, "probe", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	waitState(t, q, kept, "done")
 }

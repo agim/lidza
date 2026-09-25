@@ -147,17 +147,31 @@ func (a *Auth) Login(ctx context.Context, subject string, claims map[string]any)
 	return a.tokens(subject, claims, sessionID, refresh)
 }
 
+// RefreshGrace is how long the refresh token a Refresh just replaced
+// keeps working: requests a browser sent in parallel with an expired
+// access token all carry the old refresh cookie, and the first one to
+// arrive rotates it. Within the grace the others get a new access token
+// only (Tokens.Refresh empty); the session is not rotated again.
+const RefreshGrace = time.Minute
+
 // Refresh rotates a session: the refresh token is replaced, a new access
-// token issued. A revoked or expired session fails.
+// token issued. A revoked or expired session fails. The token Refresh
+// replaced stays valid for RefreshGrace, for an access token only.
 func (a *Auth) Refresh(ctx context.Context, refreshToken string, claims map[string]any) (Tokens, error) {
 	var sessionID, subject string
-	err := a.pool.QueryRow(ctx, `SELECT id, subject FROM auth_session WHERE refresh_hash = $1 AND revoked_at IS NULL AND expires_at > now()`,
-		hashToken(refreshToken)).Scan(&sessionID, &subject)
+	var current bool
+	err := a.pool.QueryRow(ctx, `SELECT id, subject, refresh_hash = $1 FROM auth_session
+		WHERE (refresh_hash = $1 OR (prev_refresh_hash = $1 AND rotated_at > now() - $2::interval))
+		AND revoked_at IS NULL AND expires_at > now()`,
+		hashToken(refreshToken), fmt.Sprintf("%d seconds", int(RefreshGrace.Seconds()))).Scan(&sessionID, &subject, &current)
 	if err != nil {
 		return Tokens{}, router.Errorf(http.StatusUnauthorized, "session expired")
 	}
+	if !current {
+		return a.tokens(subject, claims, sessionID, "")
+	}
 	refresh := randomID()
-	if _, err := a.pool.Exec(ctx, `UPDATE auth_session SET refresh_hash = $1 WHERE id = $2`, hashToken(refresh), sessionID); err != nil {
+	if _, err := a.pool.Exec(ctx, `UPDATE auth_session SET prev_refresh_hash = refresh_hash, rotated_at = now(), refresh_hash = $1 WHERE id = $2`, hashToken(refresh), sessionID); err != nil {
 		return Tokens{}, err
 	}
 	return a.tokens(subject, claims, sessionID, refresh)
@@ -313,12 +327,20 @@ func (a *Auth) Verify(token string) (*User, error) {
 }
 
 // Cookies returns the tokens as HttpOnly cookies for a browser client;
-// a typed handler adds them with req.SetCookie.
+// a typed handler adds them with req.SetCookie. The access cookie lives
+// as long as the session, not the token: once the token inside expires,
+// Require and Optional renew it from the refresh cookie and set both
+// again (sessions slide; no refresh route or client code is needed).
+// A Tokens without Refresh (a Refresh inside RefreshGrace) sets the
+// access cookie only.
 func (a *Auth) Cookies(t Tokens) []*http.Cookie {
-	return []*http.Cookie{
-		{Name: AccessCookie, Value: t.Access, Path: "/", HttpOnly: true, Secure: a.cfg.CookieSecure, SameSite: http.SameSiteLaxMode, MaxAge: int(a.cfg.AccessTTL.Seconds())},
-		{Name: RefreshCookie, Value: t.Refresh, Path: "/api/v1/auth", HttpOnly: true, Secure: a.cfg.CookieSecure, SameSite: http.SameSiteStrictMode, MaxAge: int(a.cfg.RefreshTTL.Seconds())},
+	cookies := []*http.Cookie{
+		{Name: AccessCookie, Value: t.Access, Path: "/", HttpOnly: true, Secure: a.cfg.CookieSecure, SameSite: http.SameSiteLaxMode, MaxAge: int(a.cfg.RefreshTTL.Seconds())},
 	}
+	if t.Refresh != "" {
+		cookies = append(cookies, &http.Cookie{Name: RefreshCookie, Value: t.Refresh, Path: "/", HttpOnly: true, Secure: a.cfg.CookieSecure, SameSite: http.SameSiteStrictMode, MaxAge: int(a.cfg.RefreshTTL.Seconds())})
+	}
+	return cookies
 }
 
 // SetCookies writes the token cookies on a raw ResponseWriter.
@@ -332,6 +354,8 @@ func (a *Auth) SetCookies(w http.ResponseWriter, t Tokens) {
 func ClearedCookies() []*http.Cookie {
 	return []*http.Cookie{
 		{Name: AccessCookie, Value: "", Path: "/", HttpOnly: true, MaxAge: -1},
+		{Name: RefreshCookie, Value: "", Path: "/", HttpOnly: true, MaxAge: -1},
+		// The refresh cookie's path before v0.1.3.
 		{Name: RefreshCookie, Value: "", Path: "/api/v1/auth", HttpOnly: true, MaxAge: -1},
 	}
 }
@@ -368,6 +392,24 @@ func guard(required bool) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			a := From(r.Context())
 			token, fromCookie := bearer(r)
+			var u *User
+			var err error
+			if token != "" {
+				u, err = a.Verify(token)
+			}
+			// A browser whose access token is missing or expired but whose
+			// refresh cookie is valid gets a new one on this request: the
+			// session slides without a refresh route. Bearer clients refresh
+			// explicitly.
+			if u == nil && (token == "" || fromCookie) {
+				if c, cerr := r.Cookie(RefreshCookie); cerr == nil && c.Value != "" {
+					if renewed, rerr := a.Refresh(r.Context(), c.Value, a.expiredClaims(token)); rerr == nil {
+						a.SetCookies(w, renewed)
+						token, fromCookie = renewed.Access, true
+						u, err = a.Verify(token)
+					}
+				}
+			}
 			if token == "" {
 				if required {
 					router.Error(w, http.StatusUnauthorized, "authentication required")
@@ -376,7 +418,6 @@ func guard(required bool) func(http.Handler) http.Handler {
 				next.ServeHTTP(w, r)
 				return
 			}
-			u, err := a.Verify(token)
 			if err != nil {
 				router.Error(w, http.StatusUnauthorized, "invalid or expired token")
 				return
@@ -393,6 +434,27 @@ func guard(required bool) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), userKey{}, u)))
 		})
 	}
+}
+
+// expiredClaims returns the app claims of an access token whose signature
+// is valid but whose time is up, so a renewed token carries them on; nil
+// for no token or a bad one.
+func (a *Auth) expiredClaims(token string) map[string]any {
+	if token == "" {
+		return nil
+	}
+	parsed, err := jwt.Parse(token, func(t *jwt.Token) (any, error) {
+		if t.Method.Alg() != jwt.SigningMethodHS256.Alg() {
+			return nil, errors.New("unexpected signing method")
+		}
+		return []byte(a.cfg.Secret), nil
+	}, jwt.WithoutClaimsValidation())
+	if err != nil {
+		return nil
+	}
+	mc, _ := parsed.Claims.(jwt.MapClaims)
+	app, _ := mc["app"].(map[string]any)
+	return app
 }
 
 // sessionActive reports whether the session behind an access token is

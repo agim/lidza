@@ -26,8 +26,13 @@ func runTest(ctx context.Context, args []string) error {
 	dir := fs.String("dir", ".", "project directory")
 	e2e := fs.Bool("e2e", false, "build the binary, start it with .env.test and run the Playwright suite (e2e/) instead of the Go tests")
 	install := fs.Bool("install", false, "with --e2e: install the browser when it is missing")
+	verbose := fs.Bool("v", false, "go test -v: every test by name as it runs")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	extra := fs.Args()
+	if *verbose {
+		extra = append([]string{"-v"}, extra...)
 	}
 	abs, cfg, err := loadProject(*dir)
 	if err != nil {
@@ -38,14 +43,14 @@ func runTest(ctx context.Context, args []string) error {
 		if cfg == nil {
 			return errors.New("test --e2e needs a lidza.json project")
 		}
-		return runE2E(ctx, abs, cfg, *install, fs.Args())
+		return runE2E(ctx, abs, cfg, *install, extra)
 	}
 	if cfg != nil {
 		if err := generateAll(abs, cfg, os.Stdout); err != nil {
 			return err
 		}
 	}
-	if err := goTest(ctx, abs, cfg, fs.Args(), os.Stdout); err != nil {
+	if err := goTest(ctx, abs, cfg, extra, os.Stdout); err != nil {
 		return err
 	}
 	if cfg != nil && cfg.Frontend.Dist != "" {

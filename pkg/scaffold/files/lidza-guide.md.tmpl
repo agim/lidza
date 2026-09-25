@@ -15,6 +15,7 @@ app is always at one address: http://127.0.0.1:3000.
 ```
 {{.Name}}/
 ├── main.go          entrypoint: lidza.Run(...). Do not edit.
+├── start.go         onStart: register job handlers, provide services; the app's hook.
 ├── routes.go        API handlers. Add routes here (or in packages it calls).
 ├── schema.lidza     data shapes: models (tables), types (API shapes), enums
 ├── schema/          generated Go structs with Validate(). Do not edit.
@@ -50,7 +51,7 @@ app is always at one address: http://127.0.0.1:3000.
 | `lidza context` | writes `.lidza/context.json`: routes, handler signatures, Rust exports. |
 | `lidza mcp` | MCP server on stdio; see "Agent interface". |
 | `lidza gen resource <Model>` | queries, `Create/Update/<Model>List` types, `handlers/<table>.go` with list, get, create, patch, delete under `/api/v1/<plural>`, registered in `routes.go`. Needs the `db` pack. |
-| `lidza pack add <name>` | enables an official pack: `db`, `auth`, `jobs`, `cache`, `i18n`, `realtime`, `geo`, `media`. |
+| `lidza pack add <name>` | enables an official pack: `db`, `auth`, `jobs`, `mail`, `cache`, `i18n`, `realtime`, `analytics`, `geo`, `media`. |
 | `lidza test [go test flags]` | creates and migrates the `.env.test` database, runs `go test ./...` with `LIDZA_MODE=test`, then the frontend check. |
 | `lidza test --e2e [--install]` | builds the app, starts the binary with `.env.test`, runs the Playwright suite in `e2e/`; `--install` fetches the browser when missing. |
 | `lidza setup [--packs db,auth,mail] [--agent claude]` | on an existing app: enables the packs (db added when one needs it), writes `.env` from `.env.example` with a random `AUTH_SECRET` and the app's database, writes `.env.test`, generates, creates and migrates the dev and test databases, installs `node_modules`, installs the agent CLI when asked, makes the first commit. `lidza new --packs ...` runs it for a new app. Rerunning is safe. |
@@ -171,9 +172,20 @@ instead of `time.Now()` and `lidza.HTTPClient(ctx)` instead of
 `lidzatest.Start(t, app(), lidzatest.WithRecorder("name"))` replays
 `testdata/http/name.json`, recorded once with `LIDZA_RECORD=1 lidza test`.
 
+Call a pack from the test as a handler would with `srv.Context()`:
+`mail.From(srv.Context()).WaitFor(ctx, to, subject, 5*time.Second)` waits
+for a message a job sends; `jobs.From(srv.Context()).Get` reads a job.
+A test acting as several users passes each one's token with
+`lidzatest.Bearer(token)`; the server's client keeps the cookies of the
+last sign-in. `lidza test -v` (MCP: `lidza_test` with `verbose`) lists
+every test as it runs.
+
 Browser tests live in `e2e/*.spec.ts` (Playwright); `lidza test --e2e`
 runs them against the built binary. If the browser is missing the command
-prints the install line; `lidza test --e2e --install` runs it.
+prints the install line; `lidza test --e2e --install` runs it (`lidza
+setup` installs it up front). Locate by role and accessible name, and
+pass `exact: true` when one name is a prefix of another ("Comment" and
+"Comments", a card and its "Move ... to Done" button).
 
 ## Recipes
 
@@ -245,7 +257,7 @@ backed by Postgres. Needs the `db` pack (`lidza pack add db`).
      id        uuid     @id @default(uuid())
      title     string   @min(1) @max(200)
      body      string?
-     createdAt datetime @default(now())
+     createdAt time     @default(now())
    }
    ```
 
@@ -262,6 +274,40 @@ backed by Postgres. Needs the `db` pack (`lidza pack add db`).
    `resource-handlers` scopes every query to the signed-in user).
    Regenerate with `--force` to reset it.
 5. `lidza check`, then `lidza test`.
+
+### Scope a query to the signed-in user
+
+Make a resource answer only with the rows its user may see: the
+generated handlers are unscoped, and a row another user may not read is
+a 404, never a 403 (the reply must not confirm it exists).
+
+1. Mount the routes behind `auth.Require()` and take the user from the
+   context: `user := auth.CurrentUser(ctx).ID` (never from the body; drop
+   `ownerId` from the `Create` and `Update` types the generator wrote).
+2. Owned rows: add `AND owner_id = $N` to every statement in
+   `db/queries/<table>.sql` (list, count, get, update, delete) and pass
+   the user; set `owner_id` from the user on create. The snippets
+   `queries` and `resource-handlers` are this case.
+3. Shared rows (a team, a project): keep a membership table
+   (`Membership { projectId @ref(Project, cascade), userId @ref(User,
+   cascade), role }` with `@@unique(projectId, userId)`) and join on it:
+
+   ```sql
+   -- name: GetTask :one
+   SELECT t.* FROM task t JOIN membership m ON m.project_id = t.project_id
+   WHERE t.id = sqlc.arg('id') AND m.user_id = sqlc.arg('user_id');
+   ```
+
+   Lists and creates that take the parent id from the path check it
+   first with one helper (`requireMember(ctx, projectID)` in
+   `handlers/access.go`: a membership lookup, 404 when absent, 403 for a
+   role that may read but not do this). Qualify columns (`t.id`) in an
+   `UPDATE ... WHERE id IN (SELECT ...)`, or sqlc reports them ambiguous.
+4. Reply `router.NotFound("task")` on `pgx.ErrNoRows` and on zero rows
+   affected.
+5. Test it: a second user lists nothing and gets 404 on the first user's
+   id; a member of the project sees the row. `lidza check`, then
+   `lidza test`.
 {{- if .Dist}}
 
 ### Add a page
@@ -349,19 +395,95 @@ mail pack, never through a vendor SDK.
    ```go
    _, err := mail.From(ctx).Send(ctx, mail.Message{
    	To: user.Email, Subject: "Verify your email", Template: "verify",
-   	Data: map[string]string{"Link": link},
+   	Data: map[string]string{"Link": mail.From(ctx).Link("/verify?token=" + token)},
    })
    ```
 
-   Send returns once the row is in the outbox (queued for the jobs pack,
-   or delivered right away without it). Do not build the message with
-   `fmt.Sprintf` and do not call the vendor's API.
-4. Test it: `mail.From(lidza.WithServices(ctx, srv.Services)).Outbox(ctx, 5)`
-   returns the messages, newest first, with `Status`, `Text` and `HTML`;
-   read the link out of the text. The snippet `auth-handlers` and
-   `routes_test.go` in the reference app show both sides.
+   `Link` makes the path absolute with `APP_URL` (`.env`: the address
+   the app is reached at from an inbox), so the link works outside the
+   outbox. Send returns once the row is in the outbox (queued for the
+   jobs pack, or delivered right away without it). Do not build the
+   message with `fmt.Sprintf` and do not call the vendor's API.
+4. Test it: `mail.From(srv.Context()).WaitFor(ctx, to, "Verify", 5*time.Second)`
+   returns the newest message to that address whose subject contains the
+   text, waiting for one a job sends; `Outbox(ctx, 5)` lists them newest
+   first. Both have `Status`, `Text` and `HTML`; read the link out of the
+   text. The snippet `auth-handlers` and `routes_test.go` in the
+   reference app show both sides.
 5. `lidza check`, then `lidza test`. In dev, `lidza_mail` (MCP) shows the
    outbox.
+
+### Add a background job
+
+Do work outside the request (send a notification, resize an upload, call
+a slow API) through the jobs pack: the request enqueues, a worker runs
+the handler later with retries, on this node or another.
+
+1. `lidza pack add jobs` (MCP: `lidza_pack_add`; after `db`).
+2. Declare the payload in `schema.lidza` (`type NotifyTask { taskId uuid
+   actorId uuid }`) so both sides share it.
+3. Write the handler, `func NotifyTask(ctx context.Context, payload
+   json.RawMessage) error` in `handlers/notify.go`: decode the payload,
+   read the current state by id (the job runs after the request, so the
+   row may have changed or gone), do the work. The context carries the
+   packs: `db.From(ctx)`, `mail.From(ctx)`, `realtime.From(ctx)` work as
+   in a request handler. Return an error to retry (backoff, up to
+   `JOBS_MAX_ATTEMPTS`).
+4. Register it in `start.go`:
+
+   ```go
+   jobs.FromServices(s).Handle("notify.task", handlers.NotifyTask)
+   ```
+
+5. Enqueue from the handler that caused it: `jobs.From(ctx).Enqueue(ctx,
+   "notify.task", schema.NotifyTask{...})`, or inside a transaction
+   `EnqueueTx(ctx, tx, ...)` so the job is committed with the write and
+   never runs for one that rolled back. `jobs.RunAt(t)` schedules. Never
+   do the work in the request as a fallback.
+6. Test it: the job runs a moment after the reply. For mail,
+   `mail.From(srv.Context()).WaitFor(...)`; otherwise poll
+   `jobs.From(srv.Context()).Get(ctx, id)` until `State` is `done`.
+7. `lidza check`, then `lidza test`.
+
+### Publish live updates
+
+Let every open page of a resource see a change without reloading,
+through the realtime pack: handlers publish on a topic after a write,
+the page subscribes and refetches.
+
+1. `lidza pack add realtime` (MCP: `lidza_pack_add`). More than one
+   node needs `REALTIME_BUS_URL` (Valkey) so a publish on one reaches
+   the sockets on the others.
+2. Name topics by resource, `project:<id>`, in one function both sides
+   use.
+3. Mount the socket behind auth and authorize each topic; without
+   `Authorize`, any signed-in user can subscribe to any topic:
+
+   ```go
+   live := realtime.Handler(realtime.Authorize(func(r *http.Request, topic string) bool {
+   	id, ok := strings.CutPrefix(topic, "project:")
+   	return ok && isMember(r.Context(), id, auth.CurrentUser(r.Context()).ID)
+   }))
+   r.Group("/api/v1/realtime", auth.Require()).Handle("GET /api/v1/realtime", live)
+   ```
+
+4. Publish after the write is committed, ids and an event name only:
+   `realtime.From(ctx).Publish(ctx, topic, schema.Change{Kind: "task.moved",
+   ID: task.ID})`. The page refetches through the API, which enforces
+   access; the row itself never travels over the socket.
+{{- if eq .Template "react"}}
+5. In the page, key the queries by the topic and call `useLive([topic])`
+   (`src/live.ts`): every message invalidates the queries whose key
+   starts with it.
+{{- else}}
+5. In the page, open `/api/v1/realtime?topics=<topic>` and refetch on
+   each message.
+{{- end}}
+6. Test it in Go: `websocket.Dial` (`github.com/coder/websocket`, already
+   a dependency) with `lidzatest.Bearer`'s header on
+   `ws://.../api/v1/realtime?topics=...`, make the change through the
+   API, read one message. A signed-out dial must be refused.
+7. `lidza check`, then `lidza test`.
 
 ### Add a recipe
 
@@ -501,7 +623,14 @@ Official Go packs, configured from `.env` (see `.env.example` after
   `g := r.Group("/api/v1/notes", auth.Require())` and read
   `auth.CurrentUser(ctx)`; `auth.Optional()` for a route that serves
   visitors too (the user is nil then). Logout:
-  `auth.From(ctx).Logout(ctx, user.SessionID)`. Hardening: wrap the
+  `auth.From(ctx).Logout(ctx, user.SessionID)`. Sessions slide: when
+  a browser's access token has expired, `Require` and `Optional` renew
+  it from the refresh cookie on that request and set both cookies again,
+  so a tab stays signed in for `AUTH_REFRESH_TTL` without a refresh
+  route or client code; a bearer client refreshes through a route of the
+  app that calls `auth.From(ctx).Refresh`. Read what changes after login
+  (a verified flag, a role) from the database, not from the token's
+  claims, which are what they were at login. Hardening: wrap the
   credential routes with `auth.Throttle()` (per-client rate limit,
   `AUTH_LOGIN_RPS`), refuse weak passwords with
   `auth.From(ctx).ValidatePassword(password, email)` (length, common
@@ -510,9 +639,12 @@ Official Go packs, configured from `.env` (see `.env.example` after
   email, 0)` makes the token the app mails, `ConsumeToken` redeems it
   once; `RevokeAll` after a reset. Working code: the snippets `routes`
   and `auth-handlers`.
-- `jobs`: register handlers in `OnStart` with
+- `jobs`: register handlers in `start.go` (`onStart`) with
   `jobs.FromServices(s).Handle("kind", fn)`; enqueue with
-  `jobs.From(ctx).Enqueue(ctx, "kind", payload, jobs.RunAt(t))`.
+  `jobs.From(ctx).Enqueue(ctx, "kind", payload, jobs.RunAt(t))`, or
+  `EnqueueTx(ctx, tx, ...)` inside a transaction. The handler's context
+  carries the packs (`db.From(ctx)`, `mail.From(ctx)`). Recipe: "Add a
+  background job".
 - `cache`: `cache.Remember(ctx, cache.From(ctx), "key", ttl, load)`;
   `cache.From(ctx).Invalidate(ctx, "prefix:")` after writes.
 - `i18n`: `i18n.From(ctx).T(ctx, "key", args...)`, `Number`, `Currency`,
@@ -522,14 +654,19 @@ Official Go packs, configured from `.env` (see `.env.example` after
   `r.Handle("GET /api/v1/i18n/{lang}", i18n.Handler())`. Store and send
   times in UTC; format at the edge.
 - `realtime`: `realtime.From(ctx).Publish(ctx, topic, value)` and
-  `r.Handle("GET /api/v1/realtime", realtime.Handler())`.
+  `r.Handle("GET /api/v1/realtime", realtime.Handler(realtime.Authorize(fn)))`
+  behind `auth.Require()`; `fn(r, topic)` decides per topic, and without
+  it every topic is open to every connection. Recipe: "Publish live
+  updates".
 - `mail`: `mail.From(ctx).Send(ctx, mail.Message{To, Subject, Template:
   "verify", Data: data})` renders `mail/verify.txt.tmpl` and
-  `mail/verify.html.tmpl` (Go templates over `Data`) and delivers through
+  `mail/verify.html.tmpl` (Go templates over `Data`; links through
+  `mail.From(ctx).Link(path)`, absolute with `APP_URL`) and delivers through
   `MAIL_PROVIDER` (`mailgun`, `sendgrid`, `postmark`, `resend`, `smtp`;
   `log` by default, `outbox` in tests). With the `db` pack every message
-  is a row in `mail_message` (`Outbox(ctx, n)`, the MCP tool
-  `lidza_mail`); with the `jobs` pack delivery runs as a job with
+  is a row in `mail_message` (`Outbox(ctx, n)`, `WaitFor(ctx, to,
+  subject, timeout)` in tests, the MCP tool `lidza_mail`); with the
+  `jobs` pack delivery runs as a job with
   retries. Never import a vendor SDK (`lidza check` L006).
 - `analytics` (opt-in): server errors are captured on their own; register
   `r.Handle("POST /api/v1/analytics/{kind}", analytics.Handler())`, set
@@ -548,7 +685,19 @@ the `lidza_client` Dart package there with the same operations as
 
 ## Models and migrations
 
-A `model` in `schema.lidza` is a table. `lidza gen` writes the full DDL to
+A `model` in `schema.lidza` is a table; a `type` is an API shape only;
+an `enum Status { todo doing done }` is a Postgres enum type and a string
+union in the clients. Field types: `string`, `text`, `int`, `bigint`,
+`float`, `bool`, `time`, `date`, `uuid`, `json`, `bytes`; `?` makes a
+field optional (nullable), `[]` an array. Field attributes: `@id`,
+`@default(uuid())` / `@default(now())` / `@default(value)`, `@unique`,
+`@index`, `@ref(Model)` for a foreign key (`@ref(Model, cascade)` deletes
+the row with the referenced one, `@ref(Model, setnull)` clears an
+optional field), `@min(n)` / `@max(n)` (length or value), `@email`,
+`@url`, `@pattern("re")`. Block attributes inside a model:
+`@@unique(a, b)`, `@@index(a, b)`; `@table("name")` after the model name.
+
+`lidza gen` writes the full DDL to
 `db/schema.sql` and, when models changed since `db/schema.lock.json`, a
 numbered pair in `db/migrations/` (`NNNN_name.up.sql`, `.down.sql`).
 Statements that lose data or can fail on existing rows carry a

@@ -217,7 +217,7 @@ func TestInaccessibleElement(t *testing.T) {
 }
 
 func TestGuidanceSurfaces(t *testing.T) {
-	for _, skill := range []string{"add-api-route", "add-resource", "add-page", "add-pack-capability", "add-mcp-tool", "send-email", "add-recipe", "write-test"} {
+	for _, skill := range []string{"add-api-route", "add-resource", "scope-query-to-signed-in-user", "add-page", "add-pack-capability", "add-mcp-tool", "send-email", "add-background-job", "publish-live-updates", "add-recipe", "write-test"} {
 		for _, p := range []string{filepath.Join(".claude", "skills", skill, "SKILL.md"), filepath.Join(".agents", "skills", skill, "SKILL.md"), filepath.Join(".gemini", "commands", "lidza", skill+".toml")} {
 			if _, err := os.Stat(filepath.Join(app, p)); err != nil {
 				t.Errorf("%s missing", p)
@@ -234,6 +234,12 @@ func TestGuidanceSurfaces(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(app, ".githooks", "pre-commit")); err != nil {
 		t.Error("pre-commit hook missing")
+	}
+	// The app owns its start hook; main.go stays generated.
+	start, _ := os.ReadFile(filepath.Join(app, "start.go"))
+	mainGo, _ := os.ReadFile(filepath.Join(app, "main.go"))
+	if !strings.Contains(string(start), "func onStart(") || !strings.Contains(string(mainGo), "OnStart: onStart") {
+		t.Error("start.go with onStart, wired in main.go, missing")
 	}
 	out, err := command(app, lidza, "api", "pkg/router", "--filter", "Route")
 	if err != nil || !strings.Contains(string(out), "func Route[In, Out any](") {
@@ -266,7 +272,7 @@ func TestGuidanceSurfaces(t *testing.T) {
 		t.Fatal(err)
 	}
 	prompts, err := c.ListPrompts(ctx, mcp.ListPromptsRequest{})
-	if err != nil || len(prompts.Prompts) != 8 {
+	if err != nil || len(prompts.Prompts) != 11 {
 		t.Errorf("prompts: %v %d", err, len(prompts.Prompts))
 	}
 	tools, err := c.ListTools(ctx, mcp.ListToolsRequest{})

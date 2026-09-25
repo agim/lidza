@@ -8,6 +8,32 @@ pin, tags and pushes.
 
 ## Unreleased
 
+Lessons from the first app built by an agent on v0.1.2 (a team task
+tracker): every gap it worked around by hand is closed here.
+
+- `auth`: sessions slide. `Require` and `Optional` renew an expired
+  access cookie from the refresh cookie on the request itself, claims
+  carried over, and set both cookies again; a refresh token just
+  replaced keeps working for a minute for requests in flight
+  (`prevRefreshHash`, `rotatedAt` on `AuthSession`: `lidza gen` writes
+  the migration). The refresh cookie's path is `/`; logout clears the
+  old path too. No refresh route or client code is needed.
+- `jobs`: a handler's context carries the packs (`db.From(ctx)`,
+  `mail.From(ctx)`); `EnqueueTx` queues inside the caller's transaction.
+- `realtime`: `Handler(realtime.Authorize(fn))` decides per topic who
+  may subscribe.
+- `mail`: `Link(path)` makes links absolute with `APP_URL`; `WaitFor`
+  finds a message in the outbox for tests, waiting for one a job sends.
+- `schema.lidza`: `@ref(Model, cascade)` and `@ref(Model, setnull)`.
+- Apps own a start hook: `start.go` with `onStart`, wired in `main.go`
+  by `lidza new`, where job handlers are registered.
+- `lidzatest.Server.Context()`: a context with the app's services.
+- `lidza test -v` and `lidza_test` `verbose`; `lidza setup` installs the
+  browser for the e2e suite.
+- Guide: recipes "Scope a query to the signed-in user" (ownership and
+  membership), "Add a background job", "Publish live updates"; a
+  reference of schema types and attributes; sessions, links, `WaitFor`,
+  `exact: true` locators. The reference app follows all of it.
 - `scripts/release.sh`, a test that the installer's pin is the newest
   release in this file, and a CI job on tags that installs the tag.
 

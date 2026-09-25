@@ -101,6 +101,13 @@ func Start(t testing.TB, app lidza.App, opts ...StartOption) *Server {
 	return s
 }
 
+// Context returns a context carrying the app's services, for calling a
+// pack from the test the way a handler does: mail.From(srv.Context()),
+// jobs.From(srv.Context()).
+func (s *Server) Context() context.Context {
+	return lidza.WithServices(context.Background(), s.Services)
+}
+
 // Client is an HTTP client with a cookie jar, so cookie sessions persist
 // across calls.
 func (s *Server) Client() *http.Client { return s.client }

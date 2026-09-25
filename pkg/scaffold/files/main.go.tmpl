@@ -26,8 +26,9 @@ func app() lidza.App {
 {{- if eq .Template "htmx"}}
 		Frontend: pages(),
 {{- end}}
-		Routes: routes,
-		Packs:  packs(),
-		Tools:  tools(),
+		Routes:  routes,
+		Packs:   packs(),
+		Tools:   tools(),
+		OnStart: onStart,
 	}
 }

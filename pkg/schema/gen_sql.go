@@ -85,7 +85,14 @@ func columnDef(s *Schema, f *Field) string {
 	}
 	if f.Ref != "" {
 		target := s.Model(f.Ref)
-		parts = append(parts, fmt.Sprintf("REFERENCES %s(%s)", qid(target.Table), col(target.IDField())))
+		ref := fmt.Sprintf("REFERENCES %s(%s)", qid(target.Table), col(target.IDField()))
+		switch f.OnDelete {
+		case "cascade":
+			ref += " ON DELETE CASCADE"
+		case "setnull":
+			ref += " ON DELETE SET NULL"
+		}
+		parts = append(parts, ref)
 	}
 	return strings.Join(parts, " ")
 }

@@ -52,6 +52,10 @@ type Config struct {
 	TemplatesDir string `env:"MAIL_TEMPLATES" default:"mail"`
 	// MaxAttempts bounds delivery retries through the jobs pack.
 	MaxAttempts int `env:"MAIL_MAX_ATTEMPTS" default:"5"`
+	// AppURL is where the app is reached from an inbox
+	// (https://app.example.com); Link puts it in front of a path. Empty
+	// keeps links relative, which only the outbox can follow.
+	AppURL string `env:"APP_URL"`
 }
 
 // Message is what Send takes. Text and HTML are the bodies; Template
@@ -164,6 +168,17 @@ func (m *Mail) Stop(context.Context) error { return nil }
 
 // Provider names the configured provider.
 func (m *Mail) Provider() string { return m.cfg.Provider }
+
+// Link returns an absolute URL for a path of this app (APP_URL plus the
+// path), for the links in a message; the path alone when APP_URL is not
+// set.
+func (m *Mail) Link(path string) string {
+	base := strings.TrimRight(m.cfg.AppURL, "/")
+	if base == "" {
+		return path
+	}
+	return base + "/" + strings.TrimLeft(path, "/")
+}
 
 // Send sends a message. With the outbox (db pack) it returns the row id:
 // the message is queued for the jobs pack when it runs, delivered before
@@ -340,6 +355,33 @@ func (m *Mail) Outbox(ctx context.Context, limit int) ([]Stored, error) {
 		return nil, errors.New("mail: no outbox (the db pack is not enabled)")
 	}
 	return Recent(ctx, m.pool, limit)
+}
+
+// WaitFor polls the outbox for the newest message to an address whose
+// subject contains subject, for tests of mail sent by a job (it lands a
+// moment after the request that caused it); a message sent in the
+// request itself is found at once.
+func (m *Mail) WaitFor(ctx context.Context, to, subject string, timeout time.Duration) (Stored, error) {
+	deadline := time.Now().Add(timeout)
+	for {
+		rows, err := m.Outbox(ctx, 50)
+		if err != nil {
+			return Stored{}, err
+		}
+		for _, row := range rows {
+			if strings.EqualFold(row.To, to) && strings.Contains(row.Subject, subject) {
+				return row, nil
+			}
+		}
+		if time.Now().After(deadline) {
+			return Stored{}, fmt.Errorf("mail: no message to %s with subject %q within %s", to, subject, timeout)
+		}
+		select {
+		case <-ctx.Done():
+			return Stored{}, ctx.Err()
+		case <-time.After(50 * time.Millisecond):
+		}
+	}
 }
 
 // Recent reads the outbox with a pool, newest first.

@@ -145,6 +145,7 @@ var Officials = []Official{
 			"# lidza/mail (list lidza/db and lidza/jobs before it for the outbox and background delivery)",
 			"MAIL_PROVIDER=log          # log | outbox | smtp | mailgun | sendgrid | postmark | resend",
 			"MAIL_FROM=\"App <app@example.com>\"",
+			"APP_URL=http://127.0.0.1:3000   # where links in emails point (mail.From(ctx).Link(path))",
 			"# MAIL_API_KEY=            # mailgun, sendgrid, postmark, resend",
 			"# MAIL_DOMAIN=example.com  # mailgun",
 			"# MAIL_BASE_URL=https://api.eu.mailgun.net   # a provider's regional API",
@@ -279,7 +280,11 @@ func SyncFragments(root string, packs []string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	var added []string
+	have := map[string]schemaBlock{}
+	for _, b := range schemaBlocks(string(existing)) {
+		have[b.name] = b
+	}
+	var synced []string
 	out := string(existing)
 	for _, entry := range packs {
 		name := strings.TrimPrefix(entry, OfficialPrefix)
@@ -289,19 +294,38 @@ func SyncFragments(root string, packs []string) ([]string, error) {
 		}
 		for _, block := range schemaBlocks(string(fragment)) {
 			if cur.Model(block.name) != nil || cur.Enum(block.name) != nil {
+				// The pack's declaration is the pack's: when a release changes
+				// it (a column added), the app's copy follows and lidza gen
+				// writes the migration.
+				if old, ok := have[block.name]; ok && declaration(old.text) != declaration(block.text) {
+					out = strings.Replace(out, old.text, block.text, 1)
+					synced = append(synced, block.name)
+				}
 				continue
 			}
 			if !strings.HasSuffix(out, "\n") {
 				out += "\n"
 			}
 			out += "\n" + block.text + "\n"
-			added = append(added, block.name)
+			synced = append(synced, block.name)
 		}
 	}
-	if len(added) == 0 {
+	if len(synced) == 0 {
 		return nil, nil
 	}
-	return added, os.WriteFile(p, []byte(out), 0o644)
+	return synced, os.WriteFile(p, []byte(out), 0o644)
+}
+
+// declaration is a block without its comments and spacing, for comparing
+// what it declares.
+func declaration(text string) string {
+	var parts []string
+	for _, line := range strings.Split(text, "\n") {
+		if t := strings.TrimSpace(line); t != "" && !strings.HasPrefix(t, "//") {
+			parts = append(parts, strings.Join(strings.Fields(t), " "))
+		}
+	}
+	return strings.Join(parts, "\n")
 }
 
 type schemaBlock struct{ name, text string }

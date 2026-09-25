@@ -30,10 +30,11 @@ type Snippet struct {
 var Index = []Snippet{
 	{"schema", "schema.lidza", "Models, API types with rules, optional fields, and the types the auth routes reply with."},
 	{"routes", "routes.go", "Public routes; a group behind auth.Optional() for a page that serves visitors too; groups behind auth.Require(); a resource mounted on a group."},
-	{"auth-handlers", "handlers/auth.go", "Register, login, logout and the session route: password hashing, HttpOnly cookies plus a bearer token, 409 on a taken email, 401 on a wrong password."},
+	{"auth-handlers", "handlers/auth.go", "Register, login, logout, email verification and password reset, and the session route read from the database: password hashing, HttpOnly cookies plus a bearer token (the auth pack renews them), normalized emails, links through mail.Link, 409 on a taken email, 401 on a wrong password."},
+	{"start", "start.go", "The app's start hook (onStart, wired in main.go): where job handlers are registered with jobs.FromServices(s).Handle and services are provided."},
 	{"resource-handlers", "handlers/note.go", "The handlers `lidza gen resource` writes, scoped to the signed-in user: list, get, create, patch, delete with 404 for another user's rows."},
 	{"queries", "db/queries/note.sql", "sqlc queries for an owned resource: owner checks on every statement, COALESCE with sqlc.narg for a partial update, :execrows for delete."},
-	{"handler-test", "routes_test.go", "A Go test with lidzatest.Start: cookies carried across calls, a bearer token, and the expected 401, 409, 422 and 404 replies."},
+	{"handler-test", "routes_test.go", "A Go test with lidzatest.Start: cookies carried across calls, a bearer token, mail read from the outbox with WaitFor and srv.Context(), and the expected 401, 409, 422 and 404 replies."},
 	{"mcp-tool", "tools.go", "An app MCP tool (lidza.ToolFunc) that queries the database through the db pack."},
 	{"mail-template", "mail/verify.txt.tmpl", "A mail template (Go text/template over the Data of mail.Message); the html variant sits next to it. handlers/auth.go sends it through the mail pack."},
 	{"pack-capability", "packs/stats/rust/src/lib.rs", "A Rust pack capability (lidza_export!) over types from schema.lidza: one CPU pass over user text, no I/O; the handler noteStats in resource-handlers calls it through the generated wrapper."},

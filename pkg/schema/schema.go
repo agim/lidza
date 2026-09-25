@@ -78,14 +78,18 @@ type Field struct {
 	Index    bool
 	// Default is the literal as written: 42, true, "x", draft, uuid(), now().
 	Default string
-	// Ref is the model a uuid field references.
-	Ref     string
-	Min     *float64
-	Max     *float64
-	Email   bool
-	URL     bool
-	Pattern string
-	Line    int
+	// Ref is the model a uuid field references; OnDelete is what happens
+	// to the row when the referenced one is deleted: "cascade" (delete
+	// it), "setnull" (clear the field; it must be optional) or "" (the
+	// delete fails while the row exists).
+	Ref      string
+	OnDelete string
+	Min      *float64
+	Max      *float64
+	Email    bool
+	URL      bool
+	Pattern  string
+	Line     int
 }
 
 // Index is a block-level @@index or @@unique.
@@ -178,6 +182,9 @@ func (s *Schema) validate() error {
 				target := s.Model(f.Ref)
 				if target == nil || !target.Persisted {
 					return fmt.Errorf("line %d: %s.%s: @ref(%s) is not a model", f.Line, m.Name, f.Name, f.Ref)
+				}
+				if f.OnDelete == "setnull" && !f.Optional {
+					return fmt.Errorf("line %d: %s.%s: @ref(%s, setnull) needs an optional field (%s?)", f.Line, m.Name, f.Name, f.Ref, f.Type)
 				}
 				if f.Type != "uuid" {
 					return fmt.Errorf("line %d: %s.%s: @ref needs type uuid", f.Line, m.Name, f.Name)

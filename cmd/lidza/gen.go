@@ -84,7 +84,7 @@ func generateAll(dir string, cfg *config.Config, out io.Writer) error {
 			return fmt.Errorf("pack schemas: %w", err)
 		}
 		if len(added) > 0 {
-			fmt.Fprintf(out, "[lidza] schema.lidza: added %s from the packs' schemas\n", strings.Join(added, ", "))
+			fmt.Fprintf(out, "[lidza] schema.lidza: %s synced from the packs' schemas\n", strings.Join(added, ", "))
 		}
 	}
 	if err := generateSchema(dir, out); err != nil {

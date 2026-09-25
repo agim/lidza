@@ -17,12 +17,14 @@ type AppUser struct {
 }
 
 type AuthSession struct {
-	ID          string     `json:"id"`
-	Subject     string     `json:"subject"`
-	RefreshHash string     `json:"refresh_hash"`
-	ExpiresAt   time.Time  `json:"expires_at"`
-	RevokedAt   *time.Time `json:"revoked_at"`
-	CreatedAt   time.Time  `json:"created_at"`
+	ID              string     `json:"id"`
+	Subject         string     `json:"subject"`
+	RefreshHash     string     `json:"refresh_hash"`
+	PrevRefreshHash *string    `json:"prev_refresh_hash"`
+	RotatedAt       *time.Time `json:"rotated_at"`
+	ExpiresAt       time.Time  `json:"expires_at"`
+	RevokedAt       *time.Time `json:"revoked_at"`
+	CreatedAt       time.Time  `json:"created_at"`
 }
 
 type AuthToken struct {

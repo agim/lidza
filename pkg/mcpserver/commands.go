@@ -160,6 +160,7 @@ func addCommandTools(s *server.MCPServer, dir string, cfg *config.Config) {
 			mcp.WithBoolean("e2e", mcp.Description("Build the app and run the Playwright suite instead of the Go tests.")),
 			mcp.WithBoolean("install", mcp.Description("With e2e: install the browser when it is missing.")),
 			mcp.WithString("run", mcp.Description("Only Go tests matching this regexp (go test -run).")),
+			mcp.WithBoolean("verbose", mcp.Description("Every Go test by name as it runs (go test -v): proof that a test ran, not only that the package passed.")),
 		}, 20 * time.Minute, false, true, func(req mcp.CallToolRequest) ([]string, error) {
 			args := []string{"test"}
 			if req.GetBool("e2e", false) {
@@ -167,7 +168,12 @@ func addCommandTools(s *server.MCPServer, dir string, cfg *config.Config) {
 				if req.GetBool("install", false) {
 					args = append(args, "--install")
 				}
-			} else if run := req.GetString("run", ""); run != "" {
+				return args, nil
+			}
+			if req.GetBool("verbose", false) {
+				args = append(args, "-v")
+			}
+			if run := req.GetString("run", ""); run != "" {
 				args = append(args, "-run", run)
 			}
 			return args, nil

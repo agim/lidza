@@ -11,3 +11,6 @@ UPDATE app_user SET verified_at = now() WHERE email = $1 AND verified_at IS NULL
 
 -- name: SetPassword :execrows
 UPDATE app_user SET password_hash = $2 WHERE email = $1;
+
+-- name: GetUser :one
+SELECT * FROM app_user WHERE id = $1;

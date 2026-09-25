@@ -165,3 +165,40 @@ func TestValkeyBus(t *testing.T) {
 		t.Fatalf("cross-node: %+v", m)
 	}
 }
+
+// TestAuthorize: a refused topic is never delivered, on the query string
+// or a later subscribe; allowed ones are.
+func TestAuthorize(t *testing.T) {
+	h := New(Config{Buffer: 8, WriteTimeout: time.Second}, nil)
+	s := lidza.NewServices()
+	lidza.Provide(s, h)
+	handler := Handler(Authorize(func(r *http.Request, topic string) bool {
+		return r.URL.Query().Get("user") == "u1" && strings.HasPrefix(topic, "public")
+	}))
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handler.ServeHTTP(w, r.WithContext(lidza.WithServices(r.Context(), s)))
+	}))
+	t.Cleanup(srv.Close)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	conn, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(srv.URL, "http")+"/api/v1/realtime?user=u1&topics=public,private", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { conn.CloseNow() })
+	if err := conn.Write(ctx, websocket.MessageText, []byte(`{"subscribe":["private2","public2"]}`)); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) && (h.Subscribers("public2") == 0) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if h.Subscribers("private") != 0 || h.Subscribers("private2") != 0 || h.Subscribers("public") != 1 || h.Subscribers("public2") != 1 {
+		t.Fatalf("subscriptions: private %d private2 %d public %d public2 %d", h.Subscribers("private"), h.Subscribers("private2"), h.Subscribers("public"), h.Subscribers("public2"))
+	}
+	h.Publish(ctx, "private", "secret")
+	h.Publish(ctx, "public2", "hello")
+	if m := read(t, conn); m.Topic != "public2" {
+		t.Fatalf("got %+v, want the public2 message first (private must not arrive)", m)
+	}
+}

@@ -244,19 +244,57 @@ func (h *Hub) unsubscribe(c *client) {
 	h.conns--
 }
 
+// HandlerOption configures Handler.
+type HandlerOption func(*handlerOptions)
+
+type handlerOptions struct {
+	authorize func(r *http.Request, topic string) bool
+}
+
+// Authorize decides per topic whether the connection may subscribe: it
+// runs for every topic in ?topics= and in a later {"subscribe": [...]},
+// with the upgrade request (auth.CurrentUser(r.Context()) is the user
+// when the route sits behind auth.Require()). A refused topic is
+// dropped silently; the connection stays. Without it every topic is
+// open to every connection.
+func Authorize(fn func(r *http.Request, topic string) bool) HandlerOption {
+	return func(o *handlerOptions) { o.authorize = fn }
+}
+
 // Handler returns the WebSocket endpoint. Register it with
 // r.Handle("GET /api/v1/realtime", realtime.Handler()). Clients pass
 // ?topics=a,b and may send {"subscribe":["c"]} later; they receive
 // {"topic":"a","data":...} per message.
-func Handler() http.Handler {
+func Handler(opts ...HandlerOption) http.Handler {
+	var o handlerOptions
+	for _, opt := range opts {
+		opt(&o)
+	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		From(r.Context()).ServeHTTP(w, r)
+		From(r.Context()).serve(w, r, o.authorize)
 	})
 }
 
 // ServeHTTP upgrades the connection and streams messages until the client
-// leaves or the server shuts down.
+// leaves or the server shuts down, every topic open; Handler with
+// Authorize restricts them.
 func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	h.serve(w, r, nil)
+}
+
+func (h *Hub) serve(w http.ResponseWriter, r *http.Request, authorize func(*http.Request, string) bool) {
+	allowed := func(topics []string) []string {
+		if authorize == nil {
+			return topics
+		}
+		var out []string
+		for _, t := range topics {
+			if t != "" && authorize(r, t) {
+				out = append(out, t)
+			}
+		}
+		return out
+	}
 	h.mu.Lock()
 	if h.conns >= h.cfg.MaxConns {
 		h.mu.Unlock()
@@ -274,7 +312,7 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	c := &client{send: make(chan Message, h.cfg.Buffer), topics: map[string]bool{}}
-	h.subscribe(c, strings.Split(r.URL.Query().Get("topics"), ","))
+	h.subscribe(c, allowed(strings.Split(r.URL.Query().Get("topics"), ",")))
 	defer h.unsubscribe(c)
 	ctx := r.Context()
 
@@ -291,7 +329,7 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			if json.Unmarshal(data, &cmd) == nil && len(cmd.Subscribe) > 0 {
-				h.subscribe(c, cmd.Subscribe)
+				h.subscribe(c, allowed(cmd.Subscribe))
 			}
 		}
 	}()

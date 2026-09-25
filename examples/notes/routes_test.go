@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/agim/lidza"
 	"github.com/agim/lidza/packs/mail"
 	"github.com/agim/lidza/pkg/lidzatest"
 
@@ -42,7 +41,7 @@ func TestNotes(t *testing.T) {
 	// every message, newest first.
 	// The table persists across runs, so assertions look at the newest row.
 	outbox := func() []mail.Stored {
-		rows, err := mail.From(lidza.WithServices(context.Background(), srv.Services)).Outbox(context.Background(), 5)
+		rows, err := mail.From(srv.Context()).Outbox(context.Background(), 5)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -54,10 +53,12 @@ func TestNotes(t *testing.T) {
 		}
 		return ""
 	}
+	// linkIn reads the token out of the emailed link; mail.Link made it
+	// absolute when APP_URL is set, so match on the path.
 	linkIn := func(row mail.Stored, prefix string) string {
 		for _, f := range strings.Fields(*row.Text) {
-			if strings.HasPrefix(f, prefix) {
-				return strings.TrimPrefix(f, prefix)
+			if i := strings.Index(f, prefix); i >= 0 {
+				return f[i+len(prefix):]
 			}
 		}
 		t.Fatalf("no %s link in %q", prefix, *row.Text)
@@ -67,11 +68,13 @@ func TestNotes(t *testing.T) {
 	if res := srv.JSON(t, http.MethodPost, "/api/v1/auth/register", creds, &session); res.StatusCode != http.StatusCreated || session.Email != creds.Email || session.AccessToken == "" || session.Verified {
 		t.Fatalf("register: %d %+v", res.StatusCode, session)
 	}
-	mails := outbox()
-	if len(mails) == 0 || mails[0].To != creds.Email || mails[0].Status != mail.StatusSent || mails[0].Template == nil || *mails[0].Template != "verify" {
-		t.Fatalf("verification mail: %+v", mails)
+	// WaitFor finds the message by address and subject, waiting for one a
+	// job sends; this one was written in the request, so it is there.
+	verification, err := mail.From(srv.Context()).WaitFor(context.Background(), creds.Email, "Verify", 5*time.Second)
+	if err != nil || verification.Status != mail.StatusSent || verification.Template == nil || *verification.Template != "verify" {
+		t.Fatalf("verification mail: %+v %v", verification, err)
 	}
-	verifyToken := linkIn(mails[0], "/verify?token=")
+	verifyToken := linkIn(verification, "/verify?token=")
 	if res := srv.JSON(t, http.MethodPost, "/api/v1/auth/verify", schema.VerifyEmail{Token: "nope"}, nil); res.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("bad verify token: %d", res.StatusCode)
 	}

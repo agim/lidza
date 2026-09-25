@@ -15,12 +15,13 @@
           "Index": false,
           "Default": "",
           "Ref": "",
+          "OnDelete": "",
           "Min": null,
           "Max": null,
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 9
+          "Line": 8
         },
         {
           "Name": "subject",
@@ -32,12 +33,13 @@
           "Index": true,
           "Default": "",
           "Ref": "",
+          "OnDelete": "",
           "Min": null,
           "Max": null,
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 10
+          "Line": 9
         },
         {
           "Name": "refreshHash",
@@ -49,12 +51,49 @@
           "Index": false,
           "Default": "",
           "Ref": "",
+          "OnDelete": "",
+          "Min": null,
+          "Max": null,
+          "Email": false,
+          "URL": false,
+          "Pattern": "",
+          "Line": 10
+        },
+        {
+          "Name": "prevRefreshHash",
+          "Type": "string",
+          "Optional": true,
+          "Array": false,
+          "ID": false,
+          "Unique": false,
+          "Index": false,
+          "Default": "",
+          "Ref": "",
+          "OnDelete": "",
           "Min": null,
           "Max": null,
           "Email": false,
           "URL": false,
           "Pattern": "",
           "Line": 11
+        },
+        {
+          "Name": "rotatedAt",
+          "Type": "time",
+          "Optional": true,
+          "Array": false,
+          "ID": false,
+          "Unique": false,
+          "Index": false,
+          "Default": "",
+          "Ref": "",
+          "OnDelete": "",
+          "Min": null,
+          "Max": null,
+          "Email": false,
+          "URL": false,
+          "Pattern": "",
+          "Line": 12
         },
         {
           "Name": "expiresAt",
@@ -66,12 +105,13 @@
           "Index": false,
           "Default": "",
           "Ref": "",
+          "OnDelete": "",
           "Min": null,
           "Max": null,
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 12
+          "Line": 13
         },
         {
           "Name": "revokedAt",
@@ -83,12 +123,13 @@
           "Index": false,
           "Default": "",
           "Ref": "",
+          "OnDelete": "",
           "Min": null,
           "Max": null,
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 13
+          "Line": 14
         },
         {
           "Name": "createdAt",
@@ -100,16 +141,17 @@
           "Index": false,
           "Default": "now()",
           "Ref": "",
+          "OnDelete": "",
           "Min": null,
           "Max": null,
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 14
+          "Line": 15
         }
       ],
       "Indexes": null,
-      "Line": 8,
+      "Line": 7,
       "Persisted": true
     },
     {
@@ -126,12 +168,13 @@
           "Index": false,
           "Default": "uuid()",
           "Ref": "",
+          "OnDelete": "",
           "Min": null,
           "Max": null,
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 20
+          "Line": 21
         },
         {
           "Name": "email",
@@ -143,12 +186,13 @@
           "Index": false,
           "Default": "",
           "Ref": "",
+          "OnDelete": "",
           "Min": 3,
           "Max": 200,
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 21
+          "Line": 22
         },
         {
           "Name": "passwordHash",
@@ -160,12 +204,13 @@
           "Index": false,
           "Default": "",
           "Ref": "",
+          "OnDelete": "",
           "Min": null,
           "Max": null,
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 22
+          "Line": 23
         },
         {
           "Name": "verifiedAt",
@@ -177,12 +222,13 @@
           "Index": false,
           "Default": "",
           "Ref": "",
+          "OnDelete": "",
           "Min": null,
           "Max": null,
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 23
+          "Line": 24
         },
         {
           "Name": "createdAt",
@@ -194,16 +240,17 @@
           "Index": false,
           "Default": "now()",
           "Ref": "",
+          "OnDelete": "",
           "Min": null,
           "Max": null,
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 24
+          "Line": 25
         }
       ],
       "Indexes": null,
-      "Line": 19,
+      "Line": 20,
       "Persisted": true
     },
     {
@@ -220,12 +267,13 @@
           "Index": false,
           "Default": "uuid()",
           "Ref": "",
+          "OnDelete": "",
           "Min": null,
           "Max": null,
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 29
+          "Line": 30
         },
         {
           "Name": "ownerId",
@@ -237,12 +285,13 @@
           "Index": true,
           "Default": "",
           "Ref": "",
+          "OnDelete": "",
           "Min": null,
           "Max": null,
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 30
+          "Line": 31
         },
         {
           "Name": "title",
@@ -254,12 +303,13 @@
           "Index": false,
           "Default": "",
           "Ref": "",
+          "OnDelete": "",
           "Min": 1,
           "Max": 200,
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 31
+          "Line": 32
         },
         {
           "Name": "body",
@@ -271,12 +321,13 @@
           "Index": false,
           "Default": "",
           "Ref": "",
+          "OnDelete": "",
           "Min": null,
           "Max": null,
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 32
+          "Line": 33
         },
         {
           "Name": "createdAt",
@@ -288,16 +339,17 @@
           "Index": false,
           "Default": "now()",
           "Ref": "",
+          "OnDelete": "",
           "Min": null,
           "Max": null,
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 33
+          "Line": 34
         }
       ],
       "Indexes": null,
-      "Line": 28,
+      "Line": 29,
       "Persisted": true
     },
     {
@@ -314,12 +366,13 @@
           "Index": false,
           "Default": "",
           "Ref": "",
+          "OnDelete": "",
           "Min": null,
           "Max": null,
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 113
+          "Line": 114
         },
         {
           "Name": "purpose",
@@ -331,12 +384,13 @@
           "Index": true,
           "Default": "",
           "Ref": "",
+          "OnDelete": "",
           "Min": null,
           "Max": null,
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 114
+          "Line": 115
         },
         {
           "Name": "subject",
@@ -348,12 +402,13 @@
           "Index": true,
           "Default": "",
           "Ref": "",
+          "OnDelete": "",
           "Min": null,
           "Max": null,
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 115
+          "Line": 116
         },
         {
           "Name": "hash",
@@ -365,12 +420,13 @@
           "Index": false,
           "Default": "",
           "Ref": "",
+          "OnDelete": "",
           "Min": null,
           "Max": null,
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 116
+          "Line": 117
         },
         {
           "Name": "expiresAt",
@@ -382,12 +438,13 @@
           "Index": false,
           "Default": "",
           "Ref": "",
+          "OnDelete": "",
           "Min": null,
           "Max": null,
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 117
+          "Line": 118
         },
         {
           "Name": "usedAt",
@@ -399,12 +456,13 @@
           "Index": false,
           "Default": "",
           "Ref": "",
+          "OnDelete": "",
           "Min": null,
           "Max": null,
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 118
+          "Line": 119
         },
         {
           "Name": "createdAt",
@@ -416,16 +474,17 @@
           "Index": false,
           "Default": "now()",
           "Ref": "",
+          "OnDelete": "",
           "Min": null,
           "Max": null,
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 119
+          "Line": 120
         }
       ],
       "Indexes": null,
-      "Line": 112,
+      "Line": 113,
       "Persisted": true
     },
     {
@@ -442,12 +501,13 @@
           "Index": false,
           "Default": "uuid()",
           "Ref": "",
+          "OnDelete": "",
           "Min": null,
           "Max": null,
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 125
+          "Line": 126
         },
         {
           "Name": "recipient",
@@ -459,12 +519,13 @@
           "Index": true,
           "Default": "",
           "Ref": "",
+          "OnDelete": "",
           "Min": null,
           "Max": null,
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 126
+          "Line": 127
         },
         {
           "Name": "subject",
@@ -476,12 +537,13 @@
           "Index": false,
           "Default": "",
           "Ref": "",
+          "OnDelete": "",
           "Min": null,
           "Max": null,
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 127
+          "Line": 128
         },
         {
           "Name": "text",
@@ -493,12 +555,13 @@
           "Index": false,
           "Default": "",
           "Ref": "",
+          "OnDelete": "",
           "Min": null,
           "Max": null,
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 128
+          "Line": 129
         },
         {
           "Name": "html",
@@ -510,12 +573,13 @@
           "Index": false,
           "Default": "",
           "Ref": "",
+          "OnDelete": "",
           "Min": null,
           "Max": null,
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 129
+          "Line": 130
         },
         {
           "Name": "template",
@@ -527,12 +591,13 @@
           "Index": false,
           "Default": "",
           "Ref": "",
+          "OnDelete": "",
           "Min": null,
           "Max": null,
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 130
+          "Line": 131
         },
         {
           "Name": "status",
@@ -544,12 +609,13 @@
           "Index": true,
           "Default": "",
           "Ref": "",
+          "OnDelete": "",
           "Min": null,
           "Max": null,
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 131
+          "Line": 132
         },
         {
           "Name": "providerId",
@@ -561,12 +627,13 @@
           "Index": false,
           "Default": "",
           "Ref": "",
+          "OnDelete": "",
           "Min": null,
           "Max": null,
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 132
+          "Line": 133
         },
         {
           "Name": "error",
@@ -578,12 +645,13 @@
           "Index": false,
           "Default": "",
           "Ref": "",
+          "OnDelete": "",
           "Min": null,
           "Max": null,
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 133
+          "Line": 134
         },
         {
           "Name": "attempts",
@@ -595,12 +663,13 @@
           "Index": false,
           "Default": "",
           "Ref": "",
+          "OnDelete": "",
           "Min": null,
           "Max": null,
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 134
+          "Line": 135
         },
         {
           "Name": "createdAt",
@@ -612,12 +681,13 @@
           "Index": true,
           "Default": "now()",
           "Ref": "",
+          "OnDelete": "",
           "Min": null,
           "Max": null,
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 135
+          "Line": 136
         },
         {
           "Name": "sentAt",
@@ -629,16 +699,17 @@
           "Index": false,
           "Default": "",
           "Ref": "",
+          "OnDelete": "",
           "Min": null,
           "Max": null,
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 136
+          "Line": 137
         }
       ],
       "Indexes": null,
-      "Line": 124,
+      "Line": 125,
       "Persisted": true
     }
   ],

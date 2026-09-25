@@ -103,6 +103,7 @@ func New(ctx context.Context, opt Options) error {
 	for _, f := range []struct{ src, dst string }{
 		{"go.mod.tmpl", "go.mod"},
 		{"main.go.tmpl", "main.go"},
+		{"start.go.tmpl", "start.go"},
 		{"routes.go.tmpl", "routes.go"},
 		{"routes_test.go.tmpl", "routes_test.go"},
 		{"tools.go.tmpl", "tools.go"},

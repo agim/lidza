@@ -174,7 +174,30 @@ func setup(ctx context.Context, dir string, cfg *config.Config, opt setupOptions
 		step("node_modules: installed")
 	}
 
-	// 6. The agent CLI.
+	// 6. The browser for the e2e suite, so the first lidza test --e2e and
+	// lidza ship do not stop to fetch it. System libraries need root:
+	// with passwordless sudo they are installed too, otherwise the
+	// command is printed.
+	if _, err := os.Stat(filepath.Join(dir, "playwright.config.ts")); err == nil {
+		if _, err := exec.LookPath("npx"); err == nil {
+			args := []string{"playwright", "install", "chromium"}
+			if exec.CommandContext(ctx, "sudo", "-n", "true").Run() == nil {
+				args = []string{"playwright", "install", "--with-deps", "chromium"}
+			}
+			cmd := exec.CommandContext(ctx, "npx", args...)
+			cmd.Dir = dir
+			if res, err := cmd.CombinedOutput(); err != nil {
+				step("browser for e2e tests not installed (%v); run: npx playwright install --with-deps chromium", err)
+				_ = res
+			} else if len(args) == 3 {
+				step("browser for e2e tests: chromium installed; its system libraries need root: sudo npx playwright install-deps chromium")
+			} else {
+				step("browser for e2e tests: chromium installed")
+			}
+		}
+	}
+
+	// 7. The agent CLI.
 	if opt.Agent != "" {
 		pkgName, ok := agentPackages[opt.Agent]
 		if !ok {

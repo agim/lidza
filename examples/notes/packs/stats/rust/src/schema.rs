@@ -10,6 +10,10 @@ pub struct AuthSession {
     pub subject: String,
     #[serde(rename = "refreshHash")]
     pub refresh_hash: String,
+    #[serde(rename = "prevRefreshHash")]
+    pub prev_refresh_hash: Option<String>,
+    #[serde(rename = "rotatedAt")]
+    pub rotated_at: Option<String>,
     #[serde(rename = "expiresAt")]
     pub expires_at: String,
     #[serde(rename = "revokedAt")]

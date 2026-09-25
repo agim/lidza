@@ -74,8 +74,9 @@ func TestSessionsAndMiddleware(t *testing.T) {
 	if err != nil || rotated.Refresh == tokens.Refresh {
 		t.Fatalf("refresh: %v", err)
 	}
-	if _, err := a.Refresh(ctx, tokens.Refresh, nil); err == nil {
-		t.Fatal("old refresh token still valid after rotation")
+	// The replaced token works for RefreshGrace, for an access token only.
+	if g, err := a.Refresh(ctx, tokens.Refresh, nil); err != nil || g.Refresh != "" || g.Access == "" {
+		t.Fatalf("old refresh token within the grace: %+v %v", g, err)
 	}
 	if err := a.Logout(ctx, u.SessionID); err != nil {
 		t.Fatal(err)
@@ -169,7 +170,7 @@ func TestSessionsAndMiddleware(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	a.SetCookies(rec, tokens)
-	if len(rec.Result().Cookies()) != 2 || !rec.Result().Cookies()[0].HttpOnly || len(ClearedCookies()) != 2 {
+	if len(rec.Result().Cookies()) != 2 || !rec.Result().Cookies()[0].HttpOnly || len(ClearedCookies()) != 3 {
 		t.Fatal("cookies")
 	}
 }
@@ -249,5 +250,85 @@ func TestThrottle(t *testing.T) {
 	h.ServeHTTP(rec, other.WithContext(lidza.WithServices(other.Context(), s)))
 	if rec.Code != 200 {
 		t.Fatalf("another client limited: %d", rec.Code)
+	}
+}
+
+// TestSlidingSession: a browser whose access token expired is renewed by
+// the middleware from the refresh cookie, claims included; requests in
+// flight with the old refresh token get an access token for a minute; a
+// logged-out session is not renewed.
+func TestSlidingSession(t *testing.T) {
+	a := testAuth(t)
+	a.cfg.AccessTTL = -time.Minute // this access token is born expired
+	ctx := context.Background()
+	tokens, err := a.Login(ctx, "user-1", map[string]any{"role": "admin"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.Verify(tokens.Access); err == nil {
+		t.Fatal("expired token verified")
+	}
+	a.cfg.AccessTTL = time.Minute // the renewed ones are not
+	s := lidza.NewServices()
+	lidza.Provide(s, a)
+	var seen *User
+	h := Require()(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { seen = CurrentUser(r.Context()) }))
+	call := func(access, refresh string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/things", nil)
+		req = req.WithContext(lidza.WithServices(req.Context(), s))
+		if access != "" {
+			req.AddCookie(&http.Cookie{Name: AccessCookie, Value: access})
+		}
+		if refresh != "" {
+			req.AddCookie(&http.Cookie{Name: RefreshCookie, Value: refresh})
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec
+	}
+	if rec := call(tokens.Access, ""); rec.Code != 401 {
+		t.Fatalf("expired token without refresh cookie: %d", rec.Code)
+	}
+	rec := call(tokens.Access, tokens.Refresh)
+	if rec.Code != 200 || seen == nil || seen.ID != "user-1" || seen.Claims["role"] != "admin" {
+		t.Fatalf("renewed: %d %+v", rec.Code, seen)
+	}
+	var newAccess, newRefresh string
+	for _, c := range rec.Result().Cookies() {
+		switch c.Name {
+		case AccessCookie:
+			newAccess = c.Value
+		case RefreshCookie:
+			newRefresh = c.Value
+		}
+		if c.Path != "/" {
+			t.Errorf("cookie %s path %q", c.Name, c.Path)
+		}
+	}
+	if newAccess == "" || newAccess == tokens.Access || newRefresh == "" || newRefresh == tokens.Refresh {
+		t.Fatalf("cookies not rotated: %v", rec.Result().Cookies())
+	}
+	// A parallel request still carrying the old refresh token: an access
+	// token, no rotation.
+	rec = call("", tokens.Refresh)
+	if rec.Code != 200 {
+		t.Fatalf("grace: %d", rec.Code)
+	}
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == RefreshCookie {
+			t.Fatalf("grace refresh rotated the session again: %v", c)
+		}
+	}
+	if seen == nil || seen.ID != "user-1" || seen.Claims != nil {
+		t.Fatalf("grace without an access token: %+v (no claims to carry over)", seen)
+	}
+	if rec := call("", "nope"); rec.Code != 401 {
+		t.Fatalf("bad refresh cookie: %d", rec.Code)
+	}
+	if err := a.RevokeAll(ctx, "user-1"); err != nil {
+		t.Fatal(err)
+	}
+	if rec := call(tokens.Access, newRefresh); rec.Code != 401 {
+		t.Fatalf("revoked session renewed: %d", rec.Code)
 	}
 }

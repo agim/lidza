@@ -6,7 +6,7 @@ Read before changing anything:
 - `docs/scalability.md`: the rules every package follows from the first
   commit (stateless, bounded, owned goroutines, deadlines everywhere).
 - `docs/features.md`: what a complete framework needs, mapped to phases.
-- `docs/research/2026-09-lidza-design-notes.md`: where the design came from; not a spec.
+- `docs/design.md`: why the parts are what they are.
 
 Gotchas:
 - **Līdza** in prose and docs, **`lidza`** in every identifier, path, package and domain. Never `ī` in code.

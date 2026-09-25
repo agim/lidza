@@ -74,4 +74,4 @@ bin/lidza new demo --lidza-dir "$PWD"   # an app pointed at this checkout
 - `docs/roadmap.md`: phases and acceptance checks.
 - `docs/features.md`: feature matrix, what is done, what comes when, open decisions.
 - `docs/scalability.md`: the scalable-by-default primitives and the rules every change follows.
-- `docs/research/`: design notes the project started from.
+- `docs/design.md`: why Līdza is built the way it is.

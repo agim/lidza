@@ -1,9 +1,7 @@
 # Scalability
 
 Līdza is scalable by default: the rules below hold for every package from
-the first commit, not as a later phase. Source: "Scalable-by-Default
-Architecture Primitives" in `docs/research/2026-09-lidza-design-notes.md`.
-Target: 100 million registered users, about one million concurrent, on
+the first commit, not as a later phase. Target: 100 million registered users, about one million concurrent, on
 stateless Go nodes behind a load balancer, with Rust compute pools and a
 distributed state tier (Postgres, Valkey, a queue).
 

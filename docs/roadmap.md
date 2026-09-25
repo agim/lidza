@@ -1,8 +1,8 @@
 # Roadmap
 
 Each phase has an acceptance check. A phase is done when its check passes on
-`ubuntu01` from a clean checkout. Design background for phases 1–5 is in
-`docs/research/2026-09-lidza-design-notes.md`.
+`ubuntu01` from a clean checkout. The reasoning behind the design is in
+`docs/design.md`.
 
 ## Phase 0: Environment
 

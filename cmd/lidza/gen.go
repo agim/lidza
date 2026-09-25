@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/agim/lidza/pkg/config"
+	"github.com/agim/lidza/pkg/crud"
 	"github.com/agim/lidza/pkg/diag"
 	"github.com/agim/lidza/pkg/inspect"
 	"github.com/agim/lidza/pkg/pack"
@@ -17,7 +19,10 @@ import (
 	"github.com/agim/lidza/pkg/sdk"
 )
 
-func runGen(_ context.Context, args []string) error {
+func runGen(ctx context.Context, args []string) error {
+	if len(args) > 0 && args[0] == "resource" {
+		return runGenResource(ctx, args[1:])
+	}
 	fs := flags("gen")
 	dir := fs.String("dir", ".", "project directory")
 	if err := fs.Parse(args); err != nil {
@@ -28,6 +33,44 @@ func runGen(_ context.Context, args []string) error {
 		return err
 	}
 	return generateAll(abs, cfg, os.Stdout)
+}
+
+// runGenResource is `lidza gen resource <Model>`: queries, Create and
+// Update types, handlers and the routes.go line, then the generators.
+func runGenResource(_ context.Context, args []string) error {
+	fs := flags("gen resource")
+	dir := fs.String("dir", ".", "project directory")
+	force := fs.Bool("force", false, "overwrite the handlers file")
+	var model string
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		model, args = args[0], args[1:]
+	}
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if model == "" {
+		return errors.New("gen resource: model name required (a model in schema.lidza)")
+	}
+	abs, cfg, err := loadProject(*dir)
+	if err != nil {
+		return err
+	}
+	if cfg == nil {
+		return errors.New("gen resource needs a lidza.json project")
+	}
+	res, err := crud.Generate(abs, crud.Options{Model: model, Module: inspect.ModulePath(abs), Force: *force})
+	if err != nil {
+		return err
+	}
+	fmt.Printf("resource %s: wrote %s\n", model, strings.Join(res.Files, ", "))
+	if !res.Registered {
+		fmt.Printf("add to routes.go: %s\n", res.RoutesLine)
+	}
+	if err := generateAll(abs, cfg, os.Stdout); err != nil {
+		return err
+	}
+	fmt.Println("next: `lidza db migrate` if the model is new, then `lidza check`")
+	return nil
 }
 
 // generateAll runs the schema generators, the pack wrappers and builds,

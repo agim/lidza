@@ -7,7 +7,8 @@ does not reimplement).
 
 | Capability | Status | Where |
 |---|---|---|
-| CLI tools | done | `lidza new`, `dev`, `build`, `check`; generators for handlers, pages and packs in phase 4 |
+| CLI tools | done | `lidza new`, `dev`, `build`, `check`, `gen`, `gen resource`, `pack`, `db`, `test`, `benchmark`, `doctor`, `mcp` |
+| CRUD | done | `lidza gen resource <Model>`: queries, Create/Update/List types with the model's rules, five typed routes, row mapping, registration; edited freely after |
 | Hot module replacement | done | Vite HMR through the `lidza dev` proxy; Go handlers rebuild and restart, frontend state is kept |
 | API route parameter parsing | done | `net/http` patterns, `req.Param("id")` in typed handlers; the client takes them as a typed object |
 | Automated asset bundling | done | Vite: minify, hash, code split, `dist/` embedded in the binary. Image optimization: phase 3 template build |

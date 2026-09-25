@@ -45,6 +45,7 @@ app is always at one address: http://127.0.0.1:3000.
 | `lidza gen` | `schema.lidza` to `schema/schema.go`, `db/schema.sql`, a migration in `db/migrations` when models changed; handlers to `.lidza/openapi.json` and the client in `.lidza/client`. `lidza dev` runs it on every change. |
 | `lidza context` | writes `.lidza/context.json`: routes, handler signatures, Rust exports. |
 | `lidza mcp` | MCP server on stdio; see "Agent interface". |
+| `lidza gen resource <Model>` | queries, `Create/Update/<Model>List` types, `handlers/<table>.go` with list, get, create, patch, delete under `/api/v1/<plural>`, registered in `routes.go`. Needs the `db` pack. |
 | `lidza pack add <name>` | enables an official pack: `db`, `auth`, `jobs`, `cache`, `i18n`, `realtime`, `geo`, `media`. |
 | `lidza test [go test flags]` | creates and migrates the `.env.test` database, runs `go test ./...` with `LIDZA_MODE=test`, then the frontend check. |
 | `lidza test --e2e [--install]` | builds the app, starts the binary with `.env.test`, runs the Playwright suite in `e2e/`; `--install` fetches the browser when missing. |
@@ -119,6 +120,13 @@ instead of `time.Now()` and `lidza.HTTPClient(ctx)` instead of
 Browser tests live in `e2e/*.spec.ts` (Playwright); `lidza test --e2e`
 runs them against the built binary. If the browser is missing the command
 prints the install line; `lidza test --e2e --install` runs it.
+
+## Adding a resource
+
+Declare a `model` in `schema.lidza`, run `lidza gen resource <Model>`,
+then `lidza db migrate`. The generated `handlers/<table>.go` is ordinary
+code: add authorization (`auth.Require()` on a sub-router), filters or
+ownership checks there. Regenerate with `--force` to reset it.
 
 ## Adding an API route
 

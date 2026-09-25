@@ -312,6 +312,28 @@ sql:
         sql_package: "pgx/v5"
         emit_json_tags: true
         emit_pointers_for_null_types: true
+        overrides:
+          - db_type: "uuid"
+            go_type: "string"
+          - db_type: "uuid"
+            nullable: true
+            go_type:
+              type: "string"
+              pointer: true
+          - db_type: "timestamptz"
+            go_type: "time.Time"
+          - db_type: "timestamptz"
+            nullable: true
+            go_type:
+              type: "time.Time"
+              pointer: true
+          - db_type: "date"
+            go_type: "time.Time"
+          - db_type: "date"
+            nullable: true
+            go_type:
+              type: "time.Time"
+              pointer: true
 `
 	if err := os.WriteFile(p, []byte(cfg), 0o644); err != nil {
 		return err

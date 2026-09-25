@@ -316,7 +316,20 @@ the level; the same logger is slog's default, so packs log alike. The
 `DateTime` in it; the `react` template sets the cookie from `Intl`.
 Storage and the API stay in UTC.
 
+### Resource generator (done 2026-09-25)
+
+`lidza gen resource <Model>` turns a model into a resource: sqlc queries
+(list with limit and offset, count, get, create, update with COALESCE so
+absent fields keep their value, delete), the `Create<Model>`,
+`Update<Model>` (every field optional) and `<Model>List` types appended
+to `schema.lidza` with the model's validation rules, `handlers/<table>.go`
+with the five typed routes under `/api/v1/<plural>` and the row mapping,
+shared helpers in `handlers/convert.go`, and the registration line in
+`routes.go`. The handlers file is generated once and edited freely
+(`--force` overwrites). Needs the `db` pack; sqlc maps uuid and
+timestamps to `string` and `time.Time` so rows and schema types line up.
+
 ### Next
 
-A CRUD generator, Tailwind in the `react` template, opt-in analytics and
-error reporting, app-defined MCP tools.
+Tailwind in the `react` template, opt-in analytics and error reporting,
+app-defined MCP tools.

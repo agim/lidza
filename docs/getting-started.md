@@ -141,6 +141,15 @@ args = ["mcp"]
 
 To add it to Claude Code by hand: `claude mcp add lidza -- lidza mcp`.
 
+## Resources
+
+With the `db` pack enabled, `lidza gen resource Post` turns a model into a
+working resource: SQL queries, `CreatePost`/`UpdatePost`/`PostList` types
+carrying the model's validation rules, `handlers/posts.go` with list, get,
+create, patch and delete under `/api/v1/posts`, and the line in
+`routes.go`. The client gets `api.listPosts()`, `api.createPost(body)` and
+the rest on the next `lidza gen`. The handlers are yours after that.
+
 ## Packs
 
 Packs add capabilities: official ones with `lidza pack add <name>` (`db`,

@@ -1,0 +1,13 @@
+# per-clone Claude role brief
+CLAUDE.local.md
+.claude/settings.local.json
+.claude/worktrees/
+
+# build output
+/bin/lidza
+/core/target/
+*.wasm
+
+# generated
+.lidza/
+node_modules/

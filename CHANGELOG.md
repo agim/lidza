@@ -11,6 +11,20 @@ change; every release so far is additive (an app updates with
 
 ## Unreleased
 
+- The brief can be skipped, whole or per question. In `lidza brief`,
+  Enter still asks again later; `s` skips a question for good and `S`
+  skips all the rest; `lidza brief skip [id...]` does it from a script
+  (no ids: every open question), MCP `lidza_brief_skip` from an agent, and
+  setup's offer takes "skip". A skipped question is shown as skipped, is
+  never asked again and is not counted by L015; an answer given later
+  replaces the skip. Agents offer "later", "skip" and "skip the rest"
+  with every question.
+- A new app's tests and CI pass on any machine: `.env.test` gets
+  `CACHE_URL=memory` when the cache pack is enabled (setup writes it,
+  `lidza gen` and `lidza update` add it to older apps), so tests need no
+  Redis; and L011 (a pack no code uses yet) is a note, which a fresh app
+  has for every pack and `lidza verify --strict` no longer fails on.
+
 - `lidza update`, `lidza gen`, `lidza dev` and `lidza test` repair a
   `DATABASE_URL` written for another machine's Postgres socket (Linux's
   on a Mac), as `lidza setup` did; `lidza update` on a Mac no longer

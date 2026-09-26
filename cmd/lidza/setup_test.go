@@ -92,6 +92,16 @@ func TestInterview(t *testing.T) {
 	if !strings.Contains(out.String(), "3 answer(s) saved") {
 		t.Fatalf("summary: %s", out.String())
 	}
+	// s skips a question for good; S skips the rest.
+	in = bufio.NewReader(strings.NewReader("s\nS\n"))
+	out.Reset()
+	if err := interview(dir, "demo", false, in, &out); err != nil {
+		t.Fatal(err)
+	}
+	b, _ = brief.Load(dir)
+	if !b.Skipped["journeys"] || len(b.Open()) != 0 || !strings.Contains(out.String(), "skipped the remaining") {
+		t.Fatalf("skip: %+v\n%s", b.Skipped, out.String())
+	}
 	q, _ := brief.Find("palette")
 	if got := resolveChoice(q, "1,2"); got != "1,2" {
 		t.Fatalf("a one question took two choices: %q", got)

@@ -175,6 +175,10 @@ func setup(ctx context.Context, dir string, cfg *config.Config, opt setupOptions
 		if hasMail {
 			b.WriteString("MAIL_PROVIDER=outbox\n")
 		}
+		if slices.Contains(cfg.Packs, pack.OfficialPrefix+"cache") {
+			// Tests run without Redis: the cache pack's in-memory store.
+			b.WriteString("CACHE_URL=memory\n")
+		}
 		if err := os.WriteFile(filepath.Join(dir, ".env.test"), []byte(b.String()), 0o644); err != nil {
 			return err
 		}
@@ -271,14 +275,21 @@ func setup(ctx context.Context, dir string, cfg *config.Config, opt setupOptions
 	if opt.Interview && opt.In != nil {
 		if b, err := brief.Load(dir); err == nil && len(b.Open()) > 0 {
 			in := bufio.NewReader(opt.In)
-			fmt.Fprintf(out, "\n[setup] The brief: %d questions on what %s is for, who owns the data, the design, the services and how agents work on it, each with suggestions. Answer now? [Y/n] ", len(b.Open()), cfg.Name)
+			fmt.Fprintf(out, "\n[setup] The brief: %d questions on what %s is for, who owns the data, the design, the services and how agents work on it, each with suggestions. Answer now (y), later (n), or skip it altogether (skip)? [Y/n/skip] ", len(b.Open()), cfg.Name)
 			ans, _ := in.ReadString('\n')
-			if a := strings.ToLower(strings.TrimSpace(ans)); a == "" || a == "y" || a == "yes" {
+			switch a := strings.ToLower(strings.TrimSpace(ans)); a {
+			case "", "y", "yes":
 				if err := interview(dir, cfg.Name, false, in, out); err != nil {
 					problem("brief interview: %v", err)
 				}
-			} else {
-				step("brief skipped: lidza brief, or the agent's recipe \"Start with the brief\", asks the questions later")
+			case "skip", "s":
+				if _, err := brief.Skip(dir, cfg.Name); err != nil {
+					problem("brief skip: %v", err)
+				} else {
+					step("brief skipped: agents will not ask; lidza brief --all answers it any time")
+				}
+			default:
+				step("brief for later: lidza brief, or the agent's recipe \"Start with the brief\", asks the questions")
 			}
 		}
 	}

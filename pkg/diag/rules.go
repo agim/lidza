@@ -47,8 +47,8 @@ import (
 //   - L010: a string literal shaped like an API key or token (AWS,
 //     OpenAI, Anthropic, Google, SendGrid, Mailgun, Resend, Slack, a
 //     private key); secrets go in the credentials, never in source;
-//   - L011: a pack enabled in lidza.json that no app code imports; use
-//     it or remove it, so the next reader is not misled;
+//   - L011 (a note): a pack enabled in lidza.json that no app code
+//     imports; use it or remove it, so the next reader is not misled;
 //   - L012: a pack or a direct dependency (one the framework does not
 //     bring itself) with no entry in docs/decisions.md naming it; the
 //     why of every such choice is recorded there;
@@ -307,7 +307,9 @@ func unusedPacks(root string, imported map[string]bool) []Diagnostic {
 		if imported[apidoc.Module+"/packs/"+name] {
 			continue
 		}
-		out = append(out, Diagnostic{Layer: "go", Tool: "lidza rules", Severity: "warning", Code: "L011", File: config.FileName, Line: 1, Column: 1,
+		// A note, not a warning: a new app enables its packs before the
+		// code that uses them exists, and its CI (--strict) must pass.
+		out = append(out, Diagnostic{Layer: "go", Tool: "lidza rules", Severity: "note", Code: "L011", File: config.FileName, Line: 1, Column: 1,
 			Message: "pack " + name + " is enabled but no code imports " + apidoc.Module + "/packs/" + name + ": build the feature that needs it (the guide's recipes) or remove it from lidza.json and run lidza gen"})
 	}
 	return out

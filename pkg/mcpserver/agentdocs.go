@@ -177,7 +177,7 @@ func addBriefTools(s *server.MCPServer, dir string, cfg *config.Config) {
 			}
 			qs = append(qs, item{Question: q, Answer: b.Answers[q.ID]})
 		}
-		return jsonResult(map[string]any{"file": brief.File, "app": cfg.Name, "open": len(b.Open()), "openRequired": len(b.OpenRequired()), "total": len(brief.Questions), "questions": qs})
+		return jsonResult(map[string]any{"file": brief.File, "app": cfg.Name, "open": len(b.Open()), "openRequired": len(b.OpenRequired()), "skipped": len(b.Skipped), "total": len(brief.Questions), "questions": qs})
 	})
 	s.AddTool(mcp.NewTool("lidza_brief_answer",
 		mcp.WithDescription("Record the developer's answer to one brief question, in their words or the suggestion they picked; never an answer they did not give. It is saved in docs/brief.md and applied: a decision for a real choice, the working agreements in CLAUDE.md, AGENTS.md and GEMINI.md, the palette in the design tokens, a seeded app recipe. An empty answer reopens the question. The result lists the files changed and anything left for you to apply."),
@@ -189,6 +189,22 @@ func addBriefTools(s *server.MCPServer, dir string, cfg *config.Config) {
 			return mcp.NewToolResultErrorFromErr("brief", err), nil
 		}
 		return jsonResult(res)
+	})
+	s.AddTool(mcp.NewTool("lidza_brief_skip",
+		mcp.WithDescription("Skip brief questions the developer chose not to answer: they are not asked again and lidza check stops noting them (L015). Offer it with every question (\"skip this\") and for the whole brief (\"skip the rest\"); call it only when the developer says so. No ids skips every open question. An answer given later replaces the skip."),
+		mcp.WithString("ids", mcp.Description("Comma-separated question ids; empty skips every open question.")),
+	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		var ids []string
+		for _, id := range strings.Split(req.GetString("ids", ""), ",") {
+			if id = strings.TrimSpace(id); id != "" {
+				ids = append(ids, id)
+			}
+		}
+		done, err := brief.Skip(dir, cfg.Name, ids...)
+		if err != nil {
+			return mcp.NewToolResultErrorFromErr("brief", err), nil
+		}
+		return jsonResult(map[string]any{"skipped": done, "file": brief.File})
 	})
 	s.AddTool(mcp.NewTool("lidza_note_add",
 		mcp.WithDescription("Record a lasting fact about this app that the team and every agent should know (a preference, a constraint, a convention the developer states) in the Team notes of CLAUDE.md, AGENTS.md and GEMINI.md, shared through git. Use it instead of an agent's local memory for anything about this app; a convention with steps is a recipe (lidza_recipe_add), a choice with a reason a decision (lidza_decision_add)."),

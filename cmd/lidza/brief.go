@@ -21,7 +21,35 @@ import (
 //	lidza brief --all            every question, the current answer kept on Enter
 //	lidza brief --list           the questions, their ids and answers
 //	lidza brief answer <id> ".." one answer, without prompts
+//	lidza brief skip [id...]     skip questions for good; no ids: every open one
 func runBrief(_ context.Context, args []string) error {
+	if len(args) > 0 && args[0] == "skip" {
+		fs := flags("brief skip")
+		dir := fs.String("dir", ".", "project directory")
+		rest := args[1:]
+		var ids []string
+		for len(rest) > 0 && !strings.HasPrefix(rest[0], "-") {
+			ids, rest = append(ids, rest[0]), rest[1:]
+		}
+		if err := fs.Parse(rest); err != nil {
+			return err
+		}
+		ids = append(ids, fs.Args()...)
+		abs, cfg, err := loadProject(*dir)
+		if err != nil || cfg == nil {
+			return errors.New("brief needs a lidza.json project")
+		}
+		done, err := brief.Skip(abs, cfg.Name, ids...)
+		if err != nil {
+			return err
+		}
+		if len(done) == 0 {
+			fmt.Println("nothing to skip: those questions are answered or skipped already")
+			return nil
+		}
+		fmt.Printf("skipped %d question(s): %s; agents will not ask them, and an answer given later (lidza brief --all) replaces the skip\n", len(done), strings.Join(done, ", "))
+		return nil
+	}
 	if len(args) > 0 && args[0] == "answer" {
 		fs := flags("brief answer")
 		dir := fs.String("dir", ".", "project directory")
@@ -71,7 +99,11 @@ func runBrief(_ context.Context, args []string) error {
 				fmt.Printf("\n%s\n", section)
 			}
 			answer := b.Answers[q.ID]
-			if answer == "" {
+			switch {
+			case answer != "":
+			case b.Skipped[q.ID]:
+				answer = "(skipped)"
+			default:
 				answer = "(open)"
 			}
 			fmt.Printf("  %-14s %s\n  %-14s %s\n", q.ID, q.Ask, "", strings.ReplaceAll(answer, "\n", " "))
@@ -100,7 +132,8 @@ func interview(dir, app string, all bool, in *bufio.Reader, out io.Writer) error
 		return nil
 	}
 	fmt.Fprintf(out, "The brief for %s: %d question(s). Each answer is saved in %s and applied at once.\n", app, len(questions), brief.File)
-	fmt.Fprintln(out, "Pick a number (several, like 1,3, where more than one fits), type your own answer, Enter to skip, q to stop.")
+	fmt.Fprintln(out, "Pick a number (several, like 1,3, where more than one fits) or type your own answer.")
+	fmt.Fprintln(out, "Enter asks again later; s skips the question for good; S skips all the rest; q stops for now.")
 	answered := 0
 	for i, q := range questions {
 		current := b.Answers[q.ID]
@@ -127,6 +160,27 @@ func interview(dir, app string, all bool, in *bufio.Reader, out io.Writer) error
 		if line == "" {
 			continue
 		}
+		if line == "s" || line == "skip" {
+			if _, err := brief.Skip(dir, app, q.ID); err != nil {
+				return err
+			}
+			fmt.Fprintln(out, "  skipped")
+			continue
+		}
+		if line == "S" || line == "skip all" {
+			var rest []string
+			for _, r := range questions[i:] {
+				if b.Answers[r.ID] == "" {
+					rest = append(rest, r.ID)
+				}
+			}
+			done, err := brief.Skip(dir, app, rest...)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(out, "  skipped the remaining %d question(s)\n", len(done))
+			break
+		}
 		answer := resolveChoice(q, line)
 		res, err := brief.Answer(dir, app, q.ID, answer)
 		if err != nil {
@@ -137,7 +191,7 @@ func interview(dir, app string, all bool, in *bufio.Reader, out io.Writer) error
 		printBriefResult(out, res)
 	}
 	b, _ = brief.Load(dir)
-	fmt.Fprintf(out, "\n%d answer(s) saved; %d question(s) still open (lidza brief continues).\n", answered, len(b.Open()))
+	fmt.Fprintf(out, "\n%d answer(s) saved; %d question(s) still open (lidza brief continues), %d skipped.\n", answered, len(b.Open()), len(b.Skipped))
 	fmt.Fprintf(out, "Commit them for the team: git add %s docs CLAUDE.md AGENTS.md GEMINI.md src admin && git commit -m \"Brief\"\n", brief.File)
 	return nil
 }

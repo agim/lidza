@@ -14,7 +14,10 @@ you work together. The answers are the app's shared memory, in git.
    (in Claude Code, AskUserQuestion): the question, two to four
    suggestions (the tool's, adjusted to what you know of the app, the
    likeliest first) and room for their own answer; a `many` question
-   takes several. Never answer for them; a skipped question stays open.
+   takes several. Offer "later" and "skip" with every question, and
+   "skip the rest" for the whole brief. Never answer for them. Later
+   leaves the question open; skip (`lidza_brief_skip`, with the id, or
+   no ids for every open question) closes it: it is not asked again.
 3. Record each answer with `lidza_brief_answer`, in their words or the
    suggestion they picked. It lands in `docs/brief.md` and where it
    acts: a decision in `docs/decisions.md`, the working agreements in

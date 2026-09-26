@@ -204,7 +204,7 @@ func moduleVersion() string {
 // BriefLine is the agent files' first line: the brief, the interview
 // while it is open, and the rule that app knowledge is shared through git;
 // Refresh adds it to apps that predate it.
-const BriefLine = "Read `" + brief.File + "` first: what the app is for, who owns the data, the design, the services and the working agreements below. While it has open questions, start a session with the interview (recipe \"Start with the brief\": MCP `lidza_brief` and `lidza_brief_answer`; `lidza brief` in a terminal), asking the developer with suggestions and never inventing an answer. Lasting facts the developer states go in the Team notes below (`lidza note add`, MCP `lidza_note_add`), never in an agent's local memory: these files and `docs/` are shared through git."
+const BriefLine = "Read `" + brief.File + "` first: what the app is for, who owns the data, the design, the services and the working agreements below. While it has open questions, start a session with the interview (recipe \"Start with the brief\": MCP `lidza_brief` and `lidza_brief_answer`; `lidza brief` in a terminal), asking the developer with suggestions, offering to skip any question or the whole brief, and never inventing an answer; a skipped question is never asked again. Lasting facts the developer states go in the Team notes below (`lidza note add`, MCP `lidza_note_add`), never in an agent's local memory: these files and `docs/` are shared through git."
 
 // DecisionsLine is the agent files' line about the decision log; Refresh
 // adds it to apps that predate it.
@@ -285,6 +285,18 @@ func Refresh(dir string, cfg *config.Config) ([]string, error) {
 			changed = append(changed, name+" (DATABASE_URL now "+to+")")
 		}
 	}
+	// Tests run without Redis: the cache pack's in-memory store in
+	// .env.test (apps set up before setup wrote it).
+	if slices.Contains(cfg.Packs, "lidza/cache") {
+		p := filepath.Join(dir, ".env.test")
+		if data, err := os.ReadFile(p); err == nil && !strings.Contains(string(data), "CACHE_URL=") {
+			next := strings.TrimRight(string(data), "\n") + "\nCACHE_URL=memory\n"
+			if err := os.WriteFile(p, []byte(next), 0o644); err != nil {
+				return nil, err
+			}
+			changed = append(changed, ".env.test (CACHE_URL=memory)")
+		}
+	}
 	// Apps from before the brief get it, and their agent files the
 	// working agreements and team notes.
 	if created, err := brief.Ensure(dir, cfg.Name); err != nil {
@@ -329,11 +341,16 @@ func Refresh(dir string, cfg *config.Config) ([]string, error) {
 				next = next[:i+k+1] + "- " + DecisionsLine + "\n" + next[i+k+1:]
 			}
 		}
-		// And one from before the brief gets its line first in the list.
-		if !strings.Contains(next, "Read `"+brief.File+"` first") {
-			if k := strings.Index(next, "\n- "); k >= 0 {
-				next = next[:k+1] + "- " + BriefLine + "\n" + next[k+1:]
+		// The brief's line: added first in the list to an app from before
+		// the brief, and kept current in the others.
+		if k := strings.Index(next, "- Read `"+brief.File+"` first"); k >= 0 {
+			end := strings.Index(next[k:], "\n")
+			if end < 0 {
+				end = len(next) - k
 			}
+			next = next[:k] + "- " + BriefLine + next[k+end:]
+		} else if k := strings.Index(next, "\n- "); k >= 0 {
+			next = next[:k+1] + "- " + BriefLine + "\n" + next[k+1:]
 		}
 		if next == text {
 			continue

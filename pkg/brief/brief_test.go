@@ -195,3 +195,39 @@ func TestQuestions(t *testing.T) {
 		}
 	}
 }
+
+// A skipped question is neither open nor required any more; the whole
+// brief can be skipped; an answer given later replaces the skip.
+func TestSkip(t *testing.T) {
+	dir := app(t)
+	Ensure(dir, "galeria")
+	if done, err := Skip(dir, "galeria", "domain", "palette"); err != nil || len(done) != 2 {
+		t.Fatalf("skip: %v %v", done, err)
+	}
+	b, _ := Load(dir)
+	if !b.Skipped["palette"] || len(b.Open()) != len(Questions)-2 {
+		t.Fatalf("skipped: %+v", b.Skipped)
+	}
+	for _, q := range b.OpenRequired() {
+		if q.ID == "palette" {
+			t.Fatal("a skipped required question still counts")
+		}
+	}
+	data, _ := os.ReadFile(filepath.Join(dir, File))
+	if strings.Count(string(data), skipped) != 2 {
+		t.Fatalf("file: %s", data)
+	}
+	Answer(dir, "galeria", "purpose", "Art")
+	done, _ := Skip(dir, "galeria")
+	b, _ = Load(dir)
+	if len(done) != len(Questions)-3 || len(b.Open()) != 0 || len(b.OpenRequired()) != 0 || b.Answers["purpose"] != "Art" {
+		t.Fatalf("skip all: %d %+v", len(done), b.Open())
+	}
+	Answer(dir, "galeria", "palette", "Forest and linen")
+	if b, _ := Load(dir); b.Skipped["palette"] || b.Answers["palette"] != "Forest and linen" {
+		t.Fatalf("answer after skip: %+v", b)
+	}
+	if _, err := Skip(dir, "galeria", "nope"); err == nil {
+		t.Fatal("unknown id skipped")
+	}
+}

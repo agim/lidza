@@ -25,14 +25,20 @@ import (
 // File is the brief, relative to the project root.
 const File = "docs/brief.md"
 
-// open is what an unanswered question shows.
-const open = "_Open._"
+// open is what an unanswered question shows; skipped, one the team chose
+// not to answer (it is not asked again, and L015 does not count it).
+const (
+	open    = "_Open._"
+	skipped = "_Skipped._"
+)
 
 // Brief is the file's content: the app's name, the answers by question
 // id, and the free notes at the end.
 type Brief struct {
 	App     string
 	Answers map[string]string
+	// Skipped are the questions the team chose not to answer.
+	Skipped map[string]bool
 	Notes   string
 }
 
@@ -48,7 +54,7 @@ func Ensure(dir, app string) (bool, error) {
 	if _, err := os.Stat(p); err == nil {
 		return false, nil
 	}
-	return true, Save(dir, Brief{App: app, Answers: map[string]string{}})
+	return true, Save(dir, Brief{App: app, Answers: map[string]string{}, Skipped: map[string]bool{}})
 }
 
 // Load reads the brief; an app without one gets an empty Brief and
@@ -56,10 +62,10 @@ func Ensure(dir, app string) (bool, error) {
 func Load(dir string) (Brief, error) {
 	data, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(File)))
 	if err != nil {
-		return Brief{Answers: map[string]string{}}, err
+		return Brief{Answers: map[string]string{}, Skipped: map[string]bool{}}, err
 	}
 	s := string(data)
-	b := Brief{Answers: map[string]string{}}
+	b := Brief{Answers: map[string]string{}, Skipped: map[string]bool{}}
 	if m := titleRe.FindStringSubmatch(s); m != nil {
 		b.App = strings.TrimSpace(m[1])
 	}
@@ -76,7 +82,11 @@ func Load(dir string) (Brief, error) {
 			body = body[:k[0]]
 		}
 		body = strings.TrimSpace(body)
-		if body != "" && body != open {
+		switch body {
+		case "", open:
+		case skipped:
+			b.Skipped[id] = true
+		default:
 			b.Answers[id] = body
 		}
 	}
@@ -103,7 +113,11 @@ func Save(dir string, b Brief) error {
 				continue
 			}
 			answer := b.Answers[q.ID]
-			if answer == "" {
+			switch {
+			case answer != "":
+			case b.Skipped[q.ID]:
+				answer = skipped
+			default:
 				answer = open
 			}
 			fmt.Fprintf(&out, "\n### %s <!-- brief:%s -->\n\n%s\n", q.Ask, q.ID, answer)
@@ -122,11 +136,12 @@ func Save(dir string, b Brief) error {
 	return os.WriteFile(p, []byte(out.String()), 0o644)
 }
 
-// Open lists the questions without an answer, in interview order.
+// Open lists the questions without an answer that were not skipped, in
+// interview order: the ones an interview asks.
 func (b Brief) Open() []Question {
 	var out []Question
 	for _, q := range Questions {
-		if b.Answers[q.ID] == "" {
+		if b.Answers[q.ID] == "" && !b.Skipped[q.ID] {
 			out = append(out, q)
 		}
 	}
@@ -174,7 +189,11 @@ func Answer(dir, app, id, answer string) (Result, error) {
 	if b.App == "" {
 		b.App = app
 	}
+	if b.Skipped == nil {
+		b.Skipped = map[string]bool{}
+	}
 	previous := b.Answers[id]
+	delete(b.Skipped, id)
 	if answer == "" {
 		delete(b.Answers, id)
 	} else {
@@ -219,6 +238,39 @@ func Answer(dir, app, id, answer string) (Result, error) {
 		res.Recipe, res.Files = name, append(res.Files, recipes.GuideFile)
 	}
 	return res, nil
+}
+
+// Skip marks questions as skipped: not answered, not asked again, not
+// counted by L015. No ids skips every open question (the whole brief). An
+// answer given later replaces the skip. It returns the ids it skipped.
+func Skip(dir, app string, ids ...string) ([]string, error) {
+	b, err := Load(dir)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
+	if b.App == "" {
+		b.App = app
+	}
+	if b.Skipped == nil {
+		b.Skipped = map[string]bool{}
+	}
+	if len(ids) == 0 {
+		for _, q := range b.Open() {
+			ids = append(ids, q.ID)
+		}
+	}
+	var done []string
+	for _, id := range ids {
+		if _, ok := Find(id); !ok {
+			return nil, fmt.Errorf("brief: no question %q (lidza brief --list shows them)", id)
+		}
+		if b.Answers[id] != "" || b.Skipped[id] {
+			continue
+		}
+		b.Skipped[id] = true
+		done = append(done, id)
+	}
+	return done, Save(dir, b)
 }
 
 func firstLine(s string) string { return strings.SplitN(s, "\n", 2)[0] }

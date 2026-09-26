@@ -56,7 +56,7 @@ app is always at one address: http://127.0.0.1:3000.
 | `lidza gen deploy [--force]` | the `Dockerfile`, `.dockerignore` and `deploy/{{.Name}}.service` from the current templates; a file the app changed is kept and named unless `--force`. |
 | `lidza pack add <name>` | enables an official pack: `db`, `auth`, `jobs`, `mail`, `llm`, `storage`, `cache`, `i18n`, `realtime`, `analytics`, `geo`, `media`. |
 | `lidza credentials set NAME=value` | seals a secret into `config/credentials.yml.enc` with `config/master.key`; `list`, `show`, `unset`, `edit`, `init`. |
-| `lidza brief [--all] [--list]` | the kickoff interview in a terminal: the open questions of `docs/brief.md` one by one, each with suggestions to pick by number or your own answer; `--all` goes through every question, `--list` prints them. `lidza brief answer <id> "..."` records one. |
+| `lidza brief [--all] [--list]` | the kickoff interview in a terminal: the open questions of `docs/brief.md` one by one, each with suggestions to pick by number or your own answer; `--all` goes through every question, `--list` prints them. `lidza brief answer <id> "..."` records one; `lidza brief skip [id...]` skips questions for good (no ids: every open one), and `s` or `S` in the interview skips one or the rest. |
 | `lidza note add "..."` | a lasting fact about this app in the agent files' Team notes, shared through git. |
 | `lidza test [-v] [--run Regexp] [go test flags]` | creates and migrates the `.env.test` database, runs `go test ./...` with `LIDZA_MODE=test`, then the frontend check. |
 | `lidza test --e2e [--install]` | builds the app, starts the binary with `.env.test`, runs the Playwright suite in `e2e/`; `--install` fetches the browser when missing. |
@@ -90,7 +90,7 @@ agent needs no shell here. Its tools:
 | `lidza_gen`, `lidza_gen_resource` (`model`, `force`), `lidza_pack_add` (`name`), `lidza_pack_scaffold`, `lidza_pack_build`, `lidza_db_migrate`, `lidza_db_rollback`, `lidza_db_status`, `lidza_test` (`e2e`, `install`, `run`, `verbose`), `lidza_verify` (`no_test`), `lidza_build`, `lidza_ship` (`domains`, `email`, `no_e2e`), `lidza_doctor` | the CLI command of the same name run for you, in this project: one JSON result with `ok`, `exit`, the parsed `report` (check, verify) or the `output`. Prefer these over a shell. |
 | `lidza_recipes`, `lidza_recipe_add` | the recipes with their scope; record one of this app's conventions (title, description, steps) |
 | `lidza_decision_add` | record why the app is built a way (a pack, Rust, a dependency, a schema tradeoff) in `docs/decisions.md`; `lidza://decisions` reads the log |
-| `lidza_brief` (`open_only`), `lidza_brief_answer` (`id`, `answer`), `lidza_note_add` (`text`) | the brief: its questions with suggestions and answers, one answer recorded and applied (a decision, the working agreements, the palette, a seeded recipe); a lasting fact in the Team notes. `lidza://brief` reads `docs/brief.md` |
+| `lidza_brief` (`open_only`), `lidza_brief_answer` (`id`, `answer`), `lidza_brief_skip` (`ids`), `lidza_note_add` (`text`) | the brief: its questions with suggestions and answers, one answer recorded and applied (a decision, the working agreements, the palette, a seeded recipe); a lasting fact in the Team notes. `lidza://brief` reads `docs/brief.md` |
 | `lidza_credentials_set`, `lidza_credentials_list` | seal secrets into `config/credentials.yml.enc` by their environment names; list the names |
 | `lidza_mail`, `lidza_llm`, `lidza_llm_usage`, `lidza_storage`, `lidza_errors` | with the pack enabled: the outbox; a prompt against the configured model; token usage; stored objects; captured errors |
 | `lidza_api` | the framework's public Go API (`package`, `filter`), also the resource `lidza://api` |
@@ -242,7 +242,10 @@ you work together. The answers are the app's shared memory, in git.
    (in Claude Code, AskUserQuestion): the question, two to four
    suggestions (the tool's, adjusted to what you know of the app, the
    likeliest first) and room for their own answer; a `many` question
-   takes several. Never answer for them; a skipped question stays open.
+   takes several. Offer "later" and "skip" with every question, and
+   "skip the rest" for the whole brief. Never answer for them. Later
+   leaves the question open; skip (`lidza_brief_skip`, with the id, or
+   no ids for every open question) closes it: it is not asked again.
 3. Record each answer with `lidza_brief_answer`, in their words or the
    suggestion they picked. It lands in `docs/brief.md` and where it
    acts: a decision in `docs/decisions.md`, the working agreements in

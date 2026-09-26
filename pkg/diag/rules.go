@@ -7,6 +7,7 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -35,7 +36,10 @@ import (
 //     the S3 API already, with a local provider for tests;
 //   - L009: a file written to the local disk (os.WriteFile, os.Create,
 //     os.OpenFile, os.MkdirAll); a node's disk is neither shared nor
-//     kept, so uploads and generated files go through the storage pack.
+//     kept, so uploads and generated files go through the storage pack;
+//   - L010: a string literal shaped like an API key or token (AWS,
+//     OpenAI, Anthropic, Google, SendGrid, Mailgun, Resend, Slack, a
+//     private key); secrets go in the credentials, never in source.
 //
 // Except for L004 the findings are warnings: they point at the pattern,
 // the author decides. A comment "lidza:ignore L001" on the line, or the
@@ -153,6 +157,12 @@ func checkFile(fset *token.FileSet, f *ast.File, rel, moduleDir string) []Diagno
 		}
 	}
 	ast.Inspect(f, func(n ast.Node) bool {
+		if lit, ok := n.(*ast.BasicLit); ok && lit.Kind == token.STRING {
+			if kind := secretShape(lit.Value); kind != "" {
+				warn(lit.Pos(), "L010", "a string that looks like "+kind+": secrets never go in source; seal it with `lidza credentials set NAME=...` (MCP lidza_credentials_set) and read it by name from the pack's configuration")
+			}
+			return true
+		}
 		call, ok := n.(*ast.CallExpr)
 		if !ok {
 			return true
@@ -163,6 +173,33 @@ func checkFile(fset *token.FileSet, f *ast.File, rel, moduleDir string) []Diagno
 		return true
 	})
 	return out
+}
+
+// secretShapes are the token formats providers issue.
+var secretShapes = []struct {
+	kind string
+	re   *regexp.Regexp
+}{
+	{"an AWS access key", regexp.MustCompile(`AKIA[0-9A-Z]{16}`)},
+	{"an Anthropic API key", regexp.MustCompile(`sk-ant-[A-Za-z0-9_-]{20,}`)},
+	{"an OpenAI API key", regexp.MustCompile(`sk-(proj-)?[A-Za-z0-9_-]{20,}`)},
+	{"a Google API key", regexp.MustCompile(`AIza[0-9A-Za-z_-]{35}`)},
+	{"a SendGrid API key", regexp.MustCompile(`SG\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}`)},
+	{"a Mailgun API key", regexp.MustCompile(`key-[0-9a-f]{32}`)},
+	{"a Resend API key", regexp.MustCompile(`re_[A-Za-z0-9]{20,}`)},
+	{"a Slack token", regexp.MustCompile(`xox[abpr]-[A-Za-z0-9-]{10,}`)},
+	{"a GitHub token", regexp.MustCompile(`gh[pousr]_[A-Za-z0-9]{30,}`)},
+	{"a private key", regexp.MustCompile(`-----BEGIN [A-Z ]*PRIVATE KEY-----`)},
+}
+
+// secretShape names the kind of secret a string literal looks like, "".
+func secretShape(lit string) string {
+	for _, s := range secretShapes {
+		if s.re.MatchString(lit) {
+			return s.kind
+		}
+	}
+	return ""
 }
 
 // diskWrite names the os function a call writes files with, or "".

@@ -835,7 +835,7 @@ file in `$EDITOR`. Every pack reads the credentials by the same names as
 `.env`, between the `.env` files and the process environment, so nothing
 in the code changes. In production the key travels as
 `LIDZA_MASTER_KEY` (the file's contents) and the sealed file is deployed
-with the binary. The admin pages save changes to the database, sealed
+with the binary. A key pasted into source fails `lidza check` (L010). The admin pages save changes to the database, sealed
 with the same key, and the mail, llm and storage packs pick them up
 without a restart.
 

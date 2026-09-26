@@ -42,6 +42,8 @@ func typed(ctx context.Context, req *router.Request[router.None]) (int, error) {
 }
 
 func work() { go func() {}(); os.WriteFile("upload.bin", nil, 0o644) }
+
+var apiKey = "sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789"
 `)
 	write("handlers/things.go", `package handlers
 
@@ -77,7 +79,7 @@ func helper[In any](req *router.Request[In], n int) (In, error) { var z In; retu
 	for _, d := range got {
 		lines = append(lines, d.Code+" "+d.File+":"+itoa(d.Line)+" "+d.Severity)
 	}
-	want := "L001 app.go:10 warning,L001 app.go:11 warning,L001 app.go:14 warning,L002 app.go:19 warning,L002 app.go:23 warning,L009 app.go:27 warning," +
+	want := "L001 app.go:10 warning,L001 app.go:11 warning,L001 app.go:14 warning,L002 app.go:19 warning,L002 app.go:23 warning,L009 app.go:27 warning,L010 app.go:29 warning," +
 		"L004 handlers/things.go:6 error,L006 handlers/things.go:8 warning,L007 handlers/things.go:9 warning,L008 handlers/things.go:10 warning,L005 handlers/things.go:20 warning,L005 handlers/things.go:20 warning,L005 handlers/things.go:21 warning,L005 handlers/things.go:21 warning"
 	if strings.Join(lines, ",") != want {
 		t.Fatalf("got %v\nwant %s", lines, want)

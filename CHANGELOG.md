@@ -6,7 +6,7 @@ version in `go.mod`. `install.sh` pins the newest release here;
 `scripts/release.sh vX.Y.Z` turns "Unreleased" into a release, bumps the
 pin, tags and pushes.
 
-## Unreleased
+## v0.1.10 (2026-09-26)
 
 - `lidza version` and the version an app shows (`/api/v1/health`, the
   admin header) read the framework's version from the app's dependency,

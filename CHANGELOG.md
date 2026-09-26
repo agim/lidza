@@ -9,7 +9,7 @@ release is listed first under its version as "Breaking:", with what to
 change; every release so far is additive (an app updates with
 `lidza update --migrate`).
 
-## Unreleased
+## v0.1.23 (2026-09-26)
 
 - `lidza setup`: a machine without a git author (a fresh CI runner, a new
   laptop) gets a note with the `git config` command instead of a failed

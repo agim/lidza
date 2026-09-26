@@ -264,6 +264,12 @@ func TestAdmin(t *testing.T) {
 	if res.StatusCode != http.StatusOK || !strings.Contains(string(page), "Overview") || !strings.Contains(string(page), "Credentials") {
 		t.Fatalf("admin overview: %d %s", res.StatusCode, page)
 	}
+	res, _ = srv.Client().Get(srv.URL + "/admin/users")
+	page, _ = io.ReadAll(res.Body)
+	res.Body.Close()
+	if res.StatusCode != http.StatusOK || !strings.Contains(string(page), "admin@example.com") {
+		t.Fatalf("admin users page: %d", res.StatusCode)
+	}
 	res, _ = srv.Client().Get(srv.URL + "/admin/llm")
 	page, _ = io.ReadAll(res.Body)
 	res.Body.Close()

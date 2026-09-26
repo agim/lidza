@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/crypto/argon2"
 
@@ -63,8 +64,10 @@ const (
 
 // Auth is the running pack.
 type Auth struct {
-	cfg  Config
-	pool *pgxpool.Pool
+	cfg     Config
+	pool    *pgxpool.Pool
+	firstMu sync.Mutex
+	first   string
 }
 
 // Pack returns the pack for packs.go. It needs the db pack started first.
@@ -107,7 +110,7 @@ func (a *Auth) Start(ctx context.Context, s *lidza.Services) error {
 	if err != nil {
 		return err
 	}
-	*a = *built
+	a.cfg, a.pool = built.cfg, built.pool
 	lidza.Provide(s, a)
 	return nil
 }
@@ -136,6 +139,9 @@ type Tokens struct {
 // Login opens a session for subject with claims and returns its tokens.
 // The app verifies the credentials first (CheckPassword).
 func (a *Auth) Login(ctx context.Context, subject string, claims map[string]any) (Tokens, error) {
+	if err := a.seen(ctx, subject, claims); err != nil {
+		return Tokens{}, err
+	}
 	sessionID := randomID()
 	refresh := randomID()
 	expires := time.Now().Add(a.cfg.RefreshTTL)
@@ -166,6 +172,9 @@ func (a *Auth) Refresh(ctx context.Context, refreshToken string, claims map[stri
 		hashToken(refreshToken), fmt.Sprintf("%d seconds", int(RefreshGrace.Seconds()))).Scan(&sessionID, &subject, &current)
 	if err != nil {
 		return Tokens{}, router.Errorf(http.StatusUnauthorized, "session expired")
+	}
+	if err := a.seen(ctx, subject, claims); err != nil {
+		return Tokens{}, err
 	}
 	if !current {
 		return a.tokens(subject, claims, sessionID, "")
@@ -362,6 +371,34 @@ func ClearedCookies() []*http.Cookie {
 
 type userKey struct{}
 
+// WithUser puts a user in the context, for a test or a middleware that
+// authenticates another way; Require and Optional do it for tokens.
+func WithUser(ctx context.Context, u *User) context.Context {
+	return context.WithValue(ctx, userKey{}, u)
+}
+
+// FirstSubject returns the subject of the earliest session ever opened:
+// the first user to sign in, the app's first account. Empty until
+// someone has. The answer is cached once known; sessions are revoked,
+// never deleted.
+func (a *Auth) FirstSubject(ctx context.Context) (string, error) {
+	a.firstMu.Lock()
+	defer a.firstMu.Unlock()
+	if a.first != "" {
+		return a.first, nil
+	}
+	var subject string
+	err := a.pool.QueryRow(ctx, `SELECT subject FROM auth_session ORDER BY created_at, id LIMIT 1`).Scan(&subject)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	a.first = subject
+	return subject, nil
+}
+
 // CurrentUser returns the user Require put in the context, or nil.
 func CurrentUser(ctx context.Context) *User {
 	u, _ := ctx.Value(userKey{}).(*User)
@@ -463,7 +500,8 @@ func (a *Auth) expiredClaims(token string) map[string]any {
 // when the access token expires.
 func (a *Auth) sessionActive(ctx context.Context, sessionID string) bool {
 	var one int
-	err := a.pool.QueryRow(ctx, `SELECT 1 FROM auth_session WHERE id = $1 AND revoked_at IS NULL AND expires_at > now()`, sessionID).Scan(&one)
+	err := a.pool.QueryRow(ctx, `SELECT 1 FROM auth_session s WHERE s.id = $1 AND s.revoked_at IS NULL AND s.expires_at > now()
+		AND NOT EXISTS (SELECT 1 FROM auth_account a WHERE a.subject = s.subject AND a.disabled_at IS NOT NULL)`, sessionID).Scan(&one)
 	return err == nil
 }
 

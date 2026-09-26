@@ -174,6 +174,21 @@ func (v LLMUsage) Validate() error {
 	return errs.Result()
 }
 
+// AuthAccount is a row of the auth_account table.
+type AuthAccount struct {
+	Subject     string     `json:"subject" db:"subject"`
+	Label       *string    `json:"label" db:"label"`
+	DisabledAt  *time.Time `json:"disabledAt" db:"disabled_at"`
+	FirstSeenAt time.Time  `json:"firstSeenAt" db:"first_seen_at"`
+	LastSeenAt  time.Time  `json:"lastSeenAt" db:"last_seen_at"`
+}
+
+// Validate applies the rules of AuthAccount from schema.lidza.
+func (v AuthAccount) Validate() error {
+	var errs validate.Errors
+	return errs.Result()
+}
+
 // CreateNote is an API type.
 type CreateNote struct {
 	Title string  `json:"title"`

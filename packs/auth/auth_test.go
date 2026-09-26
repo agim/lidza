@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -29,7 +30,8 @@ func testAuth(t *testing.T) *Auth {
 	t.Cleanup(pool.Close)
 	pool.Exec(ctx, `DROP TABLE IF EXISTS auth_session`)
 	pool.Exec(ctx, `DROP TABLE IF EXISTS auth_token`)
-	if _, err := pool.Exec(ctx, SessionTable+TokenTable); err != nil {
+	pool.Exec(ctx, `DROP TABLE IF EXISTS auth_account`)
+	if _, err := pool.Exec(ctx, SessionTable+TokenTable+AccountTable); err != nil {
 		t.Fatal(err)
 	}
 	a, err := New(Config{Secret: testSecret, AccessTTL: time.Minute, RefreshTTL: time.Hour, LoginRPS: 1, LoginBurst: 2, MinPasswordLength: 10, TokenTTL: time.Hour}, pool)
@@ -330,5 +332,81 @@ func TestSlidingSession(t *testing.T) {
 	}
 	if rec := call(tokens.Access, newRefresh); rec.Code != 401 {
 		t.Fatalf("revoked session renewed: %d", rec.Code)
+	}
+}
+
+func TestFirstSubject(t *testing.T) {
+	a := testAuth(t)
+	ctx := context.Background()
+	if first, err := a.FirstSubject(ctx); err != nil || first != "" {
+		t.Fatalf("before anyone: %q %v", first, err)
+	}
+	if _, err := a.Login(ctx, "user-first", nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.Login(ctx, "user-second", nil); err != nil {
+		t.Fatal(err)
+	}
+	if first, err := a.FirstSubject(ctx); err != nil || first != "user-first" {
+		t.Fatalf("first: %q %v", first, err)
+	}
+	// Revoking does not change who was first.
+	if err := a.RevokeAll(ctx, "user-first"); err != nil {
+		t.Fatal(err)
+	}
+	if first, _ := a.FirstSubject(ctx); first != "user-first" {
+		t.Fatalf("after revoke: %q", first)
+	}
+	if u := CurrentUser(WithUser(ctx, &User{ID: "x"})); u == nil || u.ID != "x" {
+		t.Fatal("WithUser")
+	}
+}
+
+func TestAccounts(t *testing.T) {
+	a := testAuth(t)
+	ctx := context.Background()
+	if _, err := a.Login(ctx, "u1", map[string]any{"email": "One@example.com"}); err != nil {
+		t.Fatal(err)
+	}
+	t2, err := a.Login(ctx, "u2", map[string]any{"email": "two@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.Login(ctx, "u2", nil)
+	list, total, err := a.Accounts(ctx, "", 10, 0)
+	if err != nil || total != 2 || len(list) != 2 || list[0].Subject != "u2" || list[0].Sessions != 2 || list[0].Label != "two@example.com" || list[1].Label != "One@example.com" {
+		t.Fatalf("accounts: %+v %d %v", list, total, err)
+	}
+	if found, total, _ := a.Accounts(ctx, "ONE", 10, 0); total != 1 || found[0].Subject != "u1" {
+		t.Fatalf("search: %+v %d", found, total)
+	}
+	// Disabling ends the sessions and blocks login and refresh.
+	if err := a.Disable(ctx, "u2"); err != nil {
+		t.Fatal(err)
+	}
+	if ac, _ := a.AccountOf(ctx, "u2"); !ac.Disabled() || ac.Sessions != 0 {
+		t.Fatalf("disabled: %+v", ac)
+	}
+	if u, _ := a.Verify(t2.Access); u == nil || a.sessionActive(ctx, u.SessionID) {
+		t.Fatal("session still active after disable")
+	}
+	if _, err := a.Login(ctx, "u2", nil); !errors.Is(err, ErrDisabled) {
+		t.Fatalf("login while disabled: %v", err)
+	}
+	if _, err := a.Refresh(ctx, t2.Refresh, nil); err == nil {
+		t.Fatal("refresh while disabled")
+	}
+	if err := a.Enable(ctx, "u2"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.Login(ctx, "u2", nil); err != nil {
+		t.Fatalf("login after enable: %v", err)
+	}
+	if err := a.Disable(ctx, "nobody"); err == nil {
+		t.Fatal("disable unknown")
+	}
+	sessions, err := a.Sessions(ctx, "u2")
+	if err != nil || len(sessions) != 3 || sessions[0].RevokedAt != nil || sessions[1].RevokedAt == nil {
+		t.Fatalf("sessions: %+v %v", sessions, err)
 	}
 }

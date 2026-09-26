@@ -2,12 +2,15 @@ package admin
 
 import (
 	"context"
+	"html/template"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/agim/lidza"
+	"github.com/agim/lidza/packs/auth"
 	"github.com/agim/lidza/packs/jobs"
 	"github.com/agim/lidza/packs/llm"
 	"github.com/agim/lidza/packs/mail"
@@ -112,6 +115,9 @@ func (f fileStore) Names(ctx context.Context) ([]string, error) {
 }
 
 type overviewData struct {
+	FirstUser   string
+	Admins      []string
+	You         string
 	Packs       []string
 	Mail        string
 	LLM         string
@@ -125,7 +131,16 @@ type overviewData struct {
 
 func (h *Handler) overview(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	d := overviewData{TLSDomains: os.Getenv("LIDZA_TLS_DOMAINS"), AppURL: os.Getenv("APP_URL"), HasKey: credentials.HasKey(h.opt.CredentialsDir), Store: "file"}
+	d := overviewData{TLSDomains: os.Getenv("LIDZA_TLS_DOMAINS"), AppURL: os.Getenv("APP_URL"), HasKey: credentials.HasKey(h.opt.CredentialsDir), Store: "file", Admins: adminList(h.opt.CredentialsDir)}
+	if h.opt.FirstUser != nil {
+		d.FirstUser = h.opt.FirstUser(ctx)
+	}
+	if u := auth.CurrentUser(ctx); u != nil {
+		d.You = u.ID
+		if email, _ := u.Claims["email"].(string); email != "" {
+			d.You = email + " (" + u.ID + ")"
+		}
+	}
 	if s := lidza.ServicesFrom(ctx); s != nil {
 		s.Each(func(v any) {
 			if p, ok := v.(lidza.Pack); ok {
@@ -147,6 +162,157 @@ func (h *Handler) overview(w http.ResponseWriter, r *http.Request) {
 	}
 	d.Credentials = len(credentials.Names(h.opt.CredentialsDir)) + len(credentials.Overrides())
 	h.render(w, r, "overview", "Overview", d)
+}
+
+// saveAdmins adds or removes an admin: ADMIN_USERS in the credentials
+// store, applied at once (the list is read on each request).
+func (h *Handler) saveAdmins(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if err := r.ParseForm(); err != nil {
+		h.redirect(w, r, "/", "", "bad form")
+		return
+	}
+	entry := strings.TrimSpace(r.Form.Get("admin"))
+	if entry == "" {
+		h.redirect(w, r, "/", "", "an email or a user id is needed")
+		return
+	}
+	// Only the saved list changes; a name the environment sets stays.
+	remove := r.Form.Get("remove") == "on"
+	if err := h.setAdmin(ctx, entry, !remove); err != nil {
+		h.redirect(w, r, "/", "", err.Error())
+		return
+	}
+	if remove {
+		h.redirect(w, r, "/", entry+" is no longer an admin", "")
+		return
+	}
+	h.redirect(w, r, "/", entry+" is an admin", "")
+}
+
+// userRow is an account with what the page adds: whether it is an
+// admin, and the entry the admin list would use for it.
+type userRow struct {
+	auth.Account
+	Admin bool
+	Entry string
+	First bool
+	You   bool
+}
+
+func (h *Handler) users(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	a, ok := lidza.Optional[*auth.Auth](ctx)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	q := r.URL.Query().Get("q")
+	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	if page < 1 {
+		page = 1
+	}
+	const per = 50
+	accounts, total, err := a.Accounts(ctx, q, per, (page-1)*per)
+	data := map[string]any{"Query": q, "Page": page, "Total": total, "Pages": (total + per - 1) / per}
+	if err != nil {
+		data["Error"] = err.Error()
+	}
+	admins := adminList(h.opt.CredentialsDir)
+	first := ""
+	if h.opt.FirstUser != nil {
+		first = h.opt.FirstUser(ctx)
+	}
+	you := ""
+	if u := auth.CurrentUser(ctx); u != nil {
+		you = u.ID
+	}
+	var rows []userRow
+	for _, ac := range accounts {
+		row := userRow{Account: ac, Entry: ac.Subject, First: ac.Subject == first, You: ac.Subject == you}
+		if ac.Label != "" {
+			row.Entry = ac.Label
+		}
+		for _, e := range admins {
+			if e == ac.Subject || strings.EqualFold(e, ac.Label) {
+				row.Admin = true
+			}
+		}
+		rows = append(rows, row)
+	}
+	data["Rows"] = rows
+	h.render(w, r, "users", "Users", data)
+}
+
+// userAction is one of revoke (sign out everywhere), disable, enable,
+// admin and unadmin on an account.
+func (h *Handler) userAction(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	a, ok := lidza.Optional[*auth.Auth](ctx)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	subject, action := r.PathValue("subject"), r.PathValue("action")
+	back := "/users"
+	if q := r.URL.Query().Get("q"); q != "" {
+		back += "?q=" + template.URLQueryEscaper(q)
+	}
+	if u := auth.CurrentUser(ctx); u != nil && u.ID == subject && (action == "disable" || action == "unadmin") {
+		h.redirect(w, r, back, "", "not on your own account")
+		return
+	}
+	account, err := a.AccountOf(ctx, subject)
+	if err != nil {
+		h.redirect(w, r, back, "", "no such account")
+		return
+	}
+	entry := account.Subject
+	if account.Label != "" {
+		entry = account.Label
+	}
+	var msg string
+	switch action {
+	case "revoke":
+		err, msg = a.RevokeAll(ctx, subject), entry+" signed out everywhere"
+	case "disable":
+		err, msg = a.Disable(ctx, subject), entry+" disabled: signed out, cannot sign in"
+	case "enable":
+		err, msg = a.Enable(ctx, subject), entry+" enabled"
+	case "admin", "unadmin":
+		err, msg = h.setAdmin(ctx, entry, action == "admin"), entry+" is an admin"
+		if action == "unadmin" {
+			msg = entry + " is no longer an admin"
+		}
+	default:
+		h.redirect(w, r, back, "", "unknown action")
+		return
+	}
+	if err != nil {
+		h.redirect(w, r, back, "", err.Error())
+		return
+	}
+	h.redirect(w, r, back, msg, "")
+}
+
+// setAdmin adds or removes an entry of the saved admin list.
+func (h *Handler) setAdmin(ctx context.Context, entry string, add bool) error {
+	var next []string
+	for _, a := range strings.Split(credentials.Values(h.opt.CredentialsDir)[EnvAdminUsers], ",") {
+		if a = strings.TrimSpace(a); a != "" && !strings.EqualFold(a, entry) {
+			next = append(next, a)
+		}
+	}
+	if add {
+		next = append(next, entry)
+	}
+	if err := h.store(ctx).Save(ctx, EnvAdminUsers, strings.Join(next, ",")); err != nil {
+		return err
+	}
+	listMu.Lock()
+	listAt = time.Time{}
+	listMu.Unlock()
+	return nil
 }
 
 func (h *Handler) credentials(w http.ResponseWriter, r *http.Request) {

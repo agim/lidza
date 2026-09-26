@@ -10,10 +10,14 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/agim/lidza"
+	"github.com/agim/lidza/packs/auth"
+	"github.com/agim/lidza/packs/db"
 	"github.com/agim/lidza/packs/llm"
 	"github.com/agim/lidza/pkg/credentials"
+	"github.com/agim/lidza/pkg/middleware"
 )
 
 type fakeReconf struct{ calls int }
@@ -125,5 +129,143 @@ func TestGateAndPages(t *testing.T) {
 	}
 	if code, body := get(t, allowed, "/admin/"); code != 200 || !strings.Contains(body, `class="themed"`) || !strings.Contains(body, "Overview") {
 		t.Fatalf("layout override: %d %s", code, body)
+	}
+}
+
+// TestFirstUserIsAdmin: the first account gets in without being listed,
+// a listed one gets in, anyone else does not; an admin adds another from
+// the Overview page.
+func TestFirstUserIsAdmin(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv(credentials.EnvMasterKey, "")
+	t.Setenv(EnvAdminUsers, "listed@example.com")
+	t.Cleanup(func() { credentials.SetOverrides(nil) })
+	s := lidza.NewServices()
+	as := func(u *auth.User) middleware.Middleware {
+		return func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				next.ServeHTTP(w, r.WithContext(auth.WithUser(r.Context(), u)))
+			})
+		}
+	}
+	page := func(u *auth.User) (int, string) {
+		srv := serve(t, Options{Auth: as(u), FirstUser: func(context.Context) string { return "user-1" }, CredentialsDir: dir, Dir: filepath.Join(dir, "admin")}, s)
+		return get(t, srv, "/admin/")
+	}
+	if code, body := page(&auth.User{ID: "user-1"}); code != 200 || !strings.Contains(body, "user-1") || !strings.Contains(body, "an admin by default") {
+		t.Fatalf("first user: %d %s", code, body)
+	}
+	if code, _ := page(&auth.User{ID: "user-2", Claims: map[string]any{"email": "Listed@example.com"}}); code != 200 {
+		t.Fatalf("listed user: %d", code)
+	}
+	if code, _ := page(&auth.User{ID: "user-3", Claims: map[string]any{"email": "other@example.com"}}); code != 403 {
+		t.Fatalf("other user: %d", code)
+	}
+	// The first user adds user-3 by email; the list applies at once.
+	srv := serve(t, Options{Auth: as(&auth.User{ID: "user-1"}), FirstUser: func(context.Context) string { return "user-1" }, CredentialsDir: dir, Dir: filepath.Join(dir, "admin")}, s)
+	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	res, err := client.PostForm(srv.URL+"/admin/admins", url.Values{"admin": {"other@example.com"}})
+	if err != nil || res.StatusCode != http.StatusSeeOther {
+		t.Fatalf("add admin: %v %v", err, res)
+	}
+	res.Body.Close()
+	if code, _ := page(&auth.User{ID: "user-3", Claims: map[string]any{"email": "other@example.com"}}); code != 200 {
+		t.Fatalf("added admin: %d", code)
+	}
+	res, _ = client.PostForm(srv.URL+"/admin/admins", url.Values{"admin": {"other@example.com"}, "remove": {"on"}})
+	res.Body.Close()
+	if code, _ := page(&auth.User{ID: "user-3", Claims: map[string]any{"email": "other@example.com"}}); code != 403 {
+		t.Fatalf("removed admin: %d", code)
+	}
+	if code, _ := page(nil); code != 403 {
+		t.Fatalf("no user: %d", code)
+	}
+}
+
+// TestUsers: the Users page lists accounts the auth pack saw, and its
+// actions disable, enable, sign out and promote them.
+func TestUsers(t *testing.T) {
+	url := os.Getenv("LIDZA_TEST_DATABASE_URL")
+	if url == "" {
+		url = "postgres:///lidza_test?host=/var/run/postgresql"
+	}
+	ctx := context.Background()
+	pool, err := db.Open(ctx, db.Config{URL: url, MaxConns: 2, ConnectTimeout: 2 * time.Second})
+	if err != nil {
+		t.Skipf("no test database: %v", err)
+	}
+	t.Cleanup(pool.Close)
+	for _, tbl := range []string{"auth_session", "auth_token", "auth_account"} {
+		pool.Exec(ctx, "DROP TABLE IF EXISTS "+tbl)
+	}
+	if _, err := pool.Exec(ctx, auth.SessionTable+auth.TokenTable+auth.AccountTable); err != nil {
+		t.Fatal(err)
+	}
+	a, err := auth.New(auth.Config{Secret: strings.Repeat("s", 32), AccessTTL: time.Minute, RefreshTTL: time.Hour}, pool)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.Login(ctx, "owner", map[string]any{"email": "owner@example.com"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.Login(ctx, "member", map[string]any{"email": "member@example.com"}); err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	t.Setenv(credentials.EnvMasterKey, "")
+	t.Setenv(EnvAdminUsers, "")
+	t.Cleanup(func() { credentials.SetOverrides(nil) })
+	s := lidza.NewServices()
+	lidza.Provide(s, a)
+	owner := &auth.User{ID: "owner", Claims: map[string]any{"email": "owner@example.com"}}
+	asOwner := func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			next.ServeHTTP(w, r.WithContext(auth.WithUser(r.Context(), owner)))
+		})
+	}
+	srv := serve(t, Options{Auth: asOwner, CredentialsDir: dir, Dir: filepath.Join(dir, "admin")}, s)
+	code, body := get(t, srv, "/admin/users")
+	if code != 200 || !strings.Contains(body, "owner@example.com") || !strings.Contains(body, "member@example.com") || !strings.Contains(body, "first account, admin by default") || !strings.Contains(body, "2 account(s)") {
+		t.Fatalf("users: %d %s", code, body)
+	}
+	if code, body := get(t, srv, "/admin/users?q=MEMBER"); code != 200 || strings.Contains(body, "owner@example.com") || !strings.Contains(body, "1 account(s)") {
+		t.Fatalf("search: %d", code)
+	}
+	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	act := func(subject, action string) string {
+		t.Helper()
+		res, err := client.PostForm(srv.URL+"/admin/users/"+subject+"/"+action, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		return res.Header.Get("Location")
+	}
+	if loc := act("member", "disable"); !strings.Contains(loc, "disabled") {
+		t.Fatalf("disable: %s", loc)
+	}
+	if ac, _ := a.AccountOf(ctx, "member"); !ac.Disabled() || ac.Sessions != 0 {
+		t.Fatalf("after disable: %+v", ac)
+	}
+	if code, body := get(t, srv, "/admin/users"); code != 200 || !strings.Contains(body, ">disabled<") {
+		t.Fatal("disabled not shown")
+	}
+	act("member", "enable")
+	if ac, _ := a.AccountOf(ctx, "member"); ac.Disabled() {
+		t.Fatal("still disabled")
+	}
+	act("member", "admin")
+	if list := adminList(dir); len(list) != 1 || list[0] != "member@example.com" {
+		t.Fatalf("admin list: %v", list)
+	}
+	act("member", "unadmin")
+	if list := adminList(dir); len(list) != 0 {
+		t.Fatalf("admin list after removal: %v", list)
+	}
+	if loc := act("owner", "disable"); !strings.Contains(loc, "your+own") {
+		t.Fatalf("self-disable allowed: %s", loc)
+	}
+	if loc := act("nobody", "revoke"); !strings.Contains(loc, "no+such") {
+		t.Fatalf("unknown account: %s", loc)
 	}
 }

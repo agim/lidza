@@ -16,6 +16,14 @@ type AppUser struct {
 	CreatedAt    time.Time  `json:"created_at"`
 }
 
+type AuthAccount struct {
+	Subject     string     `json:"subject"`
+	Label       *string    `json:"label"`
+	DisabledAt  *time.Time `json:"disabled_at"`
+	FirstSeenAt time.Time  `json:"first_seen_at"`
+	LastSeenAt  time.Time  `json:"last_seen_at"`
+}
+
 type AuthSession struct {
 	ID              string     `json:"id"`
 	Subject         string     `json:"subject"`

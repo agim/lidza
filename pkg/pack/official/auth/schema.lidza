@@ -18,3 +18,13 @@ model AuthToken @table("auth_token") {
   usedAt    time?
   createdAt time   @default(now())
 }
+
+// Every account that ever signed in, kept by the auth pack: who, when
+// first and last, and whether an admin disabled it.
+model AuthAccount @table("auth_account") {
+  subject     string @id
+  label       string?
+  disabledAt  time?
+  firstSeenAt time   @default(now())
+  lastSeenAt  time   @default(now())
+}

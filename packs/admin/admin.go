@@ -23,10 +23,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/agim/lidza"
 	"github.com/agim/lidza/packs/auth"
+	"github.com/agim/lidza/pkg/credentials"
 	"github.com/agim/lidza/pkg/env"
 	"github.com/agim/lidza/pkg/middleware"
 	"github.com/agim/lidza/pkg/router"
@@ -50,8 +52,16 @@ type Options struct {
 	// no-op.
 	Auth middleware.Middleware
 	// Allow decides whether the signed-in user is an admin. By default
-	// the user's id or email claim must be listed in ADMIN_USERS.
+	// the first user ever to sign in is one, and so is anyone whose id
+	// or email claim ADMIN_USERS lists (in .env, the credentials, or
+	// saved from the Overview page).
 	Allow func(ctx context.Context) bool
+	// FirstUser returns the id of the app's first account, an admin by
+	// default; the auth pack's FirstSubject unless set. Empty means no
+	// such rule.
+	FirstUser func(ctx context.Context) string
+	// NoFirstUserAdmin turns that rule off: only listed users get in.
+	NoFirstUserAdmin bool
 	// CredentialsDir is where config/credentials.yml.enc lives when no
 	// db pack holds the runtime values; "." by default.
 	CredentialsDir string
@@ -91,14 +101,30 @@ func New(opt Options) *Handler {
 	if opt.CredentialsDir == "" {
 		opt.CredentialsDir = "."
 	}
+	if opt.FirstUser == nil && !opt.NoFirstUserAdmin {
+		opt.FirstUser = firstSubject
+	}
 	if opt.Allow == nil {
-		listed := adminList(opt.CredentialsDir)
-		opt.Allow = func(ctx context.Context) bool { return allowListed(ctx, listed) }
+		dir := opt.CredentialsDir
+		first := opt.FirstUser
+		opt.Allow = func(ctx context.Context) bool {
+			u := auth.CurrentUser(ctx)
+			if u == nil {
+				return false
+			}
+			if first != nil && first(ctx) != "" && first(ctx) == u.ID {
+				return true
+			}
+			return allowListed(u, adminList(dir))
+		}
 	}
 	h := &Handler{opt: opt, path: strings.TrimSuffix(opt.Path, "/"), mux: http.NewServeMux()}
 	p := h.path
 	h.mux.HandleFunc("GET "+p+"/{$}", h.overview)
 	h.mux.HandleFunc("GET "+p+"/theme.css", h.theme)
+	h.mux.HandleFunc("POST "+p+"/admins", h.saveAdmins)
+	h.mux.HandleFunc("GET "+p+"/users", h.users)
+	h.mux.HandleFunc("POST "+p+"/users/{subject}/{action}", h.userAction)
 	h.mux.HandleFunc("GET "+p+"/credentials", h.credentials)
 	h.mux.HandleFunc("POST "+p+"/credentials", h.saveCredentials)
 	h.mux.HandleFunc("GET "+p+"/llm", h.llm)
@@ -133,25 +159,55 @@ func (h *Handler) gate(next http.Handler) http.Handler {
 	})
 }
 
+// firstSubject is the auth pack's first user, "" without the pack or
+// before anyone signed in.
+func firstSubject(ctx context.Context) string {
+	a, ok := lidza.Optional[*auth.Auth](ctx)
+	if !ok {
+		return ""
+	}
+	first, _ := a.FirstSubject(ctx)
+	return first
+}
+
 // adminList reads ADMIN_USERS the way the packs read their settings:
-// the .env files, the credentials, the process environment.
+// the .env files, the credentials (the Overview page saves there), the
+// process environment. Read on each request, cached for a few seconds.
 func adminList(dir string) []string {
+	listMu.Lock()
+	defer listMu.Unlock()
+	if time.Since(listAt) < 3*time.Second && listDir == dir {
+		return listCache
+	}
+	// The union of what the environment names and what the Overview page
+	// saved (the credentials), so a variable set at deploy time and an
+	// admin added at runtime both count.
 	values, _ := env.Values(dir)
+	seen := map[string]bool{}
 	var out []string
-	for _, entry := range strings.Split(values[EnvAdminUsers], ",") {
-		if entry = strings.TrimSpace(entry); entry != "" {
+	for _, list := range []string{values[EnvAdminUsers], credentials.Values(dir)[EnvAdminUsers]} {
+		for _, entry := range strings.Split(list, ",") {
+			entry = strings.TrimSpace(entry)
+			if entry == "" || seen[strings.ToLower(entry)] {
+				continue
+			}
+			seen[strings.ToLower(entry)] = true
 			out = append(out, entry)
 		}
 	}
+	listCache, listAt, listDir = out, time.Now(), dir
 	return out
 }
 
+var (
+	listMu    sync.Mutex
+	listCache []string
+	listAt    time.Time
+	listDir   string
+)
+
 // allowListed admits the users the list names, by id or email claim.
-func allowListed(ctx context.Context, listed []string) bool {
-	u := auth.CurrentUser(ctx)
-	if u == nil {
-		return false
-	}
+func allowListed(u *auth.User, listed []string) bool {
 	email, _ := u.Claims["email"].(string)
 	for _, entry := range listed {
 		if entry == u.ID || strings.EqualFold(entry, email) {
@@ -191,6 +247,9 @@ type navItem struct{ Name, Href string }
 // nav lists the pages for the packs that are enabled.
 func (h *Handler) nav(ctx context.Context) []navItem {
 	items := []navItem{{"Overview", h.path + "/"}, {"Credentials", h.path + "/credentials"}}
+	if _, ok := lidza.Optional[*auth.Auth](ctx); ok {
+		items = append(items, navItem{"Users", h.path + "/users"})
+	}
 	if _, ok := lidza.Optional[llmService](ctx); ok {
 		items = append(items, navItem{"Language model", h.path + "/llm"})
 	}
@@ -219,6 +278,7 @@ func (h *Handler) render(w http.ResponseWriter, r *http.Request, name, active st
 			}
 			return s
 		},
+		"add": func(a, b int) int { return a + b },
 		"deref": func(s *string) string {
 			if s == nil {
 				return ""

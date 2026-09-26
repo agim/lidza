@@ -93,6 +93,18 @@ pub struct LLMUsage {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AuthAccount {
+    pub subject: String,
+    pub label: Option<String>,
+    #[serde(rename = "disabledAt")]
+    pub disabled_at: Option<String>,
+    #[serde(rename = "firstSeenAt")]
+    pub first_seen_at: String,
+    #[serde(rename = "lastSeenAt")]
+    pub last_seen_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CreateNote {
     pub title: String,
     pub body: Option<String>,

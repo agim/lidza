@@ -6,6 +6,19 @@ version in `go.mod`. `install.sh` pins the newest release here;
 `scripts/release.sh vX.Y.Z` turns "Unreleased" into a release, bumps the
 pin, tags and pushes.
 
+## Unreleased
+
+- Admin pages: the app's first account (the first user ever to sign in)
+  is an admin; the Overview page adds and removes admins, saved sealed
+  and applied at once; `ADMIN_USERS` still works. `auth.WithUser` and
+  `auth.From(ctx).FirstSubject`.
+- User management: the auth pack keeps every account that signed in
+  (`auth_account`: subject, label, first and last seen, disabled);
+  `Accounts`, `AccountOf`, `Disable` (ends the sessions, refuses sign-in
+  and refresh), `Enable`, `Sessions`. The admin Users page lists and
+  searches them with sign out everywhere, disable, enable, make and
+  unmake admin. `lidza gen` writes the migration for existing apps.
+
 ## v0.1.17 (2026-09-26)
 
 - `lidza update` reads the newest release from the repository's tags

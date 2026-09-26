@@ -75,3 +75,11 @@ CREATE TABLE llm_usage (
 CREATE INDEX llm_usage_at_idx ON llm_usage (at);
 CREATE INDEX llm_usage_label_idx ON llm_usage (label);
 
+CREATE TABLE auth_account (
+  subject text PRIMARY KEY,
+  label text,
+  disabled_at timestamptz,
+  first_seen_at timestamptz NOT NULL DEFAULT now(),
+  last_seen_at timestamptz NOT NULL DEFAULT now()
+);
+

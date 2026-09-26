@@ -13,7 +13,8 @@ writing a page.
    behind `auth.Require()`.
 2. In `routes.go`: `admin.Mount(r, admin.Options{Title: "notes"})`
    (import `github.com/agim/lidza/packs/admin`).
-3. Name the admins in `.env`: `ADMIN_USERS=you@example.com` (ids or
+3. Sign in first: the first account is an admin. More are added on the
+   Overview page or in `.env`: `ADMIN_USERS=you@example.com` (ids or
    emails, comma separated). `.env.test` names a test account.
 4. Theme it when the app has a look: `admin/theme.css` with the
    variables the default defines (`lidza api packs/admin` lists the

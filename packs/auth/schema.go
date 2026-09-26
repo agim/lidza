@@ -15,6 +15,16 @@ const SessionTable = `CREATE TABLE IF NOT EXISTS auth_session (
 );
 CREATE INDEX IF NOT EXISTS auth_session_subject_idx ON auth_session (subject);`
 
+// AccountTable is the DDL of the accounts table (model AuthAccount,
+// table auth_account in the schema fragment). Tests create it directly.
+const AccountTable = `CREATE TABLE IF NOT EXISTS auth_account (
+  subject text PRIMARY KEY,
+  label text,
+  disabled_at timestamptz,
+  first_seen_at timestamptz NOT NULL DEFAULT now(),
+  last_seen_at timestamptz NOT NULL DEFAULT now()
+);`
+
 // TokenTable is the DDL of the one-time tokens table (model AuthToken,
 // table auth_token in the schema fragment). Tests create it directly.
 const TokenTable = `CREATE TABLE IF NOT EXISTS auth_token (

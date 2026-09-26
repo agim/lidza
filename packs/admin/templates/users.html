@@ -1,0 +1,32 @@
+{{define "content"}}
+<h1>Users</h1>
+<form class="card" method="get" action="{{.Path}}/users">
+  <label for="q">Search</label>
+  <input type="text" id="q" name="q" value="{{.Data.Query}}" placeholder="email or id">
+  <button type="submit">Search</button>
+  <span class="muted" style="margin-left:12px">{{.Data.Total}} account(s)</span>
+</form>
+{{if .Data.Error}}<div class="card error">{{.Data.Error}}</div>{{end}}
+<div class="card">
+<table>
+<tr><th>Account</th><th>First seen</th><th>Last seen</th><th>Sessions</th><th>State</th><th>Actions</th></tr>
+{{range .Data.Rows}}<tr>
+  <td><span class="mono">{{or .Label .Subject}}</span>{{if .Label}}<div class="help mono">{{.Subject}}</div>{{end}}
+    {{if .First}}<span class="help">first account, admin by default</span>{{end}}{{if .You}}<span class="help">you</span>{{end}}</td>
+  <td>{{since .FirstSeenAt}}</td><td>{{since .LastSeenAt}}</td><td>{{.Sessions}}</td>
+  <td>{{if .Disabled}}<span class="bad">disabled</span>{{else if or .Admin .First}}<span class="ok">admin</span>{{else}}active{{end}}</td>
+  <td>
+    {{if .Sessions}}<form method="post" action="{{$.Path}}/users/{{.Subject}}/revoke" style="display:inline"><button class="small" type="submit">Sign out everywhere</button></form>{{end}}
+    {{if not .You}}
+      {{if .Disabled}}<form method="post" action="{{$.Path}}/users/{{.Subject}}/enable" style="display:inline"><button class="small" type="submit">Enable</button></form>
+      {{else}}<form method="post" action="{{$.Path}}/users/{{.Subject}}/disable" style="display:inline"><button class="small" type="submit">Disable</button></form>{{end}}
+      {{if .Admin}}<form method="post" action="{{$.Path}}/users/{{.Subject}}/unadmin" style="display:inline"><button class="small" type="submit">Remove admin</button></form>
+      {{else if not .First}}<form method="post" action="{{$.Path}}/users/{{.Subject}}/admin" style="display:inline"><button class="small" type="submit">Make admin</button></form>{{end}}
+    {{end}}
+  </td>
+</tr>{{else}}<tr><td colspan="6" class="muted">nobody has signed in yet</td></tr>{{end}}
+</table>
+{{if gt .Data.Pages 1}}<p class="muted">Page {{.Data.Page}} of {{.Data.Pages}}{{if lt .Data.Page .Data.Pages}} · <a href="{{.Path}}/users?q={{.Data.Query}}&page={{add .Data.Page 1}}">next</a>{{end}}</p>{{end}}
+</div>
+<p class="help">Disabling an account ends its sessions and refuses sign-in and refresh until it is enabled; deleting a user's data is the app's own operation.</p>
+{{end}}

@@ -6,7 +6,7 @@ version in `go.mod`. `install.sh` pins the newest release here;
 `scripts/release.sh vX.Y.Z` turns "Unreleased" into a release, bumps the
 pin, tags and pushes.
 
-## Unreleased
+## v0.1.12 (2026-09-26)
 
 - Rule L009: a file written to the local disk (`os.WriteFile`,
   `os.Create`, `os.OpenFile`, `os.MkdirAll`) is flagged; uploads and

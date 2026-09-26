@@ -181,7 +181,7 @@ func Answer(dir, app, id, answer string) (Result, error) {
 	if !ok {
 		return Result{}, fmt.Errorf("brief: no question %q (lidza brief --list shows them)", id)
 	}
-	answer = strings.TrimSpace(answer)
+	answer = Clean(q, answer)
 	b, err := Load(dir)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return Result{}, err
@@ -271,6 +271,23 @@ func Skip(dir, app string, ids ...string) ([]string, error) {
 		done = append(done, id)
 	}
 	return done, Save(dir, b)
+}
+
+// headerRe matches the interview's question header ("[Product 1/31] ..."),
+// which a copy and paste can carry into an answer.
+var headerRe = regexp.MustCompile(`\[[A-Za-z ]+ \d+/\d+\]`)
+
+// Clean removes what a copy and paste of the interview can carry into an
+// answer: the question header, the question and its explanation. What
+// is left is the answer; "" when nothing is.
+func Clean(q Question, answer string) string {
+	answer = headerRe.ReplaceAllString(answer, "")
+	for _, s := range []string{q.Ask, q.Why} {
+		if s != "" {
+			answer = strings.ReplaceAll(answer, s, "")
+		}
+	}
+	return strings.TrimSpace(answer)
 }
 
 func firstLine(s string) string { return strings.SplitN(s, "\n", 2)[0] }

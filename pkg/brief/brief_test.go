@@ -231,3 +231,18 @@ func TestSkip(t *testing.T) {
 		t.Fatal("unknown id skipped")
 	}
 }
+
+// An answer that is only the pasted question is not recorded.
+func TestCleanOnAnswer(t *testing.T) {
+	dir := app(t)
+	Ensure(dir, "galeria")
+	q, _ := Find("purpose")
+	Answer(dir, "galeria", "purpose", "[Product 1/31] "+q.Ask)
+	if b, _ := Load(dir); b.Answers["purpose"] != "" {
+		t.Fatalf("pasted question saved: %q", b.Answers["purpose"])
+	}
+	Answer(dir, "galeria", "purpose", q.Why+" Discover art.")
+	if b, _ := Load(dir); b.Answers["purpose"] != "Discover art." {
+		t.Fatalf("pasted why kept: %q", b.Answers["purpose"])
+	}
+}

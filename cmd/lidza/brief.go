@@ -181,6 +181,11 @@ func interview(dir, app string, all bool, in *bufio.Reader, out io.Writer) error
 			fmt.Fprintf(out, "  skipped the remaining %d question(s)\n", len(done))
 			break
 		}
+		line = brief.Clean(q, line)
+		if line == "" {
+			fmt.Fprintln(out, "  that was the question itself; nothing saved (lidza brief asks it again)")
+			continue
+		}
 		answer := resolveChoice(q, line)
 		res, err := brief.Answer(dir, app, q.ID, answer)
 		if err != nil {
@@ -209,7 +214,9 @@ func resolveChoice(q brief.Question, line string) string {
 		}
 		picked = append(picked, q.Suggestions[n-1].Value)
 	}
-	if q.Kind != brief.Many && len(picked) > 1 {
+	// Only a "one" question takes a single pick; a "many" question and a
+	// free answer with suggestions combine them.
+	if q.Kind == brief.One && len(picked) > 1 {
 		return line
 	}
 	answer := strings.Join(picked, ", ")

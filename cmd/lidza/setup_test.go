@@ -102,6 +102,21 @@ func TestInterview(t *testing.T) {
 	if !b.Skipped["journeys"] || len(b.Open()) != 0 || !strings.Contains(out.String(), "skipped the remaining") {
 		t.Fatalf("skip: %+v\n%s", b.Skipped, out.String())
 	}
+	// Several picks combine for a free question with suggestions too.
+	done, _ := brief.Find("done")
+	if got := resolveChoice(done, "1,3"); got != "The README says how to use it, Screenshots in the report" {
+		t.Fatalf("text with picks: %q", got)
+	}
+	// A pasted question header or explanation is removed; the numbers
+	// after it are still choices.
+	users, _ := brief.Find("users")
+	if got := resolveChoice(users, brief.Clean(users, users.Why+"1,2,4")); got != "Individuals, for themselves, Small teams working together, Visitors who only read" {
+		t.Fatalf("pasted why: %q", got)
+	}
+	purpose, _ := brief.Find("purpose")
+	if got := brief.Clean(purpose, "[Product 1/31] "+purpose.Ask); got != "" {
+		t.Fatalf("pasted question: %q", got)
+	}
 	q, _ := brief.Find("palette")
 	if got := resolveChoice(q, "1,2"); got != "1,2" {
 		t.Fatalf("a one question took two choices: %q", got)

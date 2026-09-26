@@ -9,6 +9,13 @@ release is listed first under its version as "Breaking:", with what to
 change; every release so far is additive (an app updates with
 `lidza update --migrate`).
 
+## Unreleased
+
+- `lidza brief`: several numbers combine suggestions on a free-text
+  question too ("1,3" was saved as text); a pasted question header,
+  question or explanation is removed from an answer, and an answer that
+  was only the question is not saved (the interview asks again).
+
 ## v0.1.25 (2026-09-26)
 
 - The brief can be skipped, whole or per question. In `lidza brief`,

@@ -36,7 +36,8 @@ var Officials = []Official{
 		Name:        "db",
 		Description: "Postgres: bounded pgx pool from DATABASE_URL, migrations from db/migrations, typed queries with sqlc.",
 		Env: []string{
-			"# lidza/db",
+			"# lidza/db. lidza setup writes this machine's address: the Postgres socket",
+			"# (/var/run/postgresql on Linux, /tmp on macOS) or 127.0.0.1:5432.",
 			"DATABASE_URL=postgres:///app_dev?host=/var/run/postgresql",
 			"DB_MAX_CONNS=10",
 			"# DB_MIGRATE=true   # apply db/migrations at start",

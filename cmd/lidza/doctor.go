@@ -8,9 +8,12 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/agim/lidza/packs/db"
 	"github.com/agim/lidza/pkg/env"
 	"github.com/agim/lidza/pkg/pack"
 	"github.com/agim/lidza/pkg/version"
@@ -64,6 +67,11 @@ func runDoctor(ctx context.Context, args []string) error {
 		}
 	}
 	tool("node", "--version", "sh install.sh (installs Node 22 into ~/.local/opt)", true)
+	if out, err := exec.CommandContext(ctx, "node", "--version").Output(); err == nil {
+		if major := nodeMajor(string(out)); major != 0 && major != nodeTested {
+			note(fmt.Sprintf("node %d: the templates are tested on Node %d; if npm install or the build misbehaves, use %d (brew install node@%d, or nvm install %d)", major, nodeTested, nodeTested, nodeTested, nodeTested))
+		}
+	}
 	tool("staticcheck", "-version", "go install honnef.co/go/tools/cmd/staticcheck@latest", false)
 	tool("sqlc", "version", "go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest", false)
 	tool("wasm-tools", "--version", "cargo install wasm-tools --locked", false)
@@ -95,6 +103,9 @@ func runDoctor(ctx context.Context, args []string) error {
 			default:
 				todo("framework module "+mod+", CLI "+version.String(), "lidza update (both to the newest release) or lidza update --to "+mod)
 			}
+		}
+		if slices.Contains(cfg.Packs, pack.OfficialPrefix+"db") {
+			doctorDatabase(ctx, abs, ok, todo)
 		}
 		if cfg.Frontend.Dist != "" {
 			if _, err := os.Stat(filepath.Join(abs, "node_modules")); err == nil {
@@ -136,6 +147,53 @@ func runDoctor(ctx context.Context, args []string) error {
 	fmt.Println("everything in place")
 	return nil
 }
+
+// nodeTested is the Node major version the templates are built and
+// tested with: install.sh's NODE_VERSION (a test keeps them equal).
+const nodeTested = 22
+
+// nodeMajor reads "v22.23.2" as 22; 0 when it cannot.
+func nodeMajor(v string) int {
+	v = strings.TrimPrefix(strings.TrimSpace(v), "v")
+	major, _, _ := strings.Cut(v, ".")
+	n, err := strconv.Atoi(major)
+	if err != nil {
+		return 0
+	}
+	return n
+}
+
+// doctorDatabase connects with the app's own DATABASE_URL (.env): the
+// port answering is not enough when the address names a socket directory
+// this machine's Postgres does not use.
+func doctorDatabase(ctx context.Context, dir string, ok func(string), todo func(string, string)) {
+	values, err := env.Values(dir)
+	if err != nil || values["DATABASE_URL"] == "" {
+		todo("DATABASE_URL not set in .env", "lidza setup")
+		return
+	}
+	raw := values["DATABASE_URL"]
+	cctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	pool, err := db.Open(cctx, db.Config{URL: raw, MaxConns: 1, ConnectTimeout: 2 * time.Second})
+	if err == nil {
+		err = pool.Ping(cctx)
+		pool.Close()
+	}
+	switch {
+	case err == nil:
+		ok("database reachable (DATABASE_URL in .env)")
+	case func() bool { _, fixable := db.RepairSocket(raw); return fixable }():
+		fixed, _ := db.RepairSocket(raw)
+		todo("DATABASE_URL names a socket directory without Postgres; this machine's is at "+fixed, "lidza setup (repairs .env and .env.test)")
+	case strings.Contains(err.Error(), "does not exist"):
+		todo("database in DATABASE_URL does not exist yet", "lidza setup (creates and migrates it)")
+	default:
+		todo("database not reachable with DATABASE_URL: "+firstLine(err.Error()), "is Postgres running? "+serviceHint("postgres"))
+	}
+}
+
+func firstLine(s string) string { return strings.SplitN(s, "\n", 2)[0] }
 
 // doctorTLS checks what serving LIDZA_TLS_DOMAINS from .env needs: a DNS
 // record per domain, ports 80 and 443 free, and the right to bind them.

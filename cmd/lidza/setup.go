@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -81,6 +82,15 @@ func setup(ctx context.Context, dir string, cfg *config.Config, opt setupOptions
 		out = io.Discard
 	}
 	step := func(format string, a ...any) { fmt.Fprintf(out, "[setup] "+format+"\n", a...) }
+	// A step that fails from here on is reported and setup goes on, so
+	// one problem (Postgres not running, npm offline) does not leave the
+	// later steps silently undone; the list is repeated at the end.
+	var problems []string
+	problem := func(format string, a ...any) {
+		msg := fmt.Sprintf(format, a...)
+		problems = append(problems, msg)
+		fmt.Fprintf(out, "[setup] PROBLEM: %s\n", msg)
+	}
 
 	// 1. Packs, db first when any pack needs it.
 	packs := opt.Packs
@@ -132,7 +142,9 @@ func setup(ctx context.Context, dir string, cfg *config.Config, opt setupOptions
 	// 3. .env and .env.test with real values.
 	devURL := opt.DatabaseURL
 	if devURL == "" {
-		devURL = "postgres:///" + dbName(cfg.Name, "dev") + "?host=/var/run/postgresql"
+		// Where this machine's Postgres listens: its socket directory
+		// differs between Linux and macOS, TCP when there is none.
+		devURL = db.LocalURL(dbName(cfg.Name, "dev"))
 	}
 	testURL := withDatabase(devURL, dbName(cfg.Name, "test"))
 	if _, err := os.Stat(filepath.Join(dir, ".env")); err != nil {
@@ -169,23 +181,34 @@ func setup(ctx context.Context, dir string, cfg *config.Config, opt setupOptions
 	}
 	step("generated: schema, migrations, client, skills")
 
-	// 4. Databases.
+	// 4. Databases. An address an earlier run wrote for another
+	// machine's socket directory (Linux's on a Mac) is repaired first.
 	if hasDB {
+		for _, name := range []string{".env", ".env.test"} {
+			if from, to, err := repairEnvSocket(filepath.Join(dir, name)); err != nil {
+				return err
+			} else if to != "" {
+				step("%s: DATABASE_URL pointed at %s, where Postgres has no socket; now %s", name, from, to)
+			}
+		}
 		for _, m := range []string{"", "test"} {
 			applied, err := migrate(ctx, dir, m)
 			if err != nil {
-				return fmt.Errorf("database (%s): %w; is Postgres running? sh install.sh --services, then lidza setup again", map[bool]string{true: "dev", false: m}[m == ""], err)
+				problem("database (%s): %v; is Postgres running (lidza doctor)? Then lidza setup again", map[bool]string{true: "dev", false: m}[m == ""], err)
+				continue
 			}
 			step("database %s: created if missing, %d migration(s) applied", dbName(cfg.Name, map[bool]string{true: "dev", false: m}[m == ""]), applied)
 		}
 	}
 
-	// 5. Frontend dependencies.
+	// 5. Frontend dependencies. npm's own output is shown when it fails.
 	if cfg.Frontend.Dist != "" {
-		if err := devserver.EnsureNodeModules(ctx, dir, io.Discard); err != nil {
-			return err
+		var npmOut bytes.Buffer
+		if err := devserver.EnsureNodeModules(ctx, dir, &npmOut); err != nil {
+			problem("npm install failed (%v); its output:\n%s", err, tail(npmOut.String(), 25))
+		} else {
+			step("node_modules: installed")
 		}
-		step("node_modules: installed")
 	}
 
 	// 6. The browser for the e2e suite, so the first lidza test --e2e and
@@ -201,8 +224,7 @@ func setup(ctx context.Context, dir string, cfg *config.Config, opt setupOptions
 			cmd := exec.CommandContext(ctx, "npx", args...)
 			cmd.Dir = dir
 			if res, err := cmd.CombinedOutput(); err != nil {
-				step("browser for e2e tests not installed (%v); run: npx playwright install --with-deps chromium", err)
-				_ = res
+				problem("browser for e2e tests not installed (%v): %s; run: npx playwright install chromium", err, tail(string(res), 5))
 			} else if len(args) == 3 {
 				step("browser for e2e tests: chromium installed; its system libraries need root: sudo npx playwright install-deps chromium")
 			} else {
@@ -222,9 +244,10 @@ func setup(ctx context.Context, dir string, cfg *config.Config, opt setupOptions
 		} else {
 			cmd := exec.CommandContext(ctx, "npm", "install", "-g", pkgName)
 			if res, err := cmd.CombinedOutput(); err != nil {
-				return fmt.Errorf("npm install -g %s: %v\n%s", pkgName, err, res)
+				problem("agent CLI not installed: npm install -g %s: %v\n%s", pkgName, err, tail(string(res), 10))
+			} else {
+				step("agent %s: installed (%s); run `%s` once to sign in", opt.Agent, pkgName, opt.Agent)
 			}
-			step("agent %s: installed (%s); run `%s` once to sign in", opt.Agent, pkgName, opt.Agent)
 		}
 	} else {
 		var have []string
@@ -249,7 +272,7 @@ func setup(ctx context.Context, dir string, cfg *config.Config, opt setupOptions
 			if res, err := run("rev-parse", "HEAD"); err != nil || len(res) == 0 {
 				if _, err := run("add", "-A"); err == nil {
 					if res, err := run("commit", "-q", "-m", "Scaffold "+cfg.Name); err != nil {
-						step("first commit not made: %s", strings.TrimSpace(string(res)))
+						problem("first commit not made (the pre-commit hook runs lidza verify): %s", tail(strings.TrimSpace(string(res)), 15))
 					} else {
 						step("first commit made; lidza verify ran in the pre-commit hook")
 					}
@@ -259,8 +282,57 @@ func setup(ctx context.Context, dir string, cfg *config.Config, opt setupOptions
 			}
 		}
 	}
+	if len(problems) > 0 {
+		fmt.Fprintf(out, "\n%d step(s) need attention; fix them and run lidza setup again (it skips what is done):\n", len(problems))
+		for _, p := range problems {
+			fmt.Fprintf(out, "  - %s\n", strings.SplitN(p, "\n", 2)[0])
+		}
+		return fmt.Errorf("setup incomplete: %d step(s) need attention", len(problems))
+	}
 	fmt.Fprintf(out, "\nnext:\n  lidza dev        # http://127.0.0.1:3000\n  claude           # or codex, gemini; the MCP server and the recipes are configured\n")
 	return nil
+}
+
+// tail keeps the last n lines of a command's output.
+func tail(s string, n int) string {
+	lines := strings.Split(strings.TrimRight(s, "\n"), "\n")
+	if len(lines) > n {
+		lines = lines[len(lines)-n:]
+	}
+	return strings.Join(lines, "\n")
+}
+
+// repairEnvSocket rewrites the DATABASE_URL of an env file whose Unix
+// socket directory has no Postgres when this machine's Postgres listens
+// in another one; it returns the old and new address, or "" when the file
+// needed nothing.
+func repairEnvSocket(path string) (from, to string, err error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", "", nil
+	}
+	lines := strings.Split(string(data), "\n")
+	for i, line := range lines {
+		key, value, ok := strings.Cut(line, "=")
+		if !ok || strings.TrimSpace(key) != "DATABASE_URL" {
+			continue
+		}
+		raw := strings.Trim(strings.TrimSpace(value), `"'`)
+		fixed, changed := db.RepairSocket(raw)
+		if !changed {
+			return "", "", nil
+		}
+		lines[i] = key + "=" + fixed
+		mode := os.FileMode(0o600)
+		if st, err := os.Stat(path); err == nil {
+			mode = st.Mode().Perm()
+		}
+		if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")), mode); err != nil {
+			return "", "", err
+		}
+		return raw, fixed, nil
+	}
+	return "", "", nil
 }
 
 func dbName(app, mode string) string {

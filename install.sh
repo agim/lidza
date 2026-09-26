@@ -279,7 +279,7 @@ install_services() {
       pacman) pm_install postgresql && { [ -d /var/lib/postgres/data/base ] || as_root su - postgres -c "initdb -D /var/lib/postgres/data"; } && start_service postgresql ;;
       brew) pm_install postgresql@17 && start_service postgresql@17 ;;
       *) todo "$(service_hint postgres)" ;;
-    esac
+    esac || todo "Postgres was not installed or started: $(service_hint postgres)"
     sleep 2
     status_service postgres 127.0.0.1 5432 || true
   fi
@@ -297,9 +297,12 @@ install_services() {
       apt) if pm_install valkey-server 2>/dev/null; then start_service valkey-server; else pm_install redis-server && start_service redis-server; fi ;;
       dnf) pm_install valkey && start_service valkey ;;
       pacman) pm_install valkey && start_service valkey ;;
-      brew) pm_install valkey && start_service valkey ;;
+      # Homebrew refuses Valkey next to an installed Redis (both ship
+      # redis-* binaries); Redis serves the packs the same, so start it.
+      brew) if brew list --formula redis >/dev/null 2>&1; then start_service redis
+            else pm_install valkey && start_service valkey; fi ;;
       *) todo "$(service_hint valkey)" ;;
-    esac
+    esac || todo "Valkey was not installed or started: $(service_hint valkey)"
     sleep 1
     status_service valkey 127.0.0.1 6379 || true
   fi
@@ -405,6 +408,11 @@ ensure_env_sourced
 
 echo
 report
+if [ "$SERVICES" -eq 0 ]; then
+  echo
+  echo "Postgres and Valkey were NOT installed: the packs db, auth, jobs, mail, cache and realtime need them."
+  echo "Add them with: curl -fsSL https://raw.githubusercontent.com/agim/lidza/master/install.sh | sh -s -- --services"
+fi
 echo
 echo "Open a new shell (or run: . $LIDZA_ENV), then: lidza new myapp && cd myapp && lidza dev"
 echo "Next: docs/getting-started.md"

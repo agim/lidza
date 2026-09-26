@@ -9,6 +9,28 @@ release is listed first under its version as "Breaking:", with what to
 change; every release so far is additive (an app updates with
 `lidza update --migrate`).
 
+## Unreleased
+
+- macOS: `lidza setup` (and `lidza new --packs`) writes the address where
+  this machine's Postgres actually listens: its Unix socket in
+  /var/run/postgresql (Linux) or /tmp (Homebrew, Postgres.app), else TCP
+  on 127.0.0.1:5432 (`db.LocalURL`). It was always the Linux socket, so
+  setup failed on a Mac at the database step. Rerunning `lidza setup`
+  repairs an `.env` and `.env.test` written that way (`db.RepairSocket`).
+- `lidza setup` goes on past a failed step (the databases, npm install,
+  the test browser, the agent CLI, the first commit), shows npm's own
+  output when it fails, and lists what needs attention at the end; it
+  used to stop at the first failure and hide npm's error, leaving the
+  later steps silently undone.
+- `lidza doctor` connects with the app's own `DATABASE_URL` (the port
+  answering was not enough) and says how to fix it, and notes a Node major
+  version other than the one the templates are tested on (22).
+- Installer: says plainly at the end when Postgres and Valkey were not
+  installed (piped without `--services`, it cannot ask) with the command
+  that adds them; on macOS starts an installed Redis instead of failing on
+  Homebrew's Valkey/Redis conflict; reports a failed service install
+  instead of moving on silently.
+
 ## v0.1.21 (2026-09-26)
 
 - A palette of Līdza's own instead of the stock blue: a mulberry accent

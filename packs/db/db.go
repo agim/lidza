@@ -23,7 +23,8 @@ import (
 // Config comes from the environment (see pkg/env).
 type Config struct {
 	// URL is the connection string, e.g. postgres://user:pass@host/db or
-	// postgres:///db?host=/var/run/postgresql for a Unix socket.
+	// postgres:///db?host=/var/run/postgresql for a Unix socket (/tmp on
+	// macOS; LocalURL finds this machine's).
 	URL string `env:"DATABASE_URL" required:"true"`
 	// MaxConns bounds the pool; size it below Postgres max_connections
 	// divided by the number of app nodes.

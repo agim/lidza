@@ -2,6 +2,7 @@ package diag
 
 import (
 	"context"
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -13,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/agim/lidza/pkg/apidoc"
+	"github.com/agim/lidza/pkg/brief"
 	"github.com/agim/lidza/pkg/config"
 	"github.com/agim/lidza/pkg/decisions"
 	"github.com/agim/lidza/pkg/pack"
@@ -56,7 +58,10 @@ import (
 //     the identities linked to accounts and the admin pages;
 //   - L014: an app admin page (admin.Page) whose name no entry in
 //     docs/decisions.md mentions; a page lets admins act across
-//     accounts, so what it may do is recorded.
+//     accounts, so what it may do is recorded;
+//   - L015 (a note, not a warning): the brief (docs/brief.md) has
+//     required questions open; the agent runs the interview with the
+//     developer before building much. A note never fails --strict.
 //
 // Except for L004 the findings are warnings: they point at the pattern,
 // the author decides. A comment "lidza:ignore L001" on the line, or the
@@ -101,7 +106,26 @@ func Rules(ctx context.Context, root string) []Diagnostic {
 	out = append(out, unusedPacks(root, imported)...)
 	out = append(out, missingDecisions(root, moduleDir)...)
 	out = append(out, undecidedPages(root, pages)...)
+	out = append(out, openBrief(root)...)
 	return out
+}
+
+// openBrief notes the required brief questions still open.
+func openBrief(root string) []Diagnostic {
+	b, err := brief.Load(root)
+	if err != nil {
+		return nil
+	}
+	open := b.OpenRequired()
+	if len(open) == 0 {
+		return nil
+	}
+	ids := make([]string, len(open))
+	for i, q := range open {
+		ids[i] = q.ID
+	}
+	return []Diagnostic{{Layer: "go", Tool: "lidza rules", Severity: "note", Code: "L015", File: brief.File, Line: 1, Column: 1,
+		Message: fmt.Sprintf("the brief has %d required question(s) open (%s): interview the developer before building (recipe \"Start with the brief\": lidza_brief, lidza_brief_answer; lidza brief in a terminal)", len(open), strings.Join(ids, ", "))}}
 }
 
 // adminPage is an admin.Page literal with a literal Name.

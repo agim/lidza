@@ -76,7 +76,7 @@ func runNew(ctx context.Context, args []string) error {
 		return err
 	}
 	fmt.Println()
-	if err := setup(ctx, abs, cfg, setupOptions{Packs: splitList(*packs), Agent: *agent, DatabaseURL: *dbURL, Commit: true, Out: os.Stdout}); err != nil {
+	if err := setup(ctx, abs, cfg, setupOptions{Packs: splitList(*packs), Agent: *agent, DatabaseURL: *dbURL, Commit: true, Out: os.Stdout, Interview: isTerminal(os.Stdin), In: os.Stdin}); err != nil {
 		return err
 	}
 	fmt.Printf("  (in %s)\n", name)

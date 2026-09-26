@@ -1,0 +1,24 @@
+/* Written by lidza brief from the palette answer; edit freely. */
+/* Mulberry and paper: Līdza's own: a berry accent on warm neutrals. */
+:root,
+[data-bs-theme=light] {
+  --admin-accent: oklch(47% 0.13 345);
+  --admin-accent-fg: #ffffff;
+  --admin-bg: #f6f2ed;
+  --admin-surface: #fffdfa;
+  --admin-surface-2: #f1ebe4;
+  --admin-line: #e4dbd1;
+  --admin-fg: #2a2224;
+  --admin-muted: #7b6f69;
+  --admin-sidebar: #241821;
+}
+[data-bs-theme=dark] {
+  --admin-accent: oklch(76% 0.1 345);
+  --admin-accent-fg: #221519;
+  --admin-bg: #171214;
+  --admin-surface: #201a1d;
+  --admin-surface-2: #2a2226;
+  --admin-line: #372d32;
+  --admin-fg: #eee7e3;
+  --admin-muted: #a89a93;
+}

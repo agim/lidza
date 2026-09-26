@@ -129,9 +129,11 @@ func dump(r diag.Report) string {
 	return b.String()
 }
 
+// A fresh app has nothing to fix; the one note is the brief, still open,
+// which asks the agent to interview the developer (L015).
 func TestCleanAppIsSilent(t *testing.T) {
 	r := check(t)
-	if r.Status != "ok" || len(r.Diagnostics) != 0 {
+	if r.Status != "ok" || len(r.Diagnostics) != 1 || r.Diagnostics[0].Code != "L015" || r.Diagnostics[0].Severity != "note" {
 		t.Fatalf("fresh app:\n%s", dump(r))
 	}
 }
@@ -229,7 +231,7 @@ func TestInaccessibleElement(t *testing.T) {
 }
 
 func TestGuidanceSurfaces(t *testing.T) {
-	for _, skill := range []string{"add-api-route", "add-resource", "scope-query-to-signed-in-user", "add-page", "add-pack-capability", "add-mcp-tool", "send-email", "add-background-job", "publish-live-updates", "add-llm-feature", "store-file", "add-admin-pages", "extend-admin-pages", "add-recipe", "write-test"} {
+	for _, skill := range []string{"start-with-brief", "add-api-route", "add-resource", "scope-query-to-signed-in-user", "add-page", "add-pack-capability", "add-mcp-tool", "send-email", "add-background-job", "publish-live-updates", "add-llm-feature", "store-file", "add-admin-pages", "extend-admin-pages", "add-recipe", "write-test"} {
 		for _, p := range []string{filepath.Join(".claude", "skills", skill, "SKILL.md"), filepath.Join(".agents", "skills", skill, "SKILL.md"), filepath.Join(".gemini", "commands", "lidza", skill+".toml")} {
 			if _, err := os.Stat(filepath.Join(app, p)); err != nil {
 				t.Errorf("%s missing", p)
@@ -284,7 +286,7 @@ func TestGuidanceSurfaces(t *testing.T) {
 		t.Fatal(err)
 	}
 	prompts, err := c.ListPrompts(ctx, mcp.ListPromptsRequest{})
-	if err != nil || len(prompts.Prompts) != 16 {
+	if err != nil || len(prompts.Prompts) != 17 {
 		t.Errorf("prompts: %v %d", err, len(prompts.Prompts))
 	}
 	tools, err := c.ListTools(ctx, mcp.ListToolsRequest{})
@@ -295,7 +297,7 @@ func TestGuidanceSurfaces(t *testing.T) {
 	for _, tl := range tools.Tools {
 		names[tl.Name] = true
 	}
-	for _, want := range []string{"lidza_routes", "lidza_check", "lidza_api", "lidza_snippet", "lidza_logs", "lidza_gen", "lidza_gen_resource", "lidza_verify", "lidza_test", "lidza_ship", "lidza_recipe_add", "lidza_recipes", "lidza_decision_add", "lidza_credentials_set", "lidza_credentials_list"} {
+	for _, want := range []string{"lidza_routes", "lidza_check", "lidza_api", "lidza_snippet", "lidza_logs", "lidza_gen", "lidza_gen_resource", "lidza_verify", "lidza_test", "lidza_ship", "lidza_recipe_add", "lidza_recipes", "lidza_decision_add", "lidza_brief", "lidza_brief_answer", "lidza_note_add", "lidza_credentials_set", "lidza_credentials_list"} {
 		if !names[want] {
 			t.Errorf("tool %s missing", want)
 		}
@@ -480,6 +482,45 @@ func TestDecisionAdd(t *testing.T) {
 	if out, err := command(app, lidza, "decision", "add", "No reason"); err == nil {
 		t.Errorf("decision without --why accepted:\n%s", out)
 	}
+}
+
+// The brief through the CLI: an answer is saved and applied (a decision,
+// the working agreements in every agent file), a team note lands in the
+// agent files, and the check's note names what is still open.
+func TestBrief(t *testing.T) {
+	restore := map[string]string{}
+	for _, f := range []string{"docs/brief.md", "docs/decisions.md", "CLAUDE.md", "AGENTS.md", "GEMINI.md"} {
+		restore[f] = mustRead(t, f)
+	}
+	edit(t, restore)
+	if out, err := command(app, lidza, "brief", "answer", "purpose", "A place to collect art"); err != nil {
+		t.Fatalf("brief answer: %v\n%s", err, out)
+	}
+	if out, err := command(app, lidza, "brief", "answer", "signin", "Email and password, Google"); err != nil || !strings.Contains(string(out), "decision recorded: Sign-in: Email and password, Google") {
+		t.Fatalf("brief answer signin: %v\n%s", err, out)
+	}
+	if out, err := command(app, lidza, "brief", "answer", "push", "After every verified commit"); err != nil {
+		t.Fatalf("brief answer push: %v\n%s", err, out)
+	}
+	if out, err := command(app, lidza, "note", "add", "Prices are shown in euros"); err != nil {
+		t.Fatalf("note add: %v\n%s", err, out)
+	}
+	if b := mustRead(t, "docs/brief.md"); !strings.Contains(b, "A place to collect art") {
+		t.Errorf("brief.md:\n%s", b)
+	}
+	for _, f := range []string{"CLAUDE.md", "AGENTS.md", "GEMINI.md"} {
+		if s := mustRead(t, f); !strings.Contains(s, "- Pushing: After every verified commit.") || !strings.Contains(s, ": Prices are shown in euros.") {
+			t.Errorf("%s:\n%s", f, s)
+		}
+	}
+	if out, _ := command(app, lidza, "brief", "--list"); !strings.Contains(string(out), "A place to collect art") || !strings.Contains(string(out), "(open)") {
+		t.Errorf("brief --list:\n%s", out)
+	}
+	// Without a terminal the interview points at the tools.
+	if out, err := command(app, lidza, "brief"); err == nil || !strings.Contains(string(out), "lidza_brief") {
+		t.Errorf("brief without a terminal: %v\n%s", err, out)
+	}
+	expect(t, check(t), expectation{code: "L015", severity: "note", file: "docs/brief.md", message: "users"})
 }
 
 // Secrets are sealed through the CLI and read back by name.

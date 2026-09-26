@@ -4,6 +4,8 @@ A Līdza application: Go control plane, {{.Template}} frontend, one binary.
 Read `docs/lidza-guide.md` before changing anything; it has the layout, the
 commands and the rules.
 
+- {{.BriefLine}}
+
 - `lidza dev`: run on http://127.0.0.1:3000 with hot reload for Go and the frontend.
 - `lidza check --json`: every Go, Rust and frontend error in one list; run it after each change until `"status": "ok"`. Every `lidza` command is also an MCP tool (`lidza_check`, `lidza_gen`, `lidza_gen_resource`, `lidza_pack_add`, `lidza_db_migrate`, `lidza_test`, `lidza_verify`, `lidza_build`): prefer the tool over a shell.
 - `lidza test` for Go tests, `lidza test --e2e` for the browser suite, `lidza doctor` when something is missing on the machine.
@@ -17,3 +19,15 @@ commands and the rules.
 - Add agent-callable functions in `tools.go` (`lidza.ToolFunc`); they show up in `lidza mcp` as `app_<name>`.
 - Go first. Rust lives in packs (`lidza pack scaffold`, Rust to WASM) and is for code that must be contained (user-supplied input), a crate Go lacks, or heap pressure; not for speed (see "Rust: when and how" in the guide, with numbers). `lidza pack add db|auth|jobs|cache|i18n|realtime|analytics|mail|llm|storage|geo|media` enables the official ones. Email goes through the `mail` pack, language models through the `llm` pack (chat, structured output from schema types, the app's tools, embeddings; `LLM_PROVIDER=fake` in tests) and files through the `storage` pack (S3-compatible or local), never a vendor SDK. Operator screens go in the admin pages (`admin.Options.Pages` and `Sections`, recipe "Extend the admin pages"), never a second admin app. Sign-in goes through `auth.Mount` (email and password, plus `AUTH_PROVIDERS` for Google, GitHub, Microsoft or an OIDC issuer), never an OAuth library.
 - Secrets (API keys, SMTP URLs, storage keys) go in the credentials, sealed with the master key: `lidza credentials set NAME=value` (MCP `lidza_credentials_set`), never in code or a committed file; every pack reads them by their environment name.
+
+## Working agreements
+
+<!-- lidza:agreements -->
+_Set by the brief interview: `lidza brief`, or the recipe "Start with the brief"._
+<!-- /lidza:agreements -->
+
+## Team notes
+
+Lasting facts about this app that the team and every agent should know, shared
+through git: `lidza note add "..."` (MCP `lidza_note_add`). Record them here,
+never in an agent's local memory.

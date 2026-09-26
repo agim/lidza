@@ -9,6 +9,33 @@ release is listed first under its version as "Breaking:", with what to
 change; every release so far is additive (an app updates with
 `lidza update --migrate`).
 
+## Unreleased
+
+- The brief: every app has `docs/brief.md`, about thirty questions in
+  eight areas (product, data, accounts, design, content, services,
+  deployment, working agreements), each with suggested answers and room
+  for the developer's own. `lidza brief` asks the open ones in a terminal
+  (a number picks a suggestion, several for a "many" question, words are
+  an answer of your own), and `lidza new` and `lidza setup` offer it
+  before the first commit. An agent runs the same interview with the MCP
+  tools `lidza_brief` and `lidza_brief_answer` (recipe "Start with the
+  brief"), asking with its question tool and never inventing an answer.
+- An answer lands where it acts: a decision for a real choice (sign-in,
+  data ownership, palette, providers, hosting), the working agreements
+  in `CLAUDE.md`, `AGENTS.md` and `GEMINI.md`, the chosen palette in
+  `src/index.css` and `admin/theme.css` (four palettes of Līdza's own, or
+  the app's brand colours), and a seeded app recipe for the ownership
+  model ("Scope a query in this app"), the page style ("Style a page to
+  match the app") or a dataset ("Import or seed data").
+- Shared memory instead of an agent's local one: the agent files end with
+  "Working agreements" and "Team notes"; `lidza note add` (MCP
+  `lidza_note_add`) records a lasting fact there, in git for the team.
+  The agent files' first line points every session at the brief.
+- Rule L015, a note: the brief still has required questions open. A
+  note is reported by `lidza check` but never fails `lidza verify
+  --strict`. Existing apps get the brief and the two sections on
+  `lidza update` or `lidza gen`.
+
 ## v0.1.23 (2026-09-26)
 
 - `lidza setup`: a machine without a git author (a fresh CI runner, a new

@@ -175,6 +175,36 @@ below, which the framework never touches. Every recipe ends the same way: `lidza
 --json` (MCP: `lidza_check`) until `"status": "ok"`, then `lidza test`
 (`lidza_test`).
 
+### Start with the brief
+
+Fill the app's brief with the developer before building: what it is
+for, who owns the data, the design, the services, where it runs and how
+you work together. The answers are the app's shared memory, in git.
+
+1. `lidza_brief` (MCP) lists the open questions: each with why it is
+   asked, its kind (`one`, `many`, `text`) and suggested answers.
+   `lidza://brief` reads the file.
+2. Ask the developer a few questions at a time with your question tool
+   (in Claude Code, AskUserQuestion): the question, two to four
+   suggestions (the tool's, adjusted to what you know of the app, the
+   likeliest first) and room for their own answer; a `many` question
+   takes several. Never answer for them; a skipped question stays open.
+3. Record each answer with `lidza_brief_answer`, in their words or the
+   suggestion they picked. It lands in `docs/brief.md` and where it
+   acts: a decision in `docs/decisions.md`, the working agreements in
+   the agent files, the palette in the design tokens and
+   `admin/theme.css`, a seeded app recipe ("Scope a query in this app",
+   "Style a page to match the app", "Import or seed data"). Apply what
+   the result lists under `manual` yourself.
+4. The required questions first (purpose, users, journeys, ownership,
+   sign-in, palette, pushing): `lidza check` warns while they are open
+   (L015).
+5. Summarize the answers and what was written, then commit `docs/`, the
+   agent files, `src/index.css` and `admin/`.
+6. Later, a fact the developer states goes in with `lidza_note_add`, and
+   a changed answer with `lidza_brief_answer` again. In a terminal the
+   same interview is `lidza brief`.
+
 ### Add an API route
 
 Expose one operation under `/api/v1/` with typed input and output, so it
@@ -695,6 +725,26 @@ browser test.
 This app's own conventions, one recipe each; the framework never edits
 this section. Add one with `lidza recipe add "Title"` or by hand (see
 "Add a recipe").
+
+### Scope a query in this app
+
+Every row belongs to one user and only they see it: the brief's ownership model (docs/brief.md).
+
+1. Give the model an `ownerId uuid @index` and set it from `auth.CurrentUser(ctx).ID` on create, never from the body.
+2. Add `AND owner_id = $N` to every query in `db/queries/<table>.sql`: list, count, get, update, delete.
+3. Reply `router.NotFound` for another user's row, never 403.
+4. Test it: another user lists nothing and gets 404 on the first user's id; `lidza check`, then `lidza test`.
+
+### Style a page to match the app
+
+Build a page that looks like the rest of this app: its palette, type, mood and themes, from the brief's Design section, never a stock look.
+
+1. Read the Design section of `docs/brief.md` (palette, typography, mood, themes, languages); the tokens are in `src/index.css` (`bg-brand`, `text-ink`, `bg-surface`, `border-line`).
+2. Use the tokens, never raw colours or a stock blue; status colours (green, yellow, red) only for status.
+3. Every list gets a loading skeleton, an empty state with an action and a keyboard path; motion stays under 300 ms and respects `prefers-reduced-motion`.
+4. Strings go through the i18n pack when the brief names more than one language.
+5. Check both themes when the brief asks for light and dark, and a phone width.
+6. `lidza check` (accessibility is enforced), then `lidza test --e2e`.
 
 ## Packs
 

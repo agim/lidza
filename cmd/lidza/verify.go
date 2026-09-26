@@ -117,10 +117,14 @@ func runVerify(ctx context.Context, args []string) error {
 		if r.Errors() > 0 {
 			return "", fmt.Errorf("%d error(s)", r.Errors())
 		}
-		if *strict && len(r.Diagnostics) > 0 {
-			return "", fmt.Errorf("%d warning(s) with --strict", len(r.Diagnostics))
+		if *strict && r.Warnings() > 0 {
+			return "", fmt.Errorf("%d warning(s) with --strict", r.Warnings())
 		}
-		return fmt.Sprintf("%d warning(s)", len(r.Diagnostics)), nil
+		notes := ""
+		if n := len(r.Diagnostics) - r.Warnings(); n > 0 {
+			notes = fmt.Sprintf(", %d note(s)", n)
+		}
+		return fmt.Sprintf("%d warning(s)%s", r.Warnings(), notes), nil
 	})
 	step("test", func() (string, error) {
 		if *noTest {

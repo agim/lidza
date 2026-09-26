@@ -19,7 +19,7 @@ func TestNewReact(t *testing.T) {
 	}
 	for _, f := range []string{
 		"go.mod", "main.go", "routes.go", "routes_test.go", "tools.go", "lidza.json",
-		"CLAUDE.md", "AGENTS.md", "GEMINI.md", "docs/lidza-guide.md", "docs/decisions.md", "README.md", ".github/workflows/ci.yml",
+		"CLAUDE.md", "AGENTS.md", "GEMINI.md", "docs/lidza-guide.md", "docs/decisions.md", "docs/brief.md", "README.md", ".github/workflows/ci.yml",
 		".mcp.json", ".gemini/settings.json",
 		"package.json", "index.html", "vite.config.ts", "tsconfig.json",
 		"src/main.tsx", "src/router.tsx", "src/pages/Home.tsx", "src/ErrorBoundary.tsx", "playwright.config.ts", "e2e/home.spec.ts", "schema.lidza", "schema/schema.go", ".env.example", "packs.go", "benchmarks/scale_test.js",
@@ -65,10 +65,13 @@ func TestNewReact(t *testing.T) {
 	if !strings.Contains(read("CLAUDE.md"), "docs/decisions.md") || !strings.HasPrefix(read("docs/decisions.md"), "# Decisions") {
 		t.Errorf("CLAUDE.md should point at the decision log")
 	}
+	if c := read("CLAUDE.md"); !strings.Contains(c, "Read `docs/brief.md` first") || !strings.Contains(c, "<!-- lidza:agreements -->") || !strings.Contains(c, "## Team notes") {
+		t.Errorf("CLAUDE.md should point at the brief and end with the working agreements and team notes")
+	}
 	if read("CLAUDE.md") != read("AGENTS.md") || read("CLAUDE.md") != read("GEMINI.md") {
 		t.Errorf("agent files should be identical")
 	}
-	if !strings.Contains(read("CLAUDE.md"), "<!-- lidza:recipes -->`add-api-route`, `add-resource`, `add-sign-in`, `scope-query-to-signed-in-user`, `add-page`, `add-pack-capability`, `add-mcp-tool`, `send-email`, `add-background-job`, `publish-live-updates`, `add-llm-feature`, `store-file`, `add-admin-pages`, `extend-admin-pages`, `add-recipe`, `write-test`<!-- /lidza:recipes -->") {
+	if !strings.Contains(read("CLAUDE.md"), "<!-- lidza:recipes -->`start-with-brief`, `add-api-route`, `add-resource`, `add-sign-in`, `scope-query-to-signed-in-user`, `add-page`, `add-pack-capability`, `add-mcp-tool`, `send-email`, `add-background-job`, `publish-live-updates`, `add-llm-feature`, `store-file`, `add-admin-pages`, `extend-admin-pages`, `add-recipe`, `write-test`<!-- /lidza:recipes -->") {
 		t.Errorf("CLAUDE.md should list the recipes: %s", read("CLAUDE.md"))
 	}
 	// An app recipe: added to the guide, generated, listed in the agent files.

@@ -115,6 +115,7 @@ func New(dir string, cfg *config.Config) *Server {
 	addRecipes(srv.recipes, dir)
 	addRecipeTool(s, dir, cfg, srv.Refresh)
 	addDecisionTool(s, dir, cfg)
+	addBriefTools(s, dir, cfg)
 	addCredentialTools(s, dir, cfg)
 	srv.stamps = srv.stamp()
 

@@ -56,6 +56,8 @@ app is always at one address: http://127.0.0.1:3000.
 | `lidza gen deploy [--force]` | the `Dockerfile`, `.dockerignore` and `deploy/{{.Name}}.service` from the current templates; a file the app changed is kept and named unless `--force`. |
 | `lidza pack add <name>` | enables an official pack: `db`, `auth`, `jobs`, `mail`, `llm`, `storage`, `cache`, `i18n`, `realtime`, `analytics`, `geo`, `media`. |
 | `lidza credentials set NAME=value` | seals a secret into `config/credentials.yml.enc` with `config/master.key`; `list`, `show`, `unset`, `edit`, `init`. |
+| `lidza brief [--all] [--list]` | the kickoff interview in a terminal: the open questions of `docs/brief.md` one by one, each with suggestions to pick by number or your own answer; `--all` goes through every question, `--list` prints them. `lidza brief answer <id> "..."` records one. |
+| `lidza note add "..."` | a lasting fact about this app in the agent files' Team notes, shared through git. |
 | `lidza test [-v] [--run Regexp] [go test flags]` | creates and migrates the `.env.test` database, runs `go test ./...` with `LIDZA_MODE=test`, then the frontend check. |
 | `lidza test --e2e [--install]` | builds the app, starts the binary with `.env.test`, runs the Playwright suite in `e2e/`; `--install` fetches the browser when missing. |
 | `lidza setup [--packs db,auth,mail] [--agent claude]` | on an existing app: enables the packs (db added when one needs it), writes `.env` from `.env.example` with a random `AUTH_SECRET` and the app's database, writes `.env.test`, generates, creates and migrates the dev and test databases, installs `node_modules`, installs the agent CLI when asked, makes the first commit. `lidza new --packs ...` runs it for a new app. Rerunning is safe. |
@@ -88,6 +90,7 @@ agent needs no shell here. Its tools:
 | `lidza_gen`, `lidza_gen_resource` (`model`, `force`), `lidza_pack_add` (`name`), `lidza_pack_scaffold`, `lidza_pack_build`, `lidza_db_migrate`, `lidza_db_rollback`, `lidza_db_status`, `lidza_test` (`e2e`, `install`, `run`, `verbose`), `lidza_verify` (`no_test`), `lidza_build`, `lidza_ship` (`domains`, `email`, `no_e2e`), `lidza_doctor` | the CLI command of the same name run for you, in this project: one JSON result with `ok`, `exit`, the parsed `report` (check, verify) or the `output`. Prefer these over a shell. |
 | `lidza_recipes`, `lidza_recipe_add` | the recipes with their scope; record one of this app's conventions (title, description, steps) |
 | `lidza_decision_add` | record why the app is built a way (a pack, Rust, a dependency, a schema tradeoff) in `docs/decisions.md`; `lidza://decisions` reads the log |
+| `lidza_brief` (`open_only`), `lidza_brief_answer` (`id`, `answer`), `lidza_note_add` (`text`) | the brief: its questions with suggestions and answers, one answer recorded and applied (a decision, the working agreements, the palette, a seeded recipe); a lasting fact in the Team notes. `lidza://brief` reads `docs/brief.md` |
 | `lidza_credentials_set`, `lidza_credentials_list` | seal secrets into `config/credentials.yml.enc` by their environment names; list the names |
 | `lidza_mail`, `lidza_llm`, `lidza_llm_usage`, `lidza_storage`, `lidza_errors` | with the pack enabled: the outbox; a prompt against the configured model; token usage; stored objects; captured errors |
 | `lidza_api` | the framework's public Go API (`package`, `filter`), also the resource `lidza://api` |
@@ -155,7 +158,14 @@ result says so while that is the case.
    written here, read the matching snippet (`lidza snippet` or the MCP
    tool `lidza_snippet`): it is the reference app's code, verified by its
    tests.
-12. A pack (Rust or official), a dependency, an integration or a schema
+12. The brief (`docs/brief.md`) and the working agreements and Team
+   notes at the end of `CLAUDE.md`, `AGENTS.md` and `GEMINI.md` are this
+   app's shared memory: read them first, fill the brief with the
+   developer while it has open questions (recipe "Start with the
+   brief"), and record a lasting fact with `lidza note add` (MCP
+   `lidza_note_add`), never in an agent's local memory. `lidza check`
+   L015 warns while a required question is open.
+13. A pack (Rust or official), a dependency, an integration or a schema
    tradeoff is a decision: read `docs/decisions.md` before changing those
    areas and record yours in the same commit (`lidza decision add
    "Title" --why "..."`, MCP `lidza_decision_add`; `lidza pack add --why`
@@ -218,6 +228,36 @@ the framework changes. This app's own recipes go under "App recipes"
 below, which the framework never touches. Every recipe ends the same way: `lidza check
 --json` (MCP: `lidza_check`) until `"status": "ok"`, then `lidza test`
 (`lidza_test`).
+
+### Start with the brief
+
+Fill the app's brief with the developer before building: what it is
+for, who owns the data, the design, the services, where it runs and how
+you work together. The answers are the app's shared memory, in git.
+
+1. `lidza_brief` (MCP) lists the open questions: each with why it is
+   asked, its kind (`one`, `many`, `text`) and suggested answers.
+   `lidza://brief` reads the file.
+2. Ask the developer a few questions at a time with your question tool
+   (in Claude Code, AskUserQuestion): the question, two to four
+   suggestions (the tool's, adjusted to what you know of the app, the
+   likeliest first) and room for their own answer; a `many` question
+   takes several. Never answer for them; a skipped question stays open.
+3. Record each answer with `lidza_brief_answer`, in their words or the
+   suggestion they picked. It lands in `docs/brief.md` and where it
+   acts: a decision in `docs/decisions.md`, the working agreements in
+   the agent files, the palette in the design tokens and
+   `admin/theme.css`, a seeded app recipe ("Scope a query in this app",
+   "Style a page to match the app", "Import or seed data"). Apply what
+   the result lists under `manual` yourself.
+4. The required questions first (purpose, users, journeys, ownership,
+   sign-in, palette, pushing): `lidza check` warns while they are open
+   (L015).
+5. Summarize the answers and what was written, then commit `docs/`, the
+   agent files, `src/index.css` and `admin/`.
+6. Later, a fact the developer states goes in with `lidza_note_add`, and
+   a changed answer with `lidza_brief_answer` again. In a terminal the
+   same interview is `lidza brief`.
 
 ### Add an API route
 

@@ -52,3 +52,27 @@ Touches: lidza.json, mail/
 ## 2026-09-26: Admin page Notes
 
 Why: Admins moderate: the page lists the newest notes of every account and deletes one with its attachment. It is the only code that reads notes across owners (queries in db/queries/admin.sql), and it sits behind the admin pack's gate instead of a role check in the API.
+
+## 2026-09-26: Who owns the data: Each user owns their rows
+
+Why: Answered in the brief interview (docs/brief.md): Each user owns their rows. Every query is scoped by it; the most expensive answer to change later.
+
+Touches: docs/brief.md
+
+## 2026-09-26: Sign-in: Email and password
+
+Why: Answered in the brief interview (docs/brief.md): Email and password. Configures auth.Mount and the sign-in page.
+
+Touches: docs/brief.md
+
+## 2026-09-26: Palette: Mulberry and paper
+
+Why: Answered in the brief interview (docs/brief.md): Mulberry and paper. Written into the design tokens (src/index.css) and the admin theme; agents never fall back to a stock blue.
+
+Touches: docs/brief.md
+
+## 2026-09-26: Where the content comes from: People create it in the app
+
+Why: Answered in the brief interview (docs/brief.md): People create it in the app. Decides the import job, the seed data and the fixtures tests use.
+
+Touches: docs/brief.md

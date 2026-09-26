@@ -55,6 +55,18 @@ type Report struct {
 	Tools       []ToolRun    `json:"tools"`
 }
 
+// Warnings counts the diagnostics with severity "warning" or "error": a
+// "note" (the brief still open) is reported but never fails --strict.
+func (r Report) Warnings() int {
+	n := 0
+	for _, d := range r.Diagnostics {
+		if d.Severity != "note" {
+			n++
+		}
+	}
+	return n
+}
+
 // Errors counts the diagnostics with severity "error".
 func (r Report) Errors() int {
 	n := 0

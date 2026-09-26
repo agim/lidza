@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/rand"
@@ -16,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/agim/lidza/packs/db"
+	"github.com/agim/lidza/pkg/brief"
 	"github.com/agim/lidza/pkg/config"
 	"github.com/agim/lidza/pkg/credentials"
 	"github.com/agim/lidza/pkg/decisions"
@@ -34,6 +36,10 @@ type setupOptions struct {
 	DatabaseURL string
 	Commit      bool
 	Out         io.Writer
+	// Interview offers the brief's questions before the first commit,
+	// when setup runs in a terminal.
+	Interview bool
+	In        io.Reader
 }
 
 // agentPackages maps an agent CLI to its npm package.
@@ -62,7 +68,7 @@ func runSetup(ctx context.Context, args []string) error {
 	if cfg == nil {
 		return errors.New("setup needs a lidza.json project (lidza new <name> first)")
 	}
-	return setup(ctx, abs, cfg, setupOptions{Packs: splitList(*packs), Agent: *agent, DatabaseURL: *dbURL, Commit: !*noCommit, Out: os.Stdout})
+	return setup(ctx, abs, cfg, setupOptions{Packs: splitList(*packs), Agent: *agent, DatabaseURL: *dbURL, Commit: !*noCommit, Out: os.Stdout, Interview: isTerminal(os.Stdin), In: os.Stdin})
 }
 
 func splitList(s string) []string {
@@ -261,6 +267,22 @@ func setup(ctx context.Context, dir string, cfg *config.Config, opt setupOptions
 		}
 	}
 
+	// The brief, in a terminal: answered now, it is in the first commit.
+	if opt.Interview && opt.In != nil {
+		if b, err := brief.Load(dir); err == nil && len(b.Open()) > 0 {
+			in := bufio.NewReader(opt.In)
+			fmt.Fprintf(out, "\n[setup] The brief: %d questions on what %s is for, who owns the data, the design, the services and how agents work on it, each with suggestions. Answer now? [Y/n] ", len(b.Open()), cfg.Name)
+			ans, _ := in.ReadString('\n')
+			if a := strings.ToLower(strings.TrimSpace(ans)); a == "" || a == "y" || a == "yes" {
+				if err := interview(dir, cfg.Name, false, in, out); err != nil {
+					problem("brief interview: %v", err)
+				}
+			} else {
+				step("brief skipped: lidza brief, or the agent's recipe \"Start with the brief\", asks the questions later")
+			}
+		}
+	}
+
 	// 7. The first commit, through the hook (lidza verify).
 	if opt.Commit {
 		if _, err := exec.LookPath("git"); err == nil {
@@ -295,7 +317,7 @@ func setup(ctx context.Context, dir string, cfg *config.Config, opt setupOptions
 		}
 		return fmt.Errorf("setup incomplete: %d step(s) need attention", len(problems))
 	}
-	fmt.Fprintf(out, "\nnext:\n  lidza dev        # http://127.0.0.1:3000\n  claude           # or codex, gemini; the MCP server and the recipes are configured\n")
+	fmt.Fprintf(out, "\nnext:\n  lidza dev        # http://127.0.0.1:3000\n  lidza brief      # the brief's open questions, if any (an agent asks them too)\n  claude           # or codex, gemini; the MCP server and the recipes are configured\n")
 	return nil
 }
 

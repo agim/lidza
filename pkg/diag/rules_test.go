@@ -1,6 +1,8 @@
 package diag
 
 import (
+	"github.com/agim/lidza/pkg/brief"
+
 	"context"
 	"os"
 	"path/filepath"
@@ -193,5 +195,39 @@ var refunds = admin.Page{Name: "Refunds", Path: "refunds", Template: "refunds.ht
 	}
 	if len(got) != 1 || !strings.HasPrefix(got[0], "admin.go:5 admin page Orders has no decision") {
 		t.Fatalf("L014: %v", got)
+	}
+}
+
+// L015: a note while the brief's required questions are open, none once
+// they are answered; a note never counts as a warning.
+func TestOpenBrief(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module app\n\ngo 1.27\n"), 0o644)
+	if _, err := brief.Ensure(dir, "app"); err != nil {
+		t.Fatal(err)
+	}
+	notes := func() []Diagnostic {
+		var out []Diagnostic
+		for _, d := range Rules(context.Background(), dir) {
+			if d.Code == "L015" {
+				out = append(out, d)
+			}
+		}
+		return out
+	}
+	got := notes()
+	if len(got) != 1 || got[0].Severity != "note" || !strings.Contains(got[0].Message, "purpose") || got[0].File != brief.File {
+		t.Fatalf("L015: %+v", got)
+	}
+	if (Report{Diagnostics: got}).Warnings() != 0 {
+		t.Fatal("a note counted as a warning")
+	}
+	b, _ := brief.Load(dir)
+	for _, q := range b.OpenRequired() {
+		b.Answers[q.ID] = "answered"
+	}
+	brief.Save(dir, b)
+	if got := notes(); len(got) != 0 {
+		t.Fatalf("answered brief still noted: %+v", got)
 	}
 }

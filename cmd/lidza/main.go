@@ -60,6 +60,8 @@ Commands:
   credentials the app's secrets, sealed in config/credentials.yml.enc with config/master.key; every pack reads them like .env
   update   the CLI to the newest release and, in a project, the module to the same version: go get, tidy, Dockerfile pin, lidza gen, a note on pending migrations
   decision record why the app is built a way (a pack, Rust, a dependency, a schema tradeoff) in docs/decisions.md, or list the decisions
+  brief    the kickoff interview: what the app is for, who owns the data, the design, the services, the working agreements; answers go to docs/brief.md and where they act
+  note     add a lasting fact about this app for the team and every agent (the agent files' Team notes)
   snippet  print a file of the reference app (examples/notes): auth routes, an owned resource, a page, tests, a tool
   mcp      serve routes, context, diagnostics, dev logs, the API and the guide's recipes over MCP on stdio
   version  print the framework version
@@ -113,6 +115,10 @@ func main() {
 		err = runCredentials(ctx, args)
 	case "decision":
 		err = runDecision(ctx, args)
+	case "brief":
+		err = runBrief(ctx, args)
+	case "note":
+		err = runNote(ctx, args)
 	case "recipe":
 		err = runRecipe(ctx, args)
 	case "mcp":

@@ -1,6 +1,9 @@
 package main
 
 import (
+	"bufio"
+
+	"github.com/agim/lidza/pkg/brief"
 	"os"
 	"path/filepath"
 	"strings"
@@ -65,4 +68,35 @@ func TestNodeTested(t *testing.T) {
 		}
 	}
 	t.Fatal("no NODE_VERSION in install.sh")
+}
+
+// The terminal interview: numbers pick suggestions, several for a "many"
+// question, words are the developer's own, Enter skips, q stops.
+func TestInterview(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, "docs"), 0o755)
+	if _, err := brief.Ensure(dir, "demo"); err != nil {
+		t.Fatal(err)
+	}
+	// purpose (text), users (many), journeys (text, skipped), out_of_scope
+	// (many: a number with added words), then q.
+	in := bufio.NewReader(strings.NewReader("A place to keep recipes\n1,2\n\n3: for now\nq\n"))
+	var out strings.Builder
+	if err := interview(dir, "demo", false, in, &out); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := brief.Load(dir)
+	if b.Answers["purpose"] != "A place to keep recipes" || b.Answers["users"] != "Individuals, for themselves, Small teams working together" || b.Answers["journeys"] != "" || b.Answers["out_of_scope"] != "Offline use: for now" {
+		t.Fatalf("answers: %+v\n%s", b.Answers, out.String())
+	}
+	if !strings.Contains(out.String(), "3 answer(s) saved") {
+		t.Fatalf("summary: %s", out.String())
+	}
+	q, _ := brief.Find("palette")
+	if got := resolveChoice(q, "1,2"); got != "1,2" {
+		t.Fatalf("a one question took two choices: %q", got)
+	}
+	if got := resolveChoice(q, "9"); got != "9" {
+		t.Fatalf("out of range: %q", got)
+	}
 }

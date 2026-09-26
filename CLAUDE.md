@@ -22,3 +22,33 @@ Gotchas:
   so tag before a runbook or the README tells anyone to run it. Entries go
   under "## Unreleased" in `CHANGELOG.md` until then.
 - Keep docs plain: short headings, facts, no decorative arrows, no taglines.
+
+Working agreements (Agim's standing decisions):
+- Durable knowledge lives in this repository, pushed for the team: this
+  file, `docs/`, `CHANGELOG.md`. No local agent memory for this project.
+- Build the framework, not apps: "start building" means the next roadmap
+  phase here. Demo and test apps stay in a scratch directory
+  (`lidza new demo --lidza-dir "$PWD"`), never in the repo;
+  `examples/notes` is the only app in it.
+- Fixes go ahead without asking: a bug or gap found in Līdza is fixed,
+  tested and released (`scripts/release.sh`), then reported. New features
+  and redesigns wait for Agim's go; destructive actions are confirmed.
+- Docs and comments carry framework facts only. A host fact that belongs
+  to the environment contract goes in `docs/environment.md`; incidental
+  findings (another project's port, a probe mishap) stay out of the repo.
+- No stock palette (Tailwind or Tabler blue, slate or navy): Līdza's
+  palette is a mulberry accent on warm neutrals, defined in
+  `packs/admin/templates/theme.css` and the templates' tokens; status
+  colours stay semantic.
+- Rust is not for speed: packs run 1.6 to 3 times slower than Go and
+  every call pays about 12 µs plus 14 µs per KB. The case for a pack is
+  containment, a crate Go lacks, or heap pressure; the guide's "Rust: when
+  and how" keeps the table (rerun `go test ./pkg/engine -bench .` on an
+  idle machine).
+- Commit `examples/notes` before running the evals: `TestReferenceApp`
+  runs `lidza verify` there, which refuses unstaged generated files.
+- Never assume the developer's machine: CI runners have no git author,
+  macOS keeps the Postgres socket in `/tmp`, Node may be newer than 22.
+  Setup and the doctor detect and say, they do not fail silently.
+- Nested agent runs (the agent eval) use `claude -p --permission-mode
+  acceptEdits` with an allow-list, not `--dangerously-skip-permissions`.

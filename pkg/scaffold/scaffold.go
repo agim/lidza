@@ -20,6 +20,7 @@ import (
 	"text/template"
 	"unicode/utf8"
 
+	"github.com/agim/lidza/pkg/brief"
 	"github.com/agim/lidza/pkg/config"
 	"github.com/agim/lidza/pkg/decisions"
 	"github.com/agim/lidza/pkg/pack"
@@ -101,6 +102,9 @@ func New(ctx context.Context, opt Options) error {
 		return err
 	}
 	data := dataFor(&cfg, opt.LidzaDir)
+	if _, err := brief.Ensure(opt.Dir, opt.Name); err != nil {
+		return err
+	}
 	for _, f := range []struct{ src, dst string }{
 		{"go.mod.tmpl", "go.mod"},
 		{"main.go.tmpl", "main.go"},
@@ -162,6 +166,8 @@ type templateData struct {
 	LidzaVersion string
 	// DecisionsLine tells the agent about the decision log.
 	DecisionsLine string
+	// BriefLine tells the agent about the brief and the team notes.
+	BriefLine string
 	// Recipes is the comma-separated list of recipe names from the guide.
 	Recipes string
 }
@@ -179,6 +185,7 @@ func dataFor(cfg *config.Config, lidzaDir string) templateData {
 		Go:            goMinor(),
 		LidzaVersion:  moduleVersion(),
 		DecisionsLine: DecisionsLine,
+		BriefLine:     BriefLine,
 	}
 }
 
@@ -192,6 +199,11 @@ func moduleVersion() string {
 	}
 	return "latest"
 }
+
+// BriefLine is the agent files' first line: the brief, the interview
+// while it is open, and the rule that app knowledge is shared through git;
+// Refresh adds it to apps that predate it.
+const BriefLine = "Read `" + brief.File + "` first: what the app is for, who owns the data, the design, the services and the working agreements below. While it has open questions, start a session with the interview (recipe \"Start with the brief\": MCP `lidza_brief` and `lidza_brief_answer`; `lidza brief` in a terminal), asking the developer with suggestions and never inventing an answer. Lasting facts the developer states go in the Team notes below (`lidza note add`, MCP `lidza_note_add`), never in an agent's local memory: these files and `docs/` are shared through git."
 
 // DecisionsLine is the agent files' line about the decision log; Refresh
 // adds it to apps that predate it.
@@ -262,6 +274,18 @@ func Refresh(dir string, cfg *config.Config) ([]string, error) {
 	} else if created {
 		changed = append(changed, decisions.File)
 	}
+	// Apps from before the brief get it, and their agent files the
+	// working agreements and team notes.
+	if created, err := brief.Ensure(dir, cfg.Name); err != nil {
+		return nil, err
+	} else if created {
+		changed = append(changed, brief.File)
+	}
+	if files, err := brief.EnsureAgentSections(dir); err != nil {
+		return nil, err
+	} else {
+		changed = append(changed, files...)
+	}
 	if fw, err := FrameworkRecipes(cfg); err == nil {
 		replaced, err := recipes.ReplaceFramework(dir, fw)
 		if err != nil {
@@ -294,6 +318,12 @@ func Refresh(dir string, cfg *config.Config) ([]string, error) {
 				next = next[:i+k+1] + "- " + DecisionsLine + "\n" + next[i+k+1:]
 			}
 		}
+		// And one from before the brief gets its line first in the list.
+		if !strings.Contains(next, "Read `"+brief.File+"` first") {
+			if k := strings.Index(next, "\n- "); k >= 0 {
+				next = next[:k+1] + "- " + BriefLine + "\n" + next[k+1:]
+			}
+		}
 		if next == text {
 			continue
 		}
@@ -302,7 +332,19 @@ func Refresh(dir string, cfg *config.Config) ([]string, error) {
 		}
 		changed = append(changed, name)
 	}
-	return changed, nil
+	return dedupe(changed), nil
+}
+
+func dedupe(in []string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, s := range in {
+		if !seen[s] {
+			seen[s] = true
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 func render(src, dst string, data templateData) error {

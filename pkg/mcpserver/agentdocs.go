@@ -11,6 +11,7 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 
 	"github.com/agim/lidza/pkg/apidoc"
+	"github.com/agim/lidza/pkg/brief"
 	"github.com/agim/lidza/pkg/config"
 	"github.com/agim/lidza/pkg/credentials"
 	"github.com/agim/lidza/pkg/decisions"
@@ -139,6 +140,72 @@ func addDecisionTool(s *server.MCPServer, dir string, cfg *config.Config) {
 	s.AddResource(mcp.NewResource("lidza://decisions", "decisions", mcp.WithResourceDescription("This app's decision log, docs/decisions.md: why it is built the way it is."), mcp.WithMIMEType("text/markdown")),
 		func(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
 			data, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(decisions.File)))
+			if err != nil {
+				return nil, err
+			}
+			return []mcp.ResourceContents{mcp.TextResourceContents{URI: req.Params.URI, MIMEType: "text/markdown", Text: string(data)}}, nil
+		})
+}
+
+// addBriefTools serve the kickoff interview to an agent: the questions
+// with their suggestions and answers, one answer at a time, and the
+// team's notes, all in files the team shares through git.
+func addBriefTools(s *server.MCPServer, dir string, cfg *config.Config) {
+	if cfg == nil {
+		return
+	}
+	s.AddTool(mcp.NewTool("lidza_brief",
+		mcp.WithDescription("The app's brief (docs/brief.md): what it is for, who owns the data, the design, the services, where it runs and the working agreements. Returns each question with why it is asked, its kind (one, many, text), suggested answers and the current answer. Read it before building anything; while questions are open, interview the developer (recipe \"Start with the brief\") and record each answer with lidza_brief_answer."),
+		mcp.WithBoolean("open_only", mcp.Description("Only the questions without an answer (default true).")),
+	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		if _, err := brief.Ensure(dir, cfg.Name); err != nil {
+			return mcp.NewToolResultErrorFromErr("brief", err), nil
+		}
+		b, err := brief.Load(dir)
+		if err != nil {
+			return mcp.NewToolResultErrorFromErr("brief", err), nil
+		}
+		openOnly := req.GetBool("open_only", true)
+		type item struct {
+			brief.Question
+			Answer string `json:"answer,omitempty"`
+		}
+		var qs []item
+		for _, q := range brief.Questions {
+			if openOnly && b.Answers[q.ID] != "" {
+				continue
+			}
+			qs = append(qs, item{Question: q, Answer: b.Answers[q.ID]})
+		}
+		return jsonResult(map[string]any{"file": brief.File, "app": cfg.Name, "open": len(b.Open()), "openRequired": len(b.OpenRequired()), "total": len(brief.Questions), "questions": qs})
+	})
+	s.AddTool(mcp.NewTool("lidza_brief_answer",
+		mcp.WithDescription("Record the developer's answer to one brief question, in their words or the suggestion they picked; never an answer they did not give. It is saved in docs/brief.md and applied: a decision for a real choice, the working agreements in CLAUDE.md, AGENTS.md and GEMINI.md, the palette in the design tokens, a seeded app recipe. An empty answer reopens the question. The result lists the files changed and anything left for you to apply."),
+		mcp.WithString("id", mcp.Required(), mcp.Description("The question's id from lidza_brief.")),
+		mcp.WithString("answer", mcp.Description("The answer: a suggestion's value, several joined with commas for a many question, or the developer's own words.")),
+	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		res, err := brief.Answer(dir, cfg.Name, req.GetString("id", ""), req.GetString("answer", ""))
+		if err != nil {
+			return mcp.NewToolResultErrorFromErr("brief", err), nil
+		}
+		return jsonResult(res)
+	})
+	s.AddTool(mcp.NewTool("lidza_note_add",
+		mcp.WithDescription("Record a lasting fact about this app that the team and every agent should know (a preference, a constraint, a convention the developer states) in the Team notes of CLAUDE.md, AGENTS.md and GEMINI.md, shared through git. Use it instead of an agent's local memory for anything about this app; a convention with steps is a recipe (lidza_recipe_add), a choice with a reason a decision (lidza_decision_add)."),
+		mcp.WithString("text", mcp.Required(), mcp.Description("The fact, one sentence.")),
+	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		files, err := brief.AddNote(dir, req.GetString("text", ""))
+		if err != nil {
+			return mcp.NewToolResultErrorFromErr("note", err), nil
+		}
+		return jsonResult(map[string]any{"files": files})
+	})
+	s.AddResource(mcp.NewResource("lidza://brief", "brief", mcp.WithResourceDescription("This app's brief, docs/brief.md: what it is for, who owns the data, the design, the services, the working agreements."), mcp.WithMIMEType("text/markdown")),
+		func(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+			if _, err := brief.Ensure(dir, cfg.Name); err != nil {
+				return nil, err
+			}
+			data, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(brief.File)))
 			if err != nil {
 				return nil, err
 			}

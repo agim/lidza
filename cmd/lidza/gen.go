@@ -25,6 +25,9 @@ func runGen(ctx context.Context, args []string) error {
 	if len(args) > 0 && args[0] == "resource" {
 		return runGenResource(ctx, args[1:])
 	}
+	if len(args) > 0 && args[0] == "deploy" {
+		return runGenDeploy(ctx, args[1:])
+	}
 	fs := flags("gen")
 	dir := fs.String("dir", ".", "project directory")
 	if err := fs.Parse(args); err != nil {
@@ -213,6 +216,40 @@ func generateClient(dir string, cfg *config.Config, out io.Writer) error {
 	}
 	if err := sdk.WriteTypeScript(dir, c); err != nil {
 		return fmt.Errorf("client: %w", err)
+	}
+	return nil
+}
+
+// runGenDeploy is `lidza gen deploy`: the Dockerfile, .dockerignore and
+// deploy/<name>.service from the current templates. A file the app
+// changed is kept and named; --force replaces it (git diff shows what
+// changed).
+func runGenDeploy(_ context.Context, args []string) error {
+	fs := flags("gen deploy")
+	dir := fs.String("dir", ".", "project directory")
+	force := fs.Bool("force", false, "replace the deployment files the app changed")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	abs, cfg, err := loadProject(*dir)
+	if err != nil {
+		return err
+	}
+	if cfg == nil {
+		return errors.New("gen deploy needs a lidza.json project")
+	}
+	written, kept, err := scaffold.DeployFiles(abs, cfg, *force)
+	if err != nil {
+		return err
+	}
+	for _, f := range written {
+		fmt.Printf("[gen] wrote %s\n", f)
+	}
+	for _, f := range kept {
+		fmt.Printf("[gen] %s differs from the current template; lidza gen deploy --force replaces it (review with git diff)\n", f)
+	}
+	if len(written)+len(kept) == 0 {
+		fmt.Println("[gen] deployment files match the current templates")
 	}
 	return nil
 }

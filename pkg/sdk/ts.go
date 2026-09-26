@@ -234,6 +234,13 @@ func tsClient(c *inspect.Context) string {
 export interface RequestOptions {
   signal?: AbortSignal
   headers?: Record<string, string>
+  /** Query string parameters; undefined and null values are left out. */
+  query?: Record<string, string | number | boolean | null | undefined>
+  /** A raw request body (a File, Blob, FormData, ArrayBuffer or string)
+   * for a route that reads the body itself, such as an upload; sent as
+   * contentType, or the File's own type, or application/octet-stream. */
+  body?: BodyInit
+  contentType?: string
 }
 
 let baseUrl = ''
@@ -249,10 +256,25 @@ export function configure(options: { baseUrl?: string; headers?: Record<string, 
 async function request<R>(method: string, path: string, body: unknown, options?: RequestOptions): Promise<R> {
   const headers: Record<string, string> = { Accept: 'application/json', ...defaultHeaders, ...options?.headers }
   const init: RequestInit = { method, headers, signal: options?.signal }
-  // Every request that can change state is declared JSON, body or not: a
-  // cookie session is only accepted with this content type (CSRF guard).
-  if (method !== 'GET' && method !== 'HEAD') headers['Content-Type'] = 'application/json'
-  if (body !== undefined) init.body = JSON.stringify(body)
+  if (options?.body !== undefined) {
+    // A raw body: the cookie session accepts it same-origin.
+    init.body = options.body
+    const own = typeof Blob !== 'undefined' && options.body instanceof Blob ? options.body.type : ''
+    const type = options.contentType ?? own
+    if (type) headers['Content-Type'] = type
+    else if (!(typeof FormData !== 'undefined' && options.body instanceof FormData)) headers['Content-Type'] = 'application/octet-stream'
+  } else {
+    // Every request that can change state is declared JSON, body or not:
+    // a cookie session is only accepted with this content type (CSRF guard).
+    if (method !== 'GET' && method !== 'HEAD') headers['Content-Type'] = 'application/json'
+    if (body !== undefined) init.body = JSON.stringify(body)
+  }
+  if (options?.query) {
+    const q = new URLSearchParams()
+    for (const [k, v] of Object.entries(options.query)) if (v !== undefined && v !== null) q.set(k, String(v))
+    const s = q.toString()
+    if (s) path += (path.includes('?') ? '&' : '?') + s
+  }
   const res = await fetch(baseUrl + path, init)
   const text = await res.text()
   let parsed: unknown = undefined

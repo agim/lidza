@@ -27,10 +27,14 @@ func runTest(ctx context.Context, args []string) error {
 	e2e := fs.Bool("e2e", false, "build the binary, start it with .env.test and run the Playwright suite (e2e/) instead of the Go tests")
 	install := fs.Bool("install", false, "with --e2e: install the browser when it is missing")
 	verbose := fs.Bool("v", false, "go test -v: every test by name as it runs")
+	runOnly := fs.String("run", "", "only the Go tests matching this regexp (go test -run)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	extra := fs.Args()
+	if *runOnly != "" {
+		extra = append([]string{"-run", *runOnly}, extra...)
+	}
 	if *verbose {
 		extra = append([]string{"-v"}, extra...)
 	}

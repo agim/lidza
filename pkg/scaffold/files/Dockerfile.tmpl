@@ -23,15 +23,23 @@ COPY package.json package-lock.json* ./
 RUN npm ci --no-fund --no-audit || npm install --no-fund --no-audit
 {{- end}}
 COPY . .
-RUN mkdir -p db && lidza build --out /out/{{.Name}}
+RUN mkdir -p db mail admin config && lidza build --out /out/{{.Name}}
 
-# Runtime: the binary, the migrations (applied with DB_MIGRATE=true or
-# `lidza db migrate`), nothing else. Per-request SSR (LIDZA_SSR=1) needs
+# Runtime: the binary and what it reads from disk: the migrations (applied
+# with DB_MIGRATE=true or `lidza db migrate`), the mail templates (mail/),
+# the admin theme (admin/) and the sealed credentials (config/
+# credentials.yml.enc; the master key comes from LIDZA_MASTER_KEY in the
+# environment, never from the image). Per-request SSR (LIDZA_SSR=1) needs
 # Node at runtime: use node:22-bookworm-slim here instead and copy dist/.server.
+# The local storage provider writes to STORAGE_DIR, which this read-only
+# image has no room for: use STORAGE_PROVIDER=s3, or mount a volume there.
 FROM gcr.io/distroless/static-debian12:nonroot
 WORKDIR /app
 COPY --from=build /out/{{.Name}} /app/{{.Name}}
 COPY --from=build /src/db /app/db
+COPY --from=build /src/mail /app/mail
+COPY --from=build /src/admin /app/admin
+COPY --from=build /src/config /app/config
 # Plain HTTP on 3000 behind a proxy, or, with LIDZA_TLS_DOMAINS in the
 # environment (deploy/production.env), HTTPS on 443 and the redirect on 80.
 ENV LIDZA_ADDR=0.0.0.0:3000

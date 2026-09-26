@@ -191,6 +191,23 @@ func addCommandTools(s *server.MCPServer, dir string, cfg *config.Config, after 
 			return args, nil
 		}},
 		{"lidza_build", "Build the frontend (prerendered) and compile the production binary bin/<name>.", nil, 20 * time.Minute, false, true, fixed("build")},
+		{"lidza_ship", "Release build: lidza verify, the browser suite, lidza build, then deploy/production.env with the deployment settings (the TLS domains and contact, remembered in lidza.json).", []mcp.ToolOption{
+			mcp.WithString("domains", mcp.Description("Domains the deployed binary serves over TLS (LIDZA_TLS_DOMAINS), comma-separated.")),
+			mcp.WithString("email", mcp.Description("ACME account contact (LIDZA_TLS_EMAIL).")),
+			mcp.WithBoolean("no_e2e", mcp.Description("Skip the browser suite.")),
+		}, 40 * time.Minute, true, true, func(req mcp.CallToolRequest) ([]string, error) {
+			args := []string{"ship"}
+			if d := req.GetString("domains", ""); d != "" {
+				args = append(args, "--domains", d)
+			}
+			if e := req.GetString("email", ""); e != "" {
+				args = append(args, "--email", e)
+			}
+			if req.GetBool("no_e2e", false) {
+				args = append(args, "--no-e2e")
+			}
+			return args, nil
+		}},
 		{"lidza_doctor", "Report the toolchain, the services, node_modules, the pack builds and the browser for e2e tests, each missing item with its fix.", nil, 2 * time.Minute, false, false, fixed("doctor")},
 	}
 	for _, t := range tools {

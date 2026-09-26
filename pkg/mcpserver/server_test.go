@@ -55,7 +55,7 @@ func main() {}
 	for _, tl := range tools.Tools {
 		names[tl.Name] = true
 	}
-	for _, want := range []string{"lidza_routes", "lidza_context", "lidza_check", "lidza_logs", "lidza_config", "lidza_gen", "lidza_gen_resource", "lidza_pack_add", "lidza_db_migrate", "lidza_test", "lidza_verify", "lidza_build", "lidza_doctor", "lidza_recipes", "lidza_decision_add", "lidza_credentials_set", "lidza_credentials_list"} {
+	for _, want := range []string{"lidza_routes", "lidza_context", "lidza_check", "lidza_logs", "lidza_config", "lidza_gen", "lidza_gen_resource", "lidza_pack_add", "lidza_db_migrate", "lidza_test", "lidza_verify", "lidza_build", "lidza_ship", "lidza_doctor", "lidza_recipes", "lidza_decision_add", "lidza_credentials_set", "lidza_credentials_list"} {
 		if !names[want] {
 			t.Errorf("tool %s missing; have %v", want, names)
 		}

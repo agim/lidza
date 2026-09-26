@@ -283,7 +283,7 @@ func TestGuidanceSurfaces(t *testing.T) {
 	for _, tl := range tools.Tools {
 		names[tl.Name] = true
 	}
-	for _, want := range []string{"lidza_routes", "lidza_check", "lidza_api", "lidza_snippet", "lidza_logs", "lidza_gen", "lidza_gen_resource", "lidza_verify", "lidza_test", "lidza_recipe_add", "lidza_recipes", "lidza_decision_add", "lidza_credentials_set", "lidza_credentials_list"} {
+	for _, want := range []string{"lidza_routes", "lidza_check", "lidza_api", "lidza_snippet", "lidza_logs", "lidza_gen", "lidza_gen_resource", "lidza_verify", "lidza_test", "lidza_ship", "lidza_recipe_add", "lidza_recipes", "lidza_decision_add", "lidza_credentials_set", "lidza_credentials_list"} {
 		if !names[want] {
 			t.Errorf("tool %s missing", want)
 		}

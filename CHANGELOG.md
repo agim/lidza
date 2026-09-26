@@ -6,6 +6,23 @@ version in `go.mod`. `install.sh` pins the newest release here;
 `scripts/release.sh vX.Y.Z` turns "Unreleased" into a release, bumps the
 pin, tags and pushes.
 
+## Unreleased
+
+- Container image: the runtime stage copies `mail/`, `admin/` and the
+  sealed credentials next to the binary, so templated mail, the admin
+  theme and `config/credentials.yml.enc` work in a container;
+  `.dockerignore` keeps `config/master.key` and `storage/` out.
+- `lidza gen deploy [--force]` writes the Dockerfile, `.dockerignore` and
+  the systemd unit from the current templates; `lidza update` runs it,
+  so an app created by an earlier release gets the fixes (a file the app
+  edited is kept and named).
+- `lidza test --run Regexp` filters the Go tests; the MCP tool's `run`
+  option works again.
+- MCP: `lidza_ship` (`domains`, `email`, `no_e2e`).
+- Generated client: `RequestOptions` takes `query` (a query string) and
+  `body` with `contentType` (a raw body for an upload), so a list with
+  filters and a file upload need no hand-written `fetch`.
+
 ## v0.1.18 (2026-09-26)
 
 - Admin pages: the app's first account (the first user ever to sign in)

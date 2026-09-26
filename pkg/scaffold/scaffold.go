@@ -306,22 +306,67 @@ func Refresh(dir string, cfg *config.Config) ([]string, error) {
 }
 
 func render(src, dst string, data templateData) error {
-	body, err := files.ReadFile("files/" + src)
+	out, err := renderBytes(src, data)
 	if err != nil {
-		return err
-	}
-	t, err := template.New(src).Parse(string(body))
-	if err != nil {
-		return err
-	}
-	var buf bytes.Buffer
-	if err := t.Execute(&buf, data); err != nil {
 		return err
 	}
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(dst, buf.Bytes(), 0o644)
+	return os.WriteFile(dst, out, 0o644)
+}
+
+func renderBytes(src string, data templateData) ([]byte, error) {
+	body, err := files.ReadFile("files/" + src)
+	if err != nil {
+		return nil, err
+	}
+	t, err := template.New(src).Parse(string(body))
+	if err != nil {
+		return nil, err
+	}
+	var buf bytes.Buffer
+	if err := t.Execute(&buf, data); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// DeployFiles renders the deployment files from the current templates:
+// the Dockerfile, .dockerignore and deploy/<name>.service. A missing file
+// is written; one that matches the template is left; one the app edited
+// (or an older template wrote) is replaced only with force, else
+// reported in kept, so `lidza update` can say which deployment files
+// the new release would change.
+func DeployFiles(dir string, cfg *config.Config, force bool) (written, kept []string, err error) {
+	data := dataFor(cfg, "")
+	for _, f := range []struct{ src, dst string }{
+		{"Dockerfile.tmpl", "Dockerfile"},
+		{"dockerignore.tmpl", ".dockerignore"},
+		{"systemd.service.tmpl", filepath.Join("deploy", cfg.Name+".service")},
+	} {
+		want, err := renderBytes(f.src, data)
+		if err != nil {
+			return nil, nil, err
+		}
+		p := filepath.Join(dir, f.dst)
+		have, readErr := os.ReadFile(p)
+		switch {
+		case readErr == nil && bytes.Equal(have, want):
+			continue
+		case readErr == nil && !force:
+			kept = append(kept, f.dst)
+			continue
+		}
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			return nil, nil, err
+		}
+		if err := os.WriteFile(p, want, 0o644); err != nil {
+			return nil, nil, err
+		}
+		written = append(written, f.dst)
+	}
+	return written, kept, nil
 }
 
 // copyTemplate copies templates/<name> into dst, substituting the app name in

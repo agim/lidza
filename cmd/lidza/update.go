@@ -99,6 +99,11 @@ func runUpdate(ctx context.Context, args []string) error {
 		if err := run(ctx, abs, exe, "gen", "--dir", abs); err != nil {
 			return errors.New("update: lidza gen failed")
 		}
+		// The deployment files came from the templates of the release
+		// that created the app; the new ones may carry a fix.
+		if err := run(ctx, abs, exe, "gen", "deploy", "--dir", abs); err != nil {
+			fmt.Println("[update] deployment files not refreshed:", err)
+		}
 		pending, err := pendingMigrations(ctx, abs, exe)
 		switch {
 		case err != nil:

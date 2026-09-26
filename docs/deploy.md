@@ -54,7 +54,14 @@ sealed with the same key, and every node reads them.
 ## Database
 
 Migrations are files under `db/migrations`, read from the working
-directory, so they ship next to the binary (the Dockerfile copies `db/`).
+directory, so they ship next to the binary (the Dockerfile copies `db/`,
+and with it `mail/`, `admin/` and `config/credentials.yml.enc`; `.dockerignore`
+keeps `config/master.key` out, so the image needs `LIDZA_MASTER_KEY`). The
+local storage provider writes to `STORAGE_DIR`, which the read-only image
+has no room for: production uses `STORAGE_PROVIDER=s3` or a volume there.
+An app created by an earlier release gets the current templates with
+`lidza gen deploy` (`lidza update` runs it; a file the app edited is
+kept and named, `--force` replaces it).
 Apply them either from a deploy step:
 
 ```sh

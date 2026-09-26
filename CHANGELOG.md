@@ -6,6 +6,12 @@ version in `go.mod`. `install.sh` pins the newest release here;
 `scripts/release.sh vX.Y.Z` turns "Unreleased" into a release, bumps the
 pin, tags and pushes.
 
+## Unreleased
+
+- `lidza pack add` keeps a declaration `schema.lidza` already has (an
+  add that stopped halfway, or a model `lidza gen` synced) and appends
+  only what is missing, instead of refusing.
+
 ## v0.1.13 (2026-09-26)
 
 - Rule L010: a string literal shaped like an API key or token (AWS,

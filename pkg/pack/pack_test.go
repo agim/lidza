@@ -172,3 +172,23 @@ func TestSyncFragments(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// TestAddWithExistingDeclaration: an add after a half-done one, or after
+// lidza gen synced the pack's model, keeps the declaration and adds only
+// what is missing.
+func TestAddWithExistingDeclaration(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "lidza.json"), []byte(`{"name":"x","frontend":{"template":"react","dev":"npm run dev","url":"http://127.0.0.1:5173","dist":"dist"}}`), 0o644)
+	os.WriteFile(filepath.Join(dir, ".env.example"), []byte("LIDZA_ADDR=127.0.0.1:3000\n"), 0o644)
+	os.WriteFile(filepath.Join(dir, "schema.lidza"), []byte("model AuthSession @table(\"auth_session\") {\n  id string @id\n  subject string\n  refreshHash string @unique\n  expiresAt time\n}\n"), 0o644)
+	if _, _, err := Add(dir, "auth"); err != nil {
+		t.Fatalf("add with an existing model: %v", err)
+	}
+	src, _ := os.ReadFile(filepath.Join(dir, "schema.lidza"))
+	if strings.Count(string(src), "model AuthSession") != 1 || !strings.Contains(string(src), "model AuthToken") {
+		t.Fatalf("schema:\n%s", src)
+	}
+	if _, err := schema.Parse(string(src)); err != nil {
+		t.Fatal(err)
+	}
+}

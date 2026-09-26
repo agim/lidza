@@ -408,8 +408,7 @@ func schemaBlocks(src string) []schemaBlock {
 
 // appendSchema adds the pack's types to schema.lidza unless they exist.
 func appendSchema(root, pack string, fragment []byte) error {
-	frag, err := schema.Parse(string(fragment))
-	if err != nil {
+	if _, err := schema.Parse(string(fragment)); err != nil {
 		return fmt.Errorf("pack %s schema fragment: %w", pack, err)
 	}
 	p := filepath.Join(root, schema.FileName)
@@ -418,26 +417,32 @@ func appendSchema(root, pack string, fragment []byte) error {
 	if err != nil {
 		return err
 	}
-	for _, t := range append(frag.Types, frag.Models...) {
-		if cur.Model(t.Name) != nil {
-			return fmt.Errorf("schema.lidza already declares %s; remove it or rename it before adding pack %s", t.Name, pack)
+	// A declaration the app already has (an earlier add that stopped
+	// halfway, or one synced by lidza gen) is left in place; lidza gen
+	// keeps it current. Only what is missing is appended.
+	var missing []string
+	for _, block := range schemaBlocks(string(fragment)) {
+		if cur.Model(block.name) != nil || cur.Enum(block.name) != nil {
+			continue
 		}
+		missing = append(missing, block.text)
 	}
-	for _, e := range frag.Enums {
-		if cur.Enum(e.Name) != nil {
-			return fmt.Errorf("schema.lidza already declares %s; remove it or rename it before adding pack %s", e.Name, pack)
-		}
+	if len(missing) == 0 {
+		return nil
 	}
 	f, err := os.OpenFile(p, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
+	if len(bytes.TrimSpace(existing)) > 0 && !bytes.HasSuffix(existing, []byte("\n")) {
+		f.WriteString("\n")
+	}
 	if len(bytes.TrimSpace(existing)) > 0 {
 		f.WriteString("\n")
 	}
 	fmt.Fprintf(f, "// Types of the %s pack.\n", pack)
-	_, err = f.Write(bytes.TrimLeft(fragment, "\n"))
+	_, err = f.WriteString(strings.Join(missing, "\n\n") + "\n")
 	return err
 }
 

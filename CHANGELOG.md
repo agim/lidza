@@ -9,6 +9,13 @@ release is listed first under its version as "Breaking:", with what to
 change; every release so far is additive (an app updates with
 `lidza update --migrate`).
 
+## Unreleased
+
+- `lidza update`, `lidza gen`, `lidza dev` and `lidza test` repair a
+  `DATABASE_URL` written for another machine's Postgres socket (Linux's
+  on a Mac), as `lidza setup` did; `lidza update` on a Mac no longer
+  stops at "database not reachable" after an earlier failed setup.
+
 ## v0.1.24 (2026-09-26)
 
 - The brief: every app has `docs/brief.md`, about thirty questions in

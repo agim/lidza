@@ -191,7 +191,7 @@ func setup(ctx context.Context, dir string, cfg *config.Config, opt setupOptions
 	// machine's socket directory (Linux's on a Mac) is repaired first.
 	if hasDB {
 		for _, name := range []string{".env", ".env.test"} {
-			if from, to, err := repairEnvSocket(filepath.Join(dir, name)); err != nil {
+			if from, to, err := db.RepairEnvFile(filepath.Join(dir, name)); err != nil {
 				return err
 			} else if to != "" {
 				step("%s: DATABASE_URL pointed at %s, where Postgres has no socket; now %s", name, from, to)
@@ -328,39 +328,6 @@ func tail(s string, n int) string {
 		lines = lines[len(lines)-n:]
 	}
 	return strings.Join(lines, "\n")
-}
-
-// repairEnvSocket rewrites the DATABASE_URL of an env file whose Unix
-// socket directory has no Postgres when this machine's Postgres listens
-// in another one; it returns the old and new address, or "" when the file
-// needed nothing.
-func repairEnvSocket(path string) (from, to string, err error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return "", "", nil
-	}
-	lines := strings.Split(string(data), "\n")
-	for i, line := range lines {
-		key, value, ok := strings.Cut(line, "=")
-		if !ok || strings.TrimSpace(key) != "DATABASE_URL" {
-			continue
-		}
-		raw := strings.Trim(strings.TrimSpace(value), `"'`)
-		fixed, changed := db.RepairSocket(raw)
-		if !changed {
-			return "", "", nil
-		}
-		lines[i] = key + "=" + fixed
-		mode := os.FileMode(0o600)
-		if st, err := os.Stat(path); err == nil {
-			mode = st.Mode().Perm()
-		}
-		if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")), mode); err != nil {
-			return "", "", err
-		}
-		return raw, fixed, nil
-	}
-	return "", "", nil
 }
 
 func dbName(app, mode string) string {

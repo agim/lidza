@@ -74,3 +74,36 @@ func RepairSocket(raw string) (fixed string, ok bool) {
 	// as it was written.
 	return strings.Replace(raw, "host="+host, "host="+dir, 1), true
 }
+
+// RepairEnvFile rewrites the DATABASE_URL of an env file whose Unix
+// socket directory has no Postgres when this machine's Postgres listens
+// in another one; it returns the old and new address, or "" when the file
+// needed nothing.
+func RepairEnvFile(path string) (from, to string, err error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", "", nil
+	}
+	lines := strings.Split(string(data), "\n")
+	for i, line := range lines {
+		key, value, ok := strings.Cut(line, "=")
+		if !ok || strings.TrimSpace(key) != "DATABASE_URL" {
+			continue
+		}
+		raw := strings.Trim(strings.TrimSpace(value), `"'`)
+		fixed, changed := RepairSocket(raw)
+		if !changed {
+			return "", "", nil
+		}
+		lines[i] = key + "=" + fixed
+		mode := os.FileMode(0o600)
+		if st, err := os.Stat(path); err == nil {
+			mode = st.Mode().Perm()
+		}
+		if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")), mode); err != nil {
+			return "", "", err
+		}
+		return raw, fixed, nil
+	}
+	return "", "", nil
+}

@@ -20,6 +20,7 @@ import (
 	"text/template"
 	"unicode/utf8"
 
+	"github.com/agim/lidza/packs/db"
 	"github.com/agim/lidza/pkg/brief"
 	"github.com/agim/lidza/pkg/config"
 	"github.com/agim/lidza/pkg/decisions"
@@ -273,6 +274,16 @@ func Refresh(dir string, cfg *config.Config) ([]string, error) {
 		return nil, err
 	} else if created {
 		changed = append(changed, decisions.File)
+	}
+	// A DATABASE_URL written for another machine's socket directory
+	// (Linux's /var/run/postgresql on a Mac) is repaired, so gen, dev,
+	// test and update work without a second setup.
+	for _, name := range []string{".env", ".env.test"} {
+		if _, to, err := db.RepairEnvFile(filepath.Join(dir, name)); err != nil {
+			return nil, err
+		} else if to != "" {
+			changed = append(changed, name+" (DATABASE_URL now "+to+")")
+		}
 	}
 	// Apps from before the brief get it, and their agent files the
 	// working agreements and team notes.

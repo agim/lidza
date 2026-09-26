@@ -2,6 +2,7 @@ package scaffold
 
 import (
 	"context"
+	"github.com/agim/lidza/packs/db"
 	"os"
 	"path/filepath"
 	"strings"
@@ -181,5 +182,34 @@ func TestNewEveryTemplate(t *testing.T) {
 		if !strings.Contains(string(guide), "This app uses the **"+tpl+"** template.") {
 			t.Errorf("%s: guide does not name the template", tpl)
 		}
+	}
+}
+
+// Refresh (lidza gen, dev, test, update) repairs a DATABASE_URL written
+// for another machine's socket directory, as setup does.
+func TestRefreshRepairsSocket(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "demo")
+	if err := New(context.Background(), Options{Name: "demo", Dir: dir, LidzaDir: "../..", SkipModTidy: true}); err != nil {
+		t.Fatal(err)
+	}
+	sock := t.TempDir()
+	os.WriteFile(filepath.Join(sock, ".s.PGSQL.5432"), nil, 0o600)
+	old := db.SocketDirs
+	db.SocketDirs = []string{sock}
+	t.Cleanup(func() { db.SocketDirs = old })
+	t.Setenv("PGHOST", "")
+	t.Setenv("PGPORT", "")
+	os.WriteFile(filepath.Join(dir, ".env"), []byte("DATABASE_URL=postgres:///demo_dev?host=/var/run/postgresql-absent\n"), 0o600)
+	cfg, err := config.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	changed, err := Refresh(dir, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(filepath.Join(dir, ".env"))
+	if string(data) != "DATABASE_URL=postgres:///demo_dev?host="+sock+"\n" || !strings.Contains(strings.Join(changed, " "), ".env (DATABASE_URL now") {
+		t.Fatalf("repair: %s %v", data, changed)
 	}
 }

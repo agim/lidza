@@ -27,7 +27,7 @@ func TestRepairEnvSocket(t *testing.T) {
 	dir := t.TempDir()
 	env := filepath.Join(dir, ".env.test")
 	os.WriteFile(env, []byte("# test\nDATABASE_URL=postgres:///app_test?host=/var/run/postgresql-nowhere\nMAIL_PROVIDER=outbox\n"), 0o644)
-	from, to, err := repairEnvSocket(env)
+	from, to, err := db.RepairEnvFile(env)
 	if err != nil || from != "postgres:///app_test?host=/var/run/postgresql-nowhere" || to != "postgres:///app_test?host="+sock {
 		t.Fatalf("repair: %q %q %v", from, to, err)
 	}
@@ -39,10 +39,10 @@ func TestRepairEnvSocket(t *testing.T) {
 		t.Fatalf("mode: %v", st.Mode())
 	}
 	// Once right, nothing changes.
-	if _, to, _ := repairEnvSocket(env); to != "" {
+	if _, to, _ := db.RepairEnvFile(env); to != "" {
 		t.Fatalf("repaired twice: %s", to)
 	}
-	if _, to, _ := repairEnvSocket(filepath.Join(dir, "absent")); to != "" {
+	if _, to, _ := db.RepairEnvFile(filepath.Join(dir, "absent")); to != "" {
 		t.Fatal("a missing file")
 	}
 }

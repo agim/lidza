@@ -6,7 +6,7 @@ version in `go.mod`. `install.sh` pins the newest release here;
 `scripts/release.sh vX.Y.Z` turns "Unreleased" into a release, bumps the
 pin, tags and pushes.
 
-## Unreleased
+## v0.1.11 (2026-09-26)
 
 - `lidza update [--to vX.Y.Z] [--cli-only] [--migrate]`: the CLI to the
   newest release and, in a project, the framework module to the same

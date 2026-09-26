@@ -6,7 +6,7 @@ version in `go.mod`. `install.sh` pins the newest release here;
 `scripts/release.sh vX.Y.Z` turns "Unreleased" into a release, bumps the
 pin, tags and pushes.
 
-## Unreleased
+## v0.1.15 (2026-09-26)
 
 - `lidza pack add --why "..."` records the decision in
   `docs/decisions.md`; the MCP tool `lidza_pack_add` requires `why`.

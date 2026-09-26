@@ -9,7 +9,7 @@ release is listed first under its version as "Breaking:", with what to
 change; every release so far is additive (an app updates with
 `lidza update --migrate`).
 
-## Unreleased
+## v0.1.22 (2026-09-26)
 
 - macOS: `lidza setup` (and `lidza new --packs`) writes the address where
   this machine's Postgres actually listens: its Unix socket in

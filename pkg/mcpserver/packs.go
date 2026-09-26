@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/server"
 
 	"github.com/agim/lidza/packs/analytics"
 	"github.com/agim/lidza/packs/db"
@@ -75,7 +74,7 @@ func (r *packRunner) pool(ctx context.Context, m *pack.Manifest) (*engine.Pool, 
 
 // addPackTools registers lidza_packs and one tool per capability of every
 // enabled pack, with the capability's input type as the tool schema.
-func addPackTools(s *server.MCPServer, dir string, cfg *config.Config) {
+func addPackTools(s *group, dir string, cfg *config.Config) {
 	if cfg == nil {
 		return
 	}

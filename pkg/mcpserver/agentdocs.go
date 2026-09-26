@@ -22,8 +22,8 @@ import (
 // addRecipes serves the guide's recipes as prompts: one per level-3
 // heading under "## Recipes" in docs/lidza-guide.md, with an optional task
 // argument appended. The guide is re-read on every request; the list of
-// prompts is taken when the server starts.
-func addRecipes(s *server.MCPServer, dir string) {
+// prompts follows the guide (Server.Refresh).
+func addRecipes(s *group, dir string) {
 	rs, err := recipes.Load(dir)
 	if err != nil {
 		return
@@ -55,8 +55,8 @@ func addRecipes(s *server.MCPServer, dir string) {
 
 // addRecipeTool lets an agent record a convention of the app as a recipe
 // under "App recipes" in the guide; the prompts, skills and commands are
-// regenerated at once (the prompt list of this server updates on restart).
-func addRecipeTool(s *server.MCPServer, dir string, cfg *config.Config) {
+// regenerated at once, and after() refreshes this server's prompt list.
+func addRecipeTool(s *server.MCPServer, dir string, cfg *config.Config, after func()) {
 	if cfg == nil {
 		return
 	}
@@ -79,7 +79,8 @@ func addRecipeTool(s *server.MCPServer, dir string, cfg *config.Config) {
 		if _, err := scaffold.Refresh(dir, cfg); err != nil {
 			return mcp.NewToolResultErrorFromErr("recipe", err), nil
 		}
-		return jsonResult(map[string]any{"name": r.Name, "title": r.Title, "scope": r.Scope, "skill": recipes.SkillsDir + "/" + r.Name + "/SKILL.md", "note": "the prompt appears after lidza mcp restarts; the skill and command are in place"})
+		after()
+		return jsonResult(map[string]any{"name": r.Name, "title": r.Title, "scope": r.Scope, "skill": recipes.SkillsDir + "/" + r.Name + "/SKILL.md", "prompt": r.Name, "note": "the prompt, the skill and the command are in place"})
 	})
 }
 

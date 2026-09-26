@@ -37,6 +37,8 @@ type commandResult struct {
 	Output string `json:"output,omitempty"`
 	// Duration in milliseconds.
 	DurationMS int64 `json:"duration_ms"`
+	// Note says when the CLI on disk is newer than this server.
+	Note string `json:"note,omitempty"`
 }
 
 const outputCap = 64 << 10
@@ -98,7 +100,7 @@ func tailOf(s string) string {
 }
 
 // addCommandTools registers the CLI commands as tools.
-func addCommandTools(s *server.MCPServer, dir string, cfg *config.Config) {
+func addCommandTools(s *server.MCPServer, dir string, cfg *config.Config, after func()) {
 	type tool struct {
 		name, desc string
 		opts       []mcp.ToolOption
@@ -207,6 +209,12 @@ func addCommandTools(s *server.MCPServer, dir string, cfg *config.Config) {
 			if err != nil {
 				return mcp.NewToolResultErrorFromErr(t.name, err), nil
 			}
+			if t.changes {
+				after()
+			}
+			if staleCLI() {
+				res.Note = "the lidza CLI on disk is newer than this MCP server (the commands ran the new one): reconnect the server to get its tools (/mcp in Claude Code, or restart the agent)"
+			}
 			return jsonResult(res)
 		})
 	}
@@ -228,4 +236,27 @@ func addCommandTools(s *server.MCPServer, dir string, cfg *config.Config) {
 		return jsonResult(out)
 	})
 	_ = cfg
+}
+
+// cliStamp is when the CLI binary this server runs from was last
+// changed, taken at start; staleCLI reports a newer one on disk.
+var cliStamp = func() time.Time {
+	if p, err := cliPath(); err == nil {
+		if info, err := os.Stat(p); err == nil {
+			return info.ModTime()
+		}
+	}
+	return time.Time{}
+}()
+
+func staleCLI() bool {
+	if cliStamp.IsZero() {
+		return false
+	}
+	p, err := cliPath()
+	if err != nil {
+		return false
+	}
+	info, err := os.Stat(p)
+	return err == nil && info.ModTime().After(cliStamp)
 }

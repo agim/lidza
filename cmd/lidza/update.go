@@ -103,6 +103,9 @@ func runUpdate(ctx context.Context, args []string) error {
 		}
 	}
 	fmt.Printf("[update] done: %s; what changed is in CHANGELOG.md of the framework (https://github.com/agim/lidza/blob/%s/CHANGELOG.md)\n", target, target)
+	if current != target {
+		fmt.Println("[update] an agent session with the MCP server open still runs the old server: reconnect it (/mcp in Claude Code) or restart the agent to get the new tools")
+	}
 	return nil
 }
 

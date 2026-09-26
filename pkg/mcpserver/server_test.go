@@ -34,7 +34,7 @@ func main() {}
 	os.WriteFile(filepath.Join(dir, LogFile), []byte("[lidza] app: http://127.0.0.1:3000\n[app] listening\n[web] vite ready\n[app] GET /api/v1/hello/x 200\n"), 0o644)
 	cfg := config.Default("demo", "react")
 
-	c, err := client.NewInProcessClient(New(dir, &cfg))
+	c, err := client.NewInProcessClient(New(dir, &cfg).MCPServer)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +122,7 @@ func TestAgentDocs(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module demo\n\ngo 1.27\n\nrequire github.com/agim/lidza v0.0.0\n\nreplace github.com/agim/lidza => "+root+"\n"), 0o644)
 	os.MkdirAll(filepath.Join(dir, "docs"), 0o755)
 	os.WriteFile(filepath.Join(dir, "docs", "lidza-guide.md"), []byte("# Guide\n\n## Recipes\n\n### Add an API route\n\nExpose an operation.\n\n1. Declare the shapes.\n"), 0o644)
-	c, err := client.NewInProcessClient(New(dir, nil))
+	c, err := client.NewInProcessClient(New(dir, nil).MCPServer)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -207,5 +207,69 @@ func TestTail(t *testing.T) {
 	os.WriteFile(p, nil, 0o644)
 	if got, _ := tail(p, 5, ""); !strings.HasPrefix(got, "(empty") {
 		t.Fatalf("got %q", got)
+	}
+}
+
+// TestRefresh: a recipe recorded in the guide and a pack enabled in
+// lidza.json show up in the prompt and tool lists without a restart.
+func TestRefresh(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module demo\n\ngo 1.27\n"), 0o644)
+	os.WriteFile(filepath.Join(dir, "routes.go"), []byte("package main\n\nfunc main() {}\n"), 0o644)
+	cfg := config.Default("demo", "react")
+	if err := cfg.Save(dir); err != nil {
+		t.Fatal(err)
+	}
+	srv := New(dir, &cfg)
+	c, err := client.NewInProcessClient(srv.MCPServer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	if err := c.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	if _, err := c.Initialize(ctx, mcp.InitializeRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	names := func() (tools, prompts map[string]bool) {
+		tools, prompts = map[string]bool{}, map[string]bool{}
+		tl, _ := c.ListTools(ctx, mcp.ListToolsRequest{})
+		for _, x := range tl.Tools {
+			tools[x.Name] = true
+		}
+		pl, _ := c.ListPrompts(ctx, mcp.ListPromptsRequest{})
+		for _, x := range pl.Prompts {
+			prompts[x.Name] = true
+		}
+		return
+	}
+	tools, prompts := names()
+	if tools["lidza_llm"] || prompts["add-thing"] {
+		t.Fatal("present before the change")
+	}
+	os.MkdirAll(filepath.Join(dir, "docs"), 0o755)
+	os.WriteFile(filepath.Join(dir, "docs", "lidza-guide.md"), []byte("# demo\n\n## Recipes\n\n### Add a thing\n\nHow things are added.\n\n1. Add it.\n\n## App recipes\n"), 0o644)
+	cfg.Packs = []string{"lidza/db", "lidza/llm"}
+	if err := cfg.Save(dir); err != nil {
+		t.Fatal(err)
+	}
+	srv.Refresh()
+	tools, prompts = names()
+	if !tools["lidza_llm"] || !prompts["add-thing"] {
+		t.Fatalf("after refresh: llm tool %v, prompt %v", tools["lidza_llm"], prompts["add-thing"])
+	}
+	// Refresh again with nothing changed keeps them, once.
+	srv.Refresh()
+	pl, _ := c.ListPrompts(ctx, mcp.ListPromptsRequest{})
+	n := 0
+	for _, p := range pl.Prompts {
+		if p.Name == "add-thing" {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Fatalf("prompt listed %d times", n)
 	}
 }

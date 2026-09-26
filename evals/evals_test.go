@@ -258,7 +258,7 @@ func TestGuidanceSurfaces(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c, err := client.NewInProcessClient(mcpserver.New(app, cfg))
+	c, err := client.NewInProcessClient(mcpserver.New(app, cfg).MCPServer)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -386,7 +386,7 @@ func TestPackCapability(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c, err := client.NewInProcessClient(mcpserver.New(app, cfg))
+	c, err := client.NewInProcessClient(mcpserver.New(app, cfg).MCPServer)
 	if err != nil {
 		t.Fatal(err)
 	}

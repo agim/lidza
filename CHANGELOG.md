@@ -6,6 +6,15 @@ version in `go.mod`. `install.sh` pins the newest release here;
 `scripts/release.sh vX.Y.Z` turns "Unreleased" into a release, bumps the
 pin, tags and pushes.
 
+## Unreleased
+
+- `lidza mcp` refreshes its lists while it runs: the pack tools follow
+  `lidza.json`, the prompts the guide, the app tools `tools.go`, at once
+  after `lidza_pack_add` and `lidza_recipe_add` and within two seconds of
+  any other change, with list-changed notifications to the client. A
+  newer CLI binary is the one case that needs a reconnect: command
+  results say so, and `lidza update` prints the hint.
+
 ## v0.1.15 (2026-09-26)
 
 - `lidza pack add --why "..."` records the decision in

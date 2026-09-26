@@ -86,6 +86,9 @@ agent needs no shell here. Its tools:
 | `lidza_config` | `lidza.json` |
 | `lidza_gen`, `lidza_gen_resource` (`model`, `force`), `lidza_pack_add` (`name`), `lidza_pack_scaffold`, `lidza_pack_build`, `lidza_db_migrate`, `lidza_db_rollback`, `lidza_db_status`, `lidza_test` (`e2e`, `install`, `run`), `lidza_verify` (`no_test`), `lidza_build`, `lidza_doctor` | the CLI command of the same name run for you, in this project: one JSON result with `ok`, `exit`, the parsed `report` (check, verify) or the `output`. Prefer these over a shell. |
 | `lidza_recipes`, `lidza_recipe_add` | the recipes with their scope; record one of this app's conventions (title, description, steps) |
+| `lidza_decision_add` | record why the app is built a way (a pack, Rust, a dependency, a schema tradeoff) in `docs/decisions.md`; `lidza://decisions` reads the log |
+| `lidza_credentials_set`, `lidza_credentials_list` | seal secrets into `config/credentials.yml.enc` by their environment names; list the names |
+| `lidza_mail`, `lidza_llm`, `lidza_llm_usage`, `lidza_storage`, `lidza_errors` | with the pack enabled: the outbox; a prompt against the configured model; token usage; stored objects; captured errors |
 | `lidza_api` | the framework's public Go API (`package`, `filter`), also the resource `lidza://api` |
 | `lidza_snippet` | a file of the reference app, verified by its tests (`name`: `schema`, `routes`, `auth-handlers`, `resource-handlers`, `queries`, `handler-test`, `mcp-tool`, `page`, `browser-test`); also `lidza snippet` |
 | `lidza_errors` | captured errors (analytics pack) |
@@ -107,6 +110,13 @@ are enforced.
 While `lidza dev` runs, http://127.0.0.1:3000/llms.txt summarizes the app
 and http://127.0.0.1:3000/llms-full.txt has this guide plus every handler
 signature. Both are regenerated after each Go rebuild.
+
+The lists are live: a pack added to `lidza.json`, a recipe recorded in
+the guide or a tool added to `tools.go` appears in this server's tools
+and prompts within seconds, and at once after `lidza_pack_add` and
+`lidza_recipe_add`; no restart. Only a newer CLI binary (`lidza update`)
+needs the server reconnected (`/mcp` in Claude Code), and every command
+result says so while that is the case.
 
 ## Rules
 

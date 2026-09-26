@@ -11,7 +11,6 @@ import (
 
 	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/server"
 
 	"github.com/agim/lidza/pkg/config"
 	"github.com/agim/lidza/pkg/devserver"
@@ -24,7 +23,7 @@ const appToolPrefix = "app_"
 // stdio, so its packs and database are live) and mirrors every tool it
 // declares as app_<name>. Failures are reported on stderr and leave the
 // framework tools working.
-func addAppTools(s *server.MCPServer, dir string, cfg *config.Config) {
+func addAppTools(s *group, dir string, cfg *config.Config) {
 	if cfg == nil {
 		return
 	}
@@ -57,6 +56,7 @@ func addAppTools(s *server.MCPServer, dir string, cfg *config.Config) {
 		c.Close()
 		return
 	}
+	s.onClose(func() { c.Close() })
 	for _, t := range list.Tools {
 		tool := t
 		schema, _ := json.Marshal(tool.InputSchema)

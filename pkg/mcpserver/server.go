@@ -11,6 +11,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -18,6 +20,7 @@ import (
 	"github.com/agim/lidza/pkg/config"
 	"github.com/agim/lidza/pkg/devserver"
 	"github.com/agim/lidza/pkg/inspect"
+	"github.com/agim/lidza/pkg/recipes"
 	"github.com/agim/lidza/pkg/version"
 )
 
@@ -36,15 +39,32 @@ verified code of the reference app, and lidza_recipe_add to record a
 convention of this app. The prompts are the project's task recipes
 (add-api-route, add-resource, ...); follow one step by step.`
 
+// Server is the MCP server of one project. Its pack tools follow
+// lidza.json, its prompts the guide, its app tools tools.go: Refresh reads
+// them again and connected clients are told the lists changed, so an
+// agent sees a pack it just added or a recipe it just recorded without a
+// restart. Only a newer CLI binary needs a reconnect.
+type Server struct {
+	*server.MCPServer
+	dir     string
+	cfg     *config.Config
+	mu      sync.Mutex
+	packs   *group
+	app     *group
+	recipes *group
+	stamps  map[string]time.Time
+}
+
 // New builds the server for the project in dir. cfg may be nil for a plain
 // Go module.
-func New(dir string, cfg *config.Config) *server.MCPServer {
+func New(dir string, cfg *config.Config) *Server {
 	s := server.NewMCPServer("lidza", version.String(),
-		server.WithToolCapabilities(false),
-		server.WithResourceCapabilities(false, false),
-		server.WithPromptCapabilities(false),
+		server.WithToolCapabilities(true),
+		server.WithResourceCapabilities(false, true),
+		server.WithPromptCapabilities(true),
 		server.WithInstructions(instructions),
 	)
+	srv := &Server{MCPServer: s, dir: dir, cfg: cfg, packs: newGroup(s), app: newGroup(s), recipes: newGroup(s), stamps: map[string]time.Time{}}
 
 	s.AddTool(mcp.NewTool("lidza_routes",
 		mcp.WithDescription("List the API routes: method, path, handler name, file and line, signature. Built-in routes are marked."),
@@ -87,15 +107,16 @@ func New(dir string, cfg *config.Config) *server.MCPServer {
 		return jsonResult(cfg)
 	})
 
-	addCommandTools(s, dir, cfg)
-	addPackTools(s, dir, cfg)
-	addAppTools(s, dir, cfg)
+	addCommandTools(s, dir, cfg, srv.Refresh)
+	addPackTools(srv.packs, dir, cfg)
+	addAppTools(srv.app, dir, cfg)
 	addAPI(s, dir)
 	addSnippets(s)
-	addRecipes(s, dir)
-	addRecipeTool(s, dir, cfg)
+	addRecipes(srv.recipes, dir)
+	addRecipeTool(s, dir, cfg, srv.Refresh)
 	addDecisionTool(s, dir, cfg)
 	addCredentialTools(s, dir, cfg)
+	srv.stamps = srv.stamp()
 
 	for _, r := range []struct{ name, uri, desc string }{
 		{"llms.txt", "lidza://llms.txt", "Short description of the app for language models: routes, commands, files."},
@@ -115,12 +136,93 @@ func New(dir string, cfg *config.Config) *server.MCPServer {
 				return []mcp.ResourceContents{mcp.TextResourceContents{URI: req.Params.URI, MIMEType: "text/plain", Text: text}}, nil
 			})
 	}
-	return s
+	return srv
 }
 
-// Serve runs the server on stdin/stdout until the client disconnects.
+// watched are the files whose change moves a list: lidza.json (packs and
+// their tools), the guide (prompts), tools.go (app tools).
+func (srv *Server) watched() []string {
+	return []string{
+		filepath.Join(srv.dir, config.FileName),
+		filepath.Join(srv.dir, filepath.FromSlash(recipes.GuideFile)),
+		filepath.Join(srv.dir, "tools.go"),
+	}
+}
+
+func (srv *Server) stamp() map[string]time.Time {
+	out := map[string]time.Time{}
+	for _, p := range srv.watched() {
+		if info, err := os.Stat(p); err == nil {
+			out[p] = info.ModTime()
+		}
+	}
+	return out
+}
+
+// Refresh reads lidza.json, the guide and tools.go again and re-registers
+// what changed: the pack tools, the prompts, the app tools. Command tools
+// that change the project call it; Watch calls it when a file changes.
+func (srv *Server) Refresh() {
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
+	now := srv.stamp()
+	changed := func(name string) bool {
+		p := filepath.Join(srv.dir, name)
+		return !now[p].Equal(srv.stamps[p])
+	}
+	cfgChanged, guideChanged, toolsChanged := changed(config.FileName), changed(filepath.FromSlash(recipes.GuideFile)), changed("tools.go")
+	srv.stamps = now
+	if cfgChanged {
+		if cfg, err := config.Load(srv.dir); err == nil {
+			srv.cfg = cfg
+		}
+		srv.packs.clear()
+		addPackTools(srv.packs, srv.dir, srv.cfg)
+	}
+	if guideChanged {
+		srv.recipes.clear()
+		addRecipes(srv.recipes, srv.dir)
+	}
+	if toolsChanged || cfgChanged {
+		srv.app.clear()
+		addAppTools(srv.app, srv.dir, srv.cfg)
+	}
+}
+
+// Watch calls Refresh every two seconds while a watched file changes,
+// until ctx ends.
+func (srv *Server) Watch(ctx context.Context) {
+	t := time.NewTicker(2 * time.Second)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			now := srv.stamp()
+			srv.mu.Lock()
+			same := len(now) == len(srv.stamps)
+			for p, m := range now {
+				if !m.Equal(srv.stamps[p]) {
+					same = false
+				}
+			}
+			srv.mu.Unlock()
+			if !same {
+				srv.Refresh()
+			}
+		}
+	}
+}
+
+// Serve runs the server on stdin/stdout until the client disconnects,
+// refreshing its lists as the project changes.
 func Serve(dir string, cfg *config.Config) error {
-	return server.ServeStdio(New(dir, cfg))
+	srv := New(dir, cfg)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go srv.Watch(ctx)
+	return server.ServeStdio(srv.MCPServer)
 }
 
 func jsonResult(v any) (*mcp.CallToolResult, error) {

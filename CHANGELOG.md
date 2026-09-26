@@ -9,7 +9,7 @@ release is listed first under its version as "Breaking:", with what to
 change; every release so far is additive (an app updates with
 `lidza update --migrate`).
 
-## Unreleased
+## v0.1.26 (2026-09-26)
 
 - `lidza brief`: several numbers combine suggestions on a free-text
   question too ("1,3" was saved as text); a pasted question header,

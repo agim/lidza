@@ -1,0 +1,69 @@
+/* The admin pages' own rules on top of Tabler (tabler.min.css). The
+   app's theme (admin/theme.css, loaded after this file) sets the
+   --admin-* variables below, or any Tabler variable (--tblr-*). */
+:root,
+[data-bs-theme=light],
+[data-bs-theme=dark] {
+  --tblr-primary: var(--admin-accent, oklch(54.6% 0.1724 254.2deg));
+  --tblr-font-sans-serif: var(--admin-font, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif);
+  --tblr-font-monospace: var(--admin-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  --tblr-border-radius: var(--admin-radius, 6px);
+}
+
+/* The sidebar keeps its dark surface in both themes. */
+.admin-sidebar { --tblr-navbar-bg: var(--admin-sidebar, #182433); }
+.admin-sidebar .navbar-brand { font-weight: 600; letter-spacing: .01em; }
+.admin-sidebar .nav-group { color: var(--tblr-navbar-color); opacity: .55; font-size: .6875rem;
+  text-transform: uppercase; letter-spacing: .06em; padding: 1rem 1rem .25rem; }
+.admin-sidebar .admin-version { opacity: .55; font-size: .75rem; padding: 1rem; }
+
+/* Environment names next to labels. */
+.admin-env { font-family: var(--tblr-font-monospace); font-size: .75rem; color: var(--tblr-secondary); font-weight: 400; }
+
+/* The credentials page: the section list and the save bar. */
+.admin-sections .list-group-item { display: flex; align-items: center; gap: .5rem; }
+.admin-sections .list-group-item .status-dot { margin-left: auto; }
+.admin-savebar { position: sticky; bottom: 0; z-index: 3; background: var(--tblr-bg-surface);
+  border-top: 1px solid var(--tblr-border-color); }
+.admin-group-title { display: flex; align-items: center; gap: .5rem; font-weight: 600; margin: 1.5rem 0 .75rem; }
+.admin-group-title:first-child { margin-top: 0; }
+.form-selectgroup-label .badge { margin-left: .35rem; }
+
+/* The token chart (an SVG with bars as rects: no inline style). */
+.admin-chart { display: block; width: 100%; height: 170px; }
+.admin-chart .bar-in { fill: var(--tblr-primary); }
+.admin-chart .bar-out { fill: color-mix(in oklab, var(--tblr-primary) 45%, transparent); }
+.admin-chart .axis { stroke: var(--tblr-border-color); }
+.admin-legend { display: inline-block; width: .7rem; height: .7rem; border-radius: 2px; vertical-align: middle; margin-right: .3rem; }
+.admin-legend.in { background: var(--tblr-primary); }
+.admin-legend.out { background: color-mix(in oklab, var(--tblr-primary) 45%, transparent); }
+
+/* Widths for progress bars, in steps of 5 (classes, not style attributes,
+   so a strict Content-Security-Policy holds). */
+.admin-w-0{width:0%}
+.admin-w-5{width:5%}
+.admin-w-10{width:10%}
+.admin-w-15{width:15%}
+.admin-w-20{width:20%}
+.admin-w-25{width:25%}
+.admin-w-30{width:30%}
+.admin-w-35{width:35%}
+.admin-w-40{width:40%}
+.admin-w-45{width:45%}
+.admin-w-50{width:50%}
+.admin-w-55{width:55%}
+.admin-w-60{width:60%}
+.admin-w-65{width:65%}
+.admin-w-70{width:70%}
+.admin-w-75{width:75%}
+.admin-w-80{width:80%}
+.admin-w-85{width:85%}
+.admin-w-90{width:90%}
+.admin-w-95{width:95%}
+.admin-w-100{width:100%}
+
+.admin-truncate { max-width: 28rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.table .admin-actions { width: 1%; white-space: nowrap; text-align: right; }
+
+.admin-advanced summary { cursor: pointer; list-style: none; display: inline-flex; align-items: center; gap: .35rem; }
+.admin-advanced summary::-webkit-details-marker { display: none; }

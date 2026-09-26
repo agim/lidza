@@ -1,32 +1,114 @@
 {{define "content"}}
-<h1>Overview</h1>
-<div class="grid">
-  <div class="card"><div class="muted">Mail</div><div class="stat">{{or .Data.Mail "off"}}</div></div>
-  <div class="card"><div class="muted">Language model</div><div class="stat">{{or .Data.LLM "off"}}</div></div>
-  <div class="card"><div class="muted">Storage</div><div class="stat">{{or .Data.Storage "off"}}</div></div>
-  <div class="card"><div class="muted">Credentials</div><div class="stat">{{.Data.Credentials}}</div><div class="help">sealed values, kept in the {{.Data.Store}}{{if not .Data.HasKey}}; <span class="bad">no master key</span>{{end}}</div></div>
-</div>
-<div class="card">
-  <h2 style="margin-top:0">Admins</h2>
-  <table>
-    <tr><th>You</th><td class="mono">{{.Data.You}}</td></tr>
-    <tr><th>First account</th><td class="mono">{{if .Data.FirstUser}}{{.Data.FirstUser}} <span class="muted">(an admin by default)</span>{{else}}nobody has signed in yet{{end}}</td></tr>
-    <tr><th>Listed</th><td class="mono">{{range .Data.Admins}}{{.}} {{else}}<span class="muted">none (ADMIN_USERS)</span>{{end}}</td></tr>
-  </table>
-  <form method="post" action="{{.Path}}/admins">
-    <label for="admin">Add or remove an admin</label>
-    <input type="text" id="admin" name="admin" placeholder="email or user id" autocomplete="off">
-    <label class="check"><input type="checkbox" name="remove"> remove</label>
-    <div class="help">Saved sealed with the master key and applied at once; also settable as ADMIN_USERS in .env.</div>
-    <button type="submit">Save</button>
-  </form>
-</div>
-<div class="card">
-  <h2 style="margin-top:0">Serving</h2>
-  <table>
-    <tr><th>TLS domains</th><td class="mono">{{or .Data.TLSDomains "not set (plain HTTP behind a proxy)"}}</td></tr>
-    <tr><th>Public URL</th><td class="mono">{{or .Data.AppURL "not set"}}</td></tr>
-    <tr><th>Packs</th><td class="mono">{{range .Data.Packs}}{{.}} {{end}}</td></tr>
-  </table>
+{{$d := .Data}}
+<div class="row row-deck row-cards">
+  {{range $d.Cards}}
+  <div class="col-sm-6 col-xl-3">
+    <div class="card card-sm">
+      <div class="card-body">
+        <div class="row align-items-center">
+          <div class="col-auto"><span class="avatar {{if eq .Status "off"}}bg-secondary-lt{{else}}bg-primary-lt{{end}}">{{icon .Icon}}</span></div>
+          <div class="col">
+            <div class="font-weight-medium">{{.Title}}</div>
+            <div class="text-secondary small">
+              <span class="status-dot status-{{status .Status}} me-1"></span>{{.StatusText}}
+            </div>
+          </div>
+          {{if .Href}}<div class="col-auto"><a href="{{.Href}}" class="btn btn-ghost-secondary btn-icon btn-sm" aria-label="Configure {{.Title}}">{{icon "chevron-right"}}</a></div>{{end}}
+        </div>
+        {{if .Hint}}<div class="mt-2 small text-secondary"><code>{{.Hint}}</code></div>{{end}}
+      </div>
+    </div>
+  </div>
+  {{end}}
+
+  <div class="col-lg-7">
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Before production</h2>
+        <div class="card-actions text-secondary small">{{$d.Done}} of {{len $d.Checklist}} done</div>
+      </div>
+      <div class="card-body pb-0">
+        <div class="progress progress-sm mb-3" role="progressbar" aria-label="Setup progress" aria-valuenow="{{$d.Percent}}" aria-valuemin="0" aria-valuemax="100">
+          <div class="progress-bar {{if eq $d.Percent 100}}bg-green{{end}} admin-w-{{$d.Percent}}"></div>
+        </div>
+      </div>
+      <div class="list-group list-group-flush">
+        {{range $d.Checklist}}
+        <div class="list-group-item">
+          <div class="row align-items-center">
+            <div class="col-auto {{if .Done}}text-green{{else}}text-secondary{{end}}">{{if .Done}}{{icon "circle-check"}}{{else}}{{icon "circle-dashed"}}{{end}}</div>
+            <div class="col">
+              <div class="{{if .Done}}text-secondary{{else}}fw-medium{{end}}">{{.Title}}</div>
+              {{if not .Done}}<div class="small text-secondary">{{.Help}}</div>{{end}}
+            </div>
+            {{if and .Href (not .Done)}}<div class="col-auto"><a href="{{.Href}}" class="btn btn-sm">Set up</a></div>{{end}}
+          </div>
+        </div>
+        {{end}}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-5">
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Admins</h2>
+        {{if $d.Users}}<div class="card-actions"><a href="{{.Path}}/users" class="small">{{$d.Users}} account(s)</a></div>{{end}}
+      </div>
+      <div class="list-group list-group-flush">
+        {{if $d.FirstUser}}
+        <div class="list-group-item">
+          <div class="row align-items-center">
+            {{$first := or $d.FirstLabel $d.FirstUser}}
+            <div class="col-auto"><span class="avatar avatar-sm bg-{{color $first}}-lt">{{initials $first}}</span></div>
+            <div class="col text-truncate"><span{{if not $d.FirstLabel}} class="font-monospace small"{{end}}>{{$first}}</span>{{if eq $first $d.You}} <span class="badge bg-blue-lt">you</span>{{end}}<div class="small text-secondary">First account, an admin by default</div></div>
+          </div>
+        </div>
+        {{end}}
+        {{range $d.Admins}}
+        <div class="list-group-item">
+          <div class="row align-items-center">
+            <div class="col-auto"><span class="avatar avatar-sm bg-{{color .}}-lt">{{initials .}}</span></div>
+            <div class="col text-truncate">{{.}}{{if eq . $d.You}} <span class="badge bg-blue-lt">you</span>{{end}}</div>
+            <div class="col-auto">
+              <form method="post" action="{{$.Path}}/admins" data-admin-confirm="Remove {{.}} from the admins?">
+                <input type="hidden" name="admin" value="{{.}}"><input type="hidden" name="remove" value="on">
+                <button type="submit" class="btn btn-ghost-danger btn-icon btn-sm" aria-label="Remove {{.}}">{{icon "user-minus"}}</button>
+              </form>
+            </div>
+          </div>
+        </div>
+        {{else}}
+        {{if not $d.FirstUser}}<div class="list-group-item text-secondary">Nobody yet: the first account to sign in becomes an admin.</div>{{end}}
+        {{end}}
+      </div>
+      <div class="card-body">
+        <form method="post" action="{{.Path}}/admins">
+          <label class="form-label" for="admin">Add an admin</label>
+          <div class="input-group">
+            <input type="text" class="form-control" id="admin" name="admin" placeholder="email or user id" autocomplete="off">
+            <button type="submit" class="btn btn-primary">{{icon "user-plus"}}<span class="ms-1">Add</span></button>
+          </div>
+          <div class="form-hint">Saved sealed with the master key and applied at once. ADMIN_USERS in the environment adds to this list.</div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Serving</h2></div>
+      <div class="card-body">
+        <div class="datagrid">
+          <div class="datagrid-item"><div class="datagrid-title">Mode</div><div class="datagrid-content">{{$d.Mode}}</div></div>
+          <div class="datagrid-item"><div class="datagrid-title">Public URL</div><div class="datagrid-content font-monospace small">{{or $d.AppURL "not set"}}</div></div>
+          <div class="datagrid-item"><div class="datagrid-title">TLS domains</div><div class="datagrid-content font-monospace small">{{or $d.TLSDomains "not set (behind a proxy)"}}</div></div>
+          <div class="datagrid-item"><div class="datagrid-title">Credentials</div><div class="datagrid-content">{{$d.Credentials}} sealed, in the {{$d.Store}}{{if not $d.HasKey}} <span class="badge bg-yellow-lt">no master key</span>{{end}}</div></div>
+          <div class="datagrid-item"><div class="datagrid-title">Framework</div><div class="datagrid-content">Līdza {{.Version}}</div></div>
+          <div class="datagrid-item"><div class="datagrid-title">Packs</div><div class="datagrid-content">{{range $d.Packs}}<span class="badge bg-secondary-lt me-1 mb-1">{{.}}</span>{{end}}</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 {{end}}

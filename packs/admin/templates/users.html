@@ -1,33 +1,81 @@
 {{define "content"}}
-<h1>Users</h1>
-<form class="card" method="get" action="{{.Path}}/users">
-  <label for="q">Search</label>
-  <input type="text" id="q" name="q" value="{{.Data.Query}}" placeholder="email or id">
-  <button type="submit">Search</button>
-  <span class="muted" style="margin-left:12px">{{.Data.Total}} account(s)</span>
-</form>
-{{if .Data.Error}}<div class="card error">{{.Data.Error}}</div>{{end}}
+{{$d := .Data}}
+{{if $d.Error}}<div class="alert alert-danger">{{$d.Error}}</div>{{end}}
 <div class="card">
-<table>
-<tr><th>Account</th><th>Sign-in</th><th>First seen</th><th>Last seen</th><th>Sessions</th><th>State</th><th>Actions</th></tr>
-{{range .Data.Rows}}<tr>
-  <td><span class="mono">{{or .Label .Subject}}</span>{{if .Label}}<div class="help mono">{{.Subject}}</div>{{end}}
-    {{if .First}}<span class="help">first account, admin by default</span>{{end}}{{if .You}}<span class="help">you</span>{{end}}</td>
-  <td>{{if .Methods}}{{.Methods}}{{else}}<span class="muted">app</span>{{end}}</td>
-  <td>{{since .FirstSeenAt}}</td><td>{{since .LastSeenAt}}</td><td>{{.Sessions}}</td>
-  <td>{{if .Disabled}}<span class="bad">disabled</span>{{else if or .Admin .First}}<span class="ok">admin</span>{{else}}active{{end}}</td>
-  <td>
-    {{if .Sessions}}<form method="post" action="{{$.Path}}/users/{{.Subject}}/revoke" style="display:inline"><button class="small" type="submit">Sign out everywhere</button></form>{{end}}
-    {{if not .You}}
-      {{if .Disabled}}<form method="post" action="{{$.Path}}/users/{{.Subject}}/enable" style="display:inline"><button class="small" type="submit">Enable</button></form>
-      {{else}}<form method="post" action="{{$.Path}}/users/{{.Subject}}/disable" style="display:inline"><button class="small" type="submit">Disable</button></form>{{end}}
-      {{if .Admin}}<form method="post" action="{{$.Path}}/users/{{.Subject}}/unadmin" style="display:inline"><button class="small" type="submit">Remove admin</button></form>
-      {{else if not .First}}<form method="post" action="{{$.Path}}/users/{{.Subject}}/admin" style="display:inline"><button class="small" type="submit">Make admin</button></form>{{end}}
-    {{end}}
-  </td>
-</tr>{{else}}<tr><td colspan="7" class="muted">nobody has signed in yet</td></tr>{{end}}
-</table>
-{{if gt .Data.Pages 1}}<p class="muted">Page {{.Data.Page}} of {{.Data.Pages}}{{if lt .Data.Page .Data.Pages}} · <a href="{{.Path}}/users?q={{.Data.Query}}&page={{add .Data.Page 1}}">next</a>{{end}}</p>{{end}}
+  <div class="card-header">
+    <div>
+      <h2 class="card-title">Accounts</h2>
+      <div class="text-secondary small mt-1">{{$d.Total}} account(s){{if $d.Query}} matching “{{$d.Query}}”{{end}}</div>
+    </div>
+    <div class="card-actions">
+      <form role="search" method="get" action="{{.Path}}/users">
+        <label class="visually-hidden" for="q">Search accounts</label>
+        <div class="input-icon">
+          <span class="input-icon-addon">{{icon "search"}}</span>
+          <input type="search" class="form-control" id="q" name="q" value="{{$d.Query}}" placeholder="Email or id…" autocomplete="off">
+        </div>
+      </form>
+    </div>
+  </div>
+  {{if $d.Rows}}
+  <div class="table-responsive">
+    <table class="table table-vcenter card-table">
+      <thead><tr><th>Account</th><th>Sign-in</th><th>Last seen</th><th>Sessions</th><th>Status</th><th class="admin-actions"><span class="visually-hidden">Actions</span></th></tr></thead>
+      <tbody>
+      {{range $d.Rows}}
+        <tr>
+          <td>
+            <div class="d-flex align-items-center gap-2">
+              <span class="avatar avatar-sm bg-{{color .Entry}}-lt">{{initials .Entry}}</span>
+              <div class="text-truncate">
+                <div>{{or .Label .Subject}}{{if .You}} <span class="badge bg-blue-lt">you</span>{{end}}</div>
+                {{if .Label}}<div class="small text-secondary font-monospace">{{.Subject}}</div>{{end}}
+              </div>
+            </div>
+          </td>
+          <td>{{range .Methods}}<span class="badge bg-secondary-lt me-1" title="{{.}}">{{icon (methodIcon .)}} {{.}}</span>{{else}}<span class="text-secondary small">the app's</span>{{end}}</td>
+          <td class="text-secondary" title="first seen {{since .FirstSeenAt}}">{{since .LastSeenAt}}</td>
+          <td>{{.Sessions}}</td>
+          <td>
+            {{if .Disabled}}<span class="badge bg-red-lt">disabled</span>
+            {{else if .First}}<span class="badge bg-purple-lt" title="The first account is an admin by default">admin · first</span>
+            {{else if .Admin}}<span class="badge bg-purple-lt">admin</span>
+            {{else}}<span class="badge bg-green-lt">active</span>{{end}}
+          </td>
+          <td class="admin-actions">
+            <div class="dropdown">
+              <button type="button" class="btn btn-ghost-secondary btn-icon btn-sm" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Actions for {{or .Label .Subject}}">{{icon "dots-vertical"}}</button>
+              <div class="dropdown-menu dropdown-menu-end">
+                {{if .Sessions}}<form method="post" action="{{$.Path}}/users/{{.Subject}}/revoke" data-admin-confirm="Sign {{.Entry}} out everywhere?">
+                  <button type="submit" class="dropdown-item">{{icon "logout"}}<span class="ms-2">Sign out everywhere</span></button></form>{{end}}
+                {{if not .You}}
+                  {{if .Admin}}<form method="post" action="{{$.Path}}/users/{{.Subject}}/unadmin"><button type="submit" class="dropdown-item">{{icon "shield-x"}}<span class="ms-2">Remove admin</span></button></form>
+                  {{else if not .First}}<form method="post" action="{{$.Path}}/users/{{.Subject}}/admin"><button type="submit" class="dropdown-item">{{icon "shield-check"}}<span class="ms-2">Make admin</span></button></form>{{end}}
+                  <div class="dropdown-divider"></div>
+                  {{if .Disabled}}<form method="post" action="{{$.Path}}/users/{{.Subject}}/enable"><button type="submit" class="dropdown-item">{{icon "lock-open"}}<span class="ms-2">Enable</span></button></form>
+                  {{else}}<form method="post" action="{{$.Path}}/users/{{.Subject}}/disable" data-admin-confirm="Disable {{.Entry}}? Their sessions end and they cannot sign in until enabled.">
+                    <button type="submit" class="dropdown-item text-danger">{{icon "ban"}}<span class="ms-2">Disable</span></button></form>{{end}}
+                {{else if not .Sessions}}<span class="dropdown-item text-secondary">Nothing to do on your own account</span>{{end}}
+              </div>
+            </div>
+          </td>
+        </tr>
+      {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{if gt $d.Pages 1}}
+  <div class="card-footer d-flex align-items-center">
+    <p class="m-0 text-secondary small">Page {{$d.Page}} of {{$d.Pages}}</p>
+    <ul class="pagination m-0 ms-auto">
+      <li class="page-item{{if le $d.Page 1}} disabled{{end}}"><a class="page-link" href="{{.Path}}/users?q={{$d.Query}}&amp;page={{sub $d.Page 1}}"{{if le $d.Page 1}} tabindex="-1" aria-disabled="true"{{end}}>Previous</a></li>
+      <li class="page-item{{if ge $d.Page $d.Pages}} disabled{{end}}"><a class="page-link" href="{{.Path}}/users?q={{$d.Query}}&amp;page={{add $d.Page 1}}"{{if ge $d.Page $d.Pages}} tabindex="-1" aria-disabled="true"{{end}}>Next</a></li>
+    </ul>
+  </div>
+  {{end}}
+  {{else}}
+  <div class="card-body">{{template "admin-empty" (dict "Icon" "users" "Title" (printf "%s" (or (and $d.Query "No account matches") "Nobody has signed in yet")) "Text" "Accounts appear here the first time they sign in.")}}</div>
+  {{end}}
 </div>
-<p class="help">Disabling an account ends its sessions and refuses sign-in and refresh until it is enabled; deleting a user's data is the app's own operation.</p>
+<p class="text-secondary small mt-3">Disabling an account ends its sessions and refuses sign-in and refresh until it is enabled. Deleting a user's data is the app's own operation.</p>
 {{end}}

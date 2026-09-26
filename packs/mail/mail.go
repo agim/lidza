@@ -42,12 +42,30 @@ type Config struct {
 	APIKey string `env:"MAIL_API_KEY"`
 	// Domain is the sending domain (Mailgun).
 	Domain string `env:"MAIL_DOMAIN"`
-	// BaseURL overrides a provider's API base (Mailgun EU:
-	// https://api.eu.mailgun.net).
+	// Region picks a provider's regional API: "eu" for Mailgun
+	// (api.eu.mailgun.net) and SendGrid (api.eu.sendgrid.com); "us", the
+	// default, otherwise.
+	Region string `env:"MAIL_REGION"`
+	// BaseURL overrides a provider's API base outright (a proxy); it wins
+	// over Region.
 	BaseURL string `env:"MAIL_BASE_URL"`
 	// SMTPURL is smtp://user:pass@host:587 (STARTTLS) or
-	// smtps://user:pass@host:465 (TLS).
+	// smtps://user:pass@host:465 (TLS). The SMTP fields below are the same
+	// setting in parts; the URL wins when both are set.
 	SMTPURL string `env:"MAIL_SMTP_URL"`
+	// SMTPHost and SMTPPort address the server; the port defaults to 587
+	// (465 with SMTPSecurity "tls", 25 with "none").
+	SMTPHost string `env:"MAIL_SMTP_HOST"`
+	SMTPPort int    `env:"MAIL_SMTP_PORT"`
+	// SMTPUsername and SMTPPassword authenticate (PLAIN); both empty
+	// sends without authentication.
+	SMTPUsername string `env:"MAIL_SMTP_USERNAME"`
+	SMTPPassword string `env:"MAIL_SMTP_PASSWORD"`
+	// SMTPSecurity is "starttls" (the default: the connection is
+	// upgraded, and refused when the server cannot), "tls" (encrypted
+	// from the start, usually port 465) or "none" (plain text; a local
+	// relay only).
+	SMTPSecurity string `env:"MAIL_SMTP_SECURITY" default:"starttls"`
 	// TemplatesDir holds <name>.txt.tmpl and <name>.html.tmpl.
 	TemplatesDir string `env:"MAIL_TEMPLATES" default:"mail"`
 	// MaxAttempts bounds delivery retries through the jobs pack.

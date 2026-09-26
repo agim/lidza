@@ -315,3 +315,43 @@ func TestOllamaWire(t *testing.T) {
 		t.Fatalf("embed: %v %v", vectors, err)
 	}
 }
+
+// An OpenAI-compatible server (llama-server, vLLM, LM Studio): the
+// address is required, the key optional and not sent when empty, an
+// address written with /v1 works.
+func TestCompatibleProvider(t *testing.T) {
+	if _, err := New(Config{Provider: "compatible"}); err == nil || !strings.Contains(err.Error(), "LLM_BASE_URL") {
+		t.Fatalf("no address: %v", err)
+	}
+	var auth, path, model string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auth, path = r.Header.Get("Authorization"), r.URL.Path
+		var body struct {
+			Model string `json:"model"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		model = body.Model
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"choices":[{"message":{"role":"assistant","content":"hi there"},"finish_reason":"stop"}],"usage":{"prompt_tokens":3,"completion_tokens":2}}`)
+	}))
+	defer srv.Close()
+	l, err := New(Config{Provider: "compatible", BaseURL: srv.URL + "/v1/", Model: "qwen2.5-7b"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := l.Chat(context.Background(), Request{Messages: []Message{{Role: User, Content: "hello"}}})
+	if err != nil || res.Text != "hi there" {
+		t.Fatalf("chat: %+v %v", res, err)
+	}
+	if auth != "" || path != "/v1/chat/completions" || model != "qwen2.5-7b" {
+		t.Fatalf("request: auth %q path %q model %q", auth, path, model)
+	}
+	if l.Provider() != "compatible" {
+		t.Fatalf("provider: %s", l.Provider())
+	}
+	l, _ = New(Config{Provider: "compatible", BaseURL: srv.URL, APIKey: "sk-local"})
+	l.Chat(context.Background(), Request{Messages: []Message{{Role: User, Content: "hello"}}})
+	if auth != "Bearer sk-local" || model != "default" {
+		t.Fatalf("with a key: %q %q", auth, model)
+	}
+}

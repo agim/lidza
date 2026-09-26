@@ -69,10 +69,10 @@ func TestGateAndPages(t *testing.T) {
 
 	allowed := serve(t, Options{Auth: noAuth, Allow: func(context.Context) bool { return true }, Title: "notes", CredentialsDir: dir, Dir: filepath.Join(dir, "admin")}, s)
 	code, body := get(t, allowed, "/admin/")
-	if code != 200 || !strings.Contains(body, "<title>Overview · notes</title>") || !strings.Contains(body, "fake m1") || !strings.Contains(body, `href="/admin/llm"`) || strings.Contains(body, `href="/admin/mail"`) {
+	if code != 200 || !strings.Contains(body, "<title>Overview · notes</title>") || !strings.Contains(body, "Development (fake)") || !strings.Contains(body, `href="/admin/llm"`) || strings.Contains(body, `href="/admin/mail"`) {
 		t.Fatalf("overview: %d %s", code, body)
 	}
-	code, body = get(t, allowed, "/admin/credentials")
+	code, body = get(t, allowed, "/admin/llm/settings")
 	if code != 200 || !strings.Contains(body, "Language model") || strings.Contains(body, "Storage") || !strings.Contains(body, `name="LLM_API_KEY"`) {
 		t.Fatalf("credentials: %d %s", code, body)
 	}
@@ -89,7 +89,7 @@ func TestGateAndPages(t *testing.T) {
 	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	post := func(form url.Values) string {
 		t.Helper()
-		res, err := client.PostForm(allowed.URL+"/admin/credentials", form)
+		res, err := client.PostForm(allowed.URL+"/admin/settings", form)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -109,7 +109,7 @@ func TestGateAndPages(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, "config", "master.key")); err != nil {
 		t.Fatal("no master key created")
 	}
-	if code, body := get(t, allowed, "/admin/credentials"); code != 200 || !strings.Contains(body, "stored; leave empty to keep") || strings.Contains(body, "sk-new") {
+	if code, body := get(t, allowed, "/admin/llm/settings"); code != 200 || !strings.Contains(body, "stored; leave empty to keep") || strings.Contains(body, "sk-new") {
 		t.Fatalf("secret shown: %d %s", code, body)
 	}
 	if loc := post(url.Values{"section": {"llm"}, "LLM_API_KEY": {""}}); !strings.Contains(loc, "nothing+changed") {
@@ -127,7 +127,7 @@ func TestGateAndPages(t *testing.T) {
 	if code, body := get(t, allowed, "/admin/theme.css"); code != 200 || !strings.Contains(body, "#ff0000") {
 		t.Fatalf("theme override: %d %s", code, body)
 	}
-	if code, body := get(t, allowed, "/admin/"); code != 200 || !strings.Contains(body, `class="themed"`) || !strings.Contains(body, "Overview") {
+	if code, body := get(t, allowed, "/admin/"); code != 200 || !strings.Contains(body, `class="themed"`) || !strings.Contains(body, "Before production") {
 		t.Fatalf("layout override: %d %s", code, body)
 	}
 }
@@ -225,10 +225,10 @@ func TestUsers(t *testing.T) {
 	}
 	srv := serve(t, Options{Auth: asOwner, CredentialsDir: dir, Dir: filepath.Join(dir, "admin")}, s)
 	code, body := get(t, srv, "/admin/users")
-	if code != 200 || !strings.Contains(body, "owner@example.com") || !strings.Contains(body, "member@example.com") || !strings.Contains(body, "first account, admin by default") || !strings.Contains(body, "2 account(s)") {
+	if code != 200 || !strings.Contains(body, "owner@example.com") || !strings.Contains(body, "member@example.com") || !strings.Contains(body, "admin · first") || !strings.Contains(body, "2 account(s)") {
 		t.Fatalf("users: %d %s", code, body)
 	}
-	if code, body := get(t, srv, "/admin/users?q=MEMBER"); code != 200 || strings.Contains(body, "owner@example.com") || !strings.Contains(body, "1 account(s)") {
+	if code, body := get(t, srv, "/admin/users?q=MEMBER"); code != 200 || strings.Contains(body, "/admin/users/owner/") || !strings.Contains(body, "/admin/users/member/") || !strings.Contains(body, "1 account(s)") {
 		t.Fatalf("search: %d", code)
 	}
 	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}

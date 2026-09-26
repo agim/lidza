@@ -1,12 +1,20 @@
 package main
 
 import (
+	"embed"
+
+	"github.com/agim/lidza"
 	"github.com/agim/lidza/packs/admin"
 	"github.com/agim/lidza/packs/auth"
 	"github.com/agim/lidza/pkg/router"
 
 	"notes/handlers"
 )
+
+// adminFiles holds the templates of the app's admin pages.
+//
+//go:embed admin/*.html
+var adminFiles embed.FS
 
 // routes registers the API. Every route lives under /api; the frontend
 // never defines one. GET /api/v1/health is built in. router.Route gives a
@@ -38,8 +46,10 @@ func routes(r *router.Router) {
 	handlers.NoteRoutes(notes)
 	handlers.AttachmentRoutes(notes)
 
-	// The admin pages at /admin, for the users ADMIN_USERS names:
-	// credentials of the mail, model and storage providers, token usage,
-	// the outbox, jobs, files. Themed by admin/theme.css and layout.html.
-	admin.Mount(r, admin.Options{Title: "notes"})
+	// The admin pages at /admin, for the first account and the users
+	// ADMIN_USERS names: users and sign-in providers, mail, the model and
+	// storage with their settings, jobs. Themed by admin/theme.css.
+	// handlers.AdminNotes adds the app's own page to them, rendered from
+	// admin/notes.html, embedded so it ships in the binary.
+	admin.Mount(r, admin.Options{Title: "notes", Templates: lidza.Sub(adminFiles, "admin"), Pages: []admin.Page{handlers.AdminNotes()}})
 }

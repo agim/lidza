@@ -1,0 +1,185 @@
+{{/* Shared pieces. An app's own admin/layout.html calls "admin-head" in
+     <head> and "admin-scripts" before </body>, and renders
+     {{template "content" .}} where the page goes. */}}
+{{define "admin-head"}}
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>{{.Active}} · {{.Title}}</title>
+<script src="{{asset "admin.js"}}"></script>
+<link rel="stylesheet" href="{{asset "tabler.min.css"}}">
+<link rel="stylesheet" href="{{asset "admin.css"}}">
+<link rel="stylesheet" href="{{.Path}}/theme.css">
+{{end}}
+
+{{define "admin-scripts"}}<script src="{{asset "tabler.min.js"}}" defer></script>{{end}}
+
+{{define "admin-flash"}}
+{{if .Flash}}<div class="alert alert-success alert-dismissible" role="status">
+  <div class="d-flex"><div class="alert-icon">{{icon "circle-check"}}</div><div>{{.Flash}}</div></div>
+  <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+</div>{{end}}
+{{if .Error}}<div class="alert alert-danger alert-dismissible" role="alert">
+  <div class="d-flex"><div class="alert-icon">{{icon "alert-triangle"}}</div><div>{{.Error}}</div></div>
+  <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+</div>{{end}}
+{{end}}
+
+{{define "admin-theme-menu"}}
+<div class="nav-item dropdown">
+  <button type="button" class="nav-link px-2 btn btn-ghost-secondary" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Theme">
+    <span class="hide-theme-dark">{{icon "sun"}}</span><span class="hide-theme-light">{{icon "moon"}}</span>
+  </button>
+  <div class="dropdown-menu dropdown-menu-end">
+    <button type="button" class="dropdown-item" data-admin-set-theme="light">{{icon "sun"}}<span class="ms-2">Light</span></button>
+    <button type="button" class="dropdown-item" data-admin-set-theme="dark">{{icon "moon"}}<span class="ms-2">Dark</span></button>
+    <button type="button" class="dropdown-item" data-admin-set-theme="auto">{{icon "device-desktop"}}<span class="ms-2">System</span></button>
+  </div>
+</div>
+{{end}}
+
+{{define "admin-empty"}}
+<div class="empty">
+  <div class="empty-icon">{{icon .Icon}}</div>
+  <p class="empty-title">{{.Title}}</p>
+  {{if .Text}}<p class="empty-subtitle text-secondary">{{.Text}}</p>{{end}}
+</div>
+{{end}}
+
+{{define "admin-tabs"}}
+{{if .Tabs}}<nav class="nav nav-bordered gap-4 mb-4" aria-label="{{.Active}} sections">
+  {{range .Tabs}}<a class="nav-link{{if .Active}} active{{end}}" href="{{.Href}}"{{if .Active}} aria-current="page"{{end}}>
+    <span class="me-2 text-secondary">{{icon .Icon}}</span>{{.Name}}{{if .Status}}<span class="status-dot status-{{.Status}} ms-2" title="needs a look"></span>{{end}}
+  </a>{{end}}
+</nav>{{end}}
+{{end}}
+
+{{define "field"}}
+<div class="mb-3{{if not .Applies}} d-none{{end}}"{{if .ForAttr}} data-for="{{.ForAttr}}"{{end}}>
+  <label class="form-label d-flex flex-wrap align-items-center gap-2" for="f-{{.Name}}">
+    <span>{{.Label}}</span>
+    <code class="admin-env">{{.Name}}</code>
+    {{if .Set}}{{with origin .Origin}}<span class="badge bg-secondary-lt" title="Where the current value comes from">{{.}}</span>{{end}}{{end}}
+    {{if and (eq .Kind "secret") .Set}}<span class="badge bg-green-lt">{{icon "lock"}} stored</span>{{end}}
+  </label>
+  {{if eq .Kind "secret"}}
+  <div class="input-group input-group-flat">
+    <input type="password" class="form-control" id="f-{{.Name}}" name="{{.Name}}" autocomplete="off" spellcheck="false"
+      placeholder="{{if .Set}}stored; leave empty to keep{{else}}{{or .PlaceholderNow "not set"}}{{end}}"{{if and .PlaceholdersAttr (not .Set)}} data-placeholders="{{.PlaceholdersAttr}}"{{end}}{{if .Locked}} disabled{{end}}>
+    <span class="input-group-text">
+      <button type="button" class="btn btn-ghost-secondary btn-icon btn-sm" data-admin-reveal="f-{{.Name}}" aria-label="Show" aria-pressed="false">
+        <span class="admin-when-hidden">{{icon "eye"}}</span><span class="admin-when-shown d-none">{{icon "eye-off"}}</span>
+      </button>
+    </span>
+  </div>
+  {{if and .Set (not .Locked)}}<label class="form-check mt-2 mb-0">
+    <input class="form-check-input" type="checkbox" name="clear_{{.Name}}">
+    <span class="form-check-label text-secondary">Remove the stored value</span>
+  </label>{{end}}
+  {{else if eq .Kind "select"}}
+  <select class="form-select" id="f-{{.Name}}" name="{{.Name}}"{{if .Locked}} disabled{{end}}>
+    {{range .Opts}}<option value="{{.Value}}"{{if .Checked}} selected{{end}}>{{.Label}}{{if .Dev}} (development){{end}}</option>{{end}}
+  </select>
+  {{else}}
+  <input type="{{if eq .Kind "number"}}number{{else}}text{{end}}" class="form-control" id="f-{{.Name}}" name="{{.Name}}" value="{{.Value}}" autocomplete="off" spellcheck="false"{{if eq .Kind "number"}} inputmode="numeric" min="0"{{end}}
+    placeholder="{{if .PlaceholderNow}}{{.PlaceholderNow}}{{else if .Default}}default: {{.Default}}{{end}}"{{if .PlaceholdersAttr}} data-placeholders="{{.PlaceholdersAttr}}"{{end}}{{if .Locked}} disabled{{end}}>
+  {{end}}
+  {{if .Locked}}<div class="form-hint text-warning">{{icon "lock"}} Set in the process environment, which takes precedence. Change it where the app is deployed.</div>
+  {{else if .Help}}<div class="form-hint">{{.Help}}</div>{{end}}
+</div>
+{{end}}
+
+{{define "selector"}}
+{{$f := .}}
+<div class="mb-4">
+  <div class="form-label d-flex flex-wrap align-items-center gap-2" id="l-{{.Name}}">
+    <span>{{.Label}}</span><code class="admin-env">{{.Name}}</code>
+    {{if .Set}}{{with origin .Origin}}<span class="badge bg-secondary-lt">{{.}}</span>{{end}}{{end}}
+  </div>
+  {{if eq .Kind "multi"}}<input type="hidden" name="present_{{.Name}}" value="1">{{end}}
+  <div class="form-selectgroup" role="{{if eq .Kind "multi"}}group{{else}}radiogroup{{end}}" aria-labelledby="l-{{.Name}}">
+    {{range .Opts}}
+    <label class="form-selectgroup-item">
+      <input type="{{if eq $f.Kind "multi"}}checkbox{{else}}radio{{end}}" name="{{$f.Name}}" value="{{.Value}}" class="form-selectgroup-input"{{if .Checked}} checked{{end}}{{if $f.Locked}} disabled{{end}}>
+      <span class="form-selectgroup-label">
+        {{if eq .Value "google"}}<span class="me-1">{{icon "brand-google"}}</span>{{else if eq .Value "github"}}<span class="me-1">{{icon "brand-github"}}</span>{{else if eq .Value "microsoft"}}<span class="me-1">{{icon "brand-windows"}}</span>{{end}}{{.Label}}{{if .Dev}}<span class="badge bg-orange-lt">dev</span>{{end}}
+      </span>
+    </label>
+    {{end}}
+  </div>
+  {{if .Locked}}<div class="form-hint text-warning">{{icon "lock"}} Set in the process environment, which takes precedence.</div>
+  {{else if .Help}}<div class="form-hint">{{.Help}}</div>{{end}}
+</div>
+{{end}}
+
+{{/* section-form: a section's form. Takes (dict "S" section "Path" path). */}}
+{{define "section-form"}}
+{{$s := .S}}
+<form class="card" method="post" action="{{.Path}}/settings" data-admin-dirty{{if $s.Selector}} data-admin-selector="{{$s.Selector.Name}}"{{end}}>
+  <input type="hidden" name="section" value="{{$s.Key}}">
+  <div class="card-header">
+    <div class="d-flex align-items-center gap-3">
+      <span class="avatar bg-primary-lt">{{icon $s.Icon}}</span>
+      <div>
+        <h2 class="card-title mb-0">{{$s.Title}}</h2>
+        {{if $s.Description}}<div class="text-secondary small mt-1">{{$s.Description}}</div>{{end}}
+      </div>
+    </div>
+    <div class="card-actions">
+      <span class="badge bg-{{status $s.Status}}-lt"><span class="status-dot status-{{status $s.Status}} me-1"></span>{{$s.StatusText}}</span>
+    </div>
+  </div>
+  <div class="card-body">
+    {{with $s.Selector}}{{template "selector" .}}{{end}}
+    {{range $s.Fields}}{{template "field" .}}{{end}}
+    {{range $s.Groups}}
+    <fieldset class="border rounded-3 p-3 mb-3{{if not .Applies}} d-none{{end}}"{{if .ForAttr}} data-for="{{.ForAttr}}"{{end}}>
+      <legend class="admin-group-title float-none w-auto px-2 fs-4 mb-2">{{if .Icon}}{{icon .Icon}}{{end}}{{.Title}}</legend>
+      {{range .Fields}}{{template "field" .}}{{end}}
+    </fieldset>
+    {{end}}
+    {{if $s.Advanced}}
+    <details class="admin-advanced"{{if $s.AdvancedSet}} open{{end}}>
+      <summary class="text-secondary mb-3">{{icon "adjustments-horizontal"}} Advanced</summary>
+      {{range $s.Advanced}}{{template "field" .}}{{end}}
+    </details>
+    {{end}}
+  </div>
+  <div class="card-footer admin-savebar d-flex align-items-center gap-2">
+    <span class="text-warning small d-none" data-admin-dirty-note>{{icon "info-circle"}} Unsaved changes</span>
+    <div class="ms-auto d-flex gap-2">
+      <button type="reset" class="btn btn-link link-secondary">Reset</button>
+      <button type="submit" class="btn btn-primary">{{icon "check"}}<span class="ms-1">Save</span></button>
+    </div>
+  </div>
+</form>
+{{end}}
+
+{{/* section-aside: where to get the keys, and how values are kept. Takes (dict "S" section "HasKey" bool "Database" bool). */}}
+{{define "section-aside"}}
+{{$s := .S}}
+{{if $s.LinkViews}}
+<div class="card mb-3">
+  <div class="card-header"><h3 class="card-title">Where to get these</h3></div>
+  <div class="list-group list-group-flush">
+    {{range $s.LinkViews}}<a href="{{.URL}}" target="_blank" rel="noopener noreferrer" class="list-group-item list-group-item-action d-flex align-items-center gap-2{{if not .Applies}} d-none{{end}}" data-for="{{.For}}">
+      <span class="text-secondary">{{icon "external-link"}}</span><span>{{.Title}}</span>
+    </a>{{end}}
+    <div class="list-group-item text-secondary small" data-admin-nolinks>Pick a provider to see where its keys come from.</div>
+  </div>
+</div>
+{{end}}
+<div class="card">
+  <div class="card-body">
+    <div class="d-flex align-items-center gap-2 mb-1">
+      <span class="{{if .HasKey}}text-green{{else}}text-yellow{{end}}">{{icon "shield-check"}}</span>
+      <strong>{{if .HasKey}}Sealed with the master key{{else}}No master key yet{{end}}</strong>
+    </div>
+    <div class="text-secondary small">
+      {{if .HasKey}}Saved values are encrypted (AES-256-GCM) {{if .Database}}in the database{{else}}in config/credentials.yml.enc{{end}} and applied without a restart.
+      {{else}}Saving creates config/master.key on this node. In production set LIDZA_MASTER_KEY instead.{{end}}
+      A value set in the process environment wins over a saved one; each field shows its variable's name.
+    </div>
+  </div>
+</div>
+{{end}}

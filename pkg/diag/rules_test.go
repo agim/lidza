@@ -150,3 +150,48 @@ func TestMissingDecisions(t *testing.T) {
 		}
 	}
 }
+
+// L014: an app admin page needs a decision that names it.
+func TestUndecidedAdminPage(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, "docs"), 0o755)
+	os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module app\n\ngo 1.27\n"), 0o644)
+	os.WriteFile(filepath.Join(dir, "admin.go"), []byte(`package main
+
+import adm "github.com/agim/lidza/packs/admin"
+
+func pages() []adm.Page {
+	return []adm.Page{
+		{Name: "Orders", Path: "orders", Template: "orders.html"},
+		adm.Page{Name: "Refunds", Path: "refunds", Template: "refunds.html"},
+	}
+}
+`), 0o644)
+	os.WriteFile(filepath.Join(dir, "docs", "decisions.md"), []byte("# Decisions\n\n## 2026-09-26: Admin page Refunds\n\nWhy: support refunds orders without a database shell.\n"), 0o644)
+	var got []string
+	for _, d := range Rules(context.Background(), dir) {
+		if d.Code == "L014" {
+			got = append(got, d.File+":"+itoa(d.Line)+" "+d.Message)
+		}
+	}
+	// Orders (elided inside []adm.Page) has none; Refunds has one.
+	if len(got) != 1 || !strings.HasPrefix(got[0], "admin.go:7 admin page Orders has no decision") {
+		t.Fatalf("L014: %v", got)
+	}
+	os.WriteFile(filepath.Join(dir, "admin.go"), []byte(`package main
+
+import "github.com/agim/lidza/packs/admin"
+
+var orders = admin.Page{Name: "Orders", Path: "orders", Template: "orders.html"}
+var refunds = admin.Page{Name: "Refunds", Path: "refunds", Template: "refunds.html"}
+`), 0o644)
+	got = nil
+	for _, d := range Rules(context.Background(), dir) {
+		if d.Code == "L014" {
+			got = append(got, d.File+":"+itoa(d.Line)+" "+d.Message)
+		}
+	}
+	if len(got) != 1 || !strings.HasPrefix(got[0], "admin.go:5 admin page Orders has no decision") {
+		t.Fatalf("L014: %v", got)
+	}
+}

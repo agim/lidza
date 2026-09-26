@@ -1,0 +1,25 @@
+{{define "layout"}}<!doctype html>
+<html lang="en" data-bs-theme="light">
+<head>
+{{template "admin-head" .}}
+</head>
+<body class="d-flex flex-column">
+<main class="page page-center" id="admin-main">
+  <div class="container container-tight py-4">
+    <div class="card card-md">
+      <div class="card-body text-center py-5">
+        <div class="mb-3 text-secondary">{{icon "lock"}}</div>
+        <h1 class="h2 mb-2">This account is not an admin</h1>
+        <p class="text-secondary">{{if .User}}You are signed in as <strong>{{.User}}</strong>. {{end}}An admin adds you on the Users page, or lists you in <code>{{.Data.Env}}</code> (ids or emails).</p>
+        <div class="d-flex justify-content-center gap-2 mt-4">
+          <a href="/" class="btn">{{icon "arrow-left"}} Back to the app</a>
+          {{if .SignOut}}<button type="button" class="btn btn-primary" data-admin-signout="{{.SignOut}}">{{icon "logout"}} Sign out</button>{{end}}
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+{{template "admin-scripts" .}}
+</body>
+</html>{{end}}
+{{define "content"}}{{end}}

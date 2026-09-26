@@ -9,6 +9,50 @@ release is listed first under its version as "Breaking:", with what to
 change; every release so far is additive (an app updates with
 `lidza update --migrate`).
 
+## Unreleased
+
+- Breaking: the admin pages are rebuilt on Tabler. An app's own
+  `admin/layout.html` must now call `{{template "admin-head" .}}` in
+  `<head>` and `{{template "admin-scripts" .}}` before `</body>`, or the
+  pages render without styles. In `admin/theme.css`, `--admin-accent`,
+  `--admin-font`, `--admin-mono` and `--admin-radius` still apply;
+  `--admin-bg`, `--admin-surface`, `--admin-fg`, `--admin-muted` and
+  `--admin-line` no longer do (the light and dark themes come from
+  Tabler; set `--tblr-*` variables instead). A test that looked for the
+  word "Credentials" on the Overview page needs another anchor. Apps
+  without a custom layout change nothing.
+- Admin pages: a sidebar with light, dark and system themes, a setup
+  checklist on the Overview, avatars, status badges, row menus with
+  confirmations, empty states, a token chart. The stylesheet, script
+  and 59 icons are served from the binary, gzipped and cached by content
+  hash, with no inline script or style, so a strict
+  Content-Security-Policy holds.
+- Admin settings live on each pack's page: Mail, Language model and
+  Storage have a Settings tab and sign-in providers sit under Users. The
+  provider is picked from named tiles and only its fields show, with
+  placeholders per provider, links to where each provider issues keys,
+  an Advanced fold, the origin of each value, and a lock on values the
+  process environment sets. `/admin/credentials` redirects there.
+- Admin extension points: `admin.Options.Pages` adds the app's own
+  pages in the same frame (`admin.Page` with a template, a data loader
+  and form actions), and `admin.Options.Sections` adds the app's own
+  settings on a Settings page. Recipe "Extend the admin pages", snippets
+  `admin-page` and `admin-page-template`, and rule L014 for an admin page
+  no decision names.
+- Mail: SMTP settings in parts (`MAIL_SMTP_HOST`, `MAIL_SMTP_PORT`,
+  `MAIL_SMTP_USERNAME`, `MAIL_SMTP_PASSWORD`, `MAIL_SMTP_SECURITY` of
+  starttls, tls or none; starttls now refuses a server that cannot
+  upgrade), and `MAIL_REGION=eu` for Mailgun and SendGrid.
+  `MAIL_SMTP_URL` keeps working and wins.
+- Language model: provider `compatible` for any server speaking the
+  OpenAI API (llama.cpp's llama-server, vLLM, LM Studio), with
+  `LLM_BASE_URL` required and the key optional.
+- Storage: providers `r2`, `spaces`, `b2`, `gcs` and `minio` fill in the
+  address from `STORAGE_ACCOUNT_ID` or `STORAGE_REGION`; `s3` outside
+  us-east-1 uses the regional address.
+- `env.Origins` reports which layer each setting comes from; the jobs
+  pack's `Counts` reports jobs by state.
+
 ## v0.1.19 (2026-09-26)
 
 - Sign-in: `auth.Mount(r, auth.Options{})` serves registration, login,

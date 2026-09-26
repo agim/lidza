@@ -15,6 +15,7 @@ import (
 	"net/smtp"
 	"net/textproto"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -42,20 +43,23 @@ func newProvider(cfg Config) (Provider, error) {
 	case "outbox":
 		return outboxProvider{}, nil
 	case "smtp":
-		if err := need("MAIL_SMTP_URL", cfg.SMTPURL); err != nil {
+		if cfg.SMTPURL != "" {
+			return newSMTP(cfg.SMTPURL)
+		}
+		if err := need("MAIL_SMTP_HOST (or MAIL_SMTP_URL)", cfg.SMTPHost); err != nil {
 			return nil, err
 		}
-		return newSMTP(cfg.SMTPURL)
+		return smtpFromParts(cfg)
 	case "mailgun":
 		if err := errors.Join(need("MAIL_API_KEY", cfg.APIKey), need("MAIL_DOMAIN", cfg.Domain)); err != nil {
 			return nil, err
 		}
-		return mailgun{key: cfg.APIKey, domain: cfg.Domain, base: or(cfg.BaseURL, "https://api.mailgun.net")}, nil
+		return mailgun{key: cfg.APIKey, domain: cfg.Domain, base: or(cfg.BaseURL, regional(cfg.Region, "https://api.mailgun.net", "https://api.eu.mailgun.net"))}, nil
 	case "sendgrid":
 		if err := need("MAIL_API_KEY", cfg.APIKey); err != nil {
 			return nil, err
 		}
-		return sendgrid{key: cfg.APIKey, base: or(cfg.BaseURL, "https://api.sendgrid.com")}, nil
+		return sendgrid{key: cfg.APIKey, base: or(cfg.BaseURL, regional(cfg.Region, "https://api.sendgrid.com", "https://api.eu.sendgrid.com"))}, nil
 	case "postmark":
 		if err := need("MAIL_API_KEY", cfg.APIKey); err != nil {
 			return nil, err
@@ -68,6 +72,42 @@ func newProvider(cfg Config) (Provider, error) {
 		return resend{key: cfg.APIKey, base: or(cfg.BaseURL, "https://api.resend.com")}, nil
 	}
 	return nil, fmt.Errorf("mail: unknown provider %q; one of %s", cfg.Provider, strings.Join(Providers, ", "))
+}
+
+// Regions a provider's API may be in (MAIL_REGION).
+var Regions = []string{"us", "eu"}
+
+// regional picks the EU base for region "eu", the default one otherwise.
+func regional(region, us, eu string) string {
+	if strings.EqualFold(region, "eu") {
+		return eu
+	}
+	return us
+}
+
+// SMTPSecurities are the values of MAIL_SMTP_SECURITY.
+var SMTPSecurities = []string{"starttls", "tls", "none"}
+
+// smtpFromParts builds the SMTP provider from the separate settings.
+func smtpFromParts(cfg Config) (Provider, error) {
+	security := strings.ToLower(or(cfg.SMTPSecurity, "starttls"))
+	p := smtpProvider{host: cfg.SMTPHost, user: cfg.SMTPUsername, pass: cfg.SMTPPassword}
+	port := map[string]string{"starttls": "587", "tls": "465", "none": "25"}
+	switch security {
+	case "starttls":
+		p.requireTLS = true
+	case "tls":
+		p.implicitTLS = true
+	case "none":
+		p.plain = true
+	default:
+		return nil, fmt.Errorf("mail: MAIL_SMTP_SECURITY is %q; one of %s", cfg.SMTPSecurity, strings.Join(SMTPSecurities, ", "))
+	}
+	p.port = port[security]
+	if cfg.SMTPPort > 0 {
+		p.port = strconv.Itoa(cfg.SMTPPort)
+	}
+	return p, nil
 }
 
 func or(a, b string) string {
@@ -278,6 +318,9 @@ func (p resend) Send(ctx context.Context, msg Message) (string, error) {
 type smtpProvider struct {
 	host, port, user, pass string
 	implicitTLS            bool
+	// requireTLS refuses a server without STARTTLS; plain never
+	// upgrades. A URL (smtp://) upgrades when the server offers it.
+	requireTLS, plain bool
 }
 
 func newSMTP(raw string) (Provider, error) {
@@ -330,10 +373,13 @@ func (p smtpProvider) Send(ctx context.Context, msg Message) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		if ok, _ := client.Extension("STARTTLS"); ok {
+		if ok, _ := client.Extension("STARTTLS"); ok && !p.plain {
 			if err := client.StartTLS(&tls.Config{ServerName: p.host}); err != nil {
 				return "", err
 			}
+		} else if p.requireTLS {
+			client.Close()
+			return "", fmt.Errorf("mail: %s does not offer STARTTLS; set MAIL_SMTP_SECURITY=tls for port 465, or none for a local relay", addr)
 		}
 	}
 	defer client.Close()

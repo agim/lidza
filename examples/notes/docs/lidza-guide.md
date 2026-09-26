@@ -577,8 +577,8 @@ pack, with the app deciding who may read them.
 
 ### Add the admin pages
 
-Give operators a place to set credentials and watch the packs, without
-writing a page.
+Give operators a place to watch the packs and set their providers,
+without writing a page.
 
 1. `lidza pack add auth` if the app has no accounts yet; the pages are
    behind `auth.Require()`.
@@ -587,14 +587,55 @@ writing a page.
 3. Sign in first: the first account is an admin. More are added on the
    Overview page or in `.env`: `ADMIN_USERS=you@example.com` (ids or
    emails, comma separated). `.env.test` names a test account.
-4. Theme it when the app has a look: `admin/theme.css` with the
-   variables the default defines (`lidza api packs/admin` lists the
-   options; the pack's `templates/theme.css` is the reference), or
-   `admin/layout.html` for a frame of your own.
-5. Test it: a user in `ADMIN_USERS` gets 200 on `/admin/`, another
-   user 403, a visitor 401; the reference app's `routes_test.go` shows
-   it.
-6. `lidza check`, then `lidza test`.
+4. Each pack's page has a Settings tab (Mail, Language model, Storage;
+   sign-in providers under Users): pick the provider and only its
+   fields show. Values are saved sealed with the master key and applied
+   without a restart; one set in the process environment wins and the
+   field says so.
+5. Theme it when the app has a look: `admin/theme.css` sets
+   `--admin-accent`, `--admin-sidebar`, `--admin-font`, `--admin-radius`
+   (per theme under `[data-bs-theme=dark]`) or any Tabler variable.
+6. Test it: an admin gets 200 on `/admin/`, another user 403, a visitor
+   401; the reference app's `routes_test.go` shows it.
+7. `lidza check`, then `lidza test`.
+
+### Extend the admin pages
+
+Give the app's own operations a page in the admin pages (orders to
+refund, a moderation queue, a report), or its own keys a settings form,
+instead of a separate admin screen.
+
+1. Settings: add an `admin.Section` to `admin.Options.Sections` for the
+   keys the app reads with `pkg/env` (a payment provider's secret, a
+   feature switch). Each `admin.Field` names its environment variable;
+   `Kind` is `text`, `number`, `secret`, `select` or `multi`; a
+   `Selector` field with `For` on the others shows only the fields of
+   the chosen provider. They appear on the Settings page, saved like
+   the packs'. A service that holds the value implements
+   `Reconfigure(ctx) error` to pick up a saved change.
+2. A page: add an `admin.Page` to `admin.Options.Pages` from a function
+   in `handlers/admin.go` (snippet `admin-page`): `Name`, `Path`
+   (`orders` serves `/admin/orders`), an `Icon` from the admin pack's
+   `assets/icons.txt`, `Template`, `Data` (sqlc queries; the page is
+   admin-only, so a query may cross accounts) and `Actions` (a form
+   posts to `<Path>/<action>`; return the message the page shows, or an
+   error).
+3. The template is `admin/<page>.html` defining `content` (snippet
+   `admin-page-template`): Tabler's classes (`card`, `table card-table`,
+   `badge`, `btn`), the functions `icon`, `since`, `num`, `bytes`,
+   `dict`, and `{{template "admin-empty" (dict "Icon" "inbox"
+   "Title" "..." "Text" "...")}}` for an empty list. Embed it so it
+   ships in the binary: `//go:embed admin/*.html` in `routes.go` and
+   `Templates: lidza.Sub(adminFiles, "admin")`. No inline `<script>` or
+   `style=`: the pages hold under a strict Content-Security-Policy; a
+   destructive form takes `data-admin-confirm="..."`.
+4. Record it in the same commit: `lidza decision add "Admin page
+   Orders" --why "..."` (MCP `lidza_decision_add`), naming what the page
+   lets an admin do and which rows it reaches across accounts.
+5. Test it: the page answers 200 with a row for an admin and 403 for
+   another user; the action changes the row (post the form with
+   `Sec-Fetch-Site: same-origin`, as a browser does). `lidza check`,
+   then `lidza test`.
 
 ### Add a recipe
 

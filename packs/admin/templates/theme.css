@@ -1,22 +1,13 @@
-/* The admin theme: override these variables in admin/theme.css of the
-   app, or replace the frame with admin/layout.html. */
+/* The admin theme. The pages are built on Tabler (https://tabler.io);
+   an app's admin/theme.css replaces this file. Set the variables below,
+   per theme if you like, or any Tabler variable (--tblr-*). */
 :root {
-  --admin-bg: #f6f7f9;
-  --admin-surface: #ffffff;
-  --admin-fg: #1f2430;
-  --admin-muted: #6b7280;
-  --admin-line: #e3e6ea;
-  --admin-accent: #2456d8;
-  --admin-accent-fg: #ffffff;
-  --admin-danger: #b42318;
-  --admin-ok: #067647;
-  --admin-font: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --admin-accent: oklch(54.6% 0.1724 254.2deg);  /* buttons, links, the active page */
+  --admin-sidebar: #182433;                      /* the sidebar, in both themes */
+  --admin-font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --admin-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
-  --admin-radius: 8px;
+  --admin-radius: 6px;
 }
-@media (prefers-color-scheme: dark) {
-  :root {
-    --admin-bg: #14161b; --admin-surface: #1d2027; --admin-fg: #e8eaf0; --admin-muted: #9aa3b2;
-    --admin-line: #2b3038; --admin-accent: #7aa2ff; --admin-accent-fg: #0b1020;
-  }
+[data-bs-theme=dark] {
+  --admin-accent: oklch(68% 0.15 254.2deg);
 }

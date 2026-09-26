@@ -224,3 +224,38 @@ func TestS3Stub(t *testing.T) {
 		t.Fatalf("presign put: %s %v", u, err)
 	}
 }
+
+// The named services fill in their address; a custom endpoint wins.
+func TestNamedServices(t *testing.T) {
+	base := Config{Bucket: "b", AccessKey: "a", SecretKey: "s", Endpoint: defaultEndpoint, Region: "us-east-1"}
+	with := func(f func(*Config)) Config { c := base; f(&c); return c }
+	for _, tc := range []struct {
+		cfg              Config
+		endpoint, region string
+		path             bool
+	}{
+		{with(func(c *Config) { c.Provider = "s3" }), "https://s3.amazonaws.com", "us-east-1", false},
+		{with(func(c *Config) { c.Provider = "s3"; c.Region = "eu-central-1" }), "https://s3.eu-central-1.amazonaws.com", "eu-central-1", false},
+		{with(func(c *Config) { c.Provider = "r2"; c.AccountID = "abc123" }), "https://abc123.r2.cloudflarestorage.com", "auto", true},
+		{with(func(c *Config) { c.Provider = "spaces"; c.Region = "fra1" }), "https://fra1.digitaloceanspaces.com", "fra1", true},
+		{with(func(c *Config) { c.Provider = "b2"; c.Region = "eu-central-003" }), "https://s3.eu-central-003.backblazeb2.com", "eu-central-003", true},
+		{with(func(c *Config) { c.Provider = "gcs" }), "https://storage.googleapis.com", "auto", true},
+		{with(func(c *Config) { c.Provider = "minio"; c.Endpoint = "http://127.0.0.1:9000" }), "http://127.0.0.1:9000", "us-east-1", true},
+		{with(func(c *Config) { c.Provider = "r2"; c.Endpoint = "https://proxy.example.com" }), "https://proxy.example.com", "auto", true},
+	} {
+		p, err := newProvider(tc.cfg)
+		if err != nil {
+			t.Errorf("%s: %v", tc.cfg.Provider, err)
+			continue
+		}
+		s := p.(*s3)
+		if s.endpoint.String() != tc.endpoint || s.region != tc.region || s.pathStyle != tc.path {
+			t.Errorf("%s: %s %s path=%v", tc.cfg.Provider, s.endpoint, s.region, s.pathStyle)
+		}
+	}
+	for provider, want := range map[string]string{"r2": "STORAGE_ACCOUNT_ID", "spaces": "STORAGE_REGION", "b2": "STORAGE_REGION", "minio": "STORAGE_ENDPOINT"} {
+		if _, err := newProvider(with(func(c *Config) { c.Provider = provider })); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%s without %s: %v", provider, want, err)
+		}
+	}
+}

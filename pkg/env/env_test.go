@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/agim/lidza/pkg/credentials"
 )
 
 type cfg struct {
@@ -63,5 +65,32 @@ func TestErrors(t *testing.T) {
 	}
 	if Mode() != "production" {
 		t.Fatal("default mode")
+	}
+}
+
+func TestOrigins(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("LIDZA_MODE", "test")
+	t.Setenv(credentials.EnvMasterKey, "")
+	os.WriteFile(filepath.Join(dir, ".env"), []byte("A=1\nB=1\nC=1\nD=1\n"), 0o644)
+	os.WriteFile(filepath.Join(dir, ".env.test"), []byte("B=2\n"), 0o644)
+	if _, err := credentials.Generate(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := credentials.Set(dir, map[string]string{"C": "3"}); err != nil {
+		t.Fatal(err)
+	}
+	credentials.SetOverrides(map[string]string{"D": "4"})
+	t.Cleanup(func() { credentials.SetOverrides(nil) })
+	t.Setenv("LIDZA_ORIGIN_TEST", "5")
+	got, err := Origins(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{"A": ".env", "B": ".env.test", "C": OriginCredentials, "D": OriginSaved, "LIDZA_ORIGIN_TEST": OriginProcess}
+	for k, v := range want {
+		if got[k] != v {
+			t.Errorf("%s: %q, want %q", k, got[k], v)
+		}
 	}
 }

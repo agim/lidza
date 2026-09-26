@@ -1,0 +1,37 @@
+{{/* The app's own admin page (handlers/admin.go): it defines "content"
+     and renders inside the admin frame, so Tabler's classes, the icons
+     and the template functions (since, icon, num, dict) are there. */}}
+{{define "content"}}
+<div class="card">
+  <div class="card-header">
+    <div>
+      <h2 class="card-title">Recent notes</h2>
+      <div class="text-secondary small mt-1">{{.Data.Total}} note(s) across every account</div>
+    </div>
+  </div>
+  {{if .Data.Rows}}
+  <div class="table-responsive">
+    <table class="table table-vcenter card-table">
+      <thead><tr><th>Title</th><th>Owner</th><th>Created</th><th class="admin-actions"><span class="visually-hidden">Actions</span></th></tr></thead>
+      <tbody>
+      {{range .Data.Rows}}
+        <tr>
+          <td>{{.Title}}</td>
+          <td class="text-secondary">{{.OwnerEmail}}</td>
+          <td class="text-secondary">{{since .CreatedAt}}</td>
+          <td class="admin-actions">
+            <form method="post" action="{{$.Path}}/notes/delete" data-admin-confirm="Delete “{{.Title}}” and its attachment?">
+              <input type="hidden" name="id" value="{{.ID}}">
+              <button type="submit" class="btn btn-ghost-danger btn-sm">{{icon "trash"}}<span class="ms-1">Delete</span></button>
+            </form>
+          </td>
+        </tr>
+      {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}
+  <div class="card-body">{{template "admin-empty" (dict "Icon" "file-text" "Title" "No notes yet" "Text" "Notes appear here as users write them.")}}</div>
+  {{end}}
+</div>
+{{end}}

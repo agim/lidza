@@ -48,3 +48,7 @@ Touches: lidza.json, handlers/attachment.go
 Why: Verification and reset links go out through the mail pack: providers spoken directly, an outbox the tests read.
 
 Touches: lidza.json, mail/
+
+## 2026-09-26: Admin page Notes
+
+Why: Admins moderate: the page lists the newest notes of every account and deletes one with its attachment. It is the only code that reads notes across owners (queries in db/queries/admin.sql), and it sits behind the admin pack's gate instead of a role check in the API.

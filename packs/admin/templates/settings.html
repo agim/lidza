@@ -1,0 +1,40 @@
+{{define "content"}}
+{{if .Data.Error}}<div class="alert alert-danger">{{.Data.Error}}</div>{{end}}
+<div class="row g-4">
+  <div class="col-12 col-lg-4 col-xl-3">
+    <div class="card">
+      <div class="card-body pb-2">
+        <form role="search" action="{{.Path}}/settings" method="get">
+          <label class="visually-hidden" for="admin-filter">Filter settings</label>
+          <div class="input-icon">
+            <span class="input-icon-addon">{{icon "search"}}</span>
+            <input type="search" class="form-control" id="admin-filter" name="q" value="{{.Data.Query}}" placeholder="Filter settings…" autocomplete="off" data-admin-filter="admin-section-list">
+          </div>
+        </form>
+      </div>
+      <nav class="list-group list-group-flush admin-sections" id="admin-section-list" aria-label="Sections">
+        {{range .Data.Sections}}
+        <a href="{{$.Path}}/settings?section={{.Key}}" class="list-group-item list-group-item-action{{if .Active}} active{{end}}"{{if .Active}} aria-current="page"{{end}} data-admin-search="{{.Search}}">
+          <span class="text-secondary">{{icon .Icon}}</span>
+          <span>{{.Title}}</span>
+          <span class="status-dot status-{{status .Status}}{{if eq .Status "partial"}} status-dot-animated{{end}}" title="{{.StatusText}}"></span>
+          <span class="visually-hidden">{{.StatusText}}</span>
+        </a>
+        {{end}}
+        <div class="list-group-item text-secondary d-none" data-admin-empty>No setting matches.</div>
+      </nav>
+    </div>
+    <div class="mt-3">{{with .Data.Section}}{{template "section-aside" (dict "S" . "HasKey" $.Data.HasKey "Database" $.Data.Database)}}{{end}}</div>
+  </div>
+
+  <div class="col-12 col-lg-8 col-xl-9">
+  {{with .Data.Section}}
+    {{template "section-form" (dict "S" . "Path" $.Path)}}
+  {{else}}
+    <div class="card"><div class="card-body">
+      {{template "admin-empty" (dict "Icon" "key" "Title" "Nothing to configure" "Text" "admin.Options.Sections adds the app's own settings here.")}}
+    </div></div>
+  {{end}}
+  </div>
+</div>
+{{end}}

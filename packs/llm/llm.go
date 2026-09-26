@@ -28,7 +28,10 @@ import (
 // Config is read from .env at start.
 type Config struct {
 	// Provider is fake (default; scripted replies for tests and a first
-	// run), ollama (a local model), anthropic, openai or google.
+	// run), ollama (a local model), anthropic, openai, google (Gemini) or
+	// compatible (any server speaking the OpenAI API: llama.cpp's
+	// llama-server, vLLM, LM Studio; LLM_BASE_URL required, the key
+	// optional).
 	Provider string `env:"LLM_PROVIDER" default:"fake"`
 	// Model is the chat model; each provider has a default.
 	Model string `env:"LLM_MODEL"`
@@ -167,7 +170,7 @@ type Provider interface {
 }
 
 // Providers lists the provider names.
-var Providers = []string{"fake", "ollama", "anthropic", "openai", "google"}
+var Providers = []string{"fake", "ollama", "anthropic", "openai", "google", "compatible"}
 
 // LLM is the running pack.
 type LLM struct {
@@ -519,6 +522,13 @@ func newProvider(cfg Config) (Provider, error) {
 			return nil, err
 		}
 		return &openai{key: cfg.APIKey, base: or(cfg.BaseURL, "https://api.openai.com"), model: or(cfg.Model, "gpt-5-mini"), embedModel: or(cfg.EmbedModel, "text-embedding-3-small")}, nil
+	case "compatible":
+		if cfg.BaseURL == "" {
+			return nil, fmt.Errorf("llm: provider compatible needs LLM_BASE_URL, the server's address (http://127.0.0.1:8080 for llama-server)")
+		}
+		// The paths add /v1; an address written with it works too.
+		base := strings.TrimSuffix(strings.TrimRight(cfg.BaseURL, "/"), "/v1")
+		return &openai{name: "compatible", key: cfg.APIKey, base: base, model: or(cfg.Model, "default"), embedModel: or(cfg.EmbedModel, or(cfg.Model, "default"))}, nil
 	case "google":
 		if err := need(); err != nil {
 			return nil, err

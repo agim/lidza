@@ -1,13 +1,45 @@
 {{define "content"}}
-<h1>Mail</h1>
-<div class="grid">
-  <div class="card"><div class="muted">Provider</div><div class="stat">{{.Data.Provider}}</div></div>
-  <div class="card"><div class="muted">Templates</div><div class="mono">{{range .Data.Templates}}{{.}} {{end}}</div></div>
+{{$d := .Data}}
+<div class="row row-deck row-cards mb-3">
+  <div class="col-sm-6 col-xl-3"><div class="card card-sm"><div class="card-body d-flex align-items-center gap-3">
+    <span class="avatar bg-primary-lt">{{icon "mail"}}</span>
+    <div><div class="fw-medium">{{$d.Provider}}{{if $d.Dev}} <span class="badge bg-orange-lt">dev</span>{{end}}</div><div class="text-secondary small">provider</div></div>
+  </div></div></div>
+  <div class="col-sm-6 col-xl-3"><div class="card card-sm"><div class="card-body d-flex align-items-center gap-3">
+    <span class="avatar bg-green-lt">{{icon "send"}}</span>
+    <div><div class="fw-medium">{{index $d.Counts "sent"}}</div><div class="text-secondary small">sent, of the last 50</div></div>
+  </div></div></div>
+  <div class="col-sm-6 col-xl-3"><div class="card card-sm"><div class="card-body d-flex align-items-center gap-3">
+    <span class="avatar bg-azure-lt">{{icon "hourglass"}}</span>
+    <div><div class="fw-medium">{{index $d.Counts "queued"}}</div><div class="text-secondary small">queued</div></div>
+  </div></div></div>
+  <div class="col-sm-6 col-xl-3"><div class="card card-sm"><div class="card-body d-flex align-items-center gap-3">
+    <span class="avatar bg-red-lt">{{icon "alert-triangle"}}</span>
+    <div><div class="fw-medium">{{index $d.Counts "failed"}}</div><div class="text-secondary small">failed</div></div>
+  </div></div></div>
 </div>
-{{if .Data.NoOutbox}}<div class="card">{{.Data.NoOutbox}}</div>{{else}}
-<div class="card"><h2 style="margin-top:0">Outbox, newest first</h2>
-<table><tr><th>When</th><th>To</th><th>Subject</th><th>Status</th><th>Attempts</th></tr>
-{{range .Data.Rows}}<tr><td>{{since .CreatedAt}}</td><td class="mono">{{.To}}</td><td>{{.Subject}}</td><td>{{if eq .Status "failed"}}<span class="bad">failed: {{short (deref .Error)}}</span>{{else if eq .Status "sent"}}<span class="ok">sent</span>{{else}}{{.Status}}{{end}}</td><td>{{.Attempts}}</td></tr>{{else}}<tr><td colspan="5" class="muted">nothing sent yet</td></tr>{{end}}
-</table></div>
-{{end}}
+<div class="card mb-3">
+  <div class="card-body d-flex flex-wrap align-items-center gap-2">
+    <span class="text-secondary me-1">Templates</span>
+    {{range $d.Templates}}<span class="badge bg-secondary-lt font-monospace">{{.}}</span>{{else}}<span class="text-secondary small">none in mail/</span>{{end}}
+  </div>
+</div>
+<div class="card">
+  <div class="card-header"><h2 class="card-title">Outbox</h2><div class="card-actions small text-secondary">newest first</div></div>
+  {{if $d.NoOutbox}}<div class="card-body">{{template "admin-empty" (dict "Icon" "inbox" "Title" "No outbox" "Text" $d.NoOutbox)}}</div>
+  {{else if $d.Rows}}
+  <div class="table-responsive"><table class="table table-vcenter card-table">
+    <thead><tr><th>When</th><th>To</th><th>Subject</th><th>Status</th><th class="text-end">Attempts</th></tr></thead>
+    <tbody>{{range $d.Rows}}<tr>
+      <td class="text-secondary">{{since .CreatedAt}}</td>
+      <td class="font-monospace small">{{.To}}</td>
+      <td class="admin-truncate">{{.Subject}}</td>
+      <td>{{if eq .Status "failed"}}<span class="badge bg-red-lt" title="{{deref .Error}}">failed</span> <span class="small text-secondary">{{short (deref .Error)}}</span>
+        {{else if eq .Status "sent"}}<span class="badge bg-green-lt">sent</span>
+        {{else}}<span class="badge bg-azure-lt">{{.Status}}</span>{{end}}</td>
+      <td class="text-end">{{.Attempts}}</td>
+    </tr>{{end}}</tbody>
+  </table></div>
+  {{else}}<div class="card-body">{{template "admin-empty" (dict "Icon" "inbox" "Title" "Nothing sent yet" "Text" "Messages sent through the mail pack appear here.")}}</div>{{end}}
+</div>
 {{end}}

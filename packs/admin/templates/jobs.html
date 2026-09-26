@@ -1,12 +1,28 @@
 {{define "content"}}
-<h1>Jobs</h1>
-<div class="grid">
-  {{range $k, $v := .Data.Stats}}<div class="card"><div class="muted">{{$k}}</div><div class="stat">{{$v}}</div></div>{{end}}
+{{$d := .Data}}
+<div class="row row-deck row-cards mb-3">
+  {{range $state, $icon := dict "pending" "hourglass" "running" "player-play" "done" "circle-check" "failed" "circle-x"}}
+  <div class="col-sm-6 col-xl-3"><div class="card card-sm"><div class="card-body d-flex align-items-center gap-3">
+    <span class="avatar {{if eq $state "failed"}}bg-red-lt{{else if eq $state "done"}}bg-green-lt{{else if eq $state "running"}}bg-azure-lt{{else}}bg-secondary-lt{{end}}">{{icon $icon}}</span>
+    <div><div class="fw-medium">{{if $d.Counts}}{{index $d.Counts $state}}{{else}}—{{end}}</div><div class="text-secondary small">{{$state}}</div></div>
+  </div></div></div>
+  {{end}}
 </div>
-{{if .Data.Error}}<div class="card error">{{.Data.Error}}</div>{{end}}
-<div class="card"><h2 style="margin-top:0">Recent, newest first</h2>
-<table><tr><th>Run at</th><th>Kind</th><th>State</th><th>Attempts</th><th>Error</th><th></th></tr>
-{{range .Data.Rows}}<tr><td>{{since .RunAt}}</td><td class="mono">{{.Kind}}</td><td>{{if eq .State "failed"}}<span class="bad">failed</span>{{else if eq .State "done"}}<span class="ok">done</span>{{else}}{{.State}}{{end}}</td><td>{{.Attempts}}/{{.MaxAttempts}}</td><td class="mono">{{short (deref .LastError)}}</td>
-<td>{{if eq .State "failed"}}<form method="post" action="{{$.Path}}/jobs/{{.ID}}/retry"><button class="small" type="submit">Retry</button></form>{{end}}</td></tr>{{else}}<tr><td colspan="6" class="muted">no jobs yet</td></tr>{{end}}
-</table></div>
+{{if $d.Error}}<div class="alert alert-danger">{{$d.Error}}</div>{{end}}
+<div class="card">
+  <div class="card-header"><h2 class="card-title">Recent jobs</h2><div class="card-actions small text-secondary">{{int (index $d.Stats "workers")}} worker(s) on this node · {{int (index $d.Stats "active")}} busy</div></div>
+  {{if $d.Rows}}
+  <div class="table-responsive"><table class="table table-vcenter card-table">
+    <thead><tr><th>Run at</th><th>Kind</th><th>State</th><th>Attempts</th><th>Error</th><th class="admin-actions"><span class="visually-hidden">Actions</span></th></tr></thead>
+    <tbody>{{range $d.Rows}}<tr>
+      <td class="text-secondary">{{since .RunAt}}</td>
+      <td><span class="badge bg-secondary-lt font-monospace">{{.Kind}}</span></td>
+      <td>{{if eq .State "failed"}}<span class="badge bg-red-lt">failed</span>{{else if eq .State "done"}}<span class="badge bg-green-lt">done</span>{{else if eq .State "running"}}<span class="badge bg-azure-lt">running</span>{{else}}<span class="badge bg-secondary-lt">{{.State}}</span>{{end}}</td>
+      <td>{{.Attempts}} / {{.MaxAttempts}}</td>
+      <td class="small text-secondary admin-truncate" title="{{deref .LastError}}">{{short (deref .LastError)}}</td>
+      <td class="admin-actions">{{if eq .State "failed"}}<form method="post" action="{{$.Path}}/jobs/{{.ID}}/retry"><button type="submit" class="btn btn-sm">{{icon "refresh"}}<span class="ms-1">Retry</span></button></form>{{end}}</td>
+    </tr>{{end}}</tbody>
+  </table></div>
+  {{else}}<div class="card-body">{{template "admin-empty" (dict "Icon" "list-check" "Title" "No jobs yet" "Text" "Jobs enqueued through the jobs pack appear here.")}}</div>{{end}}
+</div>
 {{end}}

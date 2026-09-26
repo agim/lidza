@@ -79,6 +79,45 @@ func Values(dir string) (map[string]string, error) {
 	return values, nil
 }
 
+// Origin layers, lowest precedence first, as Origins reports them.
+const (
+	OriginDotEnv      = ".env"
+	OriginCredentials = "credentials" // config/credentials.yml.enc
+	OriginSaved       = "saved"       // a value saved at runtime (the admin pages)
+	OriginProcess     = "environment" // the process environment
+)
+
+// Origins reports, for every name Values returns, the layer its value
+// comes from: OriginDotEnv (".env" or ".env.<mode>", reported as the
+// file's name), OriginCredentials, OriginSaved or OriginProcess. A value
+// from the process environment wins over everything the app can save.
+func Origins(dir string) (map[string]string, error) {
+	out := map[string]string{}
+	for _, name := range []string{".env", ".env." + Mode()} {
+		values := map[string]string{}
+		if err := readFile(filepath.Join(dir, name), values); err != nil {
+			return nil, err
+		}
+		for k := range values {
+			out[k] = name
+		}
+	}
+	if file, err := credentials.Read(dir); err == nil {
+		for k := range file {
+			out[k] = OriginCredentials
+		}
+	}
+	for k := range credentials.Overrides() {
+		out[k] = OriginSaved
+	}
+	for _, kv := range os.Environ() {
+		if k, _, ok := strings.Cut(kv, "="); ok {
+			out[k] = OriginProcess
+		}
+	}
+	return out, nil
+}
+
 // Fill sets dst's fields from values, using the `env`, `default` and
 // `required` tags. Exported.
 func Fill(dst any, values map[string]string) error {

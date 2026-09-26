@@ -243,6 +243,26 @@ func (q *Queue) Recent(ctx context.Context, limit int) ([]Job, error) {
 	return out, rows.Err()
 }
 
+// Counts returns how many jobs are in each state: pending, running, done
+// and failed (a state with none is 0).
+func (q *Queue) Counts(ctx context.Context) (map[string]int64, error) {
+	out := map[string]int64{"pending": 0, "running": 0, "done": 0, "failed": 0}
+	rows, err := q.pool.Query(ctx, `SELECT state, count(*) FROM job GROUP BY state`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var state string
+		var n int64
+		if err := rows.Scan(&state, &n); err != nil {
+			return nil, err
+		}
+		out[state] = n
+	}
+	return out, rows.Err()
+}
+
 // Retry puts a failed job back in the queue to run now, attempts reset.
 func (q *Queue) Retry(ctx context.Context, id string) error {
 	tag, err := q.pool.Exec(ctx, `UPDATE job SET state = 'pending', run_at = now(), attempts = 0, last_error = NULL, locked_at = NULL WHERE id = $1 AND state = 'failed'`, id)

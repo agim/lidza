@@ -53,7 +53,10 @@ import (
 //   - L013: an import of an OAuth or OpenID Connect client library; the
 //     auth pack's sign-in speaks those flows already (auth.Mount with
 //     AUTH_PROVIDERS: Google, GitHub, Microsoft, any OIDC issuer), with
-//     the identities linked to accounts and the admin pages.
+//     the identities linked to accounts and the admin pages;
+//   - L014: an app admin page (admin.Page) whose name no entry in
+//     docs/decisions.md mentions; a page lets admins act across
+//     accounts, so what it may do is recorded.
 //
 // Except for L004 the findings are warnings: they point at the pattern,
 // the author decides. A comment "lidza:ignore L001" on the line, or the
@@ -62,6 +65,7 @@ func Rules(ctx context.Context, root string) []Diagnostic {
 	var out []Diagnostic
 	fset := token.NewFileSet()
 	imported := map[string]bool{}
+	var pages []adminPage
 	moduleDir, err := apidoc.ModuleDir(ctx, root)
 	if err != nil {
 		moduleDir = ""
@@ -91,10 +95,102 @@ func Rules(ctx context.Context, root string) []Diagnostic {
 			}
 		}
 		out = append(out, checkFile(fset, f, rel, moduleDir)...)
+		pages = append(pages, adminPages(fset, f, rel)...)
 		return nil
 	})
 	out = append(out, unusedPacks(root, imported)...)
 	out = append(out, missingDecisions(root, moduleDir)...)
+	out = append(out, undecidedPages(root, pages)...)
+	return out
+}
+
+// adminPage is an admin.Page literal with a literal Name.
+type adminPage struct {
+	name, file string
+	line       int
+}
+
+// adminPages finds the admin.Page literals of a file.
+func adminPages(fset *token.FileSet, f *ast.File, rel string) []adminPage {
+	pkg := ""
+	for _, imp := range f.Imports {
+		if path, _ := strconv.Unquote(imp.Path.Value); path == apidoc.Module+"/packs/admin" {
+			pkg = "admin"
+			if imp.Name != nil {
+				pkg = imp.Name.Name
+			}
+		}
+	}
+	if pkg == "" {
+		return nil
+	}
+	isPage := func(e ast.Expr) bool {
+		sel, ok := e.(*ast.SelectorExpr)
+		if !ok || sel.Sel.Name != "Page" {
+			return false
+		}
+		x, ok := sel.X.(*ast.Ident)
+		return ok && x.Name == pkg
+	}
+	var out []adminPage
+	record := func(lit *ast.CompositeLit) {
+		for _, el := range lit.Elts {
+			kv, ok := el.(*ast.KeyValueExpr)
+			if !ok {
+				continue
+			}
+			if k, ok := kv.Key.(*ast.Ident); ok && k.Name == "Name" {
+				if v, ok := kv.Value.(*ast.BasicLit); ok && v.Kind == token.STRING {
+					name, _ := strconv.Unquote(v.Value)
+					out = append(out, adminPage{name: name, file: rel, line: fset.Position(lit.Pos()).Line})
+				}
+			}
+		}
+	}
+	ast.Inspect(f, func(n ast.Node) bool {
+		lit, ok := n.(*ast.CompositeLit)
+		if !ok {
+			return true
+		}
+		if isPage(lit.Type) {
+			record(lit)
+			return true
+		}
+		// []admin.Page{{Name: ...}}: the elements' type is elided.
+		if arr, ok := lit.Type.(*ast.ArrayType); ok && isPage(arr.Elt) {
+			for _, el := range lit.Elts {
+				if inner, ok := el.(*ast.CompositeLit); ok && inner.Type == nil {
+					record(inner)
+				}
+			}
+		}
+		return true
+	})
+	return out
+}
+
+// undecidedPages flags the admin pages no decision mentions.
+func undecidedPages(root string, pages []adminPage) []Diagnostic {
+	if len(pages) == 0 {
+		return nil
+	}
+	entries, err := decisions.Load(root)
+	if err != nil {
+		return nil
+	}
+	var text strings.Builder
+	for _, e := range entries {
+		text.WriteString(strings.ToLower(e.Title + " " + e.Why + " " + e.Touches + "\n"))
+	}
+	var out []Diagnostic
+	for _, p := range pages {
+		re := regexp.MustCompile(`(^|[^a-z0-9])admin page ` + regexp.QuoteMeta(strings.ToLower(p.name)) + `([^a-z0-9]|$)`)
+		if re.MatchString(text.String()) {
+			continue
+		}
+		out = append(out, Diagnostic{Layer: "go", Tool: "lidza rules", Severity: "warning", Code: "L014", File: p.file, Line: p.line, Column: 1,
+			Message: "admin page " + p.name + " has no decision in " + decisions.File + ": say what it lets admins do and which rows it reaches across accounts (lidza decision add \"Admin page " + p.name + "\" --why \"...\")"})
+	}
 	return out
 }
 

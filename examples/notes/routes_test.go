@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -261,8 +262,34 @@ func TestAdmin(t *testing.T) {
 	}
 	page, _ := io.ReadAll(res.Body)
 	res.Body.Close()
-	if res.StatusCode != http.StatusOK || !strings.Contains(string(page), "Overview") || !strings.Contains(string(page), "Credentials") {
+	if res.StatusCode != http.StatusOK || !strings.Contains(string(page), "Overview") || !strings.Contains(string(page), `href="/admin/notes"`) {
 		t.Fatalf("admin overview: %d %s", res.StatusCode, page)
+	}
+	// The app's own page lists notes across accounts and deletes one.
+	title := fmt.Sprintf("moderate me %d", time.Now().UnixNano())
+	var note schema.Note
+	if res := srv.JSON(t, http.MethodPost, "/api/v1/notes", schema.CreateNote{Title: title}, &note); res.StatusCode != http.StatusCreated {
+		t.Fatalf("create note: %d", res.StatusCode)
+	}
+	res, _ = srv.Client().Get(srv.URL + "/admin/notes")
+	page, _ = io.ReadAll(res.Body)
+	res.Body.Close()
+	if res.StatusCode != http.StatusOK || !strings.Contains(string(page), title) || !strings.Contains(string(page), "admin@example.com") {
+		t.Fatalf("admin notes page: %d", res.StatusCode)
+	}
+	noRedirect := *srv.Client()
+	noRedirect.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	// A form post, as a browser sends it: the cookie session is accepted
+	// for a same-origin request (the auth pack's CSRF guard).
+	form, _ := http.NewRequest(http.MethodPost, srv.URL+"/admin/notes/delete", strings.NewReader(url.Values{"id": {note.ID}}.Encode()))
+	form.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	form.Header.Set("Sec-Fetch-Site", "same-origin")
+	res, err = noRedirect.Do(form)
+	if err != nil || !strings.Contains(res.Header.Get("Location"), "note+deleted") {
+		t.Fatalf("delete action: %v %d %v", err, res.StatusCode, res.Header.Get("Location"))
+	}
+	if res := srv.JSON(t, http.MethodGet, "/api/v1/notes/"+note.ID, nil, nil); res.StatusCode != http.StatusNotFound {
+		t.Fatalf("note after the admin deleted it: %d", res.StatusCode)
 	}
 	res, _ = srv.Client().Get(srv.URL + "/admin/users")
 	page, _ = io.ReadAll(res.Body)

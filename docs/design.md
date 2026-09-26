@@ -86,6 +86,20 @@ rows, fan-out goes through a Valkey bus, compute runs in bounded pools,
 and each app exposes `/metrics`, `/healthz` and `/readyz`.
 `docs/scalability.md` has the rules and the status of each primitive.
 
+## Admin pages
+
+The admin pages are server-rendered Go templates inside the binary, so
+they work with every frontend template and need no build step. They use
+Tabler (MIT), a Bootstrap 5 admin kit, because it ships as one prebuilt
+stylesheet and script with dark mode and an icon set: the pack vendors
+them (`packs/admin/assets/vendor.sh`) and serves them itself, so there is
+no CDN and no inline code, and a strict Content-Security-Policy holds. A
+Tailwind kit would need Tailwind's build step to scan every template,
+including the ones an app adds, so its classes would not be complete in
+a prebuilt file. The app's frontend keeps its own Tailwind; the two do
+not share a stylesheet. App pages (`admin.Options.Pages`) render in the
+same frame, so an app never grows a second admin screen.
+
 ## Decisions
 
 Recorded with their reasons in `docs/features.md`: `sqlc` instead of an

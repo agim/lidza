@@ -4,7 +4,8 @@ import (
 	"context"
 	"html/template"
 	"net/http"
-	"os"
+	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -26,81 +27,6 @@ type (
 	jobsService    = *jobs.Queue
 	storageService = *storage.Storage
 )
-
-// field is one setting on the credentials page.
-type field struct {
-	Name    string
-	Label   string
-	Kind    string // text, secret, select
-	Options []string
-	Help    string
-	Value   string // current, for text and select
-	Set     bool   // a secret has a value
-}
-
-// section groups the fields of one pack.
-type section struct {
-	Title  string
-	Pack   string
-	Fields []field
-}
-
-var sections = []section{
-	{Title: "Sign-in providers", Pack: "auth", Fields: []field{
-		{Name: "AUTH_PROVIDERS", Label: "Providers", Kind: "text", Help: "Comma-separated: google, github, microsoft, or a name with AUTH_<NAME>_ISSUER (an OIDC issuer) set with lidza credentials set. Served by auth.Mount; the callback is <APP_URL>/api/v1/auth/<name>/callback."},
-		{Name: "AUTH_GOOGLE_CLIENT_ID", Label: "Google client id", Kind: "text"},
-		{Name: "AUTH_GOOGLE_CLIENT_SECRET", Label: "Google client secret", Kind: "secret"},
-		{Name: "AUTH_GITHUB_CLIENT_ID", Label: "GitHub client id", Kind: "text"},
-		{Name: "AUTH_GITHUB_CLIENT_SECRET", Label: "GitHub client secret", Kind: "secret"},
-		{Name: "AUTH_MICROSOFT_CLIENT_ID", Label: "Microsoft client id", Kind: "text"},
-		{Name: "AUTH_MICROSOFT_CLIENT_SECRET", Label: "Microsoft client secret", Kind: "secret"},
-		{Name: "AUTH_MICROSOFT_TENANT", Label: "Microsoft tenant", Kind: "text", Help: "common, organizations, consumers or a tenant id."},
-	}},
-	{Title: "Mail", Pack: "mail", Fields: []field{
-		{Name: "MAIL_PROVIDER", Label: "Provider", Kind: "select", Options: mail.Providers, Help: "log prints messages; outbox keeps them; the others deliver."},
-		{Name: "MAIL_FROM", Label: "From", Kind: "text", Help: "Name <address> or an address."},
-		{Name: "MAIL_API_KEY", Label: "API key", Kind: "secret", Help: "Mailgun, SendGrid, Postmark, Resend."},
-		{Name: "MAIL_DOMAIN", Label: "Sending domain", Kind: "text", Help: "Mailgun."},
-		{Name: "MAIL_SMTP_URL", Label: "SMTP URL", Kind: "secret", Help: "smtp://user:pass@host:587 or smtps://...:465."},
-		{Name: "MAIL_BASE_URL", Label: "API base", Kind: "text", Help: "A provider's regional API (Mailgun EU)."},
-	}},
-	{Title: "Language model", Pack: "llm", Fields: []field{
-		{Name: "LLM_PROVIDER", Label: "Provider", Kind: "select", Options: llm.Providers, Help: "fake echoes; ollama is local; the others need a key."},
-		{Name: "LLM_MODEL", Label: "Model", Kind: "text", Help: "Empty picks the provider's default."},
-		{Name: "LLM_API_KEY", Label: "API key", Kind: "secret", Help: "Anthropic, OpenAI, Google."},
-		{Name: "LLM_BASE_URL", Label: "API base", Kind: "text", Help: "A proxy or region; Ollama elsewhere than 127.0.0.1:11434."},
-		{Name: "LLM_EMBED_MODEL", Label: "Embedding model", Kind: "text", Help: "Empty picks the provider's default."},
-	}},
-	{Title: "Storage", Pack: "storage", Fields: []field{
-		{Name: "STORAGE_PROVIDER", Label: "Provider", Kind: "select", Options: storage.Providers, Help: "local keeps files in a directory; s3 is any S3-compatible service."},
-		{Name: "STORAGE_BUCKET", Label: "Bucket", Kind: "text"},
-		{Name: "STORAGE_ENDPOINT", Label: "Endpoint", Kind: "text", Help: "https://s3.amazonaws.com, https://<account>.r2.cloudflarestorage.com, http://127.0.0.1:9000."},
-		{Name: "STORAGE_REGION", Label: "Region", Kind: "text", Help: "us-east-1 unless the service says otherwise."},
-		{Name: "STORAGE_ACCESS_KEY", Label: "Access key", Kind: "secret"},
-		{Name: "STORAGE_SECRET_KEY", Label: "Secret key", Kind: "secret"},
-		{Name: "STORAGE_PUBLIC_URL", Label: "Public URL", Kind: "text", Help: "A CDN or public bucket for URL(key)."},
-	}},
-}
-
-// enabled reports whether a section's pack runs.
-func enabled(ctx context.Context, pack string) bool {
-	switch pack {
-	case "auth":
-		// The section matters once the app mounts the pack's sign-in.
-		_, ok := lidza.Optional[*auth.Auth](ctx)
-		return ok && auth.Mounted()
-	case "mail":
-		_, ok := lidza.Optional[mailService](ctx)
-		return ok
-	case "llm":
-		_, ok := lidza.Optional[llmService](ctx)
-		return ok
-	case "storage":
-		_, ok := lidza.Optional[storageService](ctx)
-		return ok
-	}
-	return false
-}
 
 // store is where saved values go: the db pack's sealed table when it
 // runs, else the credentials file.
@@ -128,14 +54,29 @@ func (f fileStore) Names(ctx context.Context) ([]string, error) {
 	return credentials.Names(f.dir), nil
 }
 
+// packCard is one pack's state on the Overview page.
+type packCard struct {
+	Title, Icon, Provider, Status, StatusText, Href, Hint string
+}
+
+// checkItem is one step of the setup checklist.
+type checkItem struct {
+	Title, Help, Href string
+	Done              bool
+}
+
 type overviewData struct {
 	FirstUser   string
+	FirstLabel  string
 	Admins      []string
 	You         string
 	Packs       []string
-	Mail        string
-	LLM         string
-	Storage     string
+	Cards       []packCard
+	Checklist   []checkItem
+	Done        int
+	Percent     int
+	Users       int
+	Mode        string
 	TLSDomains  string
 	AppURL      string
 	Credentials int
@@ -145,36 +86,98 @@ type overviewData struct {
 
 func (h *Handler) overview(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	d := overviewData{TLSDomains: os.Getenv("LIDZA_TLS_DOMAINS"), AppURL: os.Getenv("APP_URL"), HasKey: credentials.HasKey(h.opt.CredentialsDir), Store: "file", Admins: adminList(h.opt.CredentialsDir)}
+	values, _ := env.Values(h.opt.CredentialsDir)
+	d := overviewData{TLSDomains: values["LIDZA_TLS_DOMAINS"], AppURL: values["APP_URL"], Mode: env.Mode(), HasKey: credentials.HasKey(h.opt.CredentialsDir), Store: "credentials file", Admins: adminList(h.opt.CredentialsDir)}
 	if h.opt.FirstUser != nil {
 		d.FirstUser = h.opt.FirstUser(ctx)
+		// Shown by its label (the email) when the auth pack knows it.
+		if a, ok := lidza.Optional[*auth.Auth](ctx); ok && d.FirstUser != "" {
+			if ac, err := a.AccountOf(ctx, d.FirstUser); err == nil && ac.Label != "" {
+				d.FirstLabel = ac.Label
+			}
+		}
 	}
 	if u := auth.CurrentUser(ctx); u != nil {
 		d.You = u.ID
 		if email, _ := u.Claims["email"].(string); email != "" {
-			d.You = email + " (" + u.ID + ")"
+			d.You = email
 		}
 	}
 	if s := lidza.ServicesFrom(ctx); s != nil {
 		s.Each(func(v any) {
 			if p, ok := v.(lidza.Pack); ok {
-				d.Packs = append(d.Packs, p.Name())
+				d.Packs = append(d.Packs, strings.TrimPrefix(p.Name(), "lidza/"))
 			}
 		})
 	}
-	if m, ok := lidza.Optional[mailService](ctx); ok {
-		d.Mail = m.Provider()
-	}
-	if l, ok := lidza.Optional[llmService](ctx); ok {
-		d.LLM = l.Provider() + " " + l.Model()
-	}
-	if st, ok := lidza.Optional[storageService](ctx); ok {
-		d.Storage = st.Provider()
-	}
+	sort.Strings(d.Packs)
 	if _, ok := lidza.Optional[credentials.Store](ctx); ok {
 		d.Store = "database"
 	}
-	d.Credentials = len(credentials.Names(h.opt.CredentialsDir)) + len(credentials.Overrides())
+	d.Credentials = len(credentials.Names(h.opt.CredentialsDir))
+	if a, ok := lidza.Optional[*auth.Auth](ctx); ok {
+		_, d.Users, _ = a.Accounts(ctx, "", 1, 0)
+	}
+
+	// The packs' cards and the checklist come from the settings.
+	views, _ := h.settingsViews(ctx)
+	byKey := map[string]sectionView{}
+	for _, v := range views {
+		byKey[v.Key] = v
+	}
+	for _, c := range []struct{ key, title, icon, pack string }{
+		{"auth", "Sign-in", "user-shield", "auth"}, {"mail", "Mail", "mail", "mail"},
+		{"llm", "Language model", "sparkles", "llm"}, {"storage", "Storage", "folder", "storage"},
+	} {
+		card := packCard{Title: c.title, Icon: c.icon}
+		v, ok := byKey[c.key]
+		switch {
+		case ok:
+			card.Href = h.settingsHref(v.Section)
+			card.Status, card.StatusText = v.Status, v.StatusText
+			if v.Selector != nil {
+				for _, o := range v.Selector.Opts {
+					if o.Checked {
+						card.Provider = strings.TrimPrefix(card.Provider+", "+o.Value, ", ")
+					}
+				}
+			}
+		case c.key == "auth" && slices.Contains(d.Packs, "auth"):
+			card.Status, card.StatusText, card.Provider, card.Href = "ok", "The app's own sign-in", "sessions", h.path+"/users"
+		default:
+			card.Status, card.StatusText, card.Href = "off", "Not enabled", ""
+			card.Hint = "lidza pack add " + c.pack
+		}
+		if card.Provider == "" && card.Status != "off" {
+			card.Provider = card.StatusText
+		}
+		d.Cards = append(d.Cards, card)
+	}
+	d.Checklist = append(d.Checklist, checkItem{Title: "Master key", Done: d.HasKey || values[credentials.EnvMasterKey] != "",
+		Help: "Seals the credentials. On a server, set LIDZA_MASTER_KEY in the environment; never commit config/master.key."})
+	d.Checklist = append(d.Checklist, checkItem{Title: "Public address", Done: d.AppURL != "" || d.TLSDomains != "",
+		Help: "APP_URL, or LIDZA_TLS_DOMAINS when the binary serves TLS itself: links in emails and the sign-in callbacks use it."})
+	for _, c := range []struct{ key, title, help string }{
+		{"mail", "Mail is delivered", "A real provider instead of log or outbox, with its key."},
+		{"llm", "A real language model", "A provider instead of fake, with its key."},
+		{"storage", "Shared file storage", "An S3-compatible service, so every node sees the same files."},
+	} {
+		if v, ok := byKey[c.key]; ok {
+			d.Checklist = append(d.Checklist, checkItem{Title: c.title, Help: c.help, Href: h.settingsHref(v.Section), Done: v.Status == "ok"})
+		}
+	}
+	if d.FirstUser != "" {
+		d.Checklist = append(d.Checklist, checkItem{Title: "A second admin", Done: len(d.Admins) > 0,
+			Help: "Someone besides the first account, so losing one account does not lock everyone out."})
+	}
+	for _, c := range d.Checklist {
+		if c.Done {
+			d.Done++
+		}
+	}
+	if len(d.Checklist) > 0 {
+		d.Percent = (d.Done*100/len(d.Checklist) + 2) / 5 * 5
+	}
 	h.render(w, r, "overview", "Overview", d)
 }
 
@@ -214,7 +217,7 @@ type userRow struct {
 	You   bool
 	// Methods are how the account signs in (password, google), for an
 	// account of the pack's own sign-in.
-	Methods string
+	Methods []string
 }
 
 func (h *Handler) users(w http.ResponseWriter, r *http.Request) {
@@ -256,7 +259,7 @@ func (h *Handler) users(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if methods, err := a.SignInMethods(ctx, ac.Subject); err == nil {
-			row.Methods = strings.Join(methods, ", ")
+			row.Methods = methods
 		}
 		rows = append(rows, row)
 	}
@@ -335,75 +338,44 @@ func (h *Handler) setAdmin(ctx context.Context, entry string, add bool) error {
 	return nil
 }
 
-func (h *Handler) credentials(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	values, _ := env.Values(h.opt.CredentialsDir)
-	var out []section
-	for _, s := range sections {
-		if !enabled(ctx, s.Pack) {
-			continue
-		}
-		sec := section{Title: s.Title, Pack: s.Pack}
-		for _, f := range s.Fields {
-			f.Value = values[f.Name]
-			if f.Kind == "secret" {
-				f.Set = f.Value != ""
-				f.Value = ""
-			}
-			sec.Fields = append(sec.Fields, f)
-		}
-		out = append(out, sec)
-	}
-	h.render(w, r, "credentials", "Credentials", map[string]any{"Sections": out, "HasKey": credentials.HasKey(h.opt.CredentialsDir)})
+// bar is one day of the token chart, in the SVG's coordinates.
+type bar struct {
+	Day               string
+	X, InY, InH, OutY float64
+	OutH              float64
+	Input, Output     int64
 }
 
-// saveCredentials stores every submitted value that changed (an empty
-// secret keeps the stored one; "clear" removes it), then asks the packs
-// to read their configuration again.
-func (h *Handler) saveCredentials(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	if err := r.ParseForm(); err != nil {
-		h.redirect(w, r, "/credentials", "", "bad form")
-		return
+// chartHeight and chartWidth are the token chart's viewBox.
+const chartHeight, chartWidth, chartDays = 140.0, 600.0, 30
+
+// tokenBars turns the usage rows into one stacked bar per day of the
+// last 30, oldest first.
+func tokenBars(rows []llm.UsageRow, now time.Time) []bar {
+	in, out := map[string]int64{}, map[string]int64{}
+	for _, r := range rows {
+		in[r.Day] += r.Input
+		out[r.Day] += r.Output
 	}
-	store := h.store(ctx)
-	current, _ := env.Values(h.opt.CredentialsDir)
-	saved := 0
-	for _, s := range sections {
-		if !enabled(ctx, s.Pack) || r.Form.Get("section") != s.Pack {
-			continue
-		}
-		for _, f := range s.Fields {
-			if r.Form.Get("clear_"+f.Name) == "on" {
-				if err := store.Delete(ctx, f.Name); err != nil {
-					h.redirect(w, r, "/credentials", "", err.Error())
-					return
-				}
-				saved++
-				continue
-			}
-			v := strings.TrimSpace(r.Form.Get(f.Name))
-			if v == "" || v == current[f.Name] {
-				continue
-			}
-			if err := store.Save(ctx, f.Name, v); err != nil {
-				h.redirect(w, r, "/credentials", "", err.Error())
-				return
-			}
-			saved++
+	var max int64 = 1
+	days := make([]string, chartDays)
+	for i := range days {
+		days[i] = now.AddDate(0, 0, i-chartDays+1).Format("2006-01-02")
+		if t := in[days[i]] + out[days[i]]; t > max {
+			max = t
 		}
 	}
-	if saved == 0 {
-		h.redirect(w, r, "/credentials", "nothing changed", "")
-		return
+	step := chartWidth / chartDays
+	bars := make([]bar, chartDays)
+	for i, d := range days {
+		b := bar{Day: d, X: float64(i)*step + 2, Input: in[d], Output: out[d]}
+		b.InH = float64(in[d]) / float64(max) * chartHeight
+		b.OutH = float64(out[d]) / float64(max) * chartHeight
+		b.InY = chartHeight - b.InH
+		b.OutY = b.InY - b.OutH
+		bars[i] = b
 	}
-	if s := lidza.ServicesFrom(ctx); s != nil {
-		if err := lidza.Reconfigure(ctx, s); err != nil {
-			h.redirect(w, r, "/credentials", "", "saved, but a pack refused the new settings: "+err.Error())
-			return
-		}
-	}
-	h.redirect(w, r, "/credentials", "saved and applied", "")
+	return bars
 }
 
 func (h *Handler) llm(w http.ResponseWriter, r *http.Request) {
@@ -413,13 +385,15 @@ func (h *Handler) llm(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	data := map[string]any{"Provider": l.Provider(), "Model": l.Model(), "Stats": l.TelemetryStats()}
+	data := map[string]any{"Provider": l.Provider(), "Model": l.Model(), "Stats": l.TelemetryStats(), "Dev": l.Provider() == "fake",
+		"Calls": int64(0), "Input": int64(0), "Output": int64(0), "Errors": int64(0)}
 	if rows, err := l.Usage(ctx, time.Now().AddDate(0, 0, -30)); err == nil {
-		var in, out, calls int64
+		var in, out, calls, errs int64
 		for _, row := range rows {
-			in, out, calls = in+row.Input, out+row.Output, calls+row.Calls
+			in, out, calls, errs = in+row.Input, out+row.Output, calls+row.Calls, errs+row.Errors
 		}
-		data["Rows"], data["Input"], data["Output"], data["Calls"] = rows, in, out, calls
+		data["Rows"], data["Input"], data["Output"], data["Calls"], data["Errors"] = rows, in, out, calls, errs
+		data["Bars"], data["BarWidth"] = tokenBars(rows, time.Now()), chartWidth/chartDays-4
 		if recent, err := l.RecentCalls(ctx, 30); err == nil {
 			data["Recent"] = recent
 		}
@@ -436,9 +410,13 @@ func (h *Handler) mail(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	data := map[string]any{"Provider": m.Provider(), "Templates": m.Templates()}
+	data := map[string]any{"Provider": m.Provider(), "Templates": m.Templates(), "Dev": m.Provider() == "log" || m.Provider() == "outbox", "Counts": map[string]int{}}
 	if rows, err := m.Outbox(ctx, 50); err == nil {
-		data["Rows"] = rows
+		counts := map[string]int{}
+		for _, row := range rows {
+			counts[row.Status]++
+		}
+		data["Rows"], data["Counts"] = rows, counts
 	} else {
 		data["NoOutbox"] = err.Error()
 	}
@@ -453,6 +431,9 @@ func (h *Handler) jobs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	data := map[string]any{"Stats": q.TelemetryStats()}
+	if counts, err := q.Counts(ctx); err == nil {
+		data["Counts"] = counts
+	}
 	if rows, err := q.Recent(ctx, 50); err == nil {
 		data["Rows"] = rows
 	} else {

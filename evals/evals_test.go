@@ -186,6 +186,18 @@ func spawn(ctx context.Context, req *router.Request[router.None]) (router.None, 
 		expectation{code: "L002", severity: "warning", file: "routes.go"})
 }
 
+// An app admin page without a decision naming it: an agent that adds one
+// is told to record what it lets admins do (L014).
+func TestAdminPageWithoutDecision(t *testing.T) {
+	edit(t, map[string]string{"adminpages.go": `package main
+
+import "github.com/agim/lidza/packs/admin"
+
+var adminPages = []admin.Page{{Name: "Refunds", Path: "refunds", Template: "refunds.html"}}
+`})
+	expect(t, check(t), expectation{code: "L014", severity: "warning", file: "adminpages.go", message: "Admin page Refunds"})
+}
+
 func TestFrontendCallsMissingOperation(t *testing.T) {
 	edit(t, map[string]string{"src/pages/Wrong.tsx": "import { api } from '@lidza/client'\n\nexport function Wrong() {\n  void api.hallo({ name: 'x' })\n  return null\n}\n"})
 	r := check(t)
@@ -217,7 +229,7 @@ func TestInaccessibleElement(t *testing.T) {
 }
 
 func TestGuidanceSurfaces(t *testing.T) {
-	for _, skill := range []string{"add-api-route", "add-resource", "scope-query-to-signed-in-user", "add-page", "add-pack-capability", "add-mcp-tool", "send-email", "add-background-job", "publish-live-updates", "add-llm-feature", "store-file", "add-admin-pages", "add-recipe", "write-test"} {
+	for _, skill := range []string{"add-api-route", "add-resource", "scope-query-to-signed-in-user", "add-page", "add-pack-capability", "add-mcp-tool", "send-email", "add-background-job", "publish-live-updates", "add-llm-feature", "store-file", "add-admin-pages", "extend-admin-pages", "add-recipe", "write-test"} {
 		for _, p := range []string{filepath.Join(".claude", "skills", skill, "SKILL.md"), filepath.Join(".agents", "skills", skill, "SKILL.md"), filepath.Join(".gemini", "commands", "lidza", skill+".toml")} {
 			if _, err := os.Stat(filepath.Join(app, p)); err != nil {
 				t.Errorf("%s missing", p)
@@ -272,7 +284,7 @@ func TestGuidanceSurfaces(t *testing.T) {
 		t.Fatal(err)
 	}
 	prompts, err := c.ListPrompts(ctx, mcp.ListPromptsRequest{})
-	if err != nil || len(prompts.Prompts) != 15 {
+	if err != nil || len(prompts.Prompts) != 16 {
 		t.Errorf("prompts: %v %d", err, len(prompts.Prompts))
 	}
 	tools, err := c.ListTools(ctx, mcp.ListToolsRequest{})

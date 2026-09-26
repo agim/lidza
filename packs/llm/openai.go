@@ -11,11 +11,21 @@ import (
 // openai speaks the Chat Completions API: POST /v1/chat/completions
 // (SSE when streaming) and POST /v1/embeddings. A Schema uses
 // response_format json_schema.
-type openai struct{ key, base, model, embedModel string }
+// The same client serves any OpenAI-compatible server (llama.cpp's
+// llama-server, vLLM, LM Studio, LocalAI) as provider "compatible".
+type openai struct{ key, base, model, embedModel, name string }
 
-func (p *openai) Name() string { return "openai" }
+func (p *openai) Name() string {
+	if p.name != "" {
+		return p.name
+	}
+	return "openai"
+}
 
 func (p *openai) headers() map[string]string {
+	if p.key == "" {
+		return map[string]string{}
+	}
 	return map[string]string{"Authorization": "Bearer " + p.key}
 }
 

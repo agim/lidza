@@ -25,9 +25,15 @@ import (
 
 // Config is read from .env and the credentials at start.
 type Config struct {
-	// Provider is local (default: files under Dir) or s3 (any
-	// S3-compatible service).
+	// Provider is local (default: files under Dir), s3 (Amazon S3, or
+	// any S3-compatible service at Endpoint), or a named S3-compatible
+	// service whose address follows from Region or AccountID: r2
+	// (Cloudflare R2), spaces (DigitalOcean Spaces), b2 (Backblaze B2),
+	// gcs (Google Cloud Storage with HMAC keys), minio (MinIO, RustFS or
+	// another server at Endpoint).
 	Provider string `env:"STORAGE_PROVIDER" default:"local"`
+	// AccountID is the Cloudflare account of an R2 bucket.
+	AccountID string `env:"STORAGE_ACCOUNT_ID"`
 	// Dir holds the files of the local provider.
 	Dir string `env:"STORAGE_DIR" default:"storage"`
 	// Bucket is the S3 bucket.
@@ -93,7 +99,58 @@ type Provider interface {
 }
 
 // Providers lists the provider names.
-var Providers = []string{"local", "s3"}
+var Providers = []string{"local", "s3", "r2", "spaces", "b2", "gcs", "minio"}
+
+// defaultEndpoint is Endpoint's default, which the named services
+// replace with their own address.
+const defaultEndpoint = "https://s3.amazonaws.com"
+
+// resolve fills Endpoint, Region and path style for a named service.
+// An Endpoint set to something other than the default wins.
+func resolve(cfg Config) (Config, error) {
+	custom := cfg.Endpoint != "" && cfg.Endpoint != defaultEndpoint
+	set := func(endpoint, region string) {
+		if !custom {
+			cfg.Endpoint = endpoint
+		}
+		if region != "" {
+			cfg.Region = region
+		}
+	}
+	switch cfg.Provider {
+	case "s3":
+		// Amazon S3 outside us-east-1 answers on its regional address.
+		if !custom && cfg.Region != "" && cfg.Region != "us-east-1" {
+			cfg.Endpoint = "https://s3." + cfg.Region + ".amazonaws.com"
+		}
+	case "r2":
+		if cfg.AccountID == "" && !custom {
+			return cfg, errors.New("storage: provider r2 needs STORAGE_ACCOUNT_ID, the Cloudflare account id")
+		}
+		set("https://"+cfg.AccountID+".r2.cloudflarestorage.com", "auto")
+	case "spaces":
+		if cfg.Region == "" || cfg.Region == "us-east-1" {
+			return cfg, errors.New("storage: provider spaces needs STORAGE_REGION, the Spaces region (nyc3, ams3, fra1, sgp1, ...)")
+		}
+		set("https://"+cfg.Region+".digitaloceanspaces.com", "")
+	case "b2":
+		if cfg.Region == "" || cfg.Region == "us-east-1" {
+			return cfg, errors.New("storage: provider b2 needs STORAGE_REGION, the bucket's region (us-west-004, eu-central-003, ...)")
+		}
+		set("https://s3."+cfg.Region+".backblazeb2.com", "")
+	case "gcs":
+		set("https://storage.googleapis.com", "auto")
+	case "minio":
+		if !custom {
+			return cfg, errors.New("storage: provider minio needs STORAGE_ENDPOINT, the server's address (http://127.0.0.1:9000)")
+		}
+		if cfg.PathStyle == nil {
+			on := true
+			cfg.PathStyle = &on
+		}
+	}
+	return cfg, nil
+}
 
 // Storage is the running pack.
 type Storage struct {
@@ -127,7 +184,7 @@ func (s *Storage) defaults() {
 		s.cfg.Dir = "storage"
 	}
 	if s.cfg.Endpoint == "" {
-		s.cfg.Endpoint = "https://s3.amazonaws.com"
+		s.cfg.Endpoint = defaultEndpoint
 	}
 	if s.cfg.Region == "" {
 		s.cfg.Region = "us-east-1"
@@ -144,11 +201,15 @@ func newProvider(cfg Config) (Provider, error) {
 	switch cfg.Provider {
 	case "local":
 		return newLocal(cfg.Dir, cfg.PublicURL)
-	case "s3":
+	case "s3", "r2", "spaces", "b2", "gcs", "minio":
 		if cfg.Bucket == "" || cfg.AccessKey == "" || cfg.SecretKey == "" {
-			return nil, errors.New("storage: provider s3 needs STORAGE_BUCKET, STORAGE_ACCESS_KEY and STORAGE_SECRET_KEY (keys in the credentials: lidza credentials set)")
+			return nil, fmt.Errorf("storage: provider %s needs STORAGE_BUCKET, STORAGE_ACCESS_KEY and STORAGE_SECRET_KEY (keys in the credentials: lidza credentials set)", cfg.Provider)
 		}
-		return newS3(cfg)
+		resolved, err := resolve(cfg)
+		if err != nil {
+			return nil, err
+		}
+		return newS3(resolved)
 	}
 	return nil, fmt.Errorf("storage: unknown provider %q (one of %s)", cfg.Provider, strings.Join(Providers, ", "))
 }

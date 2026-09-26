@@ -1,14 +1,36 @@
 {{define "content"}}
-<h1>Storage</h1>
-<div class="card"><div class="muted">Provider</div><div class="stat">{{.Data.Provider}}</div></div>
-<form class="card" method="get" action="{{.Path}}/storage">
-  <label for="prefix">Prefix</label>
-  <input type="text" id="prefix" name="prefix" value="{{.Data.Prefix}}" placeholder="avatars/">
-  <button type="submit">List</button>
-</form>
-{{if .Data.Error}}<div class="card error">{{.Data.Error}}</div>{{end}}
+{{$d := .Data}}
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="row g-3 align-items-center">
+      <div class="col-auto"><span class="avatar bg-primary-lt">{{if eq $d.Provider "s3"}}{{icon "cloud"}}{{else}}{{icon "database"}}{{end}}</span></div>
+      <div class="col-auto"><div class="fw-medium">{{$d.Provider}}{{if eq $d.Provider "local"}} <span class="badge bg-orange-lt">dev</span>{{end}}</div><div class="text-secondary small">provider</div></div>
+      <div class="col">
+        <form role="search" method="get" action="{{.Path}}/storage">
+          <label class="visually-hidden" for="prefix">Key prefix</label>
+          <div class="input-group">
+            <span class="input-group-text">{{icon "folder"}}</span>
+            <input type="search" class="form-control font-monospace" id="prefix" name="prefix" value="{{$d.Prefix}}" placeholder="avatars/" autocomplete="off">
+            <button type="submit" class="btn">List</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{{if $d.Error}}<div class="alert alert-danger">{{$d.Error}}</div>{{end}}
 <div class="card">
-<table><tr><th>Key</th><th>Size</th><th>Type</th><th>Modified</th></tr>
-{{range .Data.Rows}}<tr><td class="mono">{{.Key}}</td><td>{{.Size}}</td><td class="mono">{{.ContentType}}</td><td>{{since .ModifiedAt}}</td></tr>{{else}}<tr><td colspan="4" class="muted">nothing under this prefix</td></tr>{{end}}
-</table></div>
+  <div class="card-header"><h2 class="card-title">{{if $d.Prefix}}Under <span class="font-monospace">{{$d.Prefix}}</span>{{else}}All files{{end}}</h2><div class="card-actions small text-secondary">up to 200</div></div>
+  {{if $d.Rows}}
+  <div class="table-responsive"><table class="table table-vcenter card-table">
+    <thead><tr><th>Key</th><th class="text-end">Size</th><th>Type</th><th>Modified</th></tr></thead>
+    <tbody>{{range $d.Rows}}<tr>
+      <td><span class="text-secondary me-2">{{icon (fileIcon .ContentType)}}</span><span class="font-monospace small">{{.Key}}</span></td>
+      <td class="text-end">{{bytes .Size}}</td>
+      <td class="small text-secondary">{{.ContentType}}</td>
+      <td class="text-secondary">{{since .ModifiedAt}}</td>
+    </tr>{{end}}</tbody>
+  </table></div>
+  {{else}}<div class="card-body">{{template "admin-empty" (dict "Icon" "folder" "Title" "Nothing here" "Text" "No file under this prefix.")}}</div>{{end}}
+</div>
 {{end}}

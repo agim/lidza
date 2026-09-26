@@ -1,0 +1,9 @@
+{{define "content"}}
+{{if .Data.Error}}<div class="alert alert-danger">{{.Data.Error}}</div>{{end}}
+{{with .Data.Section}}
+<div class="row g-4">
+  <div class="col-12 col-xl-8">{{template "section-form" (dict "S" . "Path" $.Path)}}</div>
+  <div class="col-12 col-xl-4">{{template "section-aside" (dict "S" . "HasKey" $.Data.HasKey "Database" $.Data.Database)}}</div>
+</div>
+{{end}}
+{{end}}

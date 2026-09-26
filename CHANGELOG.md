@@ -6,7 +6,7 @@ version in `go.mod`. `install.sh` pins the newest release here;
 `scripts/release.sh vX.Y.Z` turns "Unreleased" into a release, bumps the
 pin, tags and pushes.
 
-## Unreleased
+## v0.1.13 (2026-09-26)
 
 - Rule L010: a string literal shaped like an API key or token (AWS,
   Anthropic, OpenAI, Google, SendGrid, Mailgun, Resend, Slack, GitHub, a

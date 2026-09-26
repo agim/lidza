@@ -6,7 +6,7 @@ version in `go.mod`. `install.sh` pins the newest release here;
 `scripts/release.sh vX.Y.Z` turns "Unreleased" into a release, bumps the
 pin, tags and pushes.
 
-## Unreleased
+## v0.1.16 (2026-09-26)
 
 - `lidza mcp` refreshes its lists while it runs: the pack tools follow
   `lidza.json`, the prompts the guide, the app tools `tools.go`, at once

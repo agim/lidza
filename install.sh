@@ -39,7 +39,7 @@ SQLC_VERSION=v1.31.1
 WASM_TOOLS_VERSION=1.259.0
 # The CLI release this installer ships with (CHANGELOG.md). Override with
 # LIDZA_VERSION=<tag>, LIDZA_VERSION=master or LIDZA_VERSION=latest.
-LIDZA_VERSION="${LIDZA_VERSION:-v0.1.17}"
+LIDZA_VERSION="${LIDZA_VERSION:-v0.1.18}"
 LIDZA_MODULE="github.com/agim/lidza"
 LIDZA_ENV="$HOME/.lidza/env"
 

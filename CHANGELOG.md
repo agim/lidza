@@ -6,7 +6,7 @@ version in `go.mod`. `install.sh` pins the newest release here;
 `scripts/release.sh vX.Y.Z` turns "Unreleased" into a release, bumps the
 pin, tags and pushes.
 
-## Unreleased
+## v0.1.18 (2026-09-26)
 
 - Admin pages: the app's first account (the first user ever to sign in)
   is an admin; the Overview page adds and removes admins, saved sealed

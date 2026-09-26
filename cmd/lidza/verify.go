@@ -56,6 +56,7 @@ func runVerify(ctx context.Context, args []string) error {
 	dir := fs.String("dir", ".", "project directory")
 	asJSON := fs.Bool("json", false, "print one JSON report instead of text")
 	noTest := fs.Bool("no-test", false, "skip the Go tests")
+	strict := fs.Bool("strict", false, "warnings fail the check step too (for CI)")
 	installHook := fs.Bool("install-hook", false, "write .githooks/pre-commit and point git at it, then exit")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -115,6 +116,9 @@ func runVerify(ctx context.Context, args []string) error {
 		}
 		if r.Errors() > 0 {
 			return "", fmt.Errorf("%d error(s)", r.Errors())
+		}
+		if *strict && len(r.Diagnostics) > 0 {
+			return "", fmt.Errorf("%d warning(s) with --strict", len(r.Diagnostics))
 		}
 		return fmt.Sprintf("%d warning(s)", len(r.Diagnostics)), nil
 	})

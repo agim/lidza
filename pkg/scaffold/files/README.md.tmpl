@@ -1,0 +1,38 @@
+# {{.Name}}
+
+A Līdza application: a Go control plane, a {{.Template}} frontend, one
+binary. `docs/lidza-guide.md` is the guide, `docs/decisions.md` says why
+the app is built the way it is.
+
+## Run
+
+```sh
+lidza setup      # once on a new machine: .env, databases, node_modules
+lidza dev        # http://127.0.0.1:3000, hot reload for Go and the frontend
+lidza test       # Go tests; lidza test --e2e for the browser suite
+lidza check      # every Go, Rust and frontend error in one list
+```
+
+`.github/workflows/ci.yml` runs `lidza verify --strict` (warnings fail)
+and the browser suite on every push.
+
+Settings live in `.env` (copied from `.env.example`); secrets in the
+credentials (`lidza credentials set NAME=value`), sealed with
+`config/master.key`.
+
+## Build with an agent
+
+`claude`, `codex` or `gemini` in this directory: the MCP server and the
+recipes are configured (`CLAUDE.md`, `AGENTS.md`, `GEMINI.md`).
+
+## Deploy
+
+```sh
+lidza ship --domains app.example.com --email ops@example.com
+```
+
+builds `bin/{{.Name}}` after the checks and writes `deploy/production.env`.
+The process needs that file plus `DATABASE_URL` and `LIDZA_MASTER_KEY`;
+`deploy/{{.Name}}.service` runs it under systemd, the `Dockerfile` in a
+container. With the domains set the binary serves HTTPS itself. Admins
+are named in `ADMIN_USERS` and manage providers at `/admin`.

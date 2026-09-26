@@ -110,6 +110,8 @@ func New(ctx context.Context, opt Options) error {
 		{"tools.go.tmpl", "tools.go"},
 		{"lidza-guide.md.tmpl", filepath.FromSlash(recipes.GuideFile)},
 		{"decisions.md.tmpl", filepath.FromSlash(decisions.File)},
+		{"README.md.tmpl", "README.md"},
+		{"ci.yml.tmpl", filepath.Join(".github", "workflows", "ci.yml")},
 		{"mcp.json.tmpl", ".mcp.json"},
 		{"gemini-settings.json.tmpl", filepath.Join(".gemini", "settings.json")},
 		{"schema.lidza.tmpl", schema.FileName},

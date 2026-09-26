@@ -17,6 +17,7 @@ import (
 	"github.com/agim/lidza/packs/db"
 	"github.com/agim/lidza/pkg/config"
 	"github.com/agim/lidza/pkg/credentials"
+	"github.com/agim/lidza/pkg/decisions"
 	"github.com/agim/lidza/pkg/devserver"
 	"github.com/agim/lidza/pkg/env"
 	"github.com/agim/lidza/pkg/pack"
@@ -112,6 +113,11 @@ func setup(ctx context.Context, dir string, cfg *config.Config, opt setupOptions
 			return err
 		}
 		step("pack %s: %s", name, o.Description)
+	}
+	if len(packs) > 0 && len(cfg.Packs) == len(packs) {
+		if _, err := decisions.Add(dir, "Packs at creation: "+strings.Join(packs, ", "), "The app's initial shape, chosen with lidza new --packs (or lidza setup --packs): "+packReasons(packs)+" A pack no code uses is flagged by lidza check (L011); remove it or build the feature.", "lidza.json, packs.go"); err != nil {
+			return err
+		}
 	}
 	hasDB := slices.Contains(cfg.Packs, pack.OfficialPrefix+"db")
 	hasMail := slices.Contains(cfg.Packs, pack.OfficialPrefix+"mail")
@@ -361,4 +367,15 @@ func migrate(ctx context.Context, dir, mode string) (int, error) {
 		return 0, err
 	}
 	return len(applied), nil
+}
+
+// packReasons lists what each chosen pack is for, from the registry.
+func packReasons(names []string) string {
+	var parts []string
+	for _, n := range names {
+		if o, ok := pack.FindOfficial(n); ok {
+			parts = append(parts, n+": "+strings.SplitN(o.Description, ":", 2)[0]+".")
+		}
+	}
+	return strings.Join(parts, " ")
 }

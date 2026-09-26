@@ -147,7 +147,10 @@ signature. Both are regenerated after each Go rebuild.
 12. A pack (Rust or official), a dependency, an integration or a schema
    tradeoff is a decision: read `docs/decisions.md` before changing those
    areas and record yours in the same commit (`lidza decision add
-   "Title" --why "..."`, MCP `lidza_decision_add`).
+   "Title" --why "..."`, MCP `lidza_decision_add`; `lidza pack add --why`
+   records it for a pack). `lidza check` L012 flags a pack or a direct
+   dependency no decision names, and L011 a pack no code uses; CI runs
+   `lidza verify --strict`, where warnings fail.
 
 ## Templates
 

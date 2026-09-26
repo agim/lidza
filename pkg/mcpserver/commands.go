@@ -127,14 +127,15 @@ func addCommandTools(s *server.MCPServer, dir string, cfg *config.Config) {
 			}
 			return args, nil
 		}},
-		{"lidza_pack_add", "Enable an official pack: db, auth, jobs, cache, i18n, realtime, analytics, mail (Go), geo, media (Rust). Writes its .env.example lines and schema types; then lidza_gen and lidza_db_migrate.", []mcp.ToolOption{
+		{"lidza_pack_add", "Enable an official pack: db, auth, jobs, cache, i18n, realtime, analytics, mail, llm, storage (Go), geo, media (Rust). Writes its .env.example lines and schema types and records why in docs/decisions.md; then lidza_gen and lidza_db_migrate. A pack no code uses is flagged by lidza check (L011): add one for a feature you are building now.", []mcp.ToolOption{
 			mcp.WithString("name", mcp.Required(), mcp.Description("The pack name.")),
+			mcp.WithString("why", mcp.Required(), mcp.Description("Why the app needs it: the feature it serves and the alternative not taken, one or two sentences. Recorded as a decision.")),
 		}, 10 * time.Minute, false, true, func(req mcp.CallToolRequest) ([]string, error) {
-			name := req.GetString("name", "")
-			if name == "" {
-				return nil, errors.New("name is required")
+			name, why := req.GetString("name", ""), strings.TrimSpace(req.GetString("why", ""))
+			if name == "" || why == "" {
+				return nil, errors.New("name and why are required")
 			}
-			return []string{"pack", "add", name}, nil
+			return []string{"pack", "add", name, "--why", why}, nil
 		}},
 		{"lidza_pack_scaffold", "Create a local Rust pack under packs/<name> with a crate, an example capability and a manifest, and build it.", []mcp.ToolOption{
 			mcp.WithString("name", mcp.Required(), mcp.Description("The pack name, lowercase.")),

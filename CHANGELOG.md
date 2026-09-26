@@ -6,6 +6,20 @@ version in `go.mod`. `install.sh` pins the newest release here;
 `scripts/release.sh vX.Y.Z` turns "Unreleased" into a release, bumps the
 pin, tags and pushes.
 
+## Unreleased
+
+- `lidza pack add --why "..."` records the decision in
+  `docs/decisions.md`; the MCP tool `lidza_pack_add` requires `why`.
+  `lidza new --packs` records the packs chosen at creation.
+- Rule L011: a pack enabled in `lidza.json` that no app code imports.
+- `lidza new` writes a `README.md`: run, build with an agent, deploy.
+- Rule L012: a pack or a direct dependency (one the framework does not
+  bring itself) with no entry in `docs/decisions.md` naming it.
+- `lidza verify --strict`: warnings fail the check step. `lidza new`
+  writes `.github/workflows/ci.yml` running it and the browser suite
+  against Postgres and Valkey, with the CLI at the version `go.mod`
+  requires.
+
 ## v0.1.14 (2026-09-26)
 
 - `lidza pack add` keeps a declaration `schema.lidza` already has (an

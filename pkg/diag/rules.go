@@ -6,12 +6,17 @@ import (
 	"go/parser"
 	"go/token"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 
 	"github.com/agim/lidza/pkg/apidoc"
+	"github.com/agim/lidza/pkg/config"
+	"github.com/agim/lidza/pkg/decisions"
+	"github.com/agim/lidza/pkg/pack"
+	"golang.org/x/mod/modfile"
 )
 
 // Rules are the checks `lidza check` applies to the app's own Go code
@@ -39,7 +44,12 @@ import (
 //     kept, so uploads and generated files go through the storage pack;
 //   - L010: a string literal shaped like an API key or token (AWS,
 //     OpenAI, Anthropic, Google, SendGrid, Mailgun, Resend, Slack, a
-//     private key); secrets go in the credentials, never in source.
+//     private key); secrets go in the credentials, never in source;
+//   - L011: a pack enabled in lidza.json that no app code imports; use
+//     it or remove it, so the next reader is not misled;
+//   - L012: a pack or a direct dependency (one the framework does not
+//     bring itself) with no entry in docs/decisions.md naming it; the
+//     why of every such choice is recorded there.
 //
 // Except for L004 the findings are warnings: they point at the pattern,
 // the author decides. A comment "lidza:ignore L001" on the line, or the
@@ -47,6 +57,7 @@ import (
 func Rules(ctx context.Context, root string) []Diagnostic {
 	var out []Diagnostic
 	fset := token.NewFileSet()
+	imported := map[string]bool{}
 	moduleDir, err := apidoc.ModuleDir(ctx, root)
 	if err != nil {
 		moduleDir = ""
@@ -70,9 +81,111 @@ func Rules(ctx context.Context, root string) []Diagnostic {
 			return nil
 		}
 		rel := filepath.ToSlash(strings.TrimPrefix(strings.TrimPrefix(p, root), string(filepath.Separator)))
+		for _, imp := range f.Imports {
+			if path, err := strconv.Unquote(imp.Path.Value); err == nil {
+				imported[path] = true
+			}
+		}
 		out = append(out, checkFile(fset, f, rel, moduleDir)...)
 		return nil
 	})
+	out = append(out, unusedPacks(root, imported)...)
+	out = append(out, missingDecisions(root, moduleDir)...)
+	return out
+}
+
+// missingDecisions flags packs and direct dependencies no decision names.
+func missingDecisions(root, moduleDir string) []Diagnostic {
+	cfg, err := config.Load(root)
+	if err != nil {
+		return nil
+	}
+	entries, err := decisions.Load(root)
+	if err != nil {
+		return nil
+	}
+	var text strings.Builder
+	for _, e := range entries {
+		text.WriteString(strings.ToLower(e.Title + " " + e.Why + " " + e.Touches + "\n"))
+	}
+	recorded := text.String()
+	mentions := func(name string) bool {
+		re := regexp.MustCompile(`(^|[^a-z0-9])` + regexp.QuoteMeta(strings.ToLower(name)) + `([^a-z0-9]|$)`)
+		return re.MatchString(recorded)
+	}
+	var out []Diagnostic
+	flag := func(what, name, hint string) {
+		out = append(out, Diagnostic{Layer: "go", Tool: "lidza rules", Severity: "warning", Code: "L012", File: decisions.File, Line: 1, Column: 1,
+			Message: what + " " + name + " has no decision in " + decisions.File + ": " + hint})
+	}
+	for _, entry := range cfg.Packs {
+		name := strings.TrimPrefix(entry, pack.OfficialPrefix)
+		if !mentions(name) {
+			flag("pack", name, "say why it is here (lidza decision add \"Pack "+name+" added\" --why \"...\", or --why on lidza pack add)")
+		}
+	}
+	for _, dep := range directDependencies(root, moduleDir) {
+		if !mentions(dep) && !mentions(path.Base(dep)) {
+			flag("dependency", dep, "say why the app takes it and what it replaces (lidza decision add \"Dependency "+path.Base(dep)+"\" --why \"...\")")
+		}
+	}
+	return out
+}
+
+// directDependencies lists the app's direct requirements that the
+// framework does not require itself: the app's own choices.
+func directDependencies(root, moduleDir string) []string {
+	data, err := os.ReadFile(filepath.Join(root, "go.mod"))
+	if err != nil {
+		return nil
+	}
+	f, err := modfile.Parse("go.mod", data, nil)
+	if err != nil {
+		return nil
+	}
+	framework := map[string]bool{apidoc.Module: true}
+	if moduleDir != "" {
+		if fd, err := os.ReadFile(filepath.Join(moduleDir, "go.mod")); err == nil {
+			if ff, err := modfile.Parse("go.mod", fd, nil); err == nil {
+				for _, r := range ff.Require {
+					framework[r.Mod.Path] = true
+				}
+			}
+		}
+	}
+	var out []string
+	for _, r := range f.Require {
+		if r.Indirect || framework[r.Mod.Path] {
+			continue
+		}
+		out = append(out, r.Mod.Path)
+	}
+	return out
+}
+
+// packsUsedByOthers are enabled for what other packs need, not for a
+// handler to call: no L011 for them.
+var packsUsedByOthers = map[string]bool{"db": true, "jobs": true, "analytics": true}
+
+// unusedPacks flags official Go packs in lidza.json that no app file
+// imports.
+func unusedPacks(root string, imported map[string]bool) []Diagnostic {
+	cfg, err := config.Load(root)
+	if err != nil {
+		return nil
+	}
+	var out []Diagnostic
+	for _, entry := range cfg.Packs {
+		name, ok := strings.CutPrefix(entry, pack.OfficialPrefix)
+		if !ok || packsUsedByOthers[name] || !pack.IsOfficialGo(entry) {
+			continue
+		}
+		if imported[apidoc.Module+"/packs/"+name] {
+			continue
+		}
+		out = append(out, Diagnostic{Layer: "go", Tool: "lidza rules", Severity: "warning", Code: "L011", File: config.FileName, Line: 1, Column: 1,
+			Message: "pack " + name + " is enabled but no code imports " + apidoc.Module + "/packs/" + name + ": build the feature that needs it (the guide's recipes) or remove it from lidza.json and run lidza gen"})
+	}
 	return out
 }
 

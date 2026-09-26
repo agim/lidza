@@ -7,11 +7,12 @@ import (
 	"os"
 	"slices"
 
+	"github.com/agim/lidza/pkg/decisions"
 	"github.com/agim/lidza/pkg/pack"
 )
 
 const packUsage = `usage:
-  lidza pack add <name>        enable an official pack: db, realtime, media, geo
+  lidza pack add <name> [--why "..."]   enable an official pack (db, auth, jobs, mail, llm, storage, ...) and record why
   lidza pack scaffold <name>   create packs/<name> with a crate and an example capability
   lidza pack build [name]      compile the crate(s) to WASM
   lidza pack list              show enabled packs, capabilities and build state
@@ -25,6 +26,7 @@ func runPack(ctx context.Context, args []string) error {
 	sub, rest := args[0], args[1:]
 	fs := flags("pack " + sub)
 	dir := fs.String("dir", ".", "project directory")
+	why := fs.String("why", "", "pack add: why this pack, recorded in docs/decisions.md")
 	var name string
 	if len(rest) > 0 && rest[0][0] != '-' {
 		name, rest = rest[0], rest[1:]
@@ -57,6 +59,14 @@ func runPack(ctx context.Context, args []string) error {
 		fmt.Printf("added %s: %s\n", entry, o.Description)
 		if err := generateAll(abs, cfg, os.Stdout); err != nil {
 			return err
+		}
+		if *why != "" {
+			if _, err := decisions.Add(abs, "Pack "+o.Name+" added", *why, "lidza.json, packs.go"); err != nil {
+				return err
+			}
+			fmt.Printf("recorded in %s\n", decisions.File)
+		} else {
+			fmt.Printf("  - record why: lidza pack add %s --why \"...\" next time, or lidza decision add \"Pack %s added\" --why \"...\"\n", o.Name, o.Name)
 		}
 		for _, n := range o.Notes {
 			fmt.Println("  -", n)

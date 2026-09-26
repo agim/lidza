@@ -27,7 +27,7 @@ Usage:
   lidza db migrate|rollback|status
   lidza benchmark [scenario] [--vus 500] [--duration 1m]
   lidza test [go test flags] | lidza test --e2e [--install]
-  lidza verify [--json] [--no-test] | lidza verify --install-hook
+  lidza verify [--json] [--no-test] [--strict] | lidza verify --install-hook
   lidza doctor
   lidza update [--to vX.Y.Z] [--cli-only] [--migrate]
   lidza context [--dir .] [--stdout]

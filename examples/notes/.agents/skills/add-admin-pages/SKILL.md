@@ -22,8 +22,12 @@ without writing a page.
    without a restart; one set in the process environment wins and the
    field says so.
 5. Theme it when the app has a look: `admin/theme.css` sets
-   `--admin-accent`, `--admin-sidebar`, `--admin-font`, `--admin-radius`
-   (per theme under `[data-bs-theme=dark]`) or any Tabler variable.
+   `--admin-accent`, `--admin-accent-fg`, `--admin-bg`, `--admin-surface`,
+   `--admin-line`, `--admin-fg`, `--admin-muted`, `--admin-sidebar`,
+   `--admin-font` and `--admin-radius`, per theme under
+   `[data-bs-theme=light]` and `[data-bs-theme=dark]`, or any Tabler
+   variable. The default is Līdza's palette (a mulberry accent on warm
+   neutrals); match the app's own tokens instead of a stock blue.
 6. Test it: an admin gets 200 on `/admin/`, another user 403, a visitor
    401; the reference app's `routes_test.go` shows it.
 7. `lidza check`, then `lidza test`.

@@ -9,6 +9,19 @@ release is listed first under its version as "Breaking:", with what to
 change; every release so far is additive (an app updates with
 `lidza update --migrate`).
 
+## Unreleased
+
+- A palette of Līdza's own instead of the stock blue: a mulberry accent
+  on warm paper neutrals, and a warm charcoal dark mode, in the admin
+  pages and the app templates (the React template's `brand` tokens; the
+  Svelte, Astro and htmx templates' neutrals). Apps keep their own
+  tokens; a new app starts from this one.
+- Admin theme: `--admin-bg`, `--admin-surface`, `--admin-surface-2`,
+  `--admin-line`, `--admin-fg`, `--admin-muted` and `--admin-accent-fg`
+  apply again, per theme, mapped onto Tabler's variables. That undoes
+  the part of v0.1.20's breaking note about them; a custom
+  `admin/layout.html` still needs the two template lines.
+
 ## v0.1.20 (2026-09-26)
 
 - Breaking: the admin pages are rebuilt on Tabler. An app's own

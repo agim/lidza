@@ -1,6 +1,6 @@
-:root { font-family: system-ui, sans-serif; line-height: 1.5; color: #1a1a1a; background: #fafafa; }
+:root { font-family: system-ui, sans-serif; line-height: 1.5; color: #2a2224; background: #f8f4ef; }
 body { margin: 0; }
-nav { display: flex; gap: 1rem; padding: 0.75rem 1.5rem; border-bottom: 1px solid #ddd; }
-nav a { color: #1a1a1a; text-decoration: none; }
+nav { display: flex; gap: 1rem; padding: 0.75rem 1.5rem; border-bottom: 1px solid #e0d6cb; }
+nav a { color: #2a2224; text-decoration: none; }
 main { max-width: 48rem; margin: 0 auto; padding: 1.5rem; }
 form { display: flex; gap: 0.5rem; align-items: center; }

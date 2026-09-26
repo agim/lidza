@@ -4,14 +4,27 @@
 :root,
 [data-bs-theme=light],
 [data-bs-theme=dark] {
-  --tblr-primary: var(--admin-accent, oklch(54.6% 0.1724 254.2deg));
+  --tblr-primary: var(--admin-accent, oklch(47% 0.13 345));
+  --tblr-primary-fg: var(--admin-accent-fg, #fff);
+  --tblr-body-bg: var(--admin-bg, #f6f2ed);
+  --tblr-bg-surface: var(--admin-surface, #fffdfa);
+  --tblr-bg-surface-secondary: var(--admin-surface-2, #f1ebe4);
+  --tblr-bg-surface-tertiary: var(--admin-surface-2, #f1ebe4);
+  --tblr-border-color: var(--admin-line, #e4dbd1);
+  --tblr-body-color: var(--admin-fg, #2a2224);
+  --tblr-secondary: var(--admin-muted, #7b6f69);
+  --tblr-secondary-color: var(--admin-muted, #7b6f69);
   --tblr-font-sans-serif: var(--admin-font, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif);
   --tblr-font-monospace: var(--admin-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  --tblr-border-radius: var(--admin-radius, 6px);
+  --tblr-border-radius: var(--admin-radius, 8px);
 }
+body { background: var(--tblr-body-bg); color: var(--tblr-body-color); }
+.card, .dropdown-menu, .list-group-item, .navbar:not(.admin-sidebar) { background-color: var(--tblr-bg-surface); }
+.table thead th { background: var(--tblr-bg-surface-secondary); }
 
 /* The sidebar keeps its dark surface in both themes. */
-.admin-sidebar { --tblr-navbar-bg: var(--admin-sidebar, #182433); }
+.admin-sidebar { --tblr-navbar-bg: var(--admin-sidebar, #241821); --tblr-body-bg: var(--admin-sidebar, #241821); background: var(--admin-sidebar, #241821); }
+.admin-sidebar .nav-item.active .nav-link, .admin-sidebar .nav-link:hover { background: color-mix(in oklab, var(--admin-accent, #8a2f63) 22%, transparent); }
 .admin-sidebar .navbar-brand { font-weight: 600; letter-spacing: .01em; }
 .admin-sidebar .nav-group { color: var(--tblr-navbar-color); opacity: .55; font-size: .6875rem;
   text-transform: uppercase; letter-spacing: .06em; padding: 1rem 1rem .25rem; }

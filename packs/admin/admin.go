@@ -567,10 +567,10 @@ func initials(s string) string {
 	return strings.ToUpper(string(out))
 }
 
-// avatarColor picks one of Tabler's light colours for a name, the same
-// every time.
+// avatarColor picks one of the palette's light colours for a name, the
+// same every time (no blues: the accent is the palette's).
 func avatarColor(s string) string {
-	colors := []string{"blue", "azure", "indigo", "purple", "pink", "red", "orange", "yellow", "lime", "green", "teal", "cyan"}
+	colors := []string{"primary", "pink", "red", "orange", "yellow", "lime", "green", "teal"}
 	var h uint32
 	for _, r := range s {
 		h = h*31 + uint32(r)

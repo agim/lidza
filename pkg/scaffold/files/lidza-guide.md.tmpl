@@ -646,8 +646,12 @@ without writing a page.
    without a restart; one set in the process environment wins and the
    field says so.
 5. Theme it when the app has a look: `admin/theme.css` sets
-   `--admin-accent`, `--admin-sidebar`, `--admin-font`, `--admin-radius`
-   (per theme under `[data-bs-theme=dark]`) or any Tabler variable.
+   `--admin-accent`, `--admin-accent-fg`, `--admin-bg`, `--admin-surface`,
+   `--admin-line`, `--admin-fg`, `--admin-muted`, `--admin-sidebar`,
+   `--admin-font` and `--admin-radius`, per theme under
+   `[data-bs-theme=light]` and `[data-bs-theme=dark]`, or any Tabler
+   variable. The default is Līdza's palette (a mulberry accent on warm
+   neutrals); match the app's own tokens instead of a stock blue.
 6. Test it: an admin gets 200 on `/admin/`, another user 403, a visitor
    401; the reference app's `routes_test.go` shows it.
 7. `lidza check`, then `lidza test`.
@@ -936,7 +940,8 @@ stylesheet, script and icons served from the binary:
   on a Settings page); recipe "Extend the admin pages".
 
 Values saved there are sealed with the master key and applied without a
-restart. Theme: `admin/theme.css` sets the `--admin-*` variables or any
+restart. Theme: `admin/theme.css` sets the `--admin-*` variables (accent,
+background, surface, line, text, sidebar, font, radius; per theme) or any
 Tabler variable; `admin/layout.html` replaces the frame (define `layout`,
 call `{{"{{"}}template "admin-head" .{{"}}"}}` in `<head>`,
 `{{"{{"}}template "admin-scripts" .{{"}}"}}` before `</body>`, and

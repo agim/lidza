@@ -98,7 +98,9 @@ Tailwind kit would need Tailwind's build step to scan every template,
 including the ones an app adds, so its classes would not be complete in
 a prebuilt file. The app's frontend keeps its own Tailwind; the two do
 not share a stylesheet. App pages (`admin.Options.Pages`) render in the
-same frame, so an app never grows a second admin screen.
+same frame, so an app never grows a second admin screen. The colours are
+Līdza's own (a mulberry accent on warm neutrals) rather than a kit's
+stock blue, in the admin pages and the app templates alike.
 
 ## Decisions
 

@@ -1,8 +1,8 @@
 :root {
   font-family: system-ui, sans-serif;
   line-height: 1.5;
-  color: #1a1a1a;
-  background: #fafafa;
+  color: #2a2224;
+  background: #f8f4ef;
 }
 
 body {
@@ -13,11 +13,11 @@ nav {
   display: flex;
   gap: 1rem;
   padding: 0.75rem 1.5rem;
-  border-bottom: 1px solid #ddd;
+  border-bottom: 1px solid #e0d6cb;
 }
 
 nav a {
-  color: #1a1a1a;
+  color: #2a2224;
   text-decoration: none;
 }
 
@@ -33,17 +33,17 @@ main {
 
 pre {
   padding: 1rem;
-  background: #eee;
+  background: #ece4db;
   border-radius: 4px;
   overflow-x: auto;
 }
 
 .error {
-  color: #b00020;
+  color: #b3261e;
 }
 
 .error-boundary {
   padding: 1rem;
-  border: 1px solid #b00020;
+  border: 1px solid #b3261e;
   border-radius: 4px;
 }

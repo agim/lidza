@@ -1,15 +1,16 @@
 @import "tailwindcss";
 
-/* The theme: change these tokens, not the classes. Tailwind v4 turns each
+/* The theme: Līdza's palette, a mulberry accent on warm neutrals.
+   Change these tokens, not the classes. Tailwind v4 turns each
    --color-* into bg-*, text-* and border-* utilities (bg-brand, text-ink). */
 @theme {
-  --color-brand: #1d4ed8;
-  --color-brand-strong: #1e40af;
-  --color-ink: #1a1a1a;
-  --color-muted: #6b7280;
-  --color-surface: #fafafa;
-  --color-line: #e5e7eb;
-  --color-danger: #b00020;
+  --color-brand: oklch(47% 0.13 345);
+  --color-brand-strong: oklch(40% 0.13 345);
+  --color-ink: #2a2224;
+  --color-muted: #7b6f69;
+  --color-surface: #f8f4ef;
+  --color-line: #e4dbd1;
+  --color-danger: #b3261e;
   --font-sans: system-ui, sans-serif;
 }
 

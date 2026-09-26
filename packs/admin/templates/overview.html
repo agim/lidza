@@ -61,7 +61,7 @@
           <div class="row align-items-center">
             {{$first := or $d.FirstLabel $d.FirstUser}}
             <div class="col-auto"><span class="avatar avatar-sm bg-{{color $first}}-lt">{{initials $first}}</span></div>
-            <div class="col text-truncate"><span{{if not $d.FirstLabel}} class="font-monospace small"{{end}}>{{$first}}</span>{{if eq $first $d.You}} <span class="badge bg-blue-lt">you</span>{{end}}<div class="small text-secondary">First account, an admin by default</div></div>
+            <div class="col text-truncate"><span{{if not $d.FirstLabel}} class="font-monospace small"{{end}}>{{$first}}</span>{{if eq $first $d.You}} <span class="badge bg-primary-lt">you</span>{{end}}<div class="small text-secondary">First account, an admin by default</div></div>
           </div>
         </div>
         {{end}}
@@ -69,7 +69,7 @@
         <div class="list-group-item">
           <div class="row align-items-center">
             <div class="col-auto"><span class="avatar avatar-sm bg-{{color .}}-lt">{{initials .}}</span></div>
-            <div class="col text-truncate">{{.}}{{if eq . $d.You}} <span class="badge bg-blue-lt">you</span>{{end}}</div>
+            <div class="col text-truncate">{{.}}{{if eq . $d.You}} <span class="badge bg-primary-lt">you</span>{{end}}</div>
             <div class="col-auto">
               <form method="post" action="{{$.Path}}/admins" data-admin-confirm="Remove {{.}} from the admins?">
                 <input type="hidden" name="admin" value="{{.}}"><input type="hidden" name="remove" value="on">

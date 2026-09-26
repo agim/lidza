@@ -6,15 +6,15 @@
     <div><div class="fw-medium">{{$d.Provider}}{{if $d.Dev}} <span class="badge bg-orange-lt">dev</span>{{end}}</div><div class="text-secondary small">{{or $d.Model "default model"}}</div></div>
   </div></div></div>
   <div class="col-sm-6 col-xl-3"><div class="card card-sm"><div class="card-body d-flex align-items-center gap-3">
-    <span class="avatar bg-azure-lt">{{icon "bolt"}}</span>
+    <span class="avatar bg-primary-lt">{{icon "bolt"}}</span>
     <div><div class="fw-medium">{{num $d.Calls}} calls</div><div class="text-secondary small">{{if $d.Errors}}<span class="text-danger">{{$d.Errors}} failed</span>{{else}}none failed{{end}} · 30 days</div></div>
   </div></div></div>
   <div class="col-sm-6 col-xl-3"><div class="card card-sm"><div class="card-body d-flex align-items-center gap-3">
-    <span class="avatar bg-indigo-lt">{{icon "arrow-left"}}</span>
+    <span class="avatar bg-primary-lt">{{icon "arrow-left"}}</span>
     <div><div class="fw-medium">{{num $d.Input}}</div><div class="text-secondary small">input tokens · 30 days</div></div>
   </div></div></div>
   <div class="col-sm-6 col-xl-3"><div class="card card-sm"><div class="card-body d-flex align-items-center gap-3">
-    <span class="avatar bg-purple-lt">{{icon "send"}}</span>
+    <span class="avatar bg-primary-lt">{{icon "send"}}</span>
     <div><div class="fw-medium">{{num $d.Output}}</div><div class="text-secondary small">output tokens · 30 days</div></div>
   </div></div></div>
 </div>

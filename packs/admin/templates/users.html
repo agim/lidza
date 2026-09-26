@@ -28,7 +28,7 @@
             <div class="d-flex align-items-center gap-2">
               <span class="avatar avatar-sm bg-{{color .Entry}}-lt">{{initials .Entry}}</span>
               <div class="text-truncate">
-                <div>{{or .Label .Subject}}{{if .You}} <span class="badge bg-blue-lt">you</span>{{end}}</div>
+                <div>{{or .Label .Subject}}{{if .You}} <span class="badge bg-primary-lt">you</span>{{end}}</div>
                 {{if .Label}}<div class="small text-secondary font-monospace">{{.Subject}}</div>{{end}}
               </div>
             </div>
@@ -38,8 +38,8 @@
           <td>{{.Sessions}}</td>
           <td>
             {{if .Disabled}}<span class="badge bg-red-lt">disabled</span>
-            {{else if .First}}<span class="badge bg-purple-lt" title="The first account is an admin by default">admin · first</span>
-            {{else if .Admin}}<span class="badge bg-purple-lt">admin</span>
+            {{else if .First}}<span class="badge bg-primary-lt" title="The first account is an admin by default">admin · first</span>
+            {{else if .Admin}}<span class="badge bg-primary-lt">admin</span>
             {{else}}<span class="badge bg-green-lt">active</span>{{end}}
           </td>
           <td class="admin-actions">

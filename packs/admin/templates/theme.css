@@ -1,13 +1,31 @@
 /* The admin theme. The pages are built on Tabler (https://tabler.io);
    an app's admin/theme.css replaces this file. Set the variables below,
-   per theme if you like, or any Tabler variable (--tblr-*). */
-:root {
-  --admin-accent: oklch(54.6% 0.1724 254.2deg);  /* buttons, links, the active page */
-  --admin-sidebar: #182433;                      /* the sidebar, in both themes */
+   per theme, or any Tabler variable (--tblr-*).
+
+   Līdza's own palette: a mulberry accent on warm paper neutrals, and a
+   dark mode on warm charcoal. */
+:root,
+[data-bs-theme=light] {
+  --admin-accent: oklch(47% 0.13 345);     /* buttons, links, the active page */
+  --admin-accent-fg: #ffffff;              /* text on the accent */
+  --admin-bg: #f6f2ed;                     /* the page */
+  --admin-surface: #fffdfa;                /* cards */
+  --admin-surface-2: #f1ebe4;              /* table heads, subtle fills */
+  --admin-line: #e4dbd1;                   /* borders */
+  --admin-fg: #2a2224;                     /* text */
+  --admin-muted: #7b6f69;                  /* secondary text */
+  --admin-sidebar: #241821;                /* the sidebar, in both themes */
   --admin-font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --admin-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
-  --admin-radius: 6px;
+  --admin-radius: 8px;
 }
 [data-bs-theme=dark] {
-  --admin-accent: oklch(68% 0.15 254.2deg);
+  --admin-accent: oklch(76% 0.1 345);
+  --admin-accent-fg: #221519;
+  --admin-bg: #171214;
+  --admin-surface: #201a1d;
+  --admin-surface-2: #2a2226;
+  --admin-line: #372d32;
+  --admin-fg: #eee7e3;
+  --admin-muted: #a89a93;
 }

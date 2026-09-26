@@ -49,8 +49,9 @@ Go, SQL, migrations and Rust, typed handlers, OpenAPI and the generated
 run as WASM in a bounded pool, official `db`, `realtime`, `geo` and
 `media`; scale primitives: `/metrics`, `/healthz`, `/readyz`, rate
 limiting, circuit breaker, `lidza check` rules for unbounded state,
-`lidza benchmark` on k6; application services: `auth`, `jobs`, `cache`,
-`i18n` packs and `lidza test`; frontend depth: prerendered routes,
+`lidza benchmark` on k6; application services: `auth` (sessions,
+sign-in with email and password or with Google, GitHub, Microsoft and
+any OIDC issuer), `jobs`, `cache`, `i18n` packs and `lidza test`; frontend depth: prerendered routes,
 accessibility in `lidza check`, `useLive`, client-side validators. Every
 roadmap phase is delivered. See
 `docs/roadmap.md`;

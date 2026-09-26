@@ -87,9 +87,10 @@ var Officials = []Official{
 			"# AUTH_LOGIN_BURST=5",
 			"# AUTH_MIN_PASSWORD=10       # auth.ValidatePassword floor",
 			"# AUTH_TOKEN_TTL=1h          # verification and reset links",
+			"# AUTH_PROVIDERS=google,github   # sign-in providers for auth.Mount; ids and secrets in the credentials",
 		},
 		Notes: []string{
-			"store password hashes with auth.HashPassword; check with auth.CheckPassword",
+			"sign-in: auth.Mount(r, auth.Options{}) in routes.go serves register, login, logout, session, verification, reset and the AUTH_PROVIDERS sign-ins on the pack's own tables (recipe \"Add sign-in\"); or keep your own users table and call auth.From(ctx).Login after auth.CheckPassword",
 			"login: tokens, err := auth.From(ctx).Login(ctx, userID, claims); for browsers add auth.From(ctx).Cookies(tokens) with req.SetCookie",
 			"protect routes: g := r.Group(\"/api/v1/notes\", auth.Require()); auth.CurrentUser(ctx) inside; auth.Optional() where visitors are served too",
 			"throttle the credential routes: router.Route(r, \"POST /api/v1/auth/login\", login, auth.Throttle()); check passwords with auth.From(ctx).ValidatePassword(pw, email)",

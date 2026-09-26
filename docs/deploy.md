@@ -104,8 +104,8 @@ It listens on 443 with certificates from Let's Encrypt, obtained on the
 first request for each domain and renewed before they expire
 (`golang.org/x/crypto/acme/autocert`; no vendor SDK), answers 80 only
 to redirect to HTTPS and to prove ownership of the domain, and derives
-`APP_URL` (links in emails) and `AUTH_COOKIE_SECURE=true` unless they are
-set. `LIDZA_ADDR` is ignored.
+`APP_URL` (links in emails, the sign-in providers' callback URL) and
+`AUTH_COOKIE_SECURE=true` unless they are set. `LIDZA_ADDR` is ignored.
 
 Certificates and the ACME account key are stored in Postgres through
 the db pack, in the `tls_certificate` table the framework creates on

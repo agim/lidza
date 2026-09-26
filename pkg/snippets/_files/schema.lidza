@@ -168,3 +168,30 @@ model AuthAccount @table("auth_account") {
   firstSeenAt time   @default(now())
   lastSeenAt  time   @default(now())
 }
+
+// The pack's own users, for apps that mount its sign-in (auth.Mount):
+// email and password for local sign-in, or no password for an account
+// that only signs in through a provider. An app with its own users table
+// leaves this one empty.
+model AuthUser @table("auth_user") {
+  subject      string @id
+  email        string? @unique
+  name         string?
+  passwordHash string?
+  verifiedAt   time?
+  createdAt    time   @default(now())
+  updatedAt    time   @default(now())
+}
+
+// One row per provider account (Google, GitHub, an OIDC issuer) linked
+// to a subject; id is provider:providerSubject.
+model AuthIdentity @table("auth_identity") {
+  id              string @id
+  provider        string @index
+  providerSubject string
+  subject         string @index
+  email           string?
+  name            string?
+  createdAt       time   @default(now())
+  lastUsedAt      time   @default(now())
+}

@@ -46,6 +46,16 @@ type section struct {
 }
 
 var sections = []section{
+	{Title: "Sign-in providers", Pack: "auth", Fields: []field{
+		{Name: "AUTH_PROVIDERS", Label: "Providers", Kind: "text", Help: "Comma-separated: google, github, microsoft, or a name with AUTH_<NAME>_ISSUER (an OIDC issuer) set with lidza credentials set. Served by auth.Mount; the callback is <APP_URL>/api/v1/auth/<name>/callback."},
+		{Name: "AUTH_GOOGLE_CLIENT_ID", Label: "Google client id", Kind: "text"},
+		{Name: "AUTH_GOOGLE_CLIENT_SECRET", Label: "Google client secret", Kind: "secret"},
+		{Name: "AUTH_GITHUB_CLIENT_ID", Label: "GitHub client id", Kind: "text"},
+		{Name: "AUTH_GITHUB_CLIENT_SECRET", Label: "GitHub client secret", Kind: "secret"},
+		{Name: "AUTH_MICROSOFT_CLIENT_ID", Label: "Microsoft client id", Kind: "text"},
+		{Name: "AUTH_MICROSOFT_CLIENT_SECRET", Label: "Microsoft client secret", Kind: "secret"},
+		{Name: "AUTH_MICROSOFT_TENANT", Label: "Microsoft tenant", Kind: "text", Help: "common, organizations, consumers or a tenant id."},
+	}},
 	{Title: "Mail", Pack: "mail", Fields: []field{
 		{Name: "MAIL_PROVIDER", Label: "Provider", Kind: "select", Options: mail.Providers, Help: "log prints messages; outbox keeps them; the others deliver."},
 		{Name: "MAIL_FROM", Label: "From", Kind: "text", Help: "Name <address> or an address."},
@@ -75,6 +85,10 @@ var sections = []section{
 // enabled reports whether a section's pack runs.
 func enabled(ctx context.Context, pack string) bool {
 	switch pack {
+	case "auth":
+		// The section matters once the app mounts the pack's sign-in.
+		_, ok := lidza.Optional[*auth.Auth](ctx)
+		return ok && auth.Mounted()
 	case "mail":
 		_, ok := lidza.Optional[mailService](ctx)
 		return ok
@@ -198,6 +212,9 @@ type userRow struct {
 	Entry string
 	First bool
 	You   bool
+	// Methods are how the account signs in (password, google), for an
+	// account of the pack's own sign-in.
+	Methods string
 }
 
 func (h *Handler) users(w http.ResponseWriter, r *http.Request) {
@@ -237,6 +254,9 @@ func (h *Handler) users(w http.ResponseWriter, r *http.Request) {
 			if e == ac.Subject || strings.EqualFold(e, ac.Label) {
 				row.Admin = true
 			}
+		}
+		if methods, err := a.SignInMethods(ctx, ac.Subject); err == nil {
+			row.Methods = strings.Join(methods, ", ")
 		}
 		rows = append(rows, row)
 	}

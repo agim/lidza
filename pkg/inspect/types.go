@@ -6,6 +6,7 @@ import (
 	"go/constant"
 	"go/token"
 	"go/types"
+	"path/filepath"
 	"reflect"
 	"regexp"
 	"sort"
@@ -14,6 +15,7 @@ import (
 	"golang.org/x/tools/go/packages"
 
 	"github.com/agim/lidza/pkg/schema"
+	"github.com/agim/lidza/pkg/version"
 )
 
 // routerPath is the package whose Route function makes a route typed.
@@ -36,12 +38,15 @@ type Operation struct {
 	Handler Handler `json:"handler"`
 	// Builtin marks operations the framework registers in every app.
 	Builtin bool `json:"builtin,omitempty"`
+	// Pack names the framework pack whose Mount registered the operation
+	// (auth for the sign-in routes); empty for the app's own.
+	Pack string `json:"pack,omitempty"`
 }
 
 // typedRoutes type-checks the project and returns its operations and the
 // component schemas they use. Type errors do not stop it: the routes the
 // checker could resolve are returned with the errors as warnings.
-func typedRoutes(root string, lidzaSchema *schema.Schema, module string) ([]Operation, map[string]any, []string, error) {
+func typedRoutes(root string, lidzaSchema *schema.Schema, module string) ([]Operation, []Route, map[string]any, []string, error) {
 	cfg := &packages.Config{
 		Mode: packages.NeedName | packages.NeedFiles | packages.NeedSyntax | packages.NeedTypes |
 			packages.NeedTypesInfo | packages.NeedImports | packages.NeedDeps,
@@ -49,12 +54,14 @@ func typedRoutes(root string, lidzaSchema *schema.Schema, module string) ([]Oper
 	}
 	pkgs, err := packages.Load(cfg, "./...")
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("type-check: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("type-check: %w", err)
 	}
 	b := newSchemaBuilder(lidzaSchema, module)
 	var warnings []string
 	var ops []Operation
 	var routerPkg *types.Package
+	// The framework packs whose Mount the app calls: their routes count.
+	mountedPacks := map[string]*packages.Package{}
 
 	for _, pkg := range pkgs {
 		for _, e := range pkg.Errors {
@@ -69,7 +76,7 @@ func typedRoutes(root string, lidzaSchema *schema.Schema, module string) ([]Oper
 		for _, f := range pkg.Syntax {
 			ast.Inspect(f, func(n ast.Node) bool {
 				call, ok := n.(*ast.CallExpr)
-				if !ok || len(call.Args) < 3 {
+				if !ok {
 					return true
 				}
 				sel, ok := call.Fun.(*ast.SelectorExpr)
@@ -77,7 +84,16 @@ func typedRoutes(root string, lidzaSchema *schema.Schema, module string) ([]Oper
 					return true
 				}
 				fn, ok := pkg.TypesInfo.Uses[sel.Sel].(*types.Func)
-				if !ok || fn.Pkg() == nil || fn.Pkg().Path() != routerPath || fn.Name() != "Route" {
+				if !ok || fn.Pkg() == nil {
+					return true
+				}
+				if fn.Name() == "Mount" && strings.HasPrefix(fn.Pkg().Path(), packsPrefix) {
+					if dep, ok := pkg.Imports[fn.Pkg().Path()]; ok && dep.TypesInfo != nil {
+						mountedPacks[fn.Pkg().Path()] = dep
+					}
+					return true
+				}
+				if len(call.Args) < 3 || fn.Pkg().Path() != routerPath || fn.Name() != "Route" {
 					return true
 				}
 				pattern, ok := stringLit(call.Args[1])
@@ -101,6 +117,14 @@ func typedRoutes(root string, lidzaSchema *schema.Schema, module string) ([]Oper
 		}
 	}
 
+	// A mounted pack's routes, from its own source: the same scan, the
+	// handler named by the pack.
+	var packRaw []Route
+	for _, path := range sortedKeys(mountedPacks) {
+		ops = append(ops, packOperations(mountedPacks[path], b)...)
+		packRaw = append(packRaw, packRoutes(mountedPacks[path])...)
+	}
+
 	// Built-in operations: their output types live in the router package.
 	if routerPkg != nil {
 		for _, bi := range builtinOps() {
@@ -118,7 +142,7 @@ func typedRoutes(root string, lidzaSchema *schema.Schema, module string) ([]Oper
 		}
 		return ops[i].Method < ops[j].Method
 	})
-	return ops, b.defs, warnings, nil
+	return ops, packRaw, b.defs, warnings, nil
 }
 
 type builtinOp struct{ id, method, path, output string }
@@ -401,3 +425,94 @@ func nullable(s map[string]any) map[string]any {
 }
 
 func ref(name string) map[string]any { return map[string]any{"$ref": "#/components/schemas/" + name} }
+
+// packsPrefix is the import path under which the framework packs live.
+const packsPrefix = version.ModulePath + "/packs/"
+
+func sortedKeys[V any](m map[string]V) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+// packOperations finds the router.Route calls with literal patterns in a
+// framework pack the app mounted (auth.Mount): the routes the pack
+// registers on the app's router, typed with the pack's own types.
+func packOperations(pkg *packages.Package, b *schemaBuilder) []Operation {
+	var ops []Operation
+	packName := strings.TrimPrefix(pkg.PkgPath, packsPrefix)
+	for _, f := range pkg.Syntax {
+		ast.Inspect(f, func(n ast.Node) bool {
+			call, ok := n.(*ast.CallExpr)
+			if !ok || len(call.Args) < 3 {
+				return true
+			}
+			sel, ok := call.Fun.(*ast.SelectorExpr)
+			if !ok {
+				return true
+			}
+			fn, ok := pkg.TypesInfo.Uses[sel.Sel].(*types.Func)
+			if !ok || fn.Pkg() == nil || fn.Pkg().Path() != routerPath || fn.Name() != "Route" {
+				return true
+			}
+			pattern, ok := stringLit(call.Args[1])
+			if !ok {
+				return true
+			}
+			inst, ok := pkg.TypesInfo.Instances[sel.Sel]
+			if !ok || inst.TypeArgs.Len() != 2 {
+				return true
+			}
+			method, path := splitPattern(pattern)
+			op := Operation{Method: method, Path: path, Params: pathParams(path), Pack: packName}
+			op.Input = b.component(inst.TypeArgs.At(0))
+			op.Output = b.component(inst.TypeArgs.At(1))
+			pos := pkg.Fset.Position(call.Args[2].Pos())
+			op.Handler = Handler{Name: exprString(pkg.Fset, call.Args[2]), File: "lidza/packs/" + packName + "/" + filepath.Base(pos.Filename), Line: pos.Line}
+			if h, ok := call.Args[2].(*ast.SelectorExpr); ok {
+				fillFromObj(&op.Handler, pkg, "", pkg.TypesInfo.Uses[h.Sel])
+				op.Handler.File = "lidza/packs/" + packName + "/" + filepath.Base(pkg.Fset.Position(pkg.TypesInfo.Uses[h.Sel].Pos()).Filename)
+			}
+			op.ID = operationID(op.Handler.Name, method, path)
+			ops = append(ops, op)
+			return true
+		})
+	}
+	return ops
+}
+
+// PackRoutes lists the raw routes (HandleFunc, Handle) a mounted pack
+// registers, for the route listing; the typed ones are operations.
+func packRoutes(pkg *packages.Package) []Route {
+	var routes []Route
+	packName := strings.TrimPrefix(pkg.PkgPath, packsPrefix)
+	for _, f := range pkg.Syntax {
+		ast.Inspect(f, func(n ast.Node) bool {
+			call, ok := n.(*ast.CallExpr)
+			if !ok || len(call.Args) != 2 {
+				return true
+			}
+			sel, ok := call.Fun.(*ast.SelectorExpr)
+			if !ok || (sel.Sel.Name != "HandleFunc" && sel.Sel.Name != "Handle") {
+				return true
+			}
+			recv, ok := pkg.TypesInfo.Types[sel.X]
+			if !ok || !strings.HasSuffix(recv.Type.String(), routerPath+".Router") {
+				return true
+			}
+			pattern, ok := stringLit(call.Args[0])
+			if !ok {
+				return true
+			}
+			method, path := splitPattern(pattern)
+			pos := pkg.Fset.Position(call.Args[1].Pos())
+			routes = append(routes, Route{Method: method, Path: path, Pattern: pattern, Pack: packName,
+				Handler: Handler{Name: exprString(pkg.Fset, call.Args[1]), File: "lidza/packs/" + packName + "/" + filepath.Base(pos.Filename), Line: pos.Line}})
+			return true
+		})
+	}
+	return routes
+}

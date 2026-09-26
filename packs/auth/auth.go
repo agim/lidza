@@ -54,6 +54,10 @@ type Config struct {
 	// TokenTTL bounds the one-time tokens IssueToken creates (email
 	// verification, password reset) unless the call says otherwise.
 	TokenTTL time.Duration `env:"AUTH_TOKEN_TTL" default:"1h"`
+	// AppURL is the public origin, for the redirect URI the sign-in
+	// providers send the browser back to; derived from the request when
+	// unset (and from LIDZA_TLS_DOMAINS when the binary serves TLS).
+	AppURL string `env:"APP_URL"`
 }
 
 // Cookie names.

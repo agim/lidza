@@ -24,6 +24,17 @@ type AuthAccount struct {
 	LastSeenAt  time.Time  `json:"last_seen_at"`
 }
 
+type AuthIdentity struct {
+	ID              string    `json:"id"`
+	Provider        string    `json:"provider"`
+	ProviderSubject string    `json:"provider_subject"`
+	Subject         string    `json:"subject"`
+	Email           *string   `json:"email"`
+	Name            *string   `json:"name"`
+	CreatedAt       time.Time `json:"created_at"`
+	LastUsedAt      time.Time `json:"last_used_at"`
+}
+
 type AuthSession struct {
 	ID              string     `json:"id"`
 	Subject         string     `json:"subject"`
@@ -43,6 +54,16 @@ type AuthToken struct {
 	ExpiresAt time.Time  `json:"expires_at"`
 	UsedAt    *time.Time `json:"used_at"`
 	CreatedAt time.Time  `json:"created_at"`
+}
+
+type AuthUser struct {
+	Subject      string     `json:"subject"`
+	Email        *string    `json:"email"`
+	Name         *string    `json:"name"`
+	PasswordHash *string    `json:"password_hash"`
+	VerifiedAt   *time.Time `json:"verified_at"`
+	CreatedAt    time.Time  `json:"created_at"`
+	UpdatedAt    time.Time  `json:"updated_at"`
 }
 
 type LlmUsage struct {

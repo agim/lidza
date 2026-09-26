@@ -49,7 +49,11 @@ import (
 //     it or remove it, so the next reader is not misled;
 //   - L012: a pack or a direct dependency (one the framework does not
 //     bring itself) with no entry in docs/decisions.md naming it; the
-//     why of every such choice is recorded there.
+//     why of every such choice is recorded there;
+//   - L013: an import of an OAuth or OpenID Connect client library; the
+//     auth pack's sign-in speaks those flows already (auth.Mount with
+//     AUTH_PROVIDERS: Google, GitHub, Microsoft, any OIDC issuer), with
+//     the identities linked to accounts and the admin pages.
 //
 // Except for L004 the findings are warnings: they point at the pattern,
 // the author decides. A comment "lidza:ignore L001" on the line, or the
@@ -225,6 +229,9 @@ func checkFile(fset *token.FileSet, f *ast.File, rel, moduleDir string) []Diagno
 		}
 		if storageVendor(path) {
 			warn(imp.Pos(), "L008", "import of "+path+": use the storage pack instead (`lidza pack add storage`, STORAGE_PROVIDER=s3 with any S3-compatible service), which speaks the API directly and adds a local provider for tests")
+		}
+		if authVendor(path) {
+			warn(imp.Pos(), "L013", "import of "+path+": use the auth pack's sign-in instead (auth.Mount with AUTH_PROVIDERS=google,github,microsoft or an OIDC issuer; recipe \"Add sign-in\"), which runs the flows, verifies the tokens and links the identities to accounts")
 		}
 		if vendor := llmVendor(path); vendor != "" {
 			warn(imp.Pos(), "L007", "import of "+path+": use the llm pack instead (`lidza pack add llm`, LLM_PROVIDER="+vendor+"), which speaks the API directly and adds structured output, tools, retries and a fake for tests")
@@ -409,6 +416,19 @@ func llmVendor(path string) string {
 		}
 	}
 	return ""
+}
+
+// authVendor reports an OAuth or OpenID Connect client library import.
+func authVendor(path string) bool {
+	for _, prefix := range []string{
+		"golang.org/x/oauth2", "github.com/coreos/go-oidc", "github.com/markbates/goth", "github.com/zitadel/oidc",
+		"github.com/go-oauth2/oauth2", "github.com/dghubble/gologin", "github.com/ory/fosite",
+	} {
+		if path == prefix || strings.HasPrefix(path, prefix+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 // storageVendor reports an object-storage SDK import.

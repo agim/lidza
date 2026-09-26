@@ -195,10 +195,10 @@ func TestUsers(t *testing.T) {
 		t.Skipf("no test database: %v", err)
 	}
 	t.Cleanup(pool.Close)
-	for _, tbl := range []string{"auth_session", "auth_token", "auth_account"} {
+	for _, tbl := range []string{"auth_session", "auth_token", "auth_account", "auth_user", "auth_identity"} {
 		pool.Exec(ctx, "DROP TABLE IF EXISTS "+tbl)
 	}
-	if _, err := pool.Exec(ctx, auth.SessionTable+auth.TokenTable+auth.AccountTable); err != nil {
+	if _, err := pool.Exec(ctx, auth.SessionTable+auth.TokenTable+auth.AccountTable+auth.UserTable+auth.IdentityTable); err != nil {
 		t.Fatal(err)
 	}
 	a, err := auth.New(auth.Config{Secret: strings.Repeat("s", 32), AccessTTL: time.Minute, RefreshTTL: time.Hour}, pool)

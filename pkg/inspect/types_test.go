@@ -1,6 +1,7 @@
 package inspect
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -196,4 +197,74 @@ func TestOperationID(t *testing.T) {
 			t.Errorf("%q %s %s: got %q, want %q", c.handler, c.method, c.path, got, c.want)
 		}
 	}
+}
+
+// A framework pack the app mounts (auth.Mount) registers routes the app
+// never writes: the inspector reads them from the pack's source, so the
+// client and the route listing carry them.
+func TestMountedPackRoutes(t *testing.T) {
+	if _, err := exec.LookPath("go"); err != nil {
+		t.Skip("go not installed")
+	}
+	root, _ := filepath.Abs("../..")
+	dir := t.TempDir()
+	write(t, dir, "go.mod", "module demo\n\ngo 1.27\n\nrequire github.com/agim/lidza v0.0.0\n\nreplace github.com/agim/lidza => "+root+"\n")
+	write(t, dir, "main.go", `package main
+
+import (
+	"github.com/agim/lidza/packs/auth"
+	"github.com/agim/lidza/pkg/router"
+)
+
+func routes(r *router.Router) {
+	auth.Mount(r, auth.Options{})
+}
+
+func main() {}
+`)
+	cmd := exec.Command("go", "mod", "tidy")
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("go mod tidy: %v\n%s", err, out)
+	}
+	c, err := Project(dir, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	byID := map[string]Operation{}
+	for _, op := range c.Operations {
+		byID[op.ID] = op
+	}
+	login, ok := byID["authLogin"]
+	if !ok || login.Method != "POST" || login.Path != "/api/v1/auth/login" || login.Pack != "auth" || login.Input != "Credentials" || login.Output != "SignedIn" {
+		t.Fatalf("authLogin: %+v (ops %v)", login, keys(byID))
+	}
+	if login.Handler.File != "lidza/packs/auth/signin.go" || login.Handler.Line == 0 {
+		t.Fatalf("handler: %+v", login.Handler)
+	}
+	for _, id := range []string{"authRegister", "authLogout", "authSession", "authMe", "authVerify", "authForgot", "authReset", "authPassword", "authProviders"} {
+		if _, ok := byID[id]; !ok {
+			t.Errorf("operation %s missing", id)
+		}
+	}
+	if _, ok := c.Schemas["SignedIn"]; !ok {
+		t.Errorf("schema SignedIn missing: %v", keys(c.Schemas))
+	}
+	var raw []string
+	for _, r := range c.Routes {
+		if r.Pack == "auth" && !r.Typed {
+			raw = append(raw, r.Pattern)
+		}
+	}
+	if fmt.Sprint(raw) != "[GET /api/v1/auth/{provider}/start GET /api/v1/auth/{provider}/callback]" {
+		t.Errorf("raw pack routes: %v", raw)
+	}
+}
+
+func keys[V any](m map[string]V) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
 }

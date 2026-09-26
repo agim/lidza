@@ -189,6 +189,50 @@ func (v AuthAccount) Validate() error {
 	return errs.Result()
 }
 
+// AuthUser is a row of the auth_user table.
+type AuthUser struct {
+	Subject      string     `json:"subject" db:"subject"`
+	Email        *string    `json:"email" db:"email"`
+	Name         *string    `json:"name" db:"name"`
+	PasswordHash *string    `json:"passwordHash" db:"password_hash"`
+	VerifiedAt   *time.Time `json:"verifiedAt" db:"verified_at"`
+	CreatedAt    time.Time  `json:"createdAt" db:"created_at"`
+	UpdatedAt    time.Time  `json:"updatedAt" db:"updated_at"`
+}
+
+// Validate applies the rules of AuthUser from schema.lidza.
+func (v AuthUser) Validate() error {
+	var errs validate.Errors
+	return errs.Result()
+}
+
+// AuthIdentity is a row of the auth_identity table.
+type AuthIdentity struct {
+	ID              string    `json:"id" db:"id"`
+	Provider        string    `json:"provider" db:"provider"`
+	ProviderSubject string    `json:"providerSubject" db:"provider_subject"`
+	Subject         string    `json:"subject" db:"subject"`
+	Email           *string   `json:"email" db:"email"`
+	Name            *string   `json:"name" db:"name"`
+	CreatedAt       time.Time `json:"createdAt" db:"created_at"`
+	LastUsedAt      time.Time `json:"lastUsedAt" db:"last_used_at"`
+}
+
+// Validate applies the rules of AuthIdentity from schema.lidza.
+func (v AuthIdentity) Validate() error {
+	var errs validate.Errors
+	if v.Provider == "" {
+		errs.Add("provider", "required", "required")
+	}
+	if v.ProviderSubject == "" {
+		errs.Add("providerSubject", "required", "required")
+	}
+	if v.Subject == "" {
+		errs.Add("subject", "required", "required")
+	}
+	return errs.Result()
+}
+
 // CreateNote is an API type.
 type CreateNote struct {
 	Title string  `json:"title"`

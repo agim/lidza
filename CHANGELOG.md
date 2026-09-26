@@ -4,10 +4,29 @@ Releases are git tags; `go install github.com/agim/lidza/cmd/lidza@<tag>`
 installs that CLI, and `lidza version` prints it. Apps depend on the same
 version in `go.mod`. `install.sh` pins the newest release here;
 `scripts/release.sh vX.Y.Z` turns "Unreleased" into a release, bumps the
-pin, tags and pushes.
+pin, tags and pushes. A change that breaks an app built on an earlier
+release is listed first under its version as "Breaking:", with what to
+change; every release so far is additive (an app updates with
+`lidza update --migrate`).
 
 ## Unreleased
 
+- Sign-in: `auth.Mount(r, auth.Options{})` serves registration, login,
+  logout, session, email verification, password reset and change on the
+  pack's own `auth_user` table, and sign-in providers from
+  `AUTH_PROVIDERS`: Google, GitHub, Microsoft and any OIDC issuer with
+  discovery (authorization code with PKCE, the nonce and the issuer's
+  keys checked), identities linked to accounts in `auth_identity`, an
+  identity with a vouched-for email joining the local account of that
+  address. The generated client carries the routes (`api.authLogin`
+  and the rest: the inspector reads a mounted pack's routes). The admin
+  pages hold the provider credentials ("Sign-in providers") and the
+  Users page shows how each account signs in. Rule L013 flags OAuth and
+  OIDC client libraries. Recipe "Add sign-in".
+- Compatibility: additive. An app with its own users table keeps calling
+  `Login`, `Require` and `Optional` unchanged; the two new tables arrive
+  as a migration with `lidza update --migrate` and stay empty until the
+  app mounts the sign-in.
 - Container image: the runtime stage copies `mail/`, `admin/` and the
   sealed credentials next to the binary, so templated mail, the admin
   theme and `config/credentials.yml.enc` work in a container;

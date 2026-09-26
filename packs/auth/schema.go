@@ -38,3 +38,32 @@ const TokenTable = `CREATE TABLE IF NOT EXISTS auth_token (
 );
 CREATE INDEX IF NOT EXISTS auth_token_purpose_idx ON auth_token (purpose);
 CREATE INDEX IF NOT EXISTS auth_token_subject_idx ON auth_token (subject);`
+
+// UserTable is the DDL of the pack's own users (model AuthUser, table
+// auth_user): the accounts Mount registers and signs in. An app with its
+// own users table does not use it. Tests create it directly.
+const UserTable = `CREATE TABLE IF NOT EXISTS auth_user (
+  subject text PRIMARY KEY,
+  email text UNIQUE,
+  name text,
+  password_hash text,
+  verified_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);`
+
+// IdentityTable is the DDL of the sign-in identities (model
+// AuthIdentity, table auth_identity): one row per provider account
+// linked to a subject. Tests create it directly.
+const IdentityTable = `CREATE TABLE IF NOT EXISTS auth_identity (
+  id text PRIMARY KEY,
+  provider text NOT NULL,
+  provider_subject text NOT NULL,
+  subject text NOT NULL,
+  email text,
+  name text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  last_used_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS auth_identity_provider_idx ON auth_identity (provider);
+CREATE INDEX IF NOT EXISTS auth_identity_subject_idx ON auth_identity (subject);`

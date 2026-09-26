@@ -296,6 +296,50 @@ backed by Postgres. Needs the `db` pack (`lidza pack add db`).
    Regenerate with `--force` to reset it.
 5. `lidza check`, then `lidza test`.
 
+### Add sign-in
+
+Give the app accounts through the auth pack's own sign-in: email and
+password by default, sign-in providers (Google, GitHub, Microsoft, any
+OIDC issuer) when configured. The app writes no login handler and no
+OAuth flow.
+
+1. `lidza pack add auth` (MCP: `lidza_pack_add`; needs `db`, and `mail`
+   for the verification and reset links). In `routes.go`:
+   `auth.Mount(r, auth.Options{Title: "{{.Name}}"})`. `lidza gen` then
+   writes the client: `api.authRegister`, `authLogin`, `authLogout`,
+   `authSession`, `authMe`, `authVerify`, `authForgot`, `authReset`,
+   `authPassword`, `authProviders`. Accounts live in `auth_user`; the
+   app's rows carry the user's id, `auth.CurrentUser(ctx).ID` (recipe
+   "Scope a query to the signed-in user").
+2. Pages: the sign-in page calls `api.authLogin({ email, password })`
+   and shows a 401 as "wrong email or password" and `err.fields` from a
+   422; registration calls `api.authRegister`; the app shell reads
+   `api.authSession()` once (`user` is null for a visitor). Render one
+   button per entry of `api.authProviders()` as a plain link to its
+   `url` (add `?redirect=/path` to land elsewhere than `/`); the callback
+   sets the cookies and redirects, or lands on `/login?error=...`. The
+   pages `/verify` and `/reset` read `?token=` and call `authVerify` or
+   `authReset`.
+3. Providers: `AUTH_PROVIDERS=google,github` in `.env` or on the admin
+   pages (section "Sign-in providers"); the client id and secret in the
+   credentials: `lidza credentials set AUTH_GOOGLE_CLIENT_ID=...
+   AUTH_GOOGLE_CLIENT_SECRET=...`. Register the callback
+   `<APP_URL>/api/v1/auth/google/callback` with the provider. Microsoft
+   takes `AUTH_MICROSOFT_TENANT`; another OIDC issuer takes
+   `AUTH_<NAME>_ISSUER` (and `AUTH_<NAME>_LABEL`). An identity whose
+   email the provider vouches for joins the local account of that
+   address; the admin Users page shows how each account signs in.
+   Options: `NoRegister` (invite-only; `auth.From(ctx).CreateUser` adds
+   accounts), `NoLocal` (providers only), `RequireVerified`, `Claims`
+   (roles into the token), `AfterSignIn`.
+4. Emails: with the mail pack the links go out as plain text, or
+   through `mail/auth_verify.txt.tmpl` and `mail/auth_reset.txt.tmpl`
+   when the app has them (Data: `App`, `Link`, `Email`, `Name`).
+5. Test: `lidzatest.Start`, `POST /api/v1/auth/register`, then a scoped
+   route with the cookies the reply set. The providers are tested by the
+   framework (against an OIDC issuer in a test server), not by the app.
+   `lidza check`, then `lidza test`.
+
 ### Scope a query to the signed-in user
 
 Make a resource answer only with the rows its user may see: the
@@ -926,6 +970,8 @@ scrape `/metrics`. Production settings: `LIDZA_MODE` unset,
 | Variable | Meaning | Default |
 |---|---|---|
 | `LIDZA_ADDR` | listen address (ignored when TLS is on) | `127.0.0.1:3000` |
+| `AUTH_PROVIDERS` | sign-in providers `auth.Mount` serves: `google`, `github`, `microsoft`, or a name with `AUTH_<NAME>_ISSUER`; each with `AUTH_<NAME>_CLIENT_ID` and `AUTH_<NAME>_CLIENT_SECRET` in the credentials | unset |
+| `APP_URL` | the public origin: mail links and the providers' callback URL | from `LIDZA_TLS_DOMAINS`, else the request |
 | `LIDZA_TLS_DOMAINS` | domains to serve over HTTPS with Let's Encrypt certificates; the first is the public name (`APP_URL` when unset; `AUTH_COOKIE_SECURE` becomes true) | unset (plain HTTP) |
 | `LIDZA_TLS_EMAIL` | ACME account contact | unset |
 | `LIDZA_TLS_ADDR`, `LIDZA_TLS_HTTP_ADDR` | the HTTPS and HTTP (redirect) listen addresses | `:443`, `:80` |

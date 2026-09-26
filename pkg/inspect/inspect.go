@@ -68,6 +68,8 @@ type Route struct {
 	// Typed marks routes registered with router.Route; their schemas are
 	// in Context.Operations.
 	Typed bool `json:"typed,omitempty"`
+	// Pack names the framework pack whose Mount registered the route.
+	Pack string `json:"pack,omitempty"`
 }
 
 // Handler describes the function behind a route.
@@ -130,11 +132,19 @@ func Project(dir string, cfg *config.Config) (*Context, error) {
 		return nil, err
 	}
 	if c.App.Module != "" {
-		ops, defs, warnings, err := typedRoutes(abs, lidzaSchema, c.App.Module)
+		ops, packRaw, defs, warnings, err := typedRoutes(abs, lidzaSchema, c.App.Module)
 		if err != nil {
 			return nil, err
 		}
 		c.Operations, c.Schemas, c.Warnings = ops, defs, warnings
+		// A mounted pack's routes join the listing: the typed ones from
+		// the operations, the raw ones as scanned.
+		for _, op := range ops {
+			if op.Pack != "" {
+				c.Routes = append(c.Routes, Route{Method: op.Method, Path: op.Path, Pattern: op.Method + " " + op.Path, Handler: op.Handler, Typed: true, Pack: op.Pack})
+			}
+		}
+		c.Routes = append(c.Routes, packRaw...)
 	}
 	if c.Operations == nil {
 		c.Operations = []Operation{}

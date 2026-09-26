@@ -250,6 +250,50 @@ backed by Postgres. Needs the `db` pack (`lidza pack add db`).
    Regenerate with `--force` to reset it.
 5. `lidza check`, then `lidza test`.
 
+### Add sign-in
+
+Give the app accounts through the auth pack's own sign-in: email and
+password by default, sign-in providers (Google, GitHub, Microsoft, any
+OIDC issuer) when configured. The app writes no login handler and no
+OAuth flow.
+
+1. `lidza pack add auth` (MCP: `lidza_pack_add`; needs `db`, and `mail`
+   for the verification and reset links). In `routes.go`:
+   `auth.Mount(r, auth.Options{Title: "notes"})`. `lidza gen` then
+   writes the client: `api.authRegister`, `authLogin`, `authLogout`,
+   `authSession`, `authMe`, `authVerify`, `authForgot`, `authReset`,
+   `authPassword`, `authProviders`. Accounts live in `auth_user`; the
+   app's rows carry the user's id, `auth.CurrentUser(ctx).ID` (recipe
+   "Scope a query to the signed-in user").
+2. Pages: the sign-in page calls `api.authLogin({ email, password })`
+   and shows a 401 as "wrong email or password" and `err.fields` from a
+   422; registration calls `api.authRegister`; the app shell reads
+   `api.authSession()` once (`user` is null for a visitor). Render one
+   button per entry of `api.authProviders()` as a plain link to its
+   `url` (add `?redirect=/path` to land elsewhere than `/`); the callback
+   sets the cookies and redirects, or lands on `/login?error=...`. The
+   pages `/verify` and `/reset` read `?token=` and call `authVerify` or
+   `authReset`.
+3. Providers: `AUTH_PROVIDERS=google,github` in `.env` or on the admin
+   pages (section "Sign-in providers"); the client id and secret in the
+   credentials: `lidza credentials set AUTH_GOOGLE_CLIENT_ID=...
+   AUTH_GOOGLE_CLIENT_SECRET=...`. Register the callback
+   `<APP_URL>/api/v1/auth/google/callback` with the provider. Microsoft
+   takes `AUTH_MICROSOFT_TENANT`; another OIDC issuer takes
+   `AUTH_<NAME>_ISSUER` (and `AUTH_<NAME>_LABEL`). An identity whose
+   email the provider vouches for joins the local account of that
+   address; the admin Users page shows how each account signs in.
+   Options: `NoRegister` (invite-only; `auth.From(ctx).CreateUser` adds
+   accounts), `NoLocal` (providers only), `RequireVerified`, `Claims`
+   (roles into the token), `AfterSignIn`.
+4. Emails: with the mail pack the links go out as plain text, or
+   through `mail/auth_verify.txt.tmpl` and `mail/auth_reset.txt.tmpl`
+   when the app has them (Data: `App`, `Link`, `Email`, `Name`).
+5. Test: `lidzatest.Start`, `POST /api/v1/auth/register`, then a scoped
+   route with the cookies the reply set. The providers are tested by the
+   framework (against an OIDC issuer in a test server), not by the app.
+   `lidza check`, then `lidza test`.
+
 ### Scope a query to the signed-in user
 
 Make a resource answer only with the rows its user may see: the
@@ -516,7 +560,11 @@ pack, with the app deciding who may read them.
    ...)` behind the same access check as the note, read the body up to
    a limit (`http.MaxBytesReader`), and store it under a key that names
    the owner and the row: `notes/<id>/attachment`. Keep the key in a
-   column of the row.
+   column of the row. The generated client calls it with the file as
+   the raw body: `api.uploadAttachment({ id }, { body: file })` (the
+   File's type becomes the Content-Type; `contentType` overrides it);
+   no hand-written `fetch`. A list that takes filters reads them with
+   `req.Query("q")` and the client sends them as `{ query: { q, limit } }`.
 3. Read it back through the app (`storage.Handler` or a handler that
    checks access and streams `Get`), or hand the browser a
    `PresignGet` URL for a minute; never a permanent public URL for a

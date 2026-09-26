@@ -105,6 +105,36 @@ pub struct AuthAccount {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AuthUser {
+    pub subject: String,
+    pub email: Option<String>,
+    pub name: Option<String>,
+    #[serde(rename = "passwordHash")]
+    pub password_hash: Option<String>,
+    #[serde(rename = "verifiedAt")]
+    pub verified_at: Option<String>,
+    #[serde(rename = "createdAt")]
+    pub created_at: String,
+    #[serde(rename = "updatedAt")]
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AuthIdentity {
+    pub id: String,
+    pub provider: String,
+    #[serde(rename = "providerSubject")]
+    pub provider_subject: String,
+    pub subject: String,
+    pub email: Option<String>,
+    pub name: Option<String>,
+    #[serde(rename = "createdAt")]
+    pub created_at: String,
+    #[serde(rename = "lastUsedAt")]
+    pub last_used_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CreateNote {
     pub title: String,
     pub body: Option<String>,

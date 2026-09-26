@@ -83,3 +83,26 @@ CREATE TABLE auth_account (
   last_seen_at timestamptz NOT NULL DEFAULT now()
 );
 
+CREATE TABLE auth_user (
+  subject text PRIMARY KEY,
+  email text UNIQUE,
+  name text,
+  password_hash text,
+  verified_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE auth_identity (
+  id text PRIMARY KEY,
+  provider text NOT NULL,
+  provider_subject text NOT NULL,
+  subject text NOT NULL,
+  email text,
+  name text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  last_used_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX auth_identity_provider_idx ON auth_identity (provider);
+CREATE INDEX auth_identity_subject_idx ON auth_identity (subject);
+

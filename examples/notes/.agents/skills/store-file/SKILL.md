@@ -19,7 +19,11 @@ pack, with the app deciding who may read them.
    ...)` behind the same access check as the note, read the body up to
    a limit (`http.MaxBytesReader`), and store it under a key that names
    the owner and the row: `notes/<id>/attachment`. Keep the key in a
-   column of the row.
+   column of the row. The generated client calls it with the file as
+   the raw body: `api.uploadAttachment({ id }, { body: file })` (the
+   File's type becomes the Content-Type; `contentType` overrides it);
+   no hand-written `fetch`. A list that takes filters reads them with
+   `req.Query("q")` and the client sends them as `{ query: { q, limit } }`.
 3. Read it back through the app (`storage.Handler` or a handler that
    checks access and streams `Get`), or hand the browser a
    `PresignGet` URL for a minute; never a permanent public URL for a

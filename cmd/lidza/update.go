@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/agim/lidza/pkg/version"
 )
@@ -73,7 +74,16 @@ func runUpdate(ctx context.Context, args []string) error {
 	} else {
 		fmt.Printf("[update] go get %s@%s (was %s)\n", version.ModulePath, target, have)
 		if err := run(ctx, abs, "go", "get", version.ModulePath+"@"+target); err != nil {
-			return errors.New("update: go get failed")
+			// The proxy may not have indexed a fresh tag yet: straight
+			// from the repository, then.
+			fmt.Println("[update] the module proxy does not know the release yet; fetching from the repository")
+			get := exec.CommandContext(ctx, "go", "get", version.ModulePath+"@"+target)
+			get.Dir = abs
+			get.Env = append(os.Environ(), "GOPROXY=direct", "GONOSUMDB="+version.ModulePath)
+			get.Stdout, get.Stderr = os.Stdout, os.Stderr
+			if err := get.Run(); err != nil {
+				return errors.New("update: go get failed")
+			}
 		}
 		if err := run(ctx, abs, "go", "mod", "tidy"); err != nil {
 			return errors.New("update: go mod tidy failed")
@@ -109,16 +119,33 @@ func runUpdate(ctx context.Context, args []string) error {
 	return nil
 }
 
-// latestVersion asks the module proxy for the newest release.
+// latestVersion asks the repository's tags for the newest release, and
+// the module proxy when the repository is unreachable: the proxy caches
+// its version list for up to half an hour, so a tag cut minutes ago is
+// missing there while an explicit version is fetched on demand.
 func latestVersion(ctx context.Context) (string, error) {
-	cmd := exec.CommandContext(ctx, "go", "list", "-m", "-versions", version.ModulePath+"@latest")
-	cmd.Env = append(os.Environ(), "GOFLAGS=-mod=mod")
-	cmd.Dir = os.TempDir()
-	out, err := cmd.Output()
-	if err != nil {
-		return "", fmt.Errorf("update: cannot list releases of %s (network?): %v", version.ModulePath, err)
+	var lastErr error
+	for _, proxy := range []string{"direct", ""} {
+		lctx, cancel := context.WithTimeout(ctx, 45*time.Second)
+		cmd := exec.CommandContext(lctx, "go", "list", "-m", "-versions", version.ModulePath+"@latest")
+		cmd.Env = append(os.Environ(), "GOFLAGS=-mod=mod")
+		if proxy != "" {
+			cmd.Env = append(cmd.Env, "GOPROXY="+proxy, "GONOSUMDB="+version.ModulePath)
+		}
+		cmd.Dir = os.TempDir()
+		out, err := cmd.Output()
+		cancel()
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		if v, err := newestOf(string(out)); err == nil {
+			return v, nil
+		} else {
+			lastErr = err
+		}
 	}
-	return newestOf(string(out))
+	return "", fmt.Errorf("update: cannot list releases of %s (network?): %v", version.ModulePath, lastErr)
 }
 
 // newestOf picks the newest release from `go list -m -versions` output

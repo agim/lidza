@@ -6,6 +6,13 @@ version in `go.mod`. `install.sh` pins the newest release here;
 `scripts/release.sh vX.Y.Z` turns "Unreleased" into a release, bumps the
 pin, tags and pushes.
 
+## Unreleased
+
+- `lidza update` reads the newest release from the repository's tags
+  first; the module proxy's cached list lagged a fresh tag by up to half
+  an hour. `go get` of a release the proxy has not indexed falls back to
+  the repository.
+
 ## v0.1.16 (2026-09-26)
 
 - `lidza mcp` refreshes its lists while it runs: the pack tools follow

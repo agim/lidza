@@ -9,7 +9,7 @@ release is listed first under its version as "Breaking:", with what to
 change; every release so far is additive (an app updates with
 `lidza update --migrate`).
 
-## Unreleased
+## v0.1.25 (2026-09-26)
 
 - The brief can be skipped, whole or per question. In `lidza brief`,
   Enter still asks again later; `s` skips a question for good and `S`

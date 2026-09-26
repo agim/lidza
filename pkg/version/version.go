@@ -22,12 +22,27 @@ func String() string {
 		return Version
 	}
 	if info, ok := debug.ReadBuildInfo(); ok {
+		// Inside an app's binary the main module is the app; the framework
+		// is a dependency, so its version is read from there.
+		if info.Main.Path != ModulePath {
+			for _, d := range info.Deps {
+				if d.Path == ModulePath {
+					if d.Replace != nil {
+						return "dev (" + d.Replace.Path + ")"
+					}
+					return d.Version
+				}
+			}
+		}
 		if v := info.Main.Version; v != "" && v != "(devel)" {
 			return v
 		}
 	}
 	return "dev"
 }
+
+// ModulePath is the framework's module path.
+const ModulePath = "github.com/agim/lidza"
 
 // Module returns the version of the framework module to fetch for an app
 // created by this build (`go get github.com/agim/lidza@<Module>`): the

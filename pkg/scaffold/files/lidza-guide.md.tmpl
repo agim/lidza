@@ -52,6 +52,7 @@ app is always at one address: http://127.0.0.1:3000.
 | `lidza context` | writes `.lidza/context.json`: routes, handler signatures, Rust exports. |
 | `lidza mcp` | MCP server on stdio; see "Agent interface". |
 | `lidza gen resource <Model>` | queries, `Create/Update/<Model>List` types, `handlers/<table>.go` with list, get, create, patch, delete under `/api/v1/<plural>`, registered in `routes.go`. Needs the `db` pack. |
+| `lidza update [--migrate]` | moves the CLI and this app's framework module to the newest release together, regenerates, and names pending migrations. |
 | `lidza pack add <name>` | enables an official pack: `db`, `auth`, `jobs`, `mail`, `llm`, `storage`, `cache`, `i18n`, `realtime`, `analytics`, `geo`, `media`. |
 | `lidza credentials set NAME=value` | seals a secret into `config/credentials.yml.enc` with `config/master.key`; `list`, `show`, `unset`, `edit`, `init`. |
 | `lidza test [go test flags]` | creates and migrates the `.env.test` database, runs `go test ./...` with `LIDZA_MODE=test`, then the frontend check. |

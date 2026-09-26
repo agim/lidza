@@ -29,6 +29,7 @@ Usage:
   lidza test [go test flags] | lidza test --e2e [--install]
   lidza verify [--json] [--no-test] | lidza verify --install-hook
   lidza doctor
+  lidza update [--to vX.Y.Z] [--cli-only] [--migrate]
   lidza context [--dir .] [--stdout]
   lidza api [package] [--filter name] [--list]
   lidza snippet [name]
@@ -57,6 +58,7 @@ Commands:
   api      print the framework's public Go API as the project resolves it (one package, or all that app code imports)
   recipe   add one of this app's conventions to docs/lidza-guide.md as a recipe (prompt, skills, command), or list the recipes
   credentials the app's secrets, sealed in config/credentials.yml.enc with config/master.key; every pack reads them like .env
+  update   the CLI to the newest release and, in a project, the module to the same version: go get, tidy, Dockerfile pin, lidza gen, a note on pending migrations
   decision record why the app is built a way (a pack, Rust, a dependency, a schema tradeoff) in docs/decisions.md, or list the decisions
   snippet  print a file of the reference app (examples/notes): auth routes, an owned resource, a page, tests, a tool
   mcp      serve routes, context, diagnostics, dev logs, the API and the guide's recipes over MCP on stdio
@@ -105,6 +107,8 @@ func main() {
 		err = runAPI(ctx, args)
 	case "snippet":
 		err = runSnippet(ctx, args)
+	case "update":
+		err = runUpdate(ctx, args)
 	case "credentials":
 		err = runCredentials(ctx, args)
 	case "decision":

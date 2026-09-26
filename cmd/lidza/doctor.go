@@ -13,6 +13,7 @@ import (
 
 	"github.com/agim/lidza/pkg/env"
 	"github.com/agim/lidza/pkg/pack"
+	"github.com/agim/lidza/pkg/version"
 )
 
 // runDoctor reports the toolchain, the services and, inside a project,
@@ -85,6 +86,16 @@ func runDoctor(ctx context.Context, args []string) error {
 	abs, cfg, err := loadProject(*dir)
 	if err == nil && cfg != nil {
 		fmt.Printf("Project %s:\n", cfg.Name)
+		if mod, err := moduleVersion(ctx, abs); err == nil {
+			switch {
+			case strings.Contains(mod, "=>"):
+				note("framework module: " + mod)
+			case mod == version.String():
+				ok("framework module " + mod + " matches the CLI")
+			default:
+				todo("framework module "+mod+", CLI "+version.String(), "lidza update (both to the newest release) or lidza update --to "+mod)
+			}
+		}
 		if cfg.Frontend.Dist != "" {
 			if _, err := os.Stat(filepath.Join(abs, "node_modules")); err == nil {
 				ok("node_modules")

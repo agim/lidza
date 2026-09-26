@@ -220,6 +220,21 @@ through the pre-commit hook. `lidza setup` does the same on an existing
 app and is safe to rerun. When the app is ready for a server, `lidza
 ship` runs verify, the browser suite and the production build in one go.
 
+## Upgrade
+
+```sh
+lidza update             # the CLI to the newest release, and the project to the same one
+lidza update --migrate   # also apply the migrations the release brings
+```
+
+In a project it runs `go get` and `go mod tidy` for the framework module,
+rewrites the Dockerfile's pin, regenerates with the new CLI (pack tables
+that changed become a migration; the guide and the skills refresh), and
+says when a migration waits. `lidza update --cli-only` leaves the
+project alone; `--to v0.1.9` picks a release. `lidza doctor` reports when
+the CLI and the project's module differ. What changed is in the
+framework's `CHANGELOG.md`.
+
 ## Resources
 
 With the `db` pack enabled, `lidza gen resource Post` turns a model into a

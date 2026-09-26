@@ -6,6 +6,14 @@ version in `go.mod`. `install.sh` pins the newest release here;
 `scripts/release.sh vX.Y.Z` turns "Unreleased" into a release, bumps the
 pin, tags and pushes.
 
+## Unreleased
+
+- `lidza update [--to vX.Y.Z] [--cli-only] [--migrate]`: the CLI to the
+  newest release and, in a project, the framework module to the same
+  version (`go get`, `go mod tidy`, the Dockerfile pin, `lidza gen`), with
+  a note when migrations wait. `lidza doctor` reports a CLI that differs
+  from the project's module.
+
 ## v0.1.10 (2026-09-26)
 
 - `lidza version` and the version an app shows (`/api/v1/health`, the

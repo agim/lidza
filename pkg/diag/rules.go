@@ -32,7 +32,10 @@ import (
 //     the llm pack speaks those APIs already, with structured output,
 //     tools, retries and a fake for tests;
 //   - L008: an import of an object-storage SDK; the storage pack speaks
-//     the S3 API already, with a local provider for tests.
+//     the S3 API already, with a local provider for tests;
+//   - L009: a file written to the local disk (os.WriteFile, os.Create,
+//     os.OpenFile, os.MkdirAll); a node's disk is neither shared nor
+//     kept, so uploads and generated files go through the storage pack.
 //
 // Except for L004 the findings are warnings: they point at the pattern,
 // the author decides. A comment "lidza:ignore L001" on the line, or the
@@ -149,7 +152,33 @@ func checkFile(fset *token.FileSet, f *ast.File, rel, moduleDir string) []Diagno
 			})
 		}
 	}
+	ast.Inspect(f, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		if fn := diskWrite(call); fn != "" {
+			warn(call.Pos(), "L009", "os."+fn+" writes to this node's disk, which is neither shared with other nodes nor kept across deploys: keep uploads and generated files in the storage pack (`lidza pack add storage`; storage.From(ctx).Put), a directory in development and S3-compatible storage in production")
+		}
+		return true
+	})
 	return out
+}
+
+// diskWrite names the os function a call writes files with, or "".
+func diskWrite(call *ast.CallExpr) string {
+	sel, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok {
+		return ""
+	}
+	if pkg, ok := sel.X.(*ast.Ident); !ok || pkg.Name != "os" {
+		return ""
+	}
+	switch sel.Sel.Name {
+	case "WriteFile", "Create", "OpenFile", "MkdirAll", "Mkdir", "CreateTemp", "MkdirTemp":
+		return sel.Sel.Name
+	}
+	return ""
 }
 
 // mutableCollection reports whether a var spec declares a map or slice,

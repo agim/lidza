@@ -18,6 +18,7 @@ import (
 	"github.com/agim/lidza/packs/db"
 	"github.com/agim/lidza/packs/llm"
 	"github.com/agim/lidza/packs/mail"
+	"github.com/agim/lidza/packs/storage"
 	"github.com/agim/lidza/pkg/config"
 	"github.com/agim/lidza/pkg/engine"
 	"github.com/agim/lidza/pkg/env"
@@ -194,6 +195,41 @@ func addPackTools(s *server.MCPServer, dir string, cfg *config.Config) {
 				return jsonResult(map[string]any{"days": days, "calls": n, "input": in, "output": out, "byDay": rows, "recent": calls})
 			})
 		}
+	}
+	if slices.Contains(cfg.Packs, pack.OfficialPrefix+"storage") {
+		s.AddTool(mcp.NewTool("lidza_storage",
+			mcp.WithDescription("What the storage pack holds, with the app's configuration (.env and the credentials: STORAGE_PROVIDER local or s3): the objects under a prefix, or one object's size and type. Use it to check an upload landed where the handler put it. Files never go to the local disk by hand (lidza check L009); they go through storage.From(ctx)."),
+			mcp.WithString("prefix", mcp.Description("List the objects whose key starts with this (\"\" for everything).")),
+			mcp.WithString("key", mcp.Description("Describe this one object instead of listing.")),
+			mcp.WithNumber("limit", mcp.Description("How many to list (default 50)."), mcp.DefaultNumber(50)),
+		), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			var scfg storage.Config
+			if err := env.Load(dir, &scfg); err != nil {
+				return mcp.NewToolResultErrorFromErr("storage", err), nil
+			}
+			if scfg.Provider == "" || scfg.Provider == "local" {
+				scfg.Provider = "local"
+				if !filepath.IsAbs(scfg.Dir) {
+					scfg.Dir = filepath.Join(dir, scfg.Dir)
+				}
+			}
+			st, err := storage.New(scfg)
+			if err != nil {
+				return mcp.NewToolResultErrorFromErr("storage", err), nil
+			}
+			if key := req.GetString("key", ""); key != "" {
+				obj, err := st.Stat(ctx, key)
+				if err != nil {
+					return mcp.NewToolResultErrorFromErr("storage", err), nil
+				}
+				return jsonResult(map[string]any{"provider": st.Provider(), "object": obj})
+			}
+			objs, err := st.List(ctx, req.GetString("prefix", ""), req.GetInt("limit", 50))
+			if err != nil {
+				return mcp.NewToolResultErrorFromErr("storage", err), nil
+			}
+			return jsonResult(map[string]any{"provider": st.Provider(), "count": len(objs), "objects": objs})
+		})
 	}
 	if slices.Contains(cfg.Packs, pack.OfficialPrefix+"mail") && slices.Contains(cfg.Packs, pack.OfficialPrefix+"db") {
 		s.AddTool(mcp.NewTool("lidza_mail",

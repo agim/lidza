@@ -6,6 +6,13 @@ version in `go.mod`. `install.sh` pins the newest release here;
 `scripts/release.sh vX.Y.Z` turns "Unreleased" into a release, bumps the
 pin, tags and pushes.
 
+## Unreleased
+
+- Rule L009: a file written to the local disk (`os.WriteFile`,
+  `os.Create`, `os.OpenFile`, `os.MkdirAll`) is flagged; uploads and
+  generated files go through the storage pack. The MCP tool
+  `lidza_storage` lists and describes stored objects.
+
 ## v0.1.11 (2026-09-26)
 
 - `lidza update [--to vX.Y.Z] [--cli-only] [--migrate]`: the CLI to the

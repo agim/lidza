@@ -789,8 +789,10 @@ Official Go packs, configured from `.env` (see `.env.example` after
   private objects through the app. Providers: `s3` (AWS S3, MinIO, R2,
   B2, Wasabi, Spaces: `STORAGE_BUCKET`, `STORAGE_ENDPOINT`, the keys in
   the credentials) and `local` (a directory, for development and tests).
-  Never import a storage SDK (`lidza check` L008). Recipe: "Store a
-  file".
+  Never import a storage SDK (`lidza check` L008) and never write an
+  upload or a generated file to the local disk (`os.WriteFile`, L009):
+  a node's disk is neither shared nor kept. The MCP tool `lidza_storage`
+  lists what is stored. Recipe: "Store a file".
 - `admin`: `admin.Mount(r, admin.Options{Title: "{{.Name}}"})` serves
   the admin pages at `/admin` for `ADMIN_USERS` (see "Admin pages").
 - `analytics` (opt-in): server errors are captured on their own; register

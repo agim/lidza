@@ -199,7 +199,7 @@ var Officials = []Official{
 			"store: obj, err := storage.From(ctx).Put(ctx, \"avatars/\"+id+\".png\", r, storage.PutOptions{}) (content type detected); Get, Stat, List, Delete",
 			"browsers: PresignGet(ctx, key, ttl) for a private object, PresignPut for a direct upload, URL(key) with STORAGE_PUBLIC_URL; or mount storage.Handler(\"/api/v1/files/\") behind auth.Require()",
 			"tests: STORAGE_PROVIDER=local and STORAGE_DIR under a temporary directory; nothing leaves the machine",
-			"never import a vendor SDK (lidza check L008): the pack speaks the S3 API directly",
+			"never import a vendor SDK (lidza check L008) and never write files to the local disk (os.WriteFile, L009): the pack keeps them; agents: the MCP tool lidza_storage lists what is stored",
 		},
 	},
 	{

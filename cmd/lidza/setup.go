@@ -272,7 +272,13 @@ func setup(ctx context.Context, dir string, cfg *config.Config, opt setupOptions
 			if res, err := run("rev-parse", "HEAD"); err != nil || len(res) == 0 {
 				if _, err := run("add", "-A"); err == nil {
 					if res, err := run("commit", "-q", "-m", "Scaffold "+cfg.Name); err != nil {
-						problem("first commit not made (the pre-commit hook runs lidza verify): %s", tail(strings.TrimSpace(string(res)), 15))
+						if strings.Contains(string(res), "tell me who you are") || strings.Contains(string(res), "empty ident") {
+							// Not the app's problem: git has no author on this
+							// machine (a fresh CI runner, a new laptop).
+							step("first commit not made: git has no author identity here; git config --global user.name \"Your Name\" and user.email, then git commit -m \"Scaffold %s\"", cfg.Name)
+						} else {
+							problem("first commit not made (the pre-commit hook runs lidza verify): %s", tail(strings.TrimSpace(string(res)), 15))
+						}
 					} else {
 						step("first commit made; lidza verify ran in the pre-commit hook")
 					}

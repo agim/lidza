@@ -9,6 +9,14 @@ release is listed first under its version as "Breaking:", with what to
 change; every release so far is additive (an app updates with
 `lidza update --migrate`).
 
+## Unreleased
+
+- `lidza setup`: a machine without a git author (a fresh CI runner, a new
+  laptop) gets a note with the `git config` command instead of a failed
+  setup; v0.1.22 counted the missing first commit as a problem and exited
+  with an error there. A first commit that `lidza verify` refuses is
+  still a problem.
+
 ## v0.1.22 (2026-09-26)
 
 - macOS: `lidza setup` (and `lidza new --packs`) writes the address where

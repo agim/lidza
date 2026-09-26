@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 
+	"golang.org/x/term"
+
 	"github.com/agim/lidza/pkg/brief"
 )
 
@@ -178,10 +180,10 @@ func printBriefResult(out io.Writer, res brief.Result) {
 	}
 }
 
-// isTerminal reports whether f is an interactive terminal.
+// isTerminal reports whether f is an interactive terminal (not /dev/null,
+// which is a character device too, nor a pipe).
 func isTerminal(f *os.File) bool {
-	st, err := f.Stat()
-	return err == nil && st.Mode()&os.ModeCharDevice != 0
+	return term.IsTerminal(int(f.Fd()))
 }
 
 // runNote is `lidza note add "..."`: a lasting fact for the team, in the

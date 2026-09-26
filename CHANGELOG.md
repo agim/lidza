@@ -9,7 +9,7 @@ release is listed first under its version as "Breaking:", with what to
 change; every release so far is additive (an app updates with
 `lidza update --migrate`).
 
-## Unreleased
+## v0.1.24 (2026-09-26)
 
 - The brief: every app has `docs/brief.md`, about thirty questions in
   eight areas (product, data, accounts, design, content, services,

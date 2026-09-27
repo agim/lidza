@@ -125,3 +125,15 @@ func TestInterview(t *testing.T) {
 		t.Fatalf("out of range: %q", got)
 	}
 }
+
+// lidza admin add and remove edit ADMIN_USERS without duplicates, in
+// any case, keeping the order.
+func TestAdminList(t *testing.T) {
+	list := editList([]string{"a@x.io"}, []string{"B@x.io", "A@X.io", " "}, true)
+	if strings.Join(list, ",") != "a@x.io,B@x.io" {
+		t.Fatalf("add: %v", list)
+	}
+	if list = editList(list, []string{"a@X.io"}, false); strings.Join(list, ",") != "B@x.io" {
+		t.Fatalf("remove: %v", list)
+	}
+}

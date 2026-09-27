@@ -36,6 +36,7 @@ Usage:
   lidza recipe add "<title>" [--description ...] [--step ...] | lidza recipe list
   lidza decision add "<title>" --why "..." [--touches ...] | lidza decision list
   lidza credentials init | set NAME=value ... | unset NAME ... | list | show NAME | edit
+  lidza admin add EMAIL... | remove EMAIL... | list
   lidza mcp [--dir .]
   lidza version
 
@@ -58,6 +59,7 @@ Commands:
   api      print the framework's public Go API as the project resolves it (one package, or all that app code imports)
   recipe   add one of this app's conventions to docs/lidza-guide.md as a recipe (prompt, skills, command), or list the recipes
   credentials the app's secrets, sealed in config/credentials.yml.enc with config/master.key; every pack reads them like .env
+  admin    who may open the admin pages besides the first account: ADMIN_USERS in the credentials, read within seconds
   update   the CLI to the newest release and, in a project, the module to the same version: go get, tidy, Dockerfile pin, lidza gen, a note on pending migrations
   decision record why the app is built a way (a pack, Rust, a dependency, a schema tradeoff) in docs/decisions.md, or list the decisions
   brief    the kickoff interview: what the app is for, who owns the data, the design, the services, the working agreements; answers go to docs/brief.md and where they act
@@ -113,6 +115,8 @@ func main() {
 		err = runUpdate(ctx, args)
 	case "credentials":
 		err = runCredentials(ctx, args)
+	case "admin":
+		err = runAdmin(ctx, args)
 	case "decision":
 		err = runDecision(ctx, args)
 	case "brief":

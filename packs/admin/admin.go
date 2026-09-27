@@ -521,7 +521,9 @@ func (h *Handler) renderWith(w http.ResponseWriter, r *http.Request, status int,
 
 // denied is the page a signed-in user who is not an admin gets.
 func (h *Handler) denied(w http.ResponseWriter, r *http.Request) {
-	h.renderStatus(w, r, http.StatusForbidden, "denied", "Not an admin", map[string]any{"Env": EnvAdminUsers})
+	// In development the first account is often a test's or a
+	// screenshot script's, so the page says how to add yourself.
+	h.renderStatus(w, r, http.StatusForbidden, "denied", "Not an admin", map[string]any{"Env": EnvAdminUsers, "Dev": env.Mode() == "dev"})
 }
 
 func humanBytes(n int64) string {

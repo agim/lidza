@@ -11,6 +11,7 @@
         <div class="mb-3 text-secondary">{{icon "lock"}}</div>
         <h1 class="h2 mb-2">This account is not an admin</h1>
         <p class="text-secondary">{{if .User}}You are signed in as <strong>{{.User}}</strong>. {{end}}An admin adds you on the Users page, or lists you in <code>{{.Data.Env}}</code> (ids or emails).</p>
+        {{if .Data.Dev}}<p class="text-secondary">In development, the first account to sign in (the automatic admin) may be one a test or a script created. From the project: <code>lidza admin add {{or .User "you@example.com"}}</code>, then reload.</p>{{end}}
         <div class="d-flex justify-content-center gap-2 mt-4">
           <a href="/" class="btn">{{icon "arrow-left"}} Back to the app</a>
           {{if .SignOut}}<button type="button" class="btn btn-primary" data-admin-signout="{{.SignOut}}">{{icon "logout"}} Sign out</button>{{end}}

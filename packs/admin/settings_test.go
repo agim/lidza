@@ -85,6 +85,13 @@ func TestDeniedPage(t *testing.T) {
 	if code != http.StatusForbidden || !strings.Contains(body, "not an admin") || !strings.Contains(body, EnvAdminUsers) || strings.Contains(body, `href="/admin/mail"`) {
 		t.Fatalf("denied: %d %s", code, body)
 	}
+	if strings.Contains(body, "lidza admin add") {
+		t.Fatal("the development hint outside development")
+	}
+	t.Setenv("LIDZA_MODE", "dev")
+	if _, body := get(t, srv, "/admin/mail/settings"); !strings.Contains(body, "lidza admin add") {
+		t.Fatalf("no development hint: %s", body)
+	}
 }
 
 // The Credentials page: one section at a time, the fields for the

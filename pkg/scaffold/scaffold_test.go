@@ -240,3 +240,27 @@ func TestRefreshTracksEnvTest(t *testing.T) {
 		t.Fatalf("gitignore: %q", data)
 	}
 }
+
+// Refresh adds the packs' test settings an older .env.test lacks, once.
+func TestRefreshTestEnv(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "demo")
+	if err := New(context.Background(), Options{Name: "demo", Dir: dir, LidzaDir: "../..", SkipModTidy: true}); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Packs = []string{"lidza/db", "lidza/cache", "lidza/auth", "lidza/analytics"}
+	p := filepath.Join(dir, ".env.test")
+	os.WriteFile(p, []byte("DATABASE_URL=postgres:///demo_test\n"), 0o644)
+	for i := 0; i < 2; i++ {
+		if _, err := Refresh(dir, cfg); err != nil {
+			t.Fatal(err)
+		}
+	}
+	data, _ := os.ReadFile(p)
+	if string(data) != "DATABASE_URL=postgres:///demo_test\nCACHE_URL=memory\n" {
+		t.Fatalf(".env.test: %q", data)
+	}
+}

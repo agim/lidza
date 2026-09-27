@@ -285,16 +285,23 @@ func Refresh(dir string, cfg *config.Config) ([]string, error) {
 			changed = append(changed, name+" (DATABASE_URL now "+to+")")
 		}
 	}
-	// Tests run without Redis: the cache pack's in-memory store in
-	// .env.test (apps set up before setup wrote it).
-	if slices.Contains(cfg.Packs, "lidza/cache") {
-		p := filepath.Join(dir, ".env.test")
-		if data, err := os.ReadFile(p); err == nil && !strings.Contains(string(data), "CACHE_URL=") {
-			next := strings.TrimRight(string(data), "\n") + "\nCACHE_URL=memory\n"
+	// The test settings the packs need (TestEnv), added to an .env.test
+	// written before they existed.
+	p := filepath.Join(dir, ".env.test")
+	if data, err := os.ReadFile(p); err == nil {
+		var add []string
+		for _, line := range TestEnv(cfg.Packs) {
+			key, _, _ := strings.Cut(line, "=")
+			if !envHasKey(string(data), key) {
+				add = append(add, line)
+			}
+		}
+		if len(add) > 0 {
+			next := strings.TrimRight(string(data), "\n") + "\n" + strings.Join(add, "\n") + "\n"
 			if err := os.WriteFile(p, []byte(next), 0o644); err != nil {
 				return nil, err
 			}
-			changed = append(changed, ".env.test (CACHE_URL=memory)")
+			changed = append(changed, ".env.test ("+strings.Join(add, ", ")+")")
 		}
 	}
 	// .env.test holds no secrets and the tests need it: an ignore list
@@ -535,4 +542,41 @@ func ignoresEnvTest(gitignore string) bool {
 		}
 	}
 	return ignored
+}
+
+// TestEnv are the .env.test lines the enabled packs need: the cache in
+// memory, so tests run without Redis.
+func TestEnv(packs []string) []string {
+	var out []string
+	if slices.Contains(packs, "lidza/cache") {
+		out = append(out, "CACHE_URL=memory")
+	}
+	return out
+}
+
+// E2EEnv are settings the browser suite runs the app with, on top of
+// .env.test: sign-in and analytics limits it does not hit, since every
+// account it signs up comes from one address. The Go tests keep the
+// real limits, so a test of the throttle still sees it.
+func E2EEnv(packs []string) []string {
+	var out []string
+	if slices.Contains(packs, "lidza/auth") {
+		out = append(out, "AUTH_LOGIN_RPS=100", "AUTH_LOGIN_BURST=1000")
+	}
+	if slices.Contains(packs, "lidza/analytics") {
+		out = append(out, "ANALYTICS_CLIENT_RPS=1000")
+	}
+	return out
+}
+
+// envHasKey reports whether an env file sets key (commented lines do
+// not count).
+func envHasKey(data, key string) bool {
+	for _, line := range strings.Split(data, "\n") {
+		line = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "export "))
+		if k, _, ok := strings.Cut(line, "="); ok && strings.TrimSpace(k) == key {
+			return true
+		}
+	}
+	return false
 }

@@ -24,6 +24,7 @@ import (
 	"github.com/agim/lidza/pkg/devserver"
 	"github.com/agim/lidza/pkg/env"
 	"github.com/agim/lidza/pkg/pack"
+	"github.com/agim/lidza/pkg/scaffold"
 )
 
 // setupOptions is what `lidza setup` and `lidza new --packs` do after the
@@ -175,9 +176,10 @@ func setup(ctx context.Context, dir string, cfg *config.Config, opt setupOptions
 		if hasMail {
 			b.WriteString("MAIL_PROVIDER=outbox\n")
 		}
-		if slices.Contains(cfg.Packs, pack.OfficialPrefix+"cache") {
-			// Tests run without Redis: the cache pack's in-memory store.
-			b.WriteString("CACHE_URL=memory\n")
+		// The packs' test settings: the cache in memory, limits a browser
+		// suite signing up from one address does not hit.
+		for _, line := range scaffold.TestEnv(cfg.Packs) {
+			b.WriteString(line + "\n")
 		}
 		if err := os.WriteFile(filepath.Join(dir, ".env.test"), []byte(b.String()), 0o644); err != nil {
 			return err

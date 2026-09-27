@@ -9,12 +9,14 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/agim/lidza/packs/db"
 	"github.com/agim/lidza/pkg/config"
 	"github.com/agim/lidza/pkg/devserver"
 	"github.com/agim/lidza/pkg/env"
+	"github.com/agim/lidza/pkg/scaffold"
 	"github.com/agim/lidza/pkg/pack"
 )
 
@@ -151,6 +153,14 @@ func runE2E(ctx context.Context, dir string, cfg *config.Config, install bool, e
 	app := exec.CommandContext(ctx, bin)
 	app.Dir = dir
 	app.Env = append(os.Environ(), devserver.EnvMode+"=test", devserver.EnvAddr+"="+addr)
+	// Limits a browser suite signing everyone up from 127.0.0.1 does not
+	// hit, unless .env.test or the environment sets its own.
+	set, _ := env.Values(dir)
+	for _, line := range scaffold.E2EEnv(cfg.Packs) {
+		if k, _, _ := strings.Cut(line, "="); set[k] == "" {
+			app.Env = append(app.Env, line)
+		}
+	}
 	app.Stdout = os.Stdout
 	app.Stderr = os.Stderr
 	if err := app.Start(); err != nil {

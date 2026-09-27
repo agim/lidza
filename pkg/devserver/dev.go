@@ -32,6 +32,26 @@ type Options struct {
 	// Watch lists extra files or directories, relative to the project
 	// root, whose change triggers a rebuild besides the Go sources.
 	Watch []string
+	// Rewatch, when set, is called after every build for the new list of
+	// extra files (lidza.json may have gained a pack whose sources are
+	// now watched); it replaces Watch.
+	Rewatch func() []string
+}
+
+// RestartFile, under the project, restarts the app under `lidza dev`
+// without a rebuild when its modification time changes. `lidza db
+// migrate` and `rollback` touch it (RequestRestart), so the app does not
+// keep running against the schema it started with.
+var RestartFile = filepath.Join(BuildDir, "restart")
+
+// RequestRestart asks a `lidza dev` running in dir to restart the app. It
+// is a no-op in effect when none runs.
+func RequestRestart(dir string) error {
+	p := filepath.Join(dir, RestartFile)
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(p, []byte(time.Now().Format(time.RFC3339Nano)+"\n"), 0o644)
 }
 
 // Environment the app binary reads, in dev (set by `lidza dev`) and in
@@ -116,6 +136,7 @@ func Dev(ctx context.Context, cfg *config.Config, opt Options) error {
 
 	w := newWatcher(cfg.Dir, opt.Watch...)
 	w.scan()
+	restart := restartStamp(cfg.Dir)
 	ticker := time.NewTicker(opt.Poll)
 	defer ticker.Stop()
 	for {
@@ -124,6 +145,20 @@ func Dev(ctx context.Context, cfg *config.Config, opt Options) error {
 			logf("stopping")
 			return nil
 		case <-ticker.C:
+			if stamp := restartStamp(cfg.Dir); !stamp.Equal(restart) {
+				restart = stamp
+				// A running app restarts; one whose build failed waits for
+				// the next change.
+				if app.p != nil {
+					app.stop()
+					if err := app.start(); err != nil {
+						logf("restart failed: %v", err)
+					} else {
+						logf("restarted (the database changed)")
+					}
+				}
+				continue
+			}
 			if !w.scan() {
 				continue
 			}
@@ -133,6 +168,9 @@ func Dev(ctx context.Context, cfg *config.Config, opt Options) error {
 				continue
 			}
 			afterBuild()
+			if opt.Rewatch != nil {
+				w = newWatcher(cfg.Dir, opt.Rewatch()...)
+			}
 			// Generators may have written Go files; record them so they do
 			// not count as a second change.
 			w.scan()
@@ -144,6 +182,13 @@ func Dev(ctx context.Context, cfg *config.Config, opt Options) error {
 			}
 		}
 	}
+}
+
+func restartStamp(dir string) time.Time {
+	if info, err := os.Stat(filepath.Join(dir, RestartFile)); err == nil {
+		return info.ModTime()
+	}
+	return time.Time{}
 }
 
 // appProcess is the app binary under `lidza dev`: built into .lidza/app and
@@ -311,4 +356,19 @@ func (w *watcher) scan() bool {
 	}
 	w.mtime = seen
 	return changed && !first
+}
+
+// NewestSource is the latest modification time of the Go sources in dir
+// (*.go, go.mod, go.sum), skipping what the dev watcher skips. `lidza mcp`
+// compares it with its app build to rebuild a stale one.
+func NewestSource(dir string) time.Time {
+	w := newWatcher(dir)
+	w.scan()
+	var newest time.Time
+	for _, t := range w.mtime {
+		if t.After(newest) {
+			newest = t
+		}
+	}
+	return newest
 }

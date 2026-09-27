@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/agim/lidza/packs/db"
+	"github.com/agim/lidza/pkg/devserver"
 	"github.com/agim/lidza/pkg/env"
 )
 
@@ -57,6 +58,10 @@ func runDB(ctx context.Context, args []string) error {
 		for _, name := range applied {
 			fmt.Println("applied", name)
 		}
+		if len(applied) > 0 {
+			// A lidza dev running here restarts the app on the new schema.
+			devserver.RequestRestart(abs)
+		}
 	case "rollback":
 		reverted, err := db.Rollback(ctx, pool, migrations, *steps)
 		if err != nil {
@@ -67,6 +72,9 @@ func runDB(ctx context.Context, args []string) error {
 		}
 		for _, name := range reverted {
 			fmt.Println("reverted", name)
+		}
+		if len(reverted) > 0 {
+			devserver.RequestRestart(abs)
 		}
 	case "status":
 		status, err := db.Status(ctx, pool, migrations)

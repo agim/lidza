@@ -72,3 +72,25 @@ func TestWatcher(t *testing.T) {
 		t.Fatal("new file in watched dir not reported")
 	}
 }
+
+// lidza db migrate asks a running lidza dev to restart through a stamp
+// file; each request moves the stamp.
+func TestRequestRestart(t *testing.T) {
+	dir := t.TempDir()
+	if !restartStamp(dir).IsZero() {
+		t.Fatal("stamp without a request")
+	}
+	if err := RequestRestart(dir); err != nil {
+		t.Fatal(err)
+	}
+	first := restartStamp(dir)
+	if first.IsZero() {
+		t.Fatal("no stamp after a request")
+	}
+	past := first.Add(-time.Minute)
+	os.Chtimes(filepath.Join(dir, RestartFile), past, past)
+	RequestRestart(dir)
+	if restartStamp(dir).Equal(past) {
+		t.Fatal("a second request did not move the stamp")
+	}
+}

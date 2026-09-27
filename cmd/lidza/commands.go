@@ -104,11 +104,22 @@ func runDev(ctx context.Context, args []string) error {
 	}
 	defer logFile.Close()
 	out := io.MultiWriter(os.Stdout, logFile)
+	// lidza.json is read again before every build: a pack added or
+	// scaffolded while dev runs is generated into packs.go and watched.
+	watch := func() []string {
+		return append(append([]string{schema.FileName, config.FileName}, cfg.Frontend.Watch...), packWatch(cfg)...)
+	}
 	return devserver.Dev(ctx, cfg, devserver.Options{
-		Addr:  *addr,
-		Out:   out,
-		Watch: append(append([]string{schema.FileName}, cfg.Frontend.Watch...), packWatch(cfg)...),
+		Addr:    *addr,
+		Out:     out,
+		Watch:   watch(),
+		Rewatch: watch,
 		BeforeBuild: func() error {
+			if fresh, err := config.Load(cfg.Dir); err != nil {
+				fmt.Fprintf(out, "[lidza] lidza.json: %v (keeping the previous one)\n", err)
+			} else {
+				cfg = fresh
+			}
 			if err := generateSchema(cfg.Dir, out); err != nil {
 				return err
 			}

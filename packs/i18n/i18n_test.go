@@ -84,6 +84,17 @@ func TestI18n(t *testing.T) {
 		t.Fatal("default")
 	}
 
+	// NegotiateLocale gives the frontend build the same choice; empty
+	// before the catalogs are loaded.
+	req = httptest.NewRequest("GET", "/", nil)
+	req.AddCookie(&http.Cookie{Name: "lang", Value: "de"})
+	if got := i.NegotiateLocale(req); got != "de" {
+		t.Fatalf("NegotiateLocale: %q", got)
+	}
+	if got := Pack(locales).(*I18n).NegotiateLocale(req); got != "" {
+		t.Fatalf("NegotiateLocale before start: %q", got)
+	}
+
 	s := lidza.NewServices()
 	lidza.Provide(s, i)
 	mux := http.NewServeMux()

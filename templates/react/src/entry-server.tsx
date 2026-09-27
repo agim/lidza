@@ -8,7 +8,8 @@
 // The result is the whole page: the template with the app's markup in
 // #root and, before </body>, the router's hydration payload (the loader
 // data of the rendered matches), so the client does not run the loaders
-// again at hydration.
+// again at hydration. With locales/<lang>.json the page is rendered in
+// options.locale and carries <html lang> and that catalog (src/i18n.ts).
 import { StrictMode } from 'react'
 import { renderToString } from 'react-dom/server'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -17,12 +18,17 @@ import { RouterServer } from '@tanstack/react-router/ssr/server'
 import { createRequestHandler, renderSsrHtmlResponse } from '@tanstack/router-core/ssr/server'
 import { configure } from '@lidza/client'
 import { createAppRouter } from './router'
+import { loadLocale, localizePage } from './i18n'
+
+export { locales } from './i18n'
 
 export interface RenderOptions {
   headers?: Record<string, string>
   apiBase?: string
   /** The built index.html; its `<div id="root"></div>` receives the markup. */
   template: string
+  /** The locale to render in (locales/<lang>.json); the default when absent. */
+  locale?: string
 }
 
 const marker = '<div id="root"></div>'
@@ -35,8 +41,9 @@ export async function render(path: string, options: RenderOptions): Promise<stri
     if (value) forwarded[name] = value
   }
   configure({ baseUrl: options.apiBase ?? '', headers: forwarded })
+  await loadLocale(options.locale)
   // The router injects "<!DOCTYPE html>" itself; the template's own is dropped.
-  const template = options.template.replace(/^\s*<!doctype html>\s*/i, '')
+  const template = localizePage(options.template.replace(/^\s*<!doctype html>\s*/i, ''))
   const request = new Request('http://localhost' + path, { headers: forwarded })
   const handler = createRequestHandler({ request, createRouter: () => createAppRouter() })
   const response = await handler(({ router, responseHeaders }) =>
@@ -61,6 +68,13 @@ export async function render(path: string, options: RenderOptions): Promise<stri
   )
   if (response.status >= 500) throw new Error(`render ${path}: ${response.status}`)
   return await response.text()
+}
+
+// renderShell is the template in a locale, without markup: the page for
+// the paths that are not prerendered, rendered in the browser.
+export async function renderShell(template: string, locale: string): Promise<string> {
+  await loadLocale(locale)
+  return localizePage(template)
 }
 
 // staticPaths lists the routes without parameters.

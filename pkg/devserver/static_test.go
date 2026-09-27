@@ -41,3 +41,106 @@ func TestStaticShell(t *testing.T) {
 		t.Fatalf("fallback without shell: %d %s", code, body)
 	}
 }
+
+// A build with a page per locale serves the visitor's: ?lang, the lang
+// cookie, Accept-Language, then the manifest's default.
+func TestStaticLocales(t *testing.T) {
+	dist := fstest.MapFS{
+		"index.html":                   {Data: []byte("home en")},
+		"about/index.html":             {Data: []byte("about en")},
+		".server/index.html":           {Data: []byte("shell")},
+		".locales/manifest.json":       {Data: []byte(`{"default":"en","locales":["en","sq","pt-BR"]}`)},
+		".locales/en/index.html":       {Data: []byte("home en")},
+		".locales/en/about/index.html": {Data: []byte("about en")},
+		".locales/en/shell.html":       {Data: []byte("shell en")},
+		".locales/sq/index.html":       {Data: []byte("home sq")},
+		".locales/sq/about/index.html": {Data: []byte("about sq")},
+		".locales/sq/shell.html":       {Data: []byte("shell sq")},
+		".locales/pt-BR/index.html":    {Data: []byte("home pt-BR")},
+		"assets/app.js":                {Data: []byte("js")},
+	}
+	get := func(h http.Handler, target string, header ...string) (string, string) {
+		req := httptest.NewRequest(http.MethodGet, target, nil)
+		for i := 0; i+1 < len(header); i += 2 {
+			req.Header.Set(header[i], header[i+1])
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Code != 200 {
+			t.Fatalf("%s: %d", target, rec.Code)
+		}
+		return rec.Body.String(), rec.Header().Get("Vary")
+	}
+	h := Static(dist)
+	cases := []struct {
+		target string
+		header []string
+		want   string
+	}{
+		{"/", nil, "home en"},
+		{"/", []string{"Accept-Language", "sq-AL,en;q=0.5"}, "home sq"},
+		{"/about", []string{"Accept-Language", "de, sq;q=0.9, en;q=0.8"}, "about sq"},
+		{"/about", []string{"Accept-Language", "en;q=0.2, sq;q=0.9"}, "about sq"},
+		{"/about", []string{"Accept-Language", "sq;q=0, en"}, "about en"},
+		{"/about?lang=sq", []string{"Accept-Language", "en"}, "about sq"},
+		{"/about", []string{"Cookie", "lang=sq", "Accept-Language", "en"}, "about sq"},
+		{"/about", []string{"Accept-Language", "ja"}, "about en"},
+		{"/", []string{"Accept-Language", "pt"}, "home pt-BR"},
+		// No variant of the page in that locale: its shell.
+		{"/posts/42", []string{"Accept-Language", "sq"}, "shell sq"},
+		{"/posts/42", nil, "shell en"},
+		// pt-BR has no shell: the plain one.
+		{"/posts/42", []string{"Accept-Language", "pt-BR"}, "shell"},
+	}
+	for _, c := range cases {
+		body, vary := get(h, c.target, c.header...)
+		if body != c.want {
+			t.Errorf("%s %v: %q, want %q", c.target, c.header, body, c.want)
+		}
+		if c.want != "shell" && vary != "Accept-Language, Cookie" {
+			t.Errorf("%s: Vary %q", c.target, vary)
+		}
+	}
+	if body, vary := get(h, "/assets/app.js", "Accept-Language", "sq"); body != "js" || vary != "" {
+		t.Errorf("asset: %q, Vary %q", body, vary)
+	}
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/.locales/sq/index.html", nil))
+	if rec.Code != 404 {
+		t.Errorf("variant served by path: %d", rec.Code)
+	}
+
+	// The i18n pack's negotiation wins; an empty answer (not started) falls
+	// back to the built-in one.
+	pack := Static(dist, WithLocale(func(*http.Request) string { return "sq" }))
+	if body, _ := get(pack, "/about", "Accept-Language", "en"); body != "about sq" {
+		t.Errorf("WithLocale: %q", body)
+	}
+	unstarted := Static(dist, WithLocale(func(*http.Request) string { return "" }))
+	if body, _ := get(unstarted, "/about", "Accept-Language", "sq"); body != "about sq" {
+		t.Errorf("WithLocale empty: %q", body)
+	}
+
+	// Without a manifest (an app without locales) the build is served as
+	// before and nothing varies.
+	delete(dist, ".locales/manifest.json")
+	plain := Static(dist)
+	if body, vary := get(plain, "/about", "Accept-Language", "sq"); body != "about en" || vary != "" {
+		t.Errorf("no manifest: %q, Vary %q", body, vary)
+	}
+	if body, vary := get(plain, "/posts/42", "Accept-Language", "sq"); body != "shell" || vary != "" {
+		t.Errorf("no manifest, shell: %q, Vary %q", body, vary)
+	}
+
+	// The svelte template keeps no shell: the locale's one page serves
+	// every path.
+	svelte := fstest.MapFS{
+		"index.html":             {Data: []byte("app en")},
+		".locales/manifest.json": {Data: []byte(`{"default":"en","locales":["en","sq"]}`)},
+		".locales/en/index.html": {Data: []byte("app en")},
+		".locales/sq/index.html": {Data: []byte("app sq")},
+	}
+	if body, _ := get(Static(svelte), "/anything", "Accept-Language", "sq"); body != "app sq" {
+		t.Errorf("svelte: %q", body)
+	}
+}

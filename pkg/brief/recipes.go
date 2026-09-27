@@ -31,7 +31,7 @@ func seedRecipe(dir, id, answer string) (string, error) {
 			"Read the Design section of `" + File + "` (palette, typography, mood, themes, languages); the tokens are in `src/index.css` (`bg-brand`, `text-ink`, `bg-surface`, `border-line`).",
 			"Use the tokens, never raw colours or a stock blue; status colours (green, yellow, red) only for status.",
 			"Every list gets a loading skeleton, an empty state with an action and a keyboard path; motion stays under 300 ms and respects `prefers-reduced-motion`.",
-			"Strings go through the i18n pack when the brief names more than one language.",
+			"Strings go through the i18n pack when the brief names more than one language: `t('key')` from `src/i18n.ts` in pages, `i18n.From(ctx).T` in handlers, every key in each `locales/<lang>.json`.",
 			"Check both themes when the brief asks for light and dark, and a phone width.",
 			"`lidza check` (accessibility is enforced), then `lidza test --e2e`.",
 		}

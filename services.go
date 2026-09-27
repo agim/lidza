@@ -26,6 +26,13 @@ type Middlewarer interface {
 	Middleware() middleware.Middleware
 }
 
+// LocaleNegotiator is implemented by packs that pick a request's locale,
+// such as i18n: the embedded build serves the page prerendered in that
+// locale (dist/.locales). It returns "" before the pack has started.
+type LocaleNegotiator interface {
+	NegotiateLocale(r *http.Request) string
+}
+
 // Services holds what packs and OnStart provide, keyed by static type, and
 // hands it to handlers through the request context. It is filled at start
 // and read-only afterwards.

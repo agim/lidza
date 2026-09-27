@@ -39,6 +39,7 @@ type Sidecar struct {
 	proc     *proc
 	client   *http.Client
 	timeout  time.Duration
+	locales  *locales
 }
 
 // HasSidecar reports whether dist carries the sidecar files.
@@ -52,8 +53,10 @@ func HasSidecar(dist fs.FS) bool {
 }
 
 // NewSidecar prepares a sidecar for dist. apiBase is the app's own
-// address, where loaders reach the API during a render.
-func NewSidecar(dist fs.FS, apiBase string, log *slog.Logger) (*Sidecar, error) {
+// address, where loaders reach the API during a render. When the build
+// has a page per locale (dist/.locales), each render is asked for the
+// request's locale, negotiated as Static does.
+func NewSidecar(dist fs.FS, apiBase string, log *slog.Logger, opts ...Option) (*Sidecar, error) {
 	if !HasSidecar(dist) {
 		return nil, fmt.Errorf("dist has no %s/ssr-server.mjs and entry-server.js (build with the react template's `npm run build`)", SSRDir)
 	}
@@ -64,7 +67,7 @@ func NewSidecar(dist fs.FS, apiBase string, log *slog.Logger) (*Sidecar, error) 
 	if err != nil {
 		return nil, err
 	}
-	return &Sidecar{dist: dist, log: log, apiBase: apiBase, template: tpl, timeout: 3 * time.Second}, nil
+	return &Sidecar{dist: dist, log: log, apiBase: apiBase, template: tpl, timeout: 3 * time.Second, locales: loadLocales(dist, collect(opts).locale)}, nil
 }
 
 // Start extracts the bundle to a temporary directory and starts node.
@@ -74,21 +77,24 @@ func (s *Sidecar) Start(ctx context.Context) error {
 		return err
 	}
 	s.dir = dir
-	entries, err := fs.ReadDir(s.dist, SSRDir)
-	if err != nil {
-		return err
-	}
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		data, err := fs.ReadFile(s.dist, path.Join(SSRDir, e.Name()))
+	// The bundle may be split into chunks (a lazily imported catalog or
+	// page) under subdirectories: copy the whole tree.
+	err = fs.WalkDir(s.dist, SSRDir, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		if err := os.WriteFile(filepath.Join(dir, e.Name()), data, 0o644); err != nil {
+		target := filepath.Join(dir, filepath.FromSlash(strings.TrimPrefix(strings.TrimPrefix(p, SSRDir), "/")))
+		if d.IsDir() {
+			return os.MkdirAll(target, 0o755)
+		}
+		data, err := fs.ReadFile(s.dist, p)
+		if err != nil {
 			return err
 		}
+		return os.WriteFile(target, data, 0o644)
+	})
+	if err != nil {
+		return err
 	}
 	s.socket = filepath.Join(dir, "ssr.sock")
 	cmd := exec.Command("node", filepath.Join(dir, "ssr-server.mjs"), s.socket)
@@ -169,12 +175,16 @@ func (s *Sidecar) render(r *http.Request) ([]byte, error) {
 			headers[strings.ToLower(h)] = v
 		}
 	}
-	body, _ := json.Marshal(map[string]any{"path": r.URL.RequestURI(), "headers": headers, "apiBase": s.apiBase})
+	req := map[string]any{"path": r.URL.RequestURI(), "headers": headers, "apiBase": s.apiBase}
+	if s.locales != nil {
+		req["locale"] = s.locales.pick(r)
+	}
+	body, _ := json.Marshal(req)
 	ctx, cancel := context.WithTimeout(r.Context(), s.timeout)
 	defer cancel()
-	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, "http://ssr/render", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	res, err := s.client.Do(req)
+	post, _ := http.NewRequestWithContext(ctx, http.MethodPost, "http://ssr/render", bytes.NewReader(body))
+	post.Header.Set("Content-Type", "application/json")
+	res, err := s.client.Do(post)
 	if err != nil {
 		return nil, err
 	}

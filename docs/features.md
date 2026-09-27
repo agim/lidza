@@ -31,7 +31,7 @@ does not reimplement).
 | Data binding | done | handlers publish over the `realtime` pack, `realtime.Authorize` decides per topic who may subscribe; `useLive(topics)` in the template invalidates the matching queries |
 | Session management and token auth | done | `auth` pack: argon2id, JWT access tokens, refresh sessions in Postgres, cookies or bearer, `auth.Require`; browser sessions slide (the middleware renews an expired access cookie from the refresh cookie) |
 | Job queues and background workers | done | `jobs` pack: Postgres queue, bounded workers, retries, scheduling; heavy work in a pack capability |
-| Localization | done | `i18n` pack: catalogs embedded, locale per request, numbers, currency, dates, catalog endpoint for the frontend |
+| Localization | done | `i18n` pack: catalogs embedded, locale per request, numbers, currency, dates, catalog endpoint; react and svelte pages translate with `src/i18n.ts`, prerendered once per locale and served in the visitor's, catalog in the page |
 | Mocking and stubbing | done | `lidza test` with the test database created and migrated; `lidzatest.Start` boots the app with a JSON client, a controllable clock (`lidza.Now`) and recorded or stubbed outbound HTTP (`lidza.HTTPClient`); `lidza test --e2e` runs Playwright against the built binary; `CACHE_URL=memory` |
 | Accessibility checks | done | `eslint-plugin-jsx-a11y` in the `react` template; `lidza check` reports its findings as errors |
 | State hydration and dehydration | done | react: prerendered and server-rendered pages carry the router's hydration payload (loader data, serialized by TanStack Router), `RouterClient` hydrates it, loaders do not run again; svelte: prerendered markup hydrated |

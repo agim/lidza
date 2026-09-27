@@ -299,9 +299,15 @@ func handler(app App, services *Services) (http.Handler, *devserver.Sidecar, err
 		}
 		frontend = devserver.AgentFiles(p)
 	case app.Dist != nil:
-		frontend = devserver.Static(app.Dist)
+		var opts []devserver.Option
+		for _, p := range app.Packs {
+			if n, ok := p.(LocaleNegotiator); ok {
+				opts = append(opts, devserver.WithLocale(n.NegotiateLocale))
+			}
+		}
+		frontend = devserver.Static(app.Dist, opts...)
 		if os.Getenv(devserver.EnvSSR) == "1" {
-			s, err := devserver.NewSidecar(app.Dist, "http://"+envOr(devserver.EnvAddr, "127.0.0.1:3000"), log)
+			s, err := devserver.NewSidecar(app.Dist, "http://"+envOr(devserver.EnvAddr, "127.0.0.1:3000"), log, opts...)
 			if err != nil {
 				return nil, nil, err
 			}

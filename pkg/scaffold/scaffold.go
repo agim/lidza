@@ -297,6 +297,17 @@ func Refresh(dir string, cfg *config.Config) ([]string, error) {
 			changed = append(changed, ".env.test (CACHE_URL=memory)")
 		}
 	}
+	// .env.test holds no secrets and the tests need it: an ignore list
+	// from before it was tracked gets the exception.
+	if _, err := os.Stat(filepath.Join(dir, ".env.test")); err == nil {
+		gi := filepath.Join(dir, ".gitignore")
+		if data, err := os.ReadFile(gi); err == nil && ignoresEnvTest(string(data)) {
+			if err := os.WriteFile(gi, []byte(strings.TrimRight(string(data), "\n")+"\n!.env.test\n"), 0o644); err != nil {
+				return nil, err
+			}
+			changed = append(changed, ".gitignore (!.env.test)")
+		}
+	}
 	// Apps from before the brief get it, and their agent files the
 	// working agreements and team notes.
 	if created, err := brief.Ensure(dir, cfg.Name); err != nil {
@@ -509,4 +520,19 @@ func goMinor() string {
 		v = v[:i]
 	}
 	return v
+}
+
+// ignoresEnvTest reports whether an ignore list keeps .env.test out
+// through a ".env.*" pattern without the "!.env.test" exception.
+func ignoresEnvTest(gitignore string) bool {
+	ignored := false
+	for _, line := range strings.Split(gitignore, "\n") {
+		switch strings.TrimSpace(line) {
+		case ".env.*", ".env*", ".env.test", "/.env.*", "/.env.test":
+			ignored = true
+		case "!.env.test", "!/.env.test":
+			ignored = false
+		}
+	}
+	return ignored
 }

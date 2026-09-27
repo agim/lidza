@@ -7,6 +7,7 @@ bin/
 .env
 .env.*
 !.env.example
+!.env.test
 playwright-report/
 test-results/
 config/master.key

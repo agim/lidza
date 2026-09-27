@@ -3,5 +3,6 @@ bin/
 .env
 .env.*
 !.env.example
+!.env.test
 config/master.key
 storage/

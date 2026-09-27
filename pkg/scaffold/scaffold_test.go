@@ -213,3 +213,30 @@ func TestRefreshRepairsSocket(t *testing.T) {
 		t.Fatalf("repair: %s %v", data, changed)
 	}
 }
+
+// A new app tracks .env.test; Refresh gives an older app's ignore list
+// the exception, once.
+func TestRefreshTracksEnvTest(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "demo")
+	if err := New(context.Background(), Options{Name: "demo", Dir: dir, LidzaDir: "../..", SkipModTidy: true}); err != nil {
+		t.Fatal(err)
+	}
+	gi := filepath.Join(dir, ".gitignore")
+	if data, _ := os.ReadFile(gi); ignoresEnvTest(string(data)) {
+		t.Fatalf("a new app ignores .env.test: %s", data)
+	}
+	os.WriteFile(gi, []byte("node_modules/\n.env\n.env.*\n!.env.example\n"), 0o644)
+	os.WriteFile(filepath.Join(dir, ".env.test"), []byte("CACHE_URL=memory\n"), 0o644)
+	cfg, err := config.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 2; i++ {
+		if _, err := Refresh(dir, cfg); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if data, _ := os.ReadFile(gi); string(data) != "node_modules/\n.env\n.env.*\n!.env.example\n!.env.test\n" {
+		t.Fatalf("gitignore: %q", data)
+	}
+}

@@ -991,6 +991,25 @@ call `{{"{{"}}template "admin-head" .{{"}}"}}` in `<head>`,
 `{{"{{"}}template "content" .{{"}}"}}` where the page goes). Recipes:
 "Add the admin pages", "Extend the admin pages".
 
+## Settings files
+
+Settings are read in layers, each overriding the one before: `.env`,
+then `.env.<mode>`, then the credentials, then the process environment.
+The mode is `dev` under `lidza dev`, `test` under `lidza test` and
+`production` otherwise. `.env` is shared by every mode, tests included,
+so:
+
+- a development-only setting (a real provider, a slow import, a
+  verbose log) goes in `.env.dev`, never `.env`;
+- a test setting goes in `.env.test`, which overrides `.env` (the fake
+  model, local storage, the mail outbox, `CACHE_URL=memory`).
+
+`.env` and `.env.dev` stay out of git. `.env.test` is committed: it
+holds no secrets, and the tests and CI need it. Its `DATABASE_URL`
+names this machine's Postgres socket; `lidza gen`, `dev`, `test` and
+`update` repair it on a machine that keeps the socket elsewhere, and
+CI sets its own `DATABASE_URL`.
+
 ## Secrets
 
 Anything secret (API keys, SMTP URLs, storage keys, `AUTH_SECRET` in

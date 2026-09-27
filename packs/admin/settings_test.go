@@ -237,6 +237,40 @@ func TestMultiSelector(t *testing.T) {
 	}
 }
 
+// A multi field that is not the section's selector renders as checkboxes
+// too, and saves the checked options.
+func TestMultiField(t *testing.T) {
+	sec := Section{Key: "import", Title: "Import", Fields: []Field{
+		{Name: "IMPORT_DEPARTMENTS", Label: "Departments", Kind: "multi", Options: []string{"1", "11"}, Labels: map[string]string{"1": "American Wing", "11": "European Paintings"}},
+		{Name: "IMPORT_BATCH", Label: "Batch size", Kind: "number"},
+	}}
+	dir := t.TempDir()
+	t.Setenv(credentials.EnvMasterKey, "")
+	t.Cleanup(func() { credentials.SetOverrides(nil) })
+	credentials.Generate(dir)
+	credentials.Set(dir, map[string]string{"IMPORT_DEPARTMENTS": "11"})
+	srv := serve(t, Options{Auth: noAuth, Allow: func(context.Context) bool { return true }, CredentialsDir: dir, Dir: dir, Sections: []Section{sec}}, lidza.NewServices())
+	res, err := http.Get(srv.URL + "/admin/settings")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	page := string(body)
+	if !strings.Contains(page, `name="present_IMPORT_DEPARTMENTS"`) || !strings.Contains(page, `type="checkbox" name="IMPORT_DEPARTMENTS" value="11" checked`) || !strings.Contains(page, "European Paintings") {
+		t.Fatalf("multi field not rendered as checkboxes: %s", page)
+	}
+	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	res, err = client.PostForm(srv.URL+"/admin/settings", url.Values{"section": {"import"}, "present_IMPORT_DEPARTMENTS": {"1"}, "IMPORT_DEPARTMENTS": {"1", "11"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if got := credentials.Values(dir)["IMPORT_DEPARTMENTS"]; got != "1,11" {
+		t.Fatalf("departments: %q", got)
+	}
+}
+
 // Each built-in settings list offers every provider its pack knows, so a
 // provider added to a pack cannot go missing from its page.
 func TestSettingsCoverProviders(t *testing.T) {
@@ -360,6 +394,18 @@ func TestIconsVendored(t *testing.T) {
 	for n := range names {
 		if icon(n) == "" {
 			t.Errorf("icon %q is not vendored: add it to assets/icons.txt and run assets/vendor.sh", n)
+		}
+	}
+}
+
+// num takes whatever number type a query returns.
+func TestHumanNumber(t *testing.T) {
+	for _, c := range []struct {
+		in   any
+		want string
+	}{{int32(42), "42"}, {int64(12_345_678), "12.3M"}, {12_500, "12.5k"}, {uint16(7), "7"}, {3.25, "3.2"}, {float32(2), "2"}, {-15_000, "-15.0k"}, {nil, "0"}} {
+		if got := humanNumber(c.in); got != c.want {
+			t.Errorf("num(%v) = %q, want %q", c.in, got, c.want)
 		}
 	}
 }

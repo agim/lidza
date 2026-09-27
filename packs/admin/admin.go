@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"html/template"
 	"io/fs"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -535,17 +536,56 @@ func humanBytes(n int64) string {
 	return strconv.FormatFloat(float64(n)/float64(div), 'f', 1, 64) + " " + string("KMGTPE"[exp]) + "B"
 }
 
-// humanNumber groups thousands: 12 345 678 as 12.3M.
-func humanNumber(n int64) string {
+// humanNumber shortens a count: 12 345 678 as 12.3M. It takes any
+// integer or float type, so a template can pass a query's int32 or a
+// float64 average as it comes.
+func humanNumber(v any) string {
+	var n float64
+	switch x := v.(type) {
+	case int:
+		n = float64(x)
+	case int8:
+		n = float64(x)
+	case int16:
+		n = float64(x)
+	case int32:
+		n = float64(x)
+	case int64:
+		n = float64(x)
+	case uint:
+		n = float64(x)
+	case uint8:
+		n = float64(x)
+	case uint16:
+		n = float64(x)
+	case uint32:
+		n = float64(x)
+	case uint64:
+		n = float64(x)
+	case float32:
+		n = float64(x)
+	case float64:
+		n = x
+	case nil:
+		return "0"
+	default:
+		return fmt.Sprint(v)
+	}
+	sign := ""
+	if n < 0 {
+		sign, n = "-", -n
+	}
 	switch {
 	case n >= 1_000_000_000:
-		return strconv.FormatFloat(float64(n)/1e9, 'f', 1, 64) + "B"
+		return sign + strconv.FormatFloat(n/1e9, 'f', 1, 64) + "B"
 	case n >= 1_000_000:
-		return strconv.FormatFloat(float64(n)/1e6, 'f', 1, 64) + "M"
+		return sign + strconv.FormatFloat(n/1e6, 'f', 1, 64) + "M"
 	case n >= 10_000:
-		return strconv.FormatFloat(float64(n)/1e3, 'f', 1, 64) + "k"
+		return sign + strconv.FormatFloat(n/1e3, 'f', 1, 64) + "k"
+	case n == math.Trunc(n):
+		return sign + strconv.FormatFloat(n, 'f', 0, 64)
 	}
-	return strconv.FormatInt(n, 10)
+	return sign + strconv.FormatFloat(n, 'f', 1, 64)
 }
 
 // initials are an avatar's letters: "ana@example.com" gives "AN",

@@ -76,6 +76,14 @@
     <input class="form-check-input" type="checkbox" name="clear_{{.Name}}">
     <span class="form-check-label text-secondary">Remove the stored value</span>
   </label>{{end}}
+  {{else if eq .Kind "multi"}}
+  {{$f := .}}<input type="hidden" name="present_{{.Name}}" value="1">
+  <div id="f-{{.Name}}" role="group" aria-label="{{.Label}}">
+    {{range .Opts}}<label class="form-check form-check-inline">
+      <input class="form-check-input" type="checkbox" name="{{$f.Name}}" value="{{.Value}}"{{if .Checked}} checked{{end}}{{if $f.Locked}} disabled{{end}}>
+      <span class="form-check-label">{{.Label}}{{if .Dev}} (development){{end}}</span>
+    </label>{{end}}
+  </div>
   {{else if eq .Kind "select"}}
   <select class="form-select" id="f-{{.Name}}" name="{{.Name}}"{{if .Locked}} disabled{{end}}>
     {{range .Opts}}<option value="{{.Value}}"{{if .Checked}} selected{{end}}>{{.Label}}{{if .Dev}} (development){{end}}</option>{{end}}

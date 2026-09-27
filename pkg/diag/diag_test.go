@@ -63,6 +63,13 @@ func TestDetect(t *testing.T) {
 	if l := Detect(dir); !l.Go || l.CargoDir != "core" || !l.TSConfig || l.NodeModules {
 		t.Fatalf("got %+v", l)
 	}
+	// A local pack's crate is found without a root Cargo.toml.
+	os.Remove(filepath.Join(dir, "core", "Cargo.toml"))
+	os.MkdirAll(filepath.Join(dir, "packs", "palette", "rust"), 0o755)
+	os.WriteFile(filepath.Join(dir, "packs", "palette", "rust", "Cargo.toml"), nil, 0o644)
+	if l := Detect(dir); l.CargoDir != "" || len(l.PackCrates) != 1 || l.PackCrates[0] != "packs/palette/rust" {
+		t.Fatalf("pack crate: %+v", l)
+	}
 }
 
 func TestDropSuperseded(t *testing.T) {

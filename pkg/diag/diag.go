@@ -87,6 +87,10 @@ type Layers struct {
 	// CargoDir is the directory with the Cargo.toml, relative to Dir
 	// ("." or "core"); empty when there is none.
 	CargoDir string
+	// PackCrates are the Rust crates of the app's local packs
+	// (packs/<name>/rust), relative to Dir; they build for
+	// wasm32-wasip1 and are checked for it.
+	PackCrates []string
 	// TSConfig is true when Dir has a tsconfig.json.
 	TSConfig bool
 	// NodeModules is true when Dir has node_modules.
@@ -102,6 +106,14 @@ func Detect(dir string) Layers {
 		if fileExists(filepath.Join(dir, c, "Cargo.toml")) {
 			l.CargoDir = c
 			break
+		}
+	}
+	for _, pattern := range []string{"packs/*/Cargo.toml", "packs/*/*/Cargo.toml"} {
+		matches, _ := filepath.Glob(filepath.Join(dir, filepath.FromSlash(pattern)))
+		for _, m := range matches {
+			if rel, err := filepath.Rel(dir, filepath.Dir(m)); err == nil {
+				l.PackCrates = append(l.PackCrates, filepath.ToSlash(rel))
+			}
 		}
 	}
 	l.TSConfig = fileExists(filepath.Join(dir, "tsconfig.json"))
@@ -294,17 +306,32 @@ func runStaticcheck(ctx context.Context, l Layers) ([]Diagnostic, ToolRun) {
 }
 
 func runCargo(ctx context.Context, l Layers) ([]Diagnostic, ToolRun) {
-	if l.CargoDir == "" {
+	if l.CargoDir == "" && len(l.PackCrates) == 0 {
 		return nil, skip("no Cargo.toml")
 	}
 	if !have("cargo") {
 		return nil, skip("cargo not installed")
 	}
-	dir := filepath.Join(l.Dir, l.CargoDir)
-	stdout, stderr, err := command(ctx, dir, "cargo", "check", "--quiet", "--message-format=json")
-	diags := parseCargo(l.CargoDir, stdout)
-	if err != nil && len(diags) == 0 {
-		return nil, ToolRun{Failed: true, Reason: firstLine(stderr, err)}
+	type crate struct{ dir, target string }
+	var crates []crate
+	if l.CargoDir != "" {
+		crates = append(crates, crate{l.CargoDir, ""})
+	}
+	for _, c := range l.PackCrates {
+		crates = append(crates, crate{c, "wasm32-wasip1"})
+	}
+	var diags []Diagnostic
+	for _, c := range crates {
+		args := []string{"check", "--quiet", "--message-format=json"}
+		if c.target != "" {
+			args = append(args, "--target", c.target)
+		}
+		stdout, stderr, err := command(ctx, filepath.Join(l.Dir, c.dir), "cargo", args...)
+		found := parseCargo(c.dir, stdout)
+		if err != nil && len(found) == 0 {
+			return diags, ToolRun{Failed: true, Reason: c.dir + ": " + firstLine(stderr, err)}
+		}
+		diags = append(diags, found...)
 	}
 	return diags, ToolRun{}
 }

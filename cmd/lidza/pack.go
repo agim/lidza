@@ -6,9 +6,12 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strings"
 
 	"github.com/agim/lidza/pkg/decisions"
+	"github.com/agim/lidza/pkg/inspect"
 	"github.com/agim/lidza/pkg/pack"
+	"github.com/agim/lidza/pkg/schema"
 )
 
 const packUsage = `usage:
@@ -96,6 +99,21 @@ func runPack(ctx context.Context, args []string) error {
 		names := cfg.Packs
 		if name != "" {
 			names = []string{name}
+		}
+		// Each crate's schema.rs follows schema.lidza first, so a build
+		// never compiles against yesterday's types.
+		if module := inspect.ModulePath(abs); module != "" {
+			s, err := schema.Load(abs)
+			if err != nil {
+				return err
+			}
+			changed, err := pack.Generate(abs, module, cfg.Packs, s)
+			if err != nil {
+				return fmt.Errorf("packs: %w", err)
+			}
+			if len(changed) > 0 {
+				fmt.Printf("[lidza] packs: wrote %s\n", strings.Join(changed, ", "))
+			}
 		}
 		for _, n := range names {
 			if pack.IsOfficialGo(n) {

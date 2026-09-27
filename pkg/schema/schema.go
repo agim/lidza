@@ -13,6 +13,7 @@
 //	  body      text?
 //	  status    Status   @default(draft)
 //	  authorId  uuid     @ref(User)
+//	  topicId   int?     @ref(Topic, setnull)
 //	  tags      string[]
 //	  createdAt time     @default(now())
 //	  @@index(status, createdAt)
@@ -28,7 +29,8 @@
 // text, int, bigint, float, bool, time, date, uuid, json, bytes. Field
 // attributes: @id, @unique, @index, @default(v), @ref(Model), @min(n),
 // @max(n), @email, @url, @pattern("re"). Block attributes: @@index(a, b),
-// @@unique(a, b); model attribute @table("name").
+// @@unique(a, b); model attribute @table("name"). A @ref field has the
+// type of the referenced model's id: uuid, int, bigint or string.
 package schema
 
 import (
@@ -78,7 +80,8 @@ type Field struct {
 	Index    bool
 	// Default is the literal as written: 42, true, "x", draft, uuid(), now().
 	Default string
-	// Ref is the model a uuid field references; OnDelete is what happens
+	// Ref is the model the field references (the field has the type of
+	// that model's id); OnDelete is what happens
 	// to the row when the referenced one is deleted: "cascade" (delete
 	// it), "setnull" (clear the field; it must be optional) or "" (the
 	// delete fails while the row exists).
@@ -173,7 +176,11 @@ func (s *Schema) validate() error {
 			case s.Enum(f.Type) != nil:
 			case s.Model(f.Type) != nil:
 				if m.Persisted {
-					return fmt.Errorf("line %d: %s.%s: a model field cannot have type %s; use uuid @ref(%s)", f.Line, m.Name, f.Name, f.Type, f.Type)
+					key := "uuid"
+					if id := s.Model(f.Type).IDField(); id != nil {
+						key = id.Type
+					}
+					return fmt.Errorf("line %d: %s.%s: a model field cannot have type %s; use %s @ref(%s)", f.Line, m.Name, f.Name, f.Type, key, f.Type)
 				}
 			default:
 				return fmt.Errorf("line %d: %s.%s: unknown type %s", f.Line, m.Name, f.Name, f.Type)
@@ -186,8 +193,12 @@ func (s *Schema) validate() error {
 				if f.OnDelete == "setnull" && !f.Optional {
 					return fmt.Errorf("line %d: %s.%s: @ref(%s, setnull) needs an optional field (%s?)", f.Line, m.Name, f.Name, f.Ref, f.Type)
 				}
-				if f.Type != "uuid" {
-					return fmt.Errorf("line %d: %s.%s: @ref needs type uuid", f.Line, m.Name, f.Name)
+				if f.Array {
+					return fmt.Errorf("line %d: %s.%s: @ref(%s) on an array; a foreign key holds one id (a join model holds many)", f.Line, m.Name, f.Name, f.Ref)
+				}
+				// The target's own check reports a model without an @id.
+				if id := target.IDField(); id != nil && !sameKey(f.Type, id.Type) {
+					return fmt.Errorf("line %d: %s.%s: @ref(%s) needs type %s, the type of %s.%s, not %s", f.Line, m.Name, f.Name, f.Ref, id.Type, target.Name, id.Name, f.Type)
 				}
 			}
 			if f.Default != "" {
@@ -214,6 +225,62 @@ func (s *Schema) validate() error {
 		}
 	}
 	return nil
+}
+
+// sameKey reports whether a foreign key of type field can reference an
+// id of type id: the same type, or string and text (both text columns).
+func sameKey(field, id string) bool {
+	text := func(t string) bool { return t == "string" || t == "text" }
+	return field == id || (text(field) && text(id))
+}
+
+// refOrder returns the models with every referenced model before the ones
+// that reference it (for CREATE TABLE, which needs the table a REFERENCES
+// names), or with drop, after them (for DROP TABLE); otherwise in
+// declaration order. A cycle keeps declaration order.
+func refOrder(models []*Model, drop bool) []*Model {
+	out := make([]*Model, 0, len(models))
+	seen := map[*Model]bool{}
+	// before lists the models that must come before m.
+	before := func(m *Model) []*Model {
+		var list []*Model
+		for _, o := range models {
+			if o == m {
+				continue
+			}
+			if drop {
+				for _, f := range o.Fields {
+					if f.Ref == m.Name {
+						list = append(list, o)
+						break
+					}
+				}
+				continue
+			}
+			for _, f := range m.Fields {
+				if f.Ref == o.Name {
+					list = append(list, o)
+					break
+				}
+			}
+		}
+		return list
+	}
+	var visit func(m *Model)
+	visit = func(m *Model) {
+		if seen[m] {
+			return
+		}
+		seen[m] = true
+		for _, o := range before(m) {
+			visit(o)
+		}
+		out = append(out, m)
+	}
+	for _, m := range models {
+		visit(m)
+	}
+	return out
 }
 
 func contains(list []string, s string) bool {

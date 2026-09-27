@@ -85,7 +85,8 @@ func TestParseErrors(t *testing.T) {
 		"no id":            "model A {\n x int\n}",
 		"two ids":          "model A {\n a uuid @id\n b uuid @id\n}",
 		"bad ref":          "model A {\n id uuid @id\n b uuid @ref(Nope)\n}",
-		"ref not uuid":     "model B {\n id uuid @id\n}\nmodel A {\n id uuid @id\n b int @ref(B)\n}",
+		"ref type differs": "model B {\n id uuid @id\n}\nmodel A {\n id uuid @id\n b int @ref(B)\n}",
+		"ref on array":     "model B {\n id int @id\n}\nmodel A {\n id uuid @id\n b int[] @ref(B)\n}",
 		"model in model":   "model B {\n id uuid @id\n}\nmodel A {\n id uuid @id\n b B\n}",
 		"bad default enum": "enum E { a b }\nmodel A {\n id uuid @id\n e E @default(c)\n}",
 		"email on int":     "model A {\n id uuid @id\n n int @email\n}",
@@ -467,6 +468,65 @@ model Task {
 		if _, err := Parse(bad); err == nil {
 			t.Errorf("accepted:\n%s", bad)
 		}
+	}
+}
+
+// TestRefKeyTypes: @ref takes the referenced id's type (int, bigint,
+// string, uuid), names it when the field differs, and tables are created
+// after the ones they reference and dropped before them.
+func TestRefKeyTypes(t *testing.T) {
+	s, err := Parse(`model Artwork {
+  id           uuid    @id
+  departmentId int     @ref(Department)
+  accountKey   string? @ref(Account, setnull)
+  objectId     bigint  @ref(MetObject, cascade)
+}
+model Department {
+  id   int    @id
+  name string
+}
+model Account {
+  key text @id
+}
+model MetObject {
+  id bigint @id
+}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ddl := GenerateSQL(s)
+	for _, want := range []string{
+		"department_id integer NOT NULL REFERENCES department(id)",
+		"account_key text REFERENCES account(key) ON DELETE SET NULL",
+		"object_id bigint NOT NULL REFERENCES met_object(id) ON DELETE CASCADE",
+	} {
+		if !strings.Contains(ddl, want) {
+			t.Errorf("DDL lacks %s:\n%s", want, ddl)
+		}
+	}
+	if strings.Index(ddl, "CREATE TABLE department") > strings.Index(ddl, "CREATE TABLE artwork") ||
+		strings.Index(ddl, "CREATE TABLE met_object") > strings.Index(ddl, "CREATE TABLE artwork") {
+		t.Errorf("referenced tables come first:\n%s", ddl)
+	}
+	up := strings.Join(Diff(nil, s, 1).Up, "\n")
+	if strings.Index(up, "CREATE TABLE department") > strings.Index(up, "CREATE TABLE artwork") {
+		t.Errorf("migration creates artwork before department:\n%s", up)
+	}
+	drop := strings.Join(Diff(s, &Schema{}, 2).Up, "\n")
+	if strings.Index(drop, "DROP TABLE artwork") > strings.Index(drop, "DROP TABLE department") {
+		t.Errorf("migration drops department before artwork:\n%s", drop)
+	}
+	if src := GenerateGo(s); !strings.Contains(src, "DepartmentID int `json:\"departmentId\"") || !strings.Contains(src, "ObjectID int64") {
+		t.Errorf("Go:\n%s", src)
+	}
+
+	_, err = Parse("model Department {\n  id int @id\n}\nmodel Artwork {\n  id uuid @id\n  departmentId uuid @ref(Department)\n}")
+	if err == nil || !strings.Contains(err.Error(), "Artwork.departmentId: @ref(Department) needs type int, the type of Department.id, not uuid") {
+		t.Errorf("mismatch: %v", err)
+	}
+	_, err = Parse("model Department {\n  id int @id\n}\nmodel Artwork {\n  id uuid @id\n  department Department\n}")
+	if err == nil || !strings.Contains(err.Error(), "use int @ref(Department)") {
+		t.Errorf("model-typed field: %v", err)
 	}
 }
 

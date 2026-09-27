@@ -1030,9 +1030,10 @@ union in the clients. Field types: `string`, `text`, `int`, `bigint`,
 `float`, `bool`, `time`, `date`, `uuid`, `json`, `bytes`; `?` makes a
 field optional (nullable), `[]` an array. Field attributes: `@id`,
 `@default(uuid())` / `@default(now())` / `@default(value)`, `@unique`,
-`@index`, `@ref(Model)` for a foreign key (`@ref(Model, cascade)` deletes
-the row with the referenced one, `@ref(Model, setnull)` clears an
-optional field), `@min(n)` / `@max(n)` (length or value), `@email`,
+`@index`, `@ref(Model)` for a foreign key, the field typed as the
+model's id (`departmentId int @ref(Department)` when `Department` has
+`id int @id`; `@ref(Model, cascade)` deletes the row with the
+referenced one, `@ref(Model, setnull)` clears an optional field), `@min(n)` / `@max(n)` (length or value), `@email`,
 `@url`, `@pattern("re")`. Block attributes inside a model:
 `@@unique(a, b)`, `@@index(a, b)`; `@table("name")` after the model name.
 

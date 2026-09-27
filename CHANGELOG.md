@@ -9,6 +9,28 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- Translated pages from the first paint (react and svelte templates):
+  with more than one `locales/<lang>.json`, `npm run build` prerenders
+  every page once per locale (`dist/.locales/<lang>/`, the
+  `I18N_DEFAULT` one also at the plain path). The binary serves the
+  visitor's locale, negotiated as the i18n pack does (`?lang`, the
+  `lang` cookie, `Accept-Language`), with `Vary: Accept-Language,
+  Cookie`; `LIDZA_SSR=1` renders in the same locale. The page carries
+  `<html lang>` and its catalog, so hydration matches and nothing
+  flashes in the default language.
+- New `src/i18n.ts` in the react and svelte templates: `t(key,
+  ...args)`, `locale()`, `locales()`, `setLocale(lang)` (sets the
+  `lang` cookie and reloads), over the same catalogs as the i18n pack.
+  Apps created earlier copy it, `scripts/` and the i18n lines of
+  `src/main.*` and `src/entry-server.*` from a new app.
+- `lidza.LocaleNegotiator` (implemented by the i18n pack) and
+  `devserver.WithLocale`; `devserver.Static` and `NewSidecar` take
+  options.
+- The SSR sidecar copies the whole `dist/.server` tree, so a server
+  bundle split into chunks runs.
+
 ## v0.1.27 (2026-09-27)
 
 Fixes from the Galeria sample app's report of framework gaps.

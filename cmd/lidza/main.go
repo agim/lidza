@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/agim/lidza/pkg/version"
@@ -35,7 +36,7 @@ Usage:
   lidza snippet [name]
   lidza recipe add "<title>" [--description ...] [--step ...] | lidza recipe list
   lidza decision add "<title>" --why "..." [--touches ...] | lidza decision list
-  lidza credentials init | set NAME=value ... | unset NAME ... | list | show NAME | edit
+  lidza credentials init | set NAME=value ... | unset NAME ... | list | show [NAME] | edit
   lidza admin add EMAIL... | remove EMAIL... | list
   lidza mcp [--dir .]
   lidza version
@@ -78,7 +79,13 @@ func main() {
 	defer stop()
 
 	var err error
-	switch cmd, args := os.Args[1], os.Args[2:]; cmd {
+	cmd, args := os.Args[1], os.Args[2:]
+	// "credentials:show", "db:migrate": the colon form of a subcommand,
+	// as Rails spells it, is the same command.
+	if c, sub, ok := strings.Cut(cmd, ":"); ok && c != "" && sub != "" {
+		cmd, args = c, append([]string{sub}, args...)
+	}
+	switch cmd {
 	case "new":
 		err = runNew(ctx, args)
 	case "setup":

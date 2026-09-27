@@ -32,13 +32,21 @@ func runAPI(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	if *list {
+	// Without a package or a filter, the list: rendering everything is
+	// thousands of lines an agent then carries; "all" asks for it.
+	if *list || (pkg == "" && *filter == "") {
 		text, err := apidoc.Listing(ctx, abs)
 		if err != nil {
 			return err
 		}
 		fmt.Print(text)
+		if !*list {
+			fmt.Println("\nlidza api <package> renders one; --filter name searches them all; lidza api all renders every one.")
+		}
 		return nil
+	}
+	if pkg == "all" {
+		pkg = ""
 	}
 	src, rels, err := apidoc.Resolve(ctx, abs, pkg)
 	if err != nil {

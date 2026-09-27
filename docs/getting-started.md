@@ -145,8 +145,9 @@ Three things keep an agent from inventing what is not there:
   resource `lidza://api`) prints exported functions, types and methods
   with their doc comments, rendered from the sources: the framework as
   the app depends on it (`lidza api pkg/router`), or the app's own
-  packages (`lidza api app`, `lidza api ./handlers`). `--list` names
-  both.
+  packages (`lidza api app`, `lidza api ./handlers`). Without a
+  package or `--filter` it names them all; `lidza api all` renders
+  every framework package at once.
 - `lidza check` rules: an import of a framework package that does not
   exist is an error with the closest real package (L004), as is a frontend
   import that `package.json` does not declare (L004); a hand-written

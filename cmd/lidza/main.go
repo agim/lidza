@@ -56,7 +56,7 @@ Commands:
   verify   before a commit: regenerate (generated files must be staged), check, go test; the pre-commit hook runs it
   doctor   report the toolchain, services and the project's prerequisites, each with its fix
   context  write .lidza/context.json: routes, handler signatures, Rust exports
-  api      print the framework's public Go API as the project resolves it (one package, or all that app code imports)
+  api      print the framework's public Go API as the project resolves it: the package list, one package, a --filter search, or all
   recipe   add one of this app's conventions to docs/lidza-guide.md as a recipe (prompt, skills, command), or list the recipes
   credentials the app's secrets, sealed in config/credentials.yml.enc with config/master.key; every pack reads them like .env
   admin    who may open the admin pages besides the first account: ADMIN_USERS in the credentials, read within seconds

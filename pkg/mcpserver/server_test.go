@@ -158,6 +158,14 @@ func TestAgentDocs(t *testing.T) {
 	if txt, ok := res.Contents[0].(mcp.TextResourceContents); !ok || !strings.Contains(txt.Text, "func Require(") {
 		t.Fatalf("lidza://api/packs/auth: %+v", res.Contents)
 	}
+	// Without arguments, the list, never every package rendered; a filter
+	// alone searches them all.
+	if got := call("lidza_api", nil); !strings.Contains(got, "pkg/router") || strings.Contains(got, "func Require(") || !strings.Contains(got, "with filter") {
+		t.Fatalf("lidza_api without arguments: %.500s", got)
+	}
+	if got := call("lidza_api", map[string]any{"filter": "notfound"}); !strings.Contains(got, "func NotFound(") || strings.Contains(got, "func Require(") {
+		t.Fatalf("lidza_api filter alone: %.500s", got)
+	}
 	req := mcp.CallToolRequest{}
 	req.Params.Name = "lidza_api"
 	req.Params.Arguments = map[string]any{"package": "pkg/orm"}

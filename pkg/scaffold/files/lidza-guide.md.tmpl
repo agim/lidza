@@ -94,7 +94,7 @@ agent needs no shell here. Its tools:
 | `lidza_brief` (`open_only`), `lidza_brief_answer` (`id`, `answer`), `lidza_brief_skip` (`ids`), `lidza_note_add` (`text`) | the brief: its questions with suggestions and answers, one answer recorded and applied (a decision, the working agreements, the palette, a seeded recipe); a lasting fact in the Team notes. `lidza://brief` reads `docs/brief.md` |
 | `lidza_credentials_set`, `lidza_credentials_list` | seal secrets into `config/credentials.yml.enc` by their environment names; list the names |
 | `lidza_mail`, `lidza_llm`, `lidza_llm_usage`, `lidza_storage`, `lidza_errors` | with the pack enabled: the outbox; a prompt against the configured model; token usage; stored objects; captured errors |
-| `lidza_api` | the framework's public Go API (`package`, `filter`), also the resource `lidza://api` |
+| `lidza_api` | the framework's public Go API: one `package`, or a `filter` across all; without either, the package list; also the resource `lidza://api/{package}` |
 | `lidza_snippet` | a file of the reference app, verified by its tests (`name`: `schema`, `routes`, `auth-handlers`, `resource-handlers`, `queries`, `handler-test`, `mcp-tool`, `page`, `browser-test`); also `lidza snippet` |
 | `lidza_errors` | captured errors (analytics pack) |
 
@@ -150,7 +150,10 @@ result says so while that is the case.
    carries the request id, so one request's lines are found together.
    Never `fmt.Println` in handlers.
 9. Before calling a framework function, read its signature: `lidza api
-   [package] [--filter name]` or the MCP tool `lidza_api`; `lidza api app`
+   <package> [--filter name]` or the MCP tool `lidza_api` with one
+   package (`packs/llm`), or a filter alone to search every package by
+   name; without either, the package list. Never render them all
+   (`all`): thousands of lines every later turn carries. `lidza api app`
    (or `./handlers`) does the same for this app's own packages. An import
    of a framework package that does not exist fails `lidza check` (L004).
 10. A pattern this app uses twice is a recipe: write it under "App

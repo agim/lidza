@@ -248,18 +248,19 @@ func addAPI(s *server.MCPServer, dir string) {
 		return src.Render(rels, filter)
 	}
 	s.AddTool(mcp.NewTool("lidza_api",
-		mcp.WithDescription("Public Go API with doc comments, rendered from the sources: the framework as this app depends on it, or this app's own packages. Read it before calling a function; guessing a name is how imports fail. Without arguments: every framework package app code imports (lidza, pkg/router, pkg/middleware, pkg/lidzatest, pkg/report, pkg/resilience, pkg/env, packs/*). \"app\": every package of this app. \"list\": the names of both."),
-		mcp.WithString("package", mcp.Description("A framework package as an import path or relative path (\"pkg/router\", \"packs/auth\", \"\" for the root package lidza); one of this app's as \"./handlers\" or its import path; \"app\" for all of this app's; \"list\" for the names.")),
+		mcp.WithDescription("Public Go API with doc comments, rendered from the sources: the framework as this app depends on it, or this app's own packages. Read it before calling a function; guessing a name is how imports fail. Ask for one package (\"packs/llm\"), or search every package by name with filter (\"Embed\"). Without arguments: the list of packages. \"all\" renders every framework package app code imports (thousands of lines: every later turn pays for them), \"app\" every package of this app."),
+		mcp.WithString("package", mcp.Description("A framework package as an import path or relative path (\"pkg/router\", \"packs/auth\", \"lidza\" for the root package); one of this app's as \"./handlers\" or its import path; \"app\" for all of this app's; \"all\" for every framework package; empty for the list.")),
 		mcp.WithString("filter", mcp.Description("Keep only declarations whose name contains this text (case-insensitive), e.g. \"cookie\".")),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		if req.GetString("package", "") == "list" {
+		pkg, filter := req.GetString("package", ""), req.GetString("filter", "")
+		if pkg == "list" || (pkg == "" && filter == "") {
 			text, err := apidoc.Listing(ctx, dir)
 			if err != nil {
 				return mcp.NewToolResultErrorFromErr("api", err), nil
 			}
-			return mcp.NewToolResultText(text), nil
+			return mcp.NewToolResultText(text + "\nCall lidza_api again with one package, or with filter to search them all by name.\n"), nil
 		}
-		text, err := render(ctx, req.GetString("package", ""), req.GetString("filter", ""))
+		text, err := render(ctx, apiPackage(pkg), filter)
 		if err != nil {
 			return mcp.NewToolResultErrorFromErr("api", err), nil
 		}
@@ -289,6 +290,14 @@ func addAPI(s *server.MCPServer, dir string) {
 			}
 			return []mcp.ResourceContents{mcp.TextResourceContents{URI: req.Params.URI, MIMEType: "text/markdown", Text: text}}, nil
 		})
+}
+
+// apiPackage maps "all" to apidoc.Resolve's every-package selection.
+func apiPackage(pkg string) string {
+	if pkg == "all" {
+		return ""
+	}
+	return pkg
 }
 
 // addSnippets serves the reference app's files: the tool lidza_snippet

@@ -6,9 +6,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/agim/lidza/pkg/config"
+	"github.com/agim/lidza/pkg/credentials"
+	"github.com/agim/lidza/pkg/pack"
 )
 
 // runShip is `lidza ship [--no-e2e] [--out bin/<name>]`: everything that
@@ -85,6 +88,9 @@ func runShip(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	for _, line := range productionNeeds(cfg, credentials.Values(abs)) {
+		fmt.Println("[ship] set before deploying: " + line)
+	}
 	fmt.Printf("[ship] ready: %s (%.1f MB); %s carries the deployment settings\n", bin, float64(info.Size())/(1<<20), envFile)
 	if len(cfg.Deploy.Domains) > 0 {
 		fmt.Printf("[ship] serves https://%s (ports 80 and 443; the DNS record and the master key are the operator's: docs/deploy.md)\n", cfg.Deploy.Domains[0])
@@ -125,9 +131,49 @@ func writeProductionEnv(dir string, cfg *config.Config) (string, error) {
 		b.WriteString("LIDZA_ADDR=0.0.0.0:3000\n")
 	}
 	b.WriteString("LIDZA_LOG=json\nDB_MIGRATE=true\n")
+	if needs := productionNeeds(cfg, credentials.Values(dir)); len(needs) > 0 {
+		b.WriteString("\n# The enabled packs need these, and the credentials do not hold them\n# (lidza credentials set NAME=value, the admin pages once deployed, or\n# the environment where the process runs):\n")
+		for _, line := range needs {
+			b.WriteString("# " + line + "\n")
+		}
+	}
 	p := filepath.Join(dir, "deploy", "production.env")
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 		return "", err
 	}
 	return filepath.Join("deploy", "production.env"), os.WriteFile(p, []byte(b.String()), 0o644)
+}
+
+// productionNeeds lists the settings the enabled official packs need in
+// production that sealed holds no usable value for: missing, or set to
+// a development-only value (the log mailer, the fake model).
+// DATABASE_URL is left out: the operator adds it with the master key.
+func productionNeeds(cfg *config.Config, sealed map[string]string) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, name := range cfg.Packs {
+		short, ok := strings.CutPrefix(name, pack.OfficialPrefix)
+		if !ok {
+			continue
+		}
+		for _, o := range pack.Officials {
+			if o.Name != short {
+				continue
+			}
+			for _, s := range o.Production {
+				if s.Name == "DATABASE_URL" || seen[s.Name] {
+					continue
+				}
+				seen[s.Name] = true
+				v := strings.TrimSpace(sealed[s.Name])
+				switch {
+				case v == "":
+					out = append(out, fmt.Sprintf("%s (%s): %s", s.Name, name, s.Why))
+				case slices.Contains(s.Dev, strings.ToLower(v)):
+					out = append(out, fmt.Sprintf("%s (%s) is %q, which suits development only: %s", s.Name, name, v, s.Why))
+				}
+			}
+		}
+	}
+	return out
 }

@@ -28,6 +28,19 @@ type Official struct {
 	Env []string
 	// Notes are printed after adding.
 	Notes []string
+	// Production are the settings a deployment needs; lidza ship names
+	// the ones the credentials do not hold.
+	Production []Setting
+}
+
+// Setting is one setting a pack needs in production.
+type Setting struct {
+	Name string
+	// Why says what it is, for the operator.
+	Why string
+	// Dev are values that only suit development and tests (the log
+	// mailer, the fake model); a deployment set to one is flagged too.
+	Dev []string
 }
 
 // Officials lists the packs `lidza pack add` knows.
@@ -47,6 +60,7 @@ var Officials = []Official{
 			"write SQL in db/queries/*.sql; `lidza gen` turns it into Go (db/queries/gen) with sqlc",
 			"in a handler: queries.New(db.From(ctx)).YourQuery(ctx, ...)",
 		},
+		Production: []Setting{{Name: "DATABASE_URL", Why: "the production Postgres"}},
 	},
 	{
 		Name:        "realtime",
@@ -74,6 +88,7 @@ var Officials = []Official{
 			"cache.Remember(ctx, cache.From(ctx), \"key\", ttl, load) caches a computed value",
 			"cache.From(ctx).Invalidate(ctx, \"prefix:\") after writes",
 		},
+		Production: []Setting{{Name: "CACHE_URL", Why: "a Valkey or Redis address (memory holds one node's cache only)", Dev: []string{"memory"}}},
 	},
 	{
 		Name:        "auth",
@@ -99,6 +114,7 @@ var Officials = []Official{
 			"working code: lidza snippet routes, lidza snippet auth-handlers",
 			"run `lidza gen` and `lidza db migrate`: the auth_session table comes from schema.lidza",
 		},
+		Production: []Setting{{Name: "AUTH_SECRET", Why: "a random secret of 32 bytes or more, signing sessions"}},
 	},
 	{
 		Name:        "jobs",
@@ -161,6 +177,7 @@ var Officials = []Official{
 			"never import a vendor SDK (lidza check L006): the pack speaks each API directly",
 			"run `lidza gen` and `lidza db migrate`: the mail_message table comes from schema.lidza",
 		},
+		Production: []Setting{{Name: "MAIL_PROVIDER", Why: "smtp, mailgun, sendgrid, postmark or resend, with its key", Dev: []string{"log", "outbox"}}, {Name: "MAIL_FROM", Why: "the sender address"}, {Name: "APP_URL", Why: "the public address links in emails point to"}},
 	},
 	{
 		Name:        "llm",
@@ -182,6 +199,7 @@ var Officials = []Official{
 			"usage: with the db pack every call is a row in llm_usage (set Request.Label to the feature name); llm.From(ctx).Usage(ctx, since) reports it, the MCP tool lidza_llm_usage too; run `lidza gen` and `lidza db migrate` for the table",
 			"never import a vendor SDK (lidza check L007): the pack speaks each API directly",
 		},
+		Production: []Setting{{Name: "LLM_PROVIDER", Why: "anthropic, openai, google, ollama or compatible, with its key", Dev: []string{"fake"}}},
 	},
 	{
 		Name:        "storage",
@@ -203,6 +221,7 @@ var Officials = []Official{
 			"tests: STORAGE_PROVIDER=local and STORAGE_DIR under a temporary directory; nothing leaves the machine",
 			"never import a vendor SDK (lidza check L008) and never write files to the local disk (os.WriteFile, L009): the pack keeps them; agents: the MCP tool lidza_storage lists what is stored",
 		},
+		Production: []Setting{{Name: "STORAGE_PROVIDER", Why: "s3 or another object store (local needs one node with a lasting disk)", Dev: []string{"local"}}},
 	},
 	{
 		Name:        "media",

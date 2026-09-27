@@ -269,3 +269,25 @@ func TestUsers(t *testing.T) {
 		t.Fatalf("unknown account: %s", loc)
 	}
 }
+
+// The admin list is every layer's, none hiding another: an admin the
+// deployed credentials file names (lidza admin add) counts though the
+// Users page saved its own list to the database.
+func TestAdminListLayers(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv(credentials.EnvMasterKey, "")
+	t.Setenv(EnvAdminUsers, "env@example.com")
+	t.Cleanup(func() { credentials.SetOverrides(nil) })
+	credentials.Generate(dir)
+	credentials.Set(dir, map[string]string{EnvAdminUsers: "file@example.com"})
+	credentials.SetOverrides(map[string]string{EnvAdminUsers: "saved@example.com"})
+	listMu.Lock()
+	listAt = time.Time{}
+	listMu.Unlock()
+	got := strings.Join(adminList(dir), ",")
+	for _, want := range []string{"env@example.com", "file@example.com", "saved@example.com"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("%s missing from %s", want, got)
+		}
+	}
+}

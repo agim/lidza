@@ -11,6 +11,12 @@ change. A release without one is additive: an app updates with
 
 ## Unreleased
 
+- Admin: `ADMIN_USERS` counts every layer: the environment, the sealed
+  credentials file deployed with the app (`lidza admin add`) and the
+  list the Users page saved in the database. Before, a saved list hid
+  the file's, so an admin added with `lidza admin add` and a deploy
+  never arrived in production. Removing on the Users page someone
+  another layer still lists says where to remove them.
 - Translated pages from the first paint (react and svelte templates):
   with more than one `locales/<lang>.json`, `npm run build` prerenders
   every page once per locale (`dist/.locales/<lang>/`, the

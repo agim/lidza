@@ -210,13 +210,16 @@ func adminList(dir string) []string {
 	if time.Since(listAt) < 3*time.Second && listDir == dir {
 		return listCache
 	}
-	// The union of what the environment names and what the Overview page
-	// saved (the credentials), so a variable set at deploy time and an
-	// admin added at runtime both count.
+	// The union of every layer, none hiding another: the environment and
+	// .env (a variable set at deploy time), the sealed file deployed with
+	// the app (`lidza admin add`), and the list the Users page saved in the
+	// database. A saved list would otherwise hide the file's, and an admin
+	// added with `lidza admin add` and a deploy would never arrive.
 	values, _ := env.Values(dir)
+	file, _ := credentials.Read(dir)
 	seen := map[string]bool{}
 	var out []string
-	for _, list := range []string{values[EnvAdminUsers], credentials.Values(dir)[EnvAdminUsers]} {
+	for _, list := range []string{values[EnvAdminUsers], file[EnvAdminUsers], credentials.Overrides()[EnvAdminUsers]} {
 		for _, entry := range strings.Split(list, ",") {
 			entry = strings.TrimSpace(entry)
 			if entry == "" || seen[strings.ToLower(entry)] {

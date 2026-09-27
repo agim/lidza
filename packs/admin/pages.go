@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"fmt"
 	"html/template"
 	"net/http"
 	"slices"
@@ -335,6 +336,9 @@ func (h *Handler) setAdmin(ctx context.Context, entry string, add bool) error {
 	listMu.Lock()
 	listAt = time.Time{}
 	listMu.Unlock()
+	if !add && slices.ContainsFunc(adminList(h.opt.CredentialsDir), func(a string) bool { return strings.EqualFold(a, entry) }) {
+		return fmt.Errorf("%s is also listed in %s outside this page (the deployed credentials or the environment): remove it there, `lidza admin remove %s` and a deploy, or the server's environment", entry, EnvAdminUsers, entry)
+	}
 	return nil
 }
 

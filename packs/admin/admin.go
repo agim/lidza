@@ -381,6 +381,7 @@ func (h *Handler) tabs(page, first string, sec *sectionView, settingsActive bool
 func (h *Handler) funcs() template.FuncMap {
 	return template.FuncMap{
 		"since": func(at time.Time) string { return humanSince(at) },
+		"until": humanUntil,
 		"short": func(s string) string {
 			if len(s) > 80 {
 				return s[:80] + "…"
@@ -602,6 +603,23 @@ func humanSince(at time.Time) string {
 		return fmt.Sprintf("%dh ago", int(d.Hours()))
 	default:
 		return at.Format("2006-01-02")
+	}
+}
+
+// humanUntil is a time ahead in the same terms: "in 5m", "in 3h", "due".
+func humanUntil(at time.Time) string {
+	d := time.Until(at)
+	switch {
+	case d <= 0:
+		return "due"
+	case d < time.Minute:
+		return "in under a minute"
+	case d < time.Hour:
+		return fmt.Sprintf("in %dm", int(d.Minutes()))
+	case d < 48*time.Hour:
+		return fmt.Sprintf("in %dh", int(d.Hours()))
+	default:
+		return fmt.Sprintf("in %d days", int(d.Hours()/24))
 	}
 }
 

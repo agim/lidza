@@ -1,6 +1,7 @@
 // Package jobs is the official background work pack: a Postgres-backed
 // queue (the job table from schema.lidza) with a bounded set of workers
-// per node, retries with backoff, and recovery of jobs whose worker died.
+// per node, retries with backoff, recurring schedules (Schedule), recovery
+// of jobs whose worker died, and release of unfinished jobs at shutdown.
 // Any node can enqueue; any node with a handler for the kind can run it.
 package jobs
 
@@ -36,6 +37,11 @@ type Config struct {
 	Stale time.Duration `env:"JOBS_STALE" default:"10m"`
 	// Timeout bounds one execution.
 	Timeout time.Duration `env:"JOBS_TIMEOUT" default:"5m"`
+	// Drain is how long running jobs may finish at shutdown before they
+	// are cancelled and released back to pending, to run again at once on
+	// another node or after the restart (the attempt is not counted).
+	// The shutdown deadline caps it; 0 releases at once.
+	Drain time.Duration `env:"JOBS_DRAIN" default:"1s"`
 }
 
 // Handler runs one job of a kind.
@@ -60,15 +66,26 @@ type Queue struct {
 	log      *slog.Logger
 	services *lidza.Services
 
-	mu       sync.RWMutex
-	handlers map[string]Handler
-	kinds    []string
+	mu        sync.RWMutex
+	handlers  map[string]Handler
+	kinds     []string
+	schedules []*scheduled
 
-	stop   context.CancelFunc
-	wg     sync.WaitGroup
-	done   atomic.Int64
-	failed atomic.Int64
-	active atomic.Int64
+	// stopClaim ends polling and scheduling; stopRun cancels the running
+	// handlers once the drain is over. claimed holds this node's running
+	// jobs (at most Workers) with the locked_at that marks each claim.
+	stopClaim context.CancelFunc
+	stopRun   context.CancelFunc
+	runCtx    context.Context
+	claimMu   sync.Mutex
+	claimed   map[string]time.Time
+
+	wg          sync.WaitGroup
+	done        atomic.Int64
+	failed      atomic.Int64
+	active      atomic.Int64
+	released    atomic.Int64
+	warnedTable atomic.Bool
 }
 
 // Pack returns the pack for packs.go; it needs the db pack started first.
@@ -93,6 +110,9 @@ func (q *Queue) defaults() {
 	}
 	if q.cfg.Timeout <= 0 {
 		q.cfg.Timeout = 5 * time.Minute
+	}
+	if q.cfg.Drain < 0 {
+		q.cfg.Drain = 0
 	}
 }
 
@@ -133,32 +153,123 @@ func (q *Queue) Start(ctx context.Context, s *lidza.Services) error {
 // a Queue built with New for a test calls it with the test's services.
 func (q *Queue) WithServices(s *lidza.Services) { q.services = s }
 
-// Run starts the workers; Start does it, tests call it directly.
+// Run starts the workers and the scheduler loop; Start does it, tests
+// call it directly. A node with no workers still enqueues its schedules.
 func (q *Queue) Run() {
-	if q.cfg.Workers <= 0 {
-		return
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	q.stop = cancel
+	claim, stopClaim := context.WithCancel(context.Background())
+	run, stopRun := context.WithCancel(context.Background())
+	q.stopClaim, q.stopRun, q.runCtx = stopClaim, stopRun, run
+	q.claimed = map[string]time.Time{}
+	q.wg.Add(1)
+	go q.scheduler(claim)
 	for i := 0; i < q.cfg.Workers; i++ {
 		q.wg.Add(1)
-		go q.worker(ctx)
+		go q.worker(claim)
 	}
 }
 
-// Stop lets running jobs finish (up to the job timeout) and stops polling.
+// Stop ends polling and scheduling, lets running jobs finish for the
+// Drain period, then cancels them and releases what is still claimed
+// back to pending with the attempt uncounted, so a restart or another
+// node takes it at once instead of after JOBS_STALE. All of it happens
+// within ctx's deadline, part of which is kept for the release.
 func (q *Queue) Stop(ctx context.Context) error {
-	if q.stop != nil {
-		q.stop()
+	if q.stopClaim == nil {
+		return nil
 	}
+	q.stopClaim()
 	done := make(chan struct{})
 	go func() { q.wg.Wait(); close(done) }()
-	select {
-	case <-done:
-		return nil
-	case <-ctx.Done():
-		return errors.New("jobs: workers still running at shutdown")
+	drain, grace := q.cfg.Drain, 500*time.Millisecond
+	if dl, ok := ctx.Deadline(); ok {
+		left := time.Until(dl)
+		grace = max(0, min(grace, left/4))
+		drain = max(0, min(drain, left-2*grace))
 	}
+	wait := func(d time.Duration) bool {
+		t := time.NewTimer(d)
+		defer t.Stop()
+		select {
+		case <-done:
+			return true
+		case <-t.C:
+			return false
+		case <-ctx.Done():
+			return false
+		}
+	}
+	finished := wait(drain)
+	// Cancel the handlers; a worker whose handler returns an error now
+	// releases its job itself.
+	q.stopRun()
+	if finished || wait(grace) {
+		return nil
+	}
+	// Handlers that ignore their context: release their jobs here. Should
+	// one finish later, its result is dropped (the claim no longer holds).
+	n, err := q.releaseClaimed(context.WithoutCancel(ctx), time.Until(deadlineOr(ctx, time.Now().Add(dbTimeout))))
+	if err != nil {
+		return fmt.Errorf("jobs: release at shutdown: %w", err)
+	}
+	return fmt.Errorf("jobs: %d job(s) ignored cancellation at shutdown; released to pending", n)
+}
+
+func deadlineOr(ctx context.Context, t time.Time) time.Time {
+	if dl, ok := ctx.Deadline(); ok {
+		return dl
+	}
+	return t
+}
+
+// track and untrack keep this node's claims for the release at shutdown.
+func (q *Queue) track(id string, lockedAt time.Time) {
+	q.claimMu.Lock()
+	q.claimed[id] = lockedAt
+	q.claimMu.Unlock()
+}
+
+func (q *Queue) untrack(id string) {
+	q.claimMu.Lock()
+	delete(q.claimed, id)
+	q.claimMu.Unlock()
+}
+
+// releaseClaimed releases every job this node still holds, within limit.
+func (q *Queue) releaseClaimed(ctx context.Context, limit time.Duration) (int, error) {
+	ctx, cancel := context.WithTimeout(ctx, max(limit, 100*time.Millisecond))
+	defer cancel()
+	q.claimMu.Lock()
+	claims := make(map[string]time.Time, len(q.claimed))
+	for id, at := range q.claimed {
+		claims[id] = at
+	}
+	q.claimMu.Unlock()
+	n := 0
+	for id, at := range claims {
+		ok, err := q.release(ctx, id, at)
+		if err != nil {
+			return n, err
+		}
+		if ok {
+			n++
+		}
+	}
+	return n, nil
+}
+
+// release puts a job this node claimed back to pending, due now, with the
+// attempt taken back. It matches only while the claim holds.
+func (q *Queue) release(ctx context.Context, id string, lockedAt time.Time) (bool, error) {
+	tag, err := q.pool.Exec(ctx, `UPDATE job SET state = 'pending', locked_at = NULL, run_at = now(), attempts = GREATEST(attempts - 1, 0)
+		WHERE id = $1 AND state = 'running' AND locked_at = $2`, id, lockedAt)
+	if err != nil {
+		return false, err
+	}
+	if tag.RowsAffected() == 0 {
+		return false, nil
+	}
+	q.released.Add(1)
+	return true, nil
 }
 
 // Handle registers the handler for a kind. Register in onStart (start.go:
@@ -305,55 +416,79 @@ func (q *Queue) worker(ctx context.Context) {
 }
 
 // runOne claims one due job of a handled kind and runs it. It returns
-// false when there was nothing to do.
+// false when there was nothing to do. ctx ends claiming; the handler's
+// context comes from runCtx, which Stop cancels only after the drain.
 func (q *Queue) runOne(ctx context.Context) (bool, error) {
 	q.mu.RLock()
 	kinds := append([]string(nil), q.kinds...)
 	handlers := q.handlers
 	q.mu.RUnlock()
-	if len(kinds) == 0 {
+	if len(kinds) == 0 || ctx.Err() != nil {
 		return false, nil
 	}
-	if _, err := q.pool.Exec(ctx, `UPDATE job SET state = 'pending', locked_at = NULL WHERE state = 'running' AND locked_at < now() - $1::interval`,
+	// A claim, once sent, runs to completion, so none is committed
+	// without this node knowing it holds the job.
+	dctx, dcancel := context.WithTimeout(context.WithoutCancel(ctx), dbTimeout)
+	defer dcancel()
+	if _, err := q.pool.Exec(dctx, `UPDATE job SET state = 'pending', locked_at = NULL WHERE state = 'running' AND locked_at < now() - $1::interval`,
 		fmt.Sprintf("%d seconds", int(q.cfg.Stale.Seconds()))); err != nil {
 		return false, err
 	}
 	var j Job
-	err := q.pool.QueryRow(ctx, `UPDATE job SET state = 'running', locked_at = now(), attempts = attempts + 1
+	var lockedAt time.Time
+	err := q.pool.QueryRow(dctx, `UPDATE job SET state = 'running', locked_at = clock_timestamp(), attempts = attempts + 1
 		WHERE id = (SELECT id FROM job WHERE state = 'pending' AND run_at <= now() AND kind = ANY($1) ORDER BY run_at LIMIT 1 FOR UPDATE SKIP LOCKED)
-		RETURNING id, kind, payload, attempts, max_attempts`, kinds).Scan(&j.ID, &j.Kind, &j.Payload, &j.Attempts, &j.MaxAttempts)
+		RETURNING id, kind, payload, attempts, max_attempts, locked_at`, kinds).Scan(&j.ID, &j.Kind, &j.Payload, &j.Attempts, &j.MaxAttempts, &lockedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
 	}
 	if err != nil {
 		return false, err
 	}
+	q.track(j.ID, lockedAt)
+	defer q.untrack(j.ID)
 	q.active.Add(1)
 	defer q.active.Add(-1)
-	jctx, cancel := context.WithTimeout(ctx, q.cfg.Timeout)
+	jctx, cancel := context.WithTimeout(q.runCtx, q.cfg.Timeout)
 	defer cancel()
 	if q.services != nil {
 		jctx = lidza.WithServices(jctx, q.services)
 	}
 	runErr := safeRun(jctx, handlers[j.Kind], j.Payload)
+	// The outcome is written only while this node's claim holds: a job
+	// taken over after JOBS_STALE, or released at shutdown, belongs to
+	// its next run.
+	fctx, fcancel := context.WithTimeout(context.Background(), dbTimeout)
+	defer fcancel()
 	if runErr == nil {
 		q.done.Add(1)
-		_, err = q.pool.Exec(context.Background(), `UPDATE job SET state = 'done', finished_at = now(), locked_at = NULL WHERE id = $1`, j.ID)
+		_, err = q.pool.Exec(fctx, `UPDATE job SET state = 'done', finished_at = now(), locked_at = NULL WHERE id = $1 AND locked_at = $2`, j.ID, lockedAt)
 		return true, err
+	}
+	if q.runCtx.Err() != nil {
+		// Cancelled by shutdown: not a failure; pending again, due now.
+		if _, err := q.release(fctx, j.ID, lockedAt); err != nil {
+			return true, err
+		}
+		q.log.Info("jobs: released at shutdown", "kind", j.Kind, "id", j.ID)
+		return true, nil
 	}
 	msg := runErr.Error()
 	if j.Attempts >= j.MaxAttempts {
 		q.failed.Add(1)
 		q.log.Error("jobs: failed", "kind", j.Kind, "id", j.ID, "attempts", j.Attempts, "error", msg)
-		_, err = q.pool.Exec(context.Background(), `UPDATE job SET state = 'failed', finished_at = now(), locked_at = NULL, last_error = $2 WHERE id = $1`, j.ID, msg)
+		_, err = q.pool.Exec(fctx, `UPDATE job SET state = 'failed', finished_at = now(), locked_at = NULL, last_error = $3 WHERE id = $1 AND locked_at = $2`, j.ID, lockedAt, msg)
 		return true, err
 	}
 	delay := time.Duration(math.Min(math.Pow(2, float64(j.Attempts)), 3600)) * time.Second
 	q.log.Warn("jobs: retry", "kind", j.Kind, "id", j.ID, "attempt", j.Attempts, "in", delay, "error", msg)
-	_, err = q.pool.Exec(context.Background(), `UPDATE job SET state = 'pending', locked_at = NULL, last_error = $2, run_at = now() + $3::interval WHERE id = $1`,
-		j.ID, msg, fmt.Sprintf("%d seconds", int(delay.Seconds())))
+	_, err = q.pool.Exec(fctx, `UPDATE job SET state = 'pending', locked_at = NULL, last_error = $3, run_at = now() + $4::interval WHERE id = $1 AND locked_at = $2`,
+		j.ID, lockedAt, msg, fmt.Sprintf("%d seconds", int(delay.Seconds())))
 	return true, err
 }
+
+// dbTimeout bounds the pack's own bookkeeping queries.
+const dbTimeout = 10 * time.Second
 
 func safeRun(ctx context.Context, h Handler, payload json.RawMessage) (err error) {
 	defer func() {
@@ -371,5 +506,7 @@ func (q *Queue) TelemetryStats() map[string]float64 {
 		"active":       float64(q.active.Load()),
 		"done_total":   float64(q.done.Load()),
 		"failed_total": float64(q.failed.Load()),
+		// Jobs put back to pending at shutdown, the attempt uncounted.
+		"released_total": float64(q.released.Load()),
 	}
 }

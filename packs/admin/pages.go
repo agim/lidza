@@ -439,6 +439,13 @@ func (h *Handler) jobs(w http.ResponseWriter, r *http.Request) {
 	} else {
 		data["Error"] = err.Error()
 	}
+	// The schedules this node declares; without the job_schedule table
+	// the next runs are computed and the page says what to run.
+	schedules, err := q.Schedules(ctx)
+	data["Schedules"] = schedules
+	if err != nil {
+		data["ScheduleError"] = err.Error()
+	}
 	h.render(w, r, "jobs", "Jobs", data)
 }
 

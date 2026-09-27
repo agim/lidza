@@ -11,7 +11,15 @@ mail pack, never through a vendor SDK.
    set `MAIL_FROM` and, in production, `MAIL_PROVIDER` with its key in
    `.env`. `.env.test` gets `MAIL_PROVIDER=outbox`.
 2. Write the bodies as Go templates: `mail/<name>.txt.tmpl` (always) and
-   `mail/<name>.html.tmpl` (optional), over the `Data` you pass.
+   `mail/<name>.html.tmpl` (optional), over the `Data` you pass. Other
+   languages: `mail/<name>.<lang>.txt.tmpl` (`verify.de.txt.tmpl`,
+   `verify.pt-BR.txt.tmpl`). Send picks `<name>.<lang>`, then the base
+   language (`pt` for `pt-BR`), then `<name>`, for the message's `Lang`,
+   else the request's language: the `i18n` pack's locale when it runs,
+   else `Accept-Language`. Outside a request (a job), set `Lang` from
+   the user's stored language. A template that defines
+   `{{define "subject"}}...{{end}}` in its
+   `.txt.tmpl` sets the subject, so it is translated with the body.
 3. From a handler or a job:
 
    ```go

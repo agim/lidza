@@ -295,9 +295,10 @@ OAuth flow.
    `auth.Mount(r, auth.Options{Title: "notes"})`. `lidza gen` then
    writes the client: `api.authRegister`, `authLogin`, `authLogout`,
    `authSession`, `authMe`, `authVerify`, `authForgot`, `authReset`,
-   `authPassword`, `authProviders`. Accounts live in `auth_user`; the
-   app's rows carry the user's id, `auth.CurrentUser(ctx).ID` (recipe
-   "Scope a query to the signed-in user").
+   `authPassword`, `authDelete`, `authProviders`. Accounts live in
+   `auth_user`; the app's rows carry the user's id,
+   `auth.CurrentUser(ctx).ID` (recipe "Scope a query to the signed-in
+   user").
 2. Pages: the sign-in page calls `api.authLogin({ email, password })`
    and shows a 401 as "wrong email or password" and `err.fields` from a
    422; registration calls `api.authRegister`; the app shell reads
@@ -319,10 +320,46 @@ OAuth flow.
    Options: `NoRegister` (invite-only; `auth.From(ctx).CreateUser` adds
    accounts), `NoLocal` (providers only), `RequireVerified`, `Claims`
    (roles into the token), `AfterSignIn`.
-4. Emails: with the mail pack the links go out as plain text, or
+4. New accounts: `OnSignUp` runs once per account the routes create (a
+   registration, or a provider's first sign-in that makes a new
+   account; not a later sign-in, not an identity joining an existing
+   account, not `CreateUser`), inside the transaction that inserts it.
+   Write the app's rows there, with the transaction:
+
+   ```go
+   auth.Mount(r, auth.Options{
+   	OnSignUp: func(ctx context.Context, tx pgx.Tx, s auth.SignUp) error {
+   		// s.Method is "password" or the provider ("google"); s.Lang the request's language.
+   		return queries.New(tx).CreateProfile(ctx, queries.CreateProfileParams{UserID: s.Profile.Subject, Lang: s.Lang})
+   	},
+   	OnDeleteUser: func(ctx context.Context, tx pgx.Tx, subject string) error {
+   		return queries.New(tx).DeleteProfile(ctx, subject)
+   	},
+   })
+   ```
+
+   An error from `OnSignUp` rolls the account back: registration replies
+   with it (`router.Errorf(403, ...)` as is), a provider sign-in lands on
+   `/login?error=signup`. Do not detect sign-ups in `Claims`.
+5. Deleting an account: set `OnDeleteUser` (it deletes or anonymizes
+   the app's rows of the subject; a no-op when the app keeps none), which
+   also serves the route. The account page links to a form that calls
+   `api.authDelete({ password })`; an account without a password (a
+   provider only) sends `{}` and must have signed in within ten minutes,
+   else a 403 "sign in again to delete the account" (send the user
+   through the provider's `url` with `?redirect=` back to the form). The
+   route removes the user, identities, sessions and tokens, runs
+   `OnDeleteUser` in the same transaction for the app's rows (an error
+   rolls it all back), and clears the cookies. From the app or an admin
+   action: `auth.From(ctx).DeleteUser(ctx, id)`; an app with its own
+   users table uses `DeleteUserTx(ctx, tx, id)` in its transaction.
+6. Emails: with the mail pack the links go out as plain text, or
    through `mail/auth_verify.txt.tmpl` and `mail/auth_reset.txt.tmpl`
-   when the app has them (Data: `App`, `Link`, `Email`, `Name`).
-5. Test: `lidzatest.Start`, `POST /api/v1/auth/register`, then a scoped
+   when the app has them (Data: `App`, `Link`, `Email`, `Name`). A
+   language's copy is `mail/auth_verify.<lang>.txt.tmpl` (`de`, `pt-BR`),
+   chosen by the request's language (recipe "Send an email"); it names
+   its subject with `{{define "subject"}}...{{end}}`.
+7. Test: `lidzatest.Start`, `POST /api/v1/auth/register`, then a scoped
    route with the cookies the reply set. The providers are tested by the
    framework (against an OIDC issuer in a test server), not by the app.
    `lidza check`, then `lidza test`.
@@ -442,7 +479,15 @@ mail pack, never through a vendor SDK.
    set `MAIL_FROM` and, in production, `MAIL_PROVIDER` with its key in
    `.env`. `.env.test` gets `MAIL_PROVIDER=outbox`.
 2. Write the bodies as Go templates: `mail/<name>.txt.tmpl` (always) and
-   `mail/<name>.html.tmpl` (optional), over the `Data` you pass.
+   `mail/<name>.html.tmpl` (optional), over the `Data` you pass. Other
+   languages: `mail/<name>.<lang>.txt.tmpl` (`verify.de.txt.tmpl`,
+   `verify.pt-BR.txt.tmpl`). Send picks `<name>.<lang>`, then the base
+   language (`pt` for `pt-BR`), then `<name>`, for the message's `Lang`,
+   else the request's language: the `i18n` pack's locale when it runs,
+   else `Accept-Language`. Outside a request (a job), set `Lang` from
+   the user's stored language. A template that defines
+   `{{define "subject"}}...{{end}}` in its
+   `.txt.tmpl` sets the subject, so it is translated with the body.
 3. From a handler or a job:
 
    ```go
@@ -470,7 +515,8 @@ mail pack, never through a vendor SDK.
 
 Do work outside the request (send a notification, resize an upload, call
 a slow API) through the jobs pack: the request enqueues, a worker runs
-the handler later with retries, on this node or another.
+the handler later with retries, on this node or another. Recurring work
+(every 15 minutes, Mondays at 09:00) is a schedule the pack enqueues.
 
 1. `lidza pack add jobs` (MCP: `lidza_pack_add`; after `db`).
 2. Declare the payload in `schema.lidza` (`type NotifyTask { taskId uuid
@@ -481,7 +527,11 @@ the handler later with retries, on this node or another.
    row may have changed or gone), do the work. The context carries the
    packs: `db.From(ctx)`, `mail.From(ctx)`, `realtime.From(ctx)` work as
    in a request handler. Return an error to retry (backoff, up to
-   `JOBS_MAX_ATTEMPTS`).
+   `JOBS_MAX_ATTEMPTS`). A job can run more than once: after a retry, or
+   after a shutdown, which gives a running job `JOBS_DRAIN` (1s) to
+   finish, then cancels its context and puts it back to pending for the
+   next node or the restart. Stop when `ctx` is done and make a rerun
+   harmless (upserts, a done marker per item).
 4. Register it in `start.go`:
 
    ```go
@@ -491,12 +541,33 @@ the handler later with retries, on this node or another.
 5. Enqueue from the handler that caused it: `jobs.From(ctx).Enqueue(ctx,
    "notify.task", schema.NotifyTask{...})`, or inside a transaction
    `EnqueueTx(ctx, tx, ...)` so the job is committed with the write and
-   never runs for one that rolled back. `jobs.RunAt(t)` schedules. Never
-   do the work in the request as a fallback.
-6. Test it: the job runs a moment after the reply. For mail,
+   never runs for one that rolled back. `jobs.RunAt(t)` delays one run.
+   Never do the work in the request as a fallback.
+6. Work on a timetable (a weekly digest, a sync every 15 minutes) is a
+   schedule in `start.go`, not a job that enqueues its next run:
+
+   ```go
+   q := jobs.FromServices(s)
+   q.Handle("digest.weekly", handlers.WeeklyDigest)
+   if err := q.Schedule("digest.weekly", jobs.Weekly(time.Monday, "09:00", "Europe/Tirane"), nil); err != nil {
+   	return err
+   }
+   ```
+
+   `jobs.Every(15*time.Minute)` runs at :00, :15, :30 and :45;
+   `jobs.Daily("06:30", zone)` and `jobs.Weekly(day, "09:00", zone)`
+   run at a clock time in a time zone ("" is UTC), once on the days the
+   clocks change. The payload (here `nil`) goes with every run. However
+   many nodes run, one job is enqueued per due time; after downtime one
+   missed run is enqueued, not one per missed time. The `job_schedule`
+   table comes from `schema.lidza`: `lidza gen`, then `lidza db
+   migrate`. The admin Jobs page lists each schedule with its next and
+   last run.
+7. Test it: the job runs a moment after the reply. For mail,
    `mail.From(srv.Context()).WaitFor(...)`; otherwise poll
-   `jobs.From(srv.Context()).Get(ctx, id)` until `State` is `done`.
-7. `lidza check`, then `lidza test`.
+   `jobs.From(srv.Context()).Get(ctx, id)` until `State` is `done`. A
+   scheduled job's handler is tested by enqueuing its kind directly.
+8. `lidza check`, then `lidza test`.
 
 ### Publish live updates
 
@@ -618,8 +689,11 @@ without writing a page.
 2. In `routes.go`: `admin.Mount(r, admin.Options{Title: "notes"})`
    (import `github.com/agim/lidza/packs/admin`).
 3. Sign in first: the first account is an admin. More are added on the
-   Overview page or in `.env`: `ADMIN_USERS=you@example.com` (ids or
-   emails, comma separated). `.env.test` names a test account.
+   Overview page, or from the project with `lidza admin add
+   you@example.com` (`ADMIN_USERS` in the credentials, read within
+   seconds). `.env.test` names a test account. A script or browser test
+   run against `lidza dev` signs up in the dev database: its account may
+   be the first, so add the developer with `lidza admin add`.
 4. Each pack's page has a Settings tab (Mail, Language model, Storage;
    sign-in providers under Users): pick the provider and only its
    fields show. Values are saved sealed with the master key and applied

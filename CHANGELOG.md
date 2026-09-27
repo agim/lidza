@@ -9,6 +9,23 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- sqlc names: a query's named parameters (`sqlc.arg`, `sqlc.narg`,
+  `sqlc.slice`, `@name`) get the same renames as columns, so
+  `sqlc.narg('ids')` is `IDs`, not `Ids`.
+- `router.ErrorCode(status, code, ...)`: an error with a code beside the
+  message (`{"error", "code"}`), read as `err.code` on the TypeScript
+  `ApiError` and the Dart `ApiException`. The auth pack's 403s carry
+  one: `wrong_password`, `reauthenticate` (the delete route),
+  `email_not_verified`, `account_disabled`.
+- `lidza dev` records itself in `.lidza/dev.pid`; `lidza update` names a
+  dev server still running the old CLI. A dev server whose CLI was
+  replaced on disk says so and stops generating, instead of rewriting
+  generated files with the old release's names.
+- The framework's TypeScript stream test compiles with TypeScript 7
+  (v0.1.28's CI failed on it; the released code was not affected).
+
 ## v0.1.28 (2026-09-27)
 
 - Admin: `ADMIN_USERS` counts every layer: the environment, the sealed

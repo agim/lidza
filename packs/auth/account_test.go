@@ -305,11 +305,11 @@ func TestDeleteAccount(t *testing.T) {
 	if err := a.DeleteUser(ctx, "nobody"); !errors.As(err, &httpErr) || httpErr.Status != 404 {
 		t.Fatalf("unknown subject: %v", err)
 	}
-	// NoDelete leaves the route out.
-	srv2, client2 := signinServer(t, a, Options{NoDelete: true})
+	// Without OnDeleteUser the route is left out.
+	srv2, client2 := signinServer(t, a, Options{})
 	call(t, client2, "POST", srv2.URL+Prefix+"/register", map[string]string{"email": "cy@example.com", "password": "correct horse battery"})
 	if code, _ := call(t, client2, "POST", srv2.URL+Prefix+"/delete", map[string]string{"password": "correct horse battery"}); code == 204 {
-		t.Fatal("delete route mounted with NoDelete")
+		t.Fatal("delete route mounted without OnDeleteUser")
 	}
 }
 

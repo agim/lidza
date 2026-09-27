@@ -69,11 +69,11 @@ type Options struct {
 	// OnDeleteUser runs inside DeleteUser's transaction (the delete route
 	// and the app's own calls), before the pack's rows go: delete or
 	// anonymize the app's rows of the subject with tx. An error rolls the
-	// whole deletion back.
+	// whole deletion back. Setting it also serves POST
+	// /api/v1/auth/delete, the signed-in user's "delete my account": an
+	// app says what happens to its rows before users can delete
+	// themselves (a no-op function when it keeps none).
 	OnDeleteUser func(ctx context.Context, tx pgx.Tx, subject string) error
-	// NoDelete leaves out POST /api/v1/auth/delete, the signed-in user's
-	// "delete my account"; DeleteUser still works for the app.
-	NoDelete bool
 	// Client is the HTTP client the providers use (tests).
 	Client *http.Client
 }
@@ -124,7 +124,7 @@ func Mount(r *router.Router, opt Options) {
 	router.Route(r, "GET /api/v1/auth/session", s.authSession, Optional())
 	router.Route(r, "GET /api/v1/auth/me", s.authMe, Require())
 	router.Route(r, "POST /api/v1/auth/logout", s.authLogout, Require())
-	if !opt.NoDelete {
+	if opt.OnDeleteUser != nil {
 		router.Route(r, "POST /api/v1/auth/delete", s.authDelete, Throttle(), Require())
 	}
 	router.Route(r, "GET /api/v1/auth/providers", s.authProviders)

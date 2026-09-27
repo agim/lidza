@@ -397,7 +397,9 @@ OAuth flow.
    An error from `OnSignUp` rolls the account back: registration replies
    with it (`router.Errorf(403, ...)` as is), a provider sign-in lands on
    `/login?error=signup`. Do not detect sign-ups in `Claims`.
-5. Deleting an account: the account page links to a form that calls
+5. Deleting an account: set `OnDeleteUser` (it deletes or anonymizes
+   the app's rows of the subject; a no-op when the app keeps none), which
+   also serves the route. The account page links to a form that calls
    `api.authDelete({ password })`; an account without a password (a
    provider only) sends `{}` and must have signed in within ten minutes,
    else a 403 "sign in again to delete the account" (send the user
@@ -407,7 +409,6 @@ OAuth flow.
    rolls it all back), and clears the cookies. From the app or an admin
    action: `auth.From(ctx).DeleteUser(ctx, id)`; an app with its own
    users table uses `DeleteUserTx(ctx, tx, id)` in its transaction.
-   `NoDelete` leaves the route out.
 6. Emails: with the mail pack the links go out as plain text, or
    through `mail/auth_verify.txt.tmpl` and `mail/auth_reset.txt.tmpl`
    when the app has them (Data: `App`, `Link`, `Email`, `Name`). A

@@ -16,8 +16,8 @@ import (
 	"github.com/agim/lidza/pkg/config"
 	"github.com/agim/lidza/pkg/devserver"
 	"github.com/agim/lidza/pkg/env"
-	"github.com/agim/lidza/pkg/scaffold"
 	"github.com/agim/lidza/pkg/pack"
+	"github.com/agim/lidza/pkg/scaffold"
 )
 
 // runTest runs the app's Go tests with LIDZA_MODE=test: the test database

@@ -15,6 +15,9 @@ cd "$(dirname "$0")/.."
 git rev-parse -q --verify "refs/tags/$ver" >/dev/null && { echo "tag $ver exists" >&2; exit 1; }
 grep -q '^## Unreleased$' CHANGELOG.md || { echo "CHANGELOG.md has no '## Unreleased' section" >&2; exit 1; }
 sed -n '/^## Unreleased$/,/^## v/p' CHANGELOG.md | grep -q '^- ' || { echo "'## Unreleased' has no entries" >&2; exit 1; }
+# CI's first check: a file gofmt would change fails the release run.
+unformatted=$(gofmt -l $(git ls-files '*.go'))
+[ -z "$unformatted" ] || { echo "gofmt: $unformatted" >&2; exit 1; }
 # The module zip carries every tracked file to every app that fetches
 # Līdza: nothing over 2 MB (a stray `go build` at the root was once).
 big=$(git ls-files -z | xargs -0 -r ls -ln 2>/dev/null | awk '$5 > 2097152 {print $9}')

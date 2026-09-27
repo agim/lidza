@@ -21,9 +21,9 @@ import (
 // routerPath is the package whose Route function makes a route typed.
 const routerPath = "github.com/agim/lidza/pkg/router"
 
-// Operation is a typed route (router.Route[In, Out]) with the JSON Schemas
-// of its input and output, the basis of the OpenAPI document and the
-// generated client.
+// Operation is a typed route (router.Route[In, Out] or
+// router.Stream[In, Event]) with the JSON Schemas of its input and output,
+// the basis of the OpenAPI document and the generated client.
 type Operation struct {
 	// ID is the operationId and the client method name: the handler's name
 	// in lowerCamel, or method plus path for a func literal.
@@ -33,8 +33,12 @@ type Operation struct {
 	// Params are the path parameters, in order.
 	Params []string `json:"params"`
 	// Input and Output name the component schema (empty for router.None).
-	Input   string  `json:"input,omitempty"`
-	Output  string  `json:"output,omitempty"`
+	// For a stream, Output is the schema of one event.
+	Input  string `json:"input,omitempty"`
+	Output string `json:"output,omitempty"`
+	// Stream marks a router.Stream operation: the reply is server-sent
+	// events, each one Output as JSON.
+	Stream  bool    `json:"stream,omitempty"`
 	Handler Handler `json:"handler"`
 	// Builtin marks operations the framework registers in every app.
 	Builtin bool `json:"builtin,omitempty"`
@@ -93,7 +97,7 @@ func typedRoutes(root string, lidzaSchema *schema.Schema, module string) ([]Oper
 					}
 					return true
 				}
-				if len(call.Args) < 3 || fn.Pkg().Path() != routerPath || fn.Name() != "Route" {
+				if len(call.Args) < 3 || fn.Pkg().Path() != routerPath || !typedRegistration(fn.Name()) {
 					return true
 				}
 				pattern, ok := stringLit(call.Args[1])
@@ -106,11 +110,10 @@ func typedRoutes(root string, lidzaSchema *schema.Schema, module string) ([]Oper
 					return true
 				}
 				method, path := splitPattern(pattern)
-				op := Operation{Method: method, Path: path, Params: pathParams(path)}
-				op.Input = b.component(inst.TypeArgs.At(0))
-				op.Output = b.component(inst.TypeArgs.At(1))
+				op := Operation{Method: method, Path: path, Params: pathParams(path), Stream: fn.Name() == "Stream"}
 				op.Handler = typedHandler(pkg, root, call.Args[2])
 				op.ID = operationID(op.Handler.Name, method, path)
+				b.types(&op, inst.TypeArgs)
 				ops = append(ops, op)
 				return true
 			})
@@ -143,6 +146,22 @@ func typedRoutes(root string, lidzaSchema *schema.Schema, module string) ([]Oper
 		return ops[i].Method < ops[j].Method
 	})
 	return ops, packRaw, b.defs, warnings, nil
+}
+
+// typedRegistration reports whether a router function registers a typed
+// operation: Route, or Stream for server-sent events.
+func typedRegistration(name string) bool { return name == "Route" || name == "Stream" }
+
+// types sets the operation's Input and Output from the registration's
+// type arguments. A stream's event of an unnamed type (string, []Item)
+// gets a component named after the operation: curate streams CurateEvent.
+func (b *schemaBuilder) types(op *Operation, args *types.TypeList) {
+	op.Input = b.component(args.At(0))
+	if op.Stream {
+		op.Output = b.componentNamed(args.At(1), strings.ToUpper(op.ID[:1])+op.ID[1:]+"Event")
+		return
+	}
+	op.Output = b.component(args.At(1))
 }
 
 type builtinOp struct{ id, method, path, output string }
@@ -258,7 +277,11 @@ func newSchemaBuilder(s *schema.Schema, module string) *schemaBuilder {
 
 // component returns the component name for a named type, registering its
 // schema, or "" for router.None.
-func (b *schemaBuilder) component(t types.Type) string {
+func (b *schemaBuilder) component(t types.Type) string { return b.componentNamed(t, "") }
+
+// componentNamed is component with the name an unnamed type gets; an
+// empty or taken name falls back to AnonymousN.
+func (b *schemaBuilder) componentNamed(t types.Type, name string) string {
 	s := b.schema(t)
 	if s == nil {
 		return ""
@@ -266,8 +289,10 @@ func (b *schemaBuilder) component(t types.Type) string {
 	if ref, ok := s["$ref"].(string); ok {
 		return strings.TrimPrefix(ref, "#/components/schemas/")
 	}
-	// An anonymous type as In or Out gets a component named after its shape.
-	name := fmt.Sprintf("Anonymous%d", len(b.defs)+1)
+	if _, taken := b.defs[name]; name == "" || taken {
+		// An anonymous type as In or Out gets a component named after its shape.
+		name = fmt.Sprintf("Anonymous%d", len(b.defs)+1)
+	}
 	b.defs[name] = s
 	return name
 }
@@ -455,7 +480,7 @@ func packOperations(pkg *packages.Package, b *schemaBuilder) []Operation {
 				return true
 			}
 			fn, ok := pkg.TypesInfo.Uses[sel.Sel].(*types.Func)
-			if !ok || fn.Pkg() == nil || fn.Pkg().Path() != routerPath || fn.Name() != "Route" {
+			if !ok || fn.Pkg() == nil || fn.Pkg().Path() != routerPath || !typedRegistration(fn.Name()) {
 				return true
 			}
 			pattern, ok := stringLit(call.Args[1])
@@ -467,9 +492,7 @@ func packOperations(pkg *packages.Package, b *schemaBuilder) []Operation {
 				return true
 			}
 			method, path := splitPattern(pattern)
-			op := Operation{Method: method, Path: path, Params: pathParams(path), Pack: packName}
-			op.Input = b.component(inst.TypeArgs.At(0))
-			op.Output = b.component(inst.TypeArgs.At(1))
+			op := Operation{Method: method, Path: path, Params: pathParams(path), Pack: packName, Stream: fn.Name() == "Stream"}
 			pos := pkg.Fset.Position(call.Args[2].Pos())
 			op.Handler = Handler{Name: exprString(pkg.Fset, call.Args[2]), File: "lidza/packs/" + packName + "/" + filepath.Base(pos.Filename), Line: pos.Line}
 			if h, ok := call.Args[2].(*ast.SelectorExpr); ok {
@@ -477,6 +500,7 @@ func packOperations(pkg *packages.Package, b *schemaBuilder) []Operation {
 				op.Handler.File = "lidza/packs/" + packName + "/" + filepath.Base(pkg.Fset.Position(pkg.TypesInfo.Uses[h.Sel].Pos()).Filename)
 			}
 			op.ID = operationID(op.Handler.Name, method, path)
+			b.types(&op, inst.TypeArgs)
 			ops = append(ops, op)
 			return true
 		})

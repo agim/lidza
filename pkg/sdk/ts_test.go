@@ -36,6 +36,10 @@ func TestTypeScript(t *testing.T) {
 		"deletePost(params: { id: string }, options?: RequestOptions): Promise<void>",
 		"`/api/v1/files/${params.path}`",
 		"export class ApiError extends Error",
+		"curate(body: T.CreatePost, options?: RequestOptions): AsyncGenerator<T.CurateEvent, void, undefined> {",
+		"return stream<T.CurateEvent>(\"POST\", `/api/v1/curate`, body, options)",
+		"feed(params: { id: string }, options?: RequestOptions): AsyncGenerator<T.Post, void, undefined> {",
+		"async function* stream<E>(",
 	} {
 		if !strings.Contains(client, want) {
 			t.Errorf("client.ts missing %q\n%s", want, client)
@@ -76,6 +80,9 @@ func TestTypeScriptUnused(t *testing.T) {
 	if strings.Contains(files["validators.ts"], "import type") {
 		t.Error("validators.ts imports the types without a validator")
 	}
+	if strings.Contains(files["client.ts"], "function* stream") {
+		t.Error("client.ts declares stream without a streamed operation")
+	}
 	if !strings.Contains(TypeScript(sampleContext())["client.ts"], "const p = encodeURIComponent") {
 		t.Error("client.ts lacks p with a {name} parameter")
 	}
@@ -91,6 +98,8 @@ func sampleContext() *inspect.Context {
 			{ID: "createPost", Method: "POST", Path: "/api/v1/posts", Params: []string{}, Input: "CreatePost", Output: "Post"},
 			{ID: "deletePost", Method: "DELETE", Path: "/api/v1/posts/{id}", Params: []string{"id"}},
 			{ID: "getFiles", Method: "GET", Path: "/api/v1/files/{path...}", Params: []string{"path"}, Output: "Post"},
+			{ID: "curate", Method: "POST", Path: "/api/v1/curate", Params: []string{}, Input: "CreatePost", Output: "CurateEvent", Stream: true},
+			{ID: "feed", Method: "GET", Path: "/api/v1/posts/{id}/feed", Params: []string{"id"}, Output: "Post", Stream: true},
 		},
 		Schemas: map[string]any{
 			"Health": map[string]any{"type": "object", "properties": map[string]any{
@@ -107,8 +116,9 @@ func sampleContext() *inspect.Context {
 				"author": map[string]any{"oneOf": []any{map[string]any{"$ref": "#/components/schemas/User"}, map[string]any{"type": "null"}}},
 				"opt":    map[string]any{"type": "integer"},
 			}, "required": []string{"id", "body", "status", "tags", "meta", "extra", "author"}},
-			"User":       map[string]any{"type": "object", "properties": map[string]any{"name": map[string]any{"type": "string"}}, "required": []any{"name"}},
-			"CreatePost": map[string]any{"type": "object", "properties": map[string]any{"title": map[string]any{"type": "string", "minLength": 1}}, "required": []string{"title"}, "x-lidza": "schema"},
+			"User":        map[string]any{"type": "object", "properties": map[string]any{"name": map[string]any{"type": "string"}}, "required": []any{"name"}},
+			"CreatePost":  map[string]any{"type": "object", "properties": map[string]any{"title": map[string]any{"type": "string", "minLength": 1}}, "required": []string{"title"}, "x-lidza": "schema"},
+			"CurateEvent": map[string]any{"type": "string"},
 		},
 	}
 }

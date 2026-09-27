@@ -164,19 +164,26 @@ func decodeBody(req *http.Request, dst any) error {
 func WriteError(w http.ResponseWriter, req *http.Request, err error) { writeError(w, req, err) }
 
 func writeError(w http.ResponseWriter, req *http.Request, err error) {
+	status, body := errorReply(req, err)
+	JSON(w, status, body)
+}
+
+// errorReply maps a handler's error to the status and body the client
+// gets, logging and reporting the ones whose text stays on the server.
+func errorReply(req *http.Request, err error) (int, any) {
 	var httpErr *HTTPError
 	var valErr *validate.Errors
 	switch {
 	case errors.As(err, &httpErr):
-		Error(w, httpErr.Status, httpErr.Message)
+		return httpErr.Status, map[string]string{"error": httpErr.Message}
 	case errors.As(err, &valErr):
-		JSON(w, http.StatusUnprocessableEntity, valErr)
+		return http.StatusUnprocessableEntity, valErr
 	default:
 		log.Printf("handler error: %v", err)
 		report.Capture(req.Context(), report.Error{
 			Source: "server", Message: err.Error(), Route: req.Pattern, Method: req.Method,
 			URL: req.URL.RequestURI(), RequestID: middleware.GetRequestID(req.Context()),
 		})
-		Error(w, http.StatusInternalServerError, "internal error")
+		return http.StatusInternalServerError, map[string]string{"error": "internal error"}
 	}
 }

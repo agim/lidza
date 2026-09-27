@@ -243,12 +243,27 @@ is validated on the server and callable from the client by name.
    is a 500 whose text stays on the server. The handler name becomes the
    client method (`createThing` gives `api.createThing`).
 
+   A reply that arrives in pieces (a model's text, progress) is a
+   stream: `router.Stream(r, "POST /api/v1/things/draft", draftThing)`
+   with `func draftThing(ctx context.Context, req
+   *router.Request[schema.CreateThing], send func(string) error) error`.
+   Each `send` reaches the client at once as a server-sent event; the
+   event is a schema type, a string or a number. Return nil to end the
+   stream. An error before the first `send` is an ordinary reply, after
+   it the client gets it as an error with its status. `send` fails when
+   the client has gone; return then. The request deadline bounds a
+   stream like any request (`App.Timeout`, 30 seconds by default).
+
 3. Save. `lidza dev` regenerates `schema/`, rebuilds, and rewrites the
    client (without it: `lidza gen`, MCP `lidza_gen`). Check with
    `curl -s -X POST http://127.0.0.1:3000/api/v1/things -d '{"title":"x"}'`.
 
 4. Call it from the frontend as `api.createThing({ title })` from
    `@lidza/client`; never `fetch` by hand (`lidza check` warns, L003).
+   A stream's method returns an async iterable: `for await (const piece
+   of api.draftThing({ title }, { signal })) text += piece`; leaving the
+   loop or aborting the signal closes the request. The Dart client
+   returns a `Stream`.
 
 5. Add a test in `routes_test.go` (see "Write a test") and run
    `lidza check`, then `lidza test`.
@@ -563,8 +578,9 @@ app's tools. The llm pack speaks the providers; the app never does.
    })
    ```
 
-   `Chat` returns prose, `Stream` delivers it as it arrives (write each
-   piece to the response, or publish it on the realtime pack), and
+   `Chat` returns prose, `Stream` delivers it as it arrives (pass each
+   piece to the `send` of a `router.Stream` route, see "Add an API
+   route", or publish it on the realtime pack), and
    `Run(ctx, req, tools())` lets the model call the app's tools with the
    packs in its context. Keep the prompt in the handler or a `prompts/`
    file, never in the frontend, and never send a row the user may not

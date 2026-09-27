@@ -36,9 +36,19 @@ func OpenAPI(c *Context) map[string]any {
 			o["requestBody"] = map[string]any{"required": true, "content": jsonContent(op.Input)}
 		}
 		responses := map[string]any{}
-		if op.Output != "" {
+		switch {
+		case op.Stream:
+			// Server-sent events: each data line is one Output as JSON;
+			// an "end" event closes the stream, an "error" event carries
+			// the error body with its status.
+			o["x-lidza-stream"] = true
+			responses["200"] = map[string]any{
+				"description": "Server-sent events: each event's data is one " + op.Output + " as JSON, then an end event; an error event carries {error, status}.",
+				"content":     map[string]any{"text/event-stream": map[string]any{"schema": ref(op.Output)}},
+			}
+		case op.Output != "":
 			responses["200"] = map[string]any{"description": "OK", "content": jsonContent(op.Output)}
-		} else {
+		default:
 			responses["204"] = map[string]any{"description": "No Content"}
 		}
 		if op.Input != "" {

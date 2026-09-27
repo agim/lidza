@@ -6,13 +6,44 @@ version in `go.mod`. `install.sh` pins the newest release here;
 `scripts/release.sh vX.Y.Z` turns "Unreleased" into a release, bumps the
 pin, tags and pushes. A change that breaks an app built on an earlier
 release is listed first under its version as "Breaking:", with what to
-change; every release so far is additive (an app updates with
-`lidza update --migrate`).
+change. A release without one is additive: an app updates with
+`lidza update --migrate`.
 
 ## Unreleased
 
 Fixes from the Galeria sample app's report of framework gaps.
 
+- Breaking: Go names follow one rule, `schema.Initialisms` (id, url,
+  api, http, json, uuid, sql, ip, html) in capitals and their plurals as
+  `IDs`, `URLs`. `lidza gen` writes the list and the renames plurals
+  need into `sqlc.yaml` (between `# lidza gen` comments; an app that
+  sets `initialisms` or `rename` itself is told what to add) and lists
+  every rename it causes; `lidza update` then runs `go build ./...`.
+  Rename in app code: in `db/queries/gen` (models, query params and
+  rows) `Url` to `URL`, `Html` to `HTML`, `Api` to `API`, `Http` to
+  `HTTP`, `Json` to `JSON`, `Uuid` to `UUID`, `Sql` to `SQL`, `Ip` to
+  `IP` inside any name (`ImageUrl` to `ImageURL`, `ApiKey` to `APIKey`
+  for table `api_key`, enum constants such as `SourceApi` to
+  `SourceAPI`), and `Ids` to `IDs`, `Urls` to `URLs` (`ArtworkIds` to
+  `ArtworkIDs`); in `schema/` plurals only (`ArtworkIds` to
+  `ArtworkIDs`, `KindUrls` to `KindURLs`).
+- `router.Stream(r, pattern, h)`: a typed operation that replies with
+  server-sent events; `send` flushes each event, and an error after the
+  first reaches the client as an error event with its status. It is
+  marked `stream` in `.lidza/context.json` and OpenAPI
+  (`x-lidza-stream`); the TypeScript client returns an async iterable
+  (`for await`; `options.signal` or leaving the loop closes it), the
+  Dart client a `Stream`. A stream's deadline is `App.StreamTimeout`
+  (10 minutes), not the 30 seconds of other requests. L005 checks the
+  event type.
+- The TypeScript client compiles under `noUnusedLocals` for an API
+  without path parameters or schema rules; a test type-checks it.
+- `schema.lidza`: `@ref(Model)` to a model whose id is `int`, `bigint`
+  or `string`; the field takes the id's type, and another type is an
+  error naming it. `@ref` on an array is an error. Tables are created
+  after the ones they reference and dropped before them.
+- The Dart client decodes an output that is not a named class (a list,
+  a string) as that type.
 - jobs: recurring schedules. `jobs.FromServices(s).Schedule(kind,
   jobs.Every(15*time.Minute) | jobs.Daily("06:30", zone) |
   jobs.Weekly(time.Monday, "09:00", "Europe/Tirane"), payload)` enqueues

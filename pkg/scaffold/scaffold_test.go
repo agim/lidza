@@ -251,7 +251,7 @@ func TestRefreshTestEnv(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg.Packs = []string{"lidza/db", "lidza/cache", "lidza/auth", "lidza/analytics"}
+	cfg.Packs = []string{"lidza/db", "lidza/cache", "lidza/auth", "lidza/analytics", "lidza/llm"}
 	p := filepath.Join(dir, ".env.test")
 	os.WriteFile(p, []byte("DATABASE_URL=postgres:///demo_test\n"), 0o644)
 	for i := 0; i < 2; i++ {
@@ -260,7 +260,7 @@ func TestRefreshTestEnv(t *testing.T) {
 		}
 	}
 	data, _ := os.ReadFile(p)
-	if string(data) != "DATABASE_URL=postgres:///demo_test\nCACHE_URL=memory\n" {
+	if string(data) != "DATABASE_URL=postgres:///demo_test\nCACHE_URL=memory\nLLM_PROVIDER=fake\nEMBED_PROVIDER=fake\n" {
 		t.Fatalf(".env.test: %q", data)
 	}
 }

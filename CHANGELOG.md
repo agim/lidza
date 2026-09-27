@@ -9,6 +9,31 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- llm: embeddings can come from a provider other than the chat one:
+  `EMBED_PROVIDER` (openai, google, ollama, compatible, fake, or `none`
+  to turn them off), `EMBED_MODEL`, `EMBED_API_KEY` (a secret) and
+  `EMBED_BASE_URL`. Unset, Embed uses the chat provider as before. With
+  an Anthropic chat and no `EMBED_PROVIDER`, Embed returns an error
+  naming `EMBED_PROVIDER`. `LLM_EMBED_MODEL` is still read when
+  `EMBED_MODEL` is empty. Errors when nothing can embed wrap
+  `llm.ErrNoEmbeddings`.
+- llm: `Embeddings(ctx, llm.EmbedRequest{Texts, Label})` returns vectors,
+  model and tokens and records the call in `llm_usage` under its label,
+  so usage per feature covers embeddings. `Embed(ctx, texts)` is
+  unchanged and records the call unlabelled.
+- admin: the Language model Settings tab has an Embeddings form (same as
+  chat, off, OpenAI, Google Gemini, Ollama, custom server; model, key,
+  address), applied without a restart.
+- `lidza ship` flags `EMBED_PROVIDER=fake`; `pack.Setting.Optional`
+  marks a production setting that may be unset.
+- `.env.test` gets the test providers of every enabled pack, from setup
+  and, for older apps, `lidza update`: `MAIL_PROVIDER=outbox`,
+  `LLM_PROVIDER=fake`, `EMBED_PROVIDER=fake`, `STORAGE_PROVIDER=local`,
+  `CACHE_URL=memory`. A provider set in `.env` (which tests read too)
+  no longer reaches the tests.
+
 ## v0.1.29 (2026-09-27)
 
 - sqlc names: a query's named parameters (`sqlc.arg`, `sqlc.narg`,

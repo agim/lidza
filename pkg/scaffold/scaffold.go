@@ -544,12 +544,23 @@ func ignoresEnvTest(gitignore string) bool {
 	return ignored
 }
 
-// TestEnv are the .env.test lines the enabled packs need: the cache in
-// memory, so tests run without Redis.
+// TestEnv are the .env.test lines the enabled packs need, so tests reach
+// no service and no provider set in .env (which applies to tests too):
+// the cache in memory, mail to the outbox, the fake model for chat and
+// embeddings, storage on local disk.
 func TestEnv(packs []string) []string {
 	var out []string
 	if slices.Contains(packs, "lidza/cache") {
 		out = append(out, "CACHE_URL=memory")
+	}
+	if slices.Contains(packs, "lidza/mail") {
+		out = append(out, "MAIL_PROVIDER=outbox")
+	}
+	if slices.Contains(packs, "lidza/llm") {
+		out = append(out, "LLM_PROVIDER=fake", "EMBED_PROVIDER=fake")
+	}
+	if slices.Contains(packs, "lidza/storage") {
+		out = append(out, "STORAGE_PROVIDER=local", "STORAGE_DIR=.lidza/test-storage")
 	}
 	return out
 }

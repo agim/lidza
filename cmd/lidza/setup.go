@@ -173,9 +173,6 @@ func setup(ctx context.Context, dir string, cfg *config.Config, opt setupOptions
 		if hasDB {
 			b.WriteString("DATABASE_URL=" + testURL + "\n")
 		}
-		if hasMail {
-			b.WriteString("MAIL_PROVIDER=outbox\n")
-		}
 		// The packs' test settings: the cache in memory, limits a browser
 		// suite signing up from one address does not hit.
 		for _, line := range scaffold.TestEnv(cfg.Packs) {

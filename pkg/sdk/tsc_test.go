@@ -101,8 +101,11 @@ func TestTypeScriptStream(t *testing.T) {
 	// Emit CommonJS that node runs as is.
 	opts["noEmit"] = false
 	opts["outDir"] = "js"
-	opts["module"] = "commonjs"
-	opts["moduleResolution"] = "node10"
+	// node16 without "type": "module" emits CommonJS; node10, which
+	// commonjs implies, is gone from newer TypeScript (TS5108).
+	opts["module"] = "node16"
+	opts["moduleResolution"] = "node16"
+	opts["rootDir"] = "client"
 	opts["verbatimModuleSyntax"] = false
 	runTSC(t, tsc, dir, opts, []string{"client"})
 
@@ -144,8 +147,13 @@ configure({ baseUrl: process.argv[2] })
 	}
 }
 
+// findTSC is LIDZA_TEST_TSC when set (to try another TypeScript),
+// examples/notes' tsc, else tsc on PATH.
 func findTSC(t *testing.T) string {
 	t.Helper()
+	if p := os.Getenv("LIDZA_TEST_TSC"); p != "" {
+		return p
+	}
 	root, _ := filepath.Abs("../..")
 	tsc := filepath.Join(root, "examples", "notes", "node_modules", ".bin", "tsc")
 	if _, err := os.Stat(tsc); err == nil {

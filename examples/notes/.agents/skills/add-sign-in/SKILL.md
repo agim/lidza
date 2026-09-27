@@ -67,8 +67,10 @@ OAuth flow.
    also serves the route. The account page links to a form that calls
    `api.authDelete({ password })`; an account without a password (a
    provider only) sends `{}` and must have signed in within ten minutes,
-   else a 403 "sign in again to delete the account" (send the user
-   through the provider's `url` with `?redirect=` back to the form). The
+   else a 403 with code `reauthenticate` (send the user through the
+   provider's `url` with `?redirect=` back to the form); a wrong password
+   is a 403 with code `wrong_password`. Switch on `err.code` of the
+   `ApiError`, not the message. The
    route removes the user, identities, sessions and tokens, runs
    `OnDeleteUser` in the same transaction for the app's rows (an error
    rolls it all back), and clears the cookies. From the app or an admin

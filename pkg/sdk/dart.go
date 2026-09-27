@@ -312,6 +312,12 @@ class ApiException implements Exception {
   final Object? body;
   final String message;
 
+  /// The error's code, when the server names one ("wrong_password").
+  String? get code {
+    final b = body;
+    return b is Map<String, dynamic> && b['code'] is String ? b['code'] as String : null;
+  }
+
   /// The field errors when the server replied 422.
   List<ValidationError>? get fields {
     final b = body;

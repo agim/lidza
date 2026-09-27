@@ -733,7 +733,7 @@ var ErrBadCredentials = router.Errorf(http.StatusUnauthorized, "wrong email or p
 
 // ErrNotVerified is the 403 of a password sign-in before the email is
 // verified, with Options.RequireVerified.
-var ErrNotVerified = router.Errorf(http.StatusForbidden, "email not verified")
+var ErrNotVerified = router.ErrorCode(http.StatusForbidden, "email_not_verified", "email not verified")
 
 func (s *signin) authLogin(ctx context.Context, req *router.Request[Credentials]) (SignedIn, error) {
 	a := From(ctx)
@@ -845,7 +845,7 @@ func (s *signin) authPassword(ctx context.Context, req *router.Request[PasswordC
 	if p.HasPassword {
 		_, hash, _, err := a.passwordHash(ctx, p.Email)
 		if err != nil || !CheckPassword(hash, req.Body.Current) {
-			return router.None{}, router.Errorf(http.StatusForbidden, "current password does not match")
+			return router.None{}, router.ErrorCode(http.StatusForbidden, "wrong_password", "current password does not match")
 		}
 	}
 	if err := a.ValidatePassword(req.Body.Password, p.Email); err != nil {
@@ -873,7 +873,7 @@ const ReauthWindow = 10 * time.Minute
 // without a password whose session is older than ReauthWindow: the
 // client sends the user through the provider again (its start URL with
 // ?redirect= back to the page), then repeats the request.
-var ErrReauthenticate = router.Errorf(http.StatusForbidden, "sign in again to delete the account")
+var ErrReauthenticate = router.ErrorCode(http.StatusForbidden, "reauthenticate", "sign in again to delete the account")
 
 // authDelete deletes the signed-in user's account (DeleteUser, with
 // OnDeleteUser) after a confirmation: the password when the account has
@@ -891,7 +891,7 @@ func (s *signin) authDelete(ctx context.Context, req *router.Request[AccountDele
 	if p.HasPassword {
 		_, hash, _, err := a.passwordHash(ctx, p.Email)
 		if err != nil || !CheckPassword(hash, req.Body.Password) {
-			return router.None{}, router.Errorf(http.StatusForbidden, "password does not match")
+			return router.None{}, router.ErrorCode(http.StatusForbidden, "wrong_password", "password does not match")
 		}
 	} else {
 		var created time.Time

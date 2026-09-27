@@ -222,8 +222,8 @@ func TestDeleteAccount(t *testing.T) {
 	if code, _ := call(t, client, "POST", api+"/delete", map[string]string{}); code != 403 || !exists() {
 		t.Fatalf("no password: %d", code)
 	}
-	if code, _ := call(t, client, "POST", api+"/delete", map[string]string{"password": "wrong password here"}); code != 403 || !exists() {
-		t.Fatalf("wrong password: %d", code)
+	if code, out := call(t, client, "POST", api+"/delete", map[string]string{"password": "wrong password here"}); code != 403 || out["code"] != "wrong_password" || !exists() {
+		t.Fatalf("wrong password: %d %v", code, out)
 	}
 	if code, _ := call(t, browser(), "POST", api+"/delete", map[string]string{"password": "correct horse battery"}); code != 401 {
 		t.Fatalf("visitor: %d", code)
@@ -278,7 +278,7 @@ func TestDeleteAccount(t *testing.T) {
 	_, out = call(t, bo, "GET", api+"/me", nil)
 	boID := out["subject"].(string)
 	a.pool.Exec(ctx, `UPDATE auth_session SET created_at = now() - interval '1 hour' WHERE subject = $1`, boID)
-	if code, out := call(t, bo, "POST", api+"/delete", map[string]string{}); code != 403 || out["error"] != "sign in again to delete the account" {
+	if code, out := call(t, bo, "POST", api+"/delete", map[string]string{}); code != 403 || out["error"] != "sign in again to delete the account" || out["code"] != "reauthenticate" {
 		t.Fatalf("stale sign-in: %d %v", code, out)
 	}
 	if _, code := follow(t, bo, api+"/fake/start"); code != 302 {

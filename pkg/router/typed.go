@@ -72,6 +72,10 @@ type Handler[In, Out any] func(ctx context.Context, req *Request[In]) (Out, erro
 type HTTPError struct {
 	Status  int
 	Message string
+	// Code, when set, names the error for programs ("wrong_password"),
+	// so a client tells apart two errors with one status without reading
+	// the message. It is sent as "code" beside "error".
+	Code string
 }
 
 func (e *HTTPError) Error() string { return fmt.Sprintf("%d %s", e.Status, e.Message) }
@@ -79,6 +83,12 @@ func (e *HTTPError) Error() string { return fmt.Sprintf("%d %s", e.Status, e.Mes
 // Errorf builds an HTTPError.
 func Errorf(status int, format string, a ...any) error {
 	return &HTTPError{Status: status, Message: fmt.Sprintf(format, a...)}
+}
+
+// ErrorCode is Errorf with a code the client can switch on: the reply is
+// {"error": message, "code": code}.
+func ErrorCode(status int, code, format string, a ...any) error {
+	return &HTTPError{Status: status, Code: code, Message: fmt.Sprintf(format, a...)}
 }
 
 // NotFound is a 404 with the given message.
@@ -175,6 +185,9 @@ func errorReply(req *http.Request, err error) (int, any) {
 	var valErr *validate.Errors
 	switch {
 	case errors.As(err, &httpErr):
+		if httpErr.Code != "" {
+			return httpErr.Status, map[string]string{"error": httpErr.Message, "code": httpErr.Code}
+		}
 		return httpErr.Status, map[string]string{"error": httpErr.Message}
 	case errors.As(err, &valErr):
 		return http.StatusUnprocessableEntity, valErr

@@ -100,3 +100,16 @@ func TestRouteBodyLimit(t *testing.T) {
 		t.Fatalf("got %d %s", rec.Code, rec.Body.String())
 	}
 }
+
+// ErrorCode adds a code the client can switch on beside the message.
+func TestErrorCode(t *testing.T) {
+	r := New()
+	Route(r, "POST /x", func(ctx context.Context, req *Request[None]) (None, error) {
+		return None{}, ErrorCode(http.StatusForbidden, "wrong_password", "password does not match")
+	})
+	rec := httptest.NewRecorder()
+	r.Handler().ServeHTTP(rec, httptest.NewRequest("POST", "/x", nil))
+	if rec.Code != 403 || strings.TrimSpace(rec.Body.String()) != `{"code":"wrong_password","error":"password does not match"}` {
+		t.Fatalf("%d %s", rec.Code, rec.Body)
+	}
+}

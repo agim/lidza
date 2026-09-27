@@ -132,7 +132,9 @@ result says so while that is the case.
    `In` is the JSON body type (`router.None` without one) and `Out` the reply
    (`router.None` for 204). Put the shapes in `schema.lidza` so they get
    validation and reach the client. Return `router.NotFound("thing")` or
-   `router.Errorf(status, ...)` for client-visible errors; any other error is a
+   `router.Errorf(status, ...)` for client-visible errors, or
+   `router.ErrorCode(status, "code", ...)` when a client must tell two
+   errors of one status apart (it reads `err.code`); any other error is a
    500 whose text stays on the server. Keep handlers under `/api/v1/`.
 3. Name handlers: the name becomes the client method (`listPosts` gives
    `api.listPosts()`).
@@ -424,8 +426,10 @@ OAuth flow.
    also serves the route. The account page links to a form that calls
    `api.authDelete({ password })`; an account without a password (a
    provider only) sends `{}` and must have signed in within ten minutes,
-   else a 403 "sign in again to delete the account" (send the user
-   through the provider's `url` with `?redirect=` back to the form). The
+   else a 403 with code `reauthenticate` (send the user through the
+   provider's `url` with `?redirect=` back to the form); a wrong password
+   is a 403 with code `wrong_password`. Switch on `err.code` of the
+   `ApiError`, not the message. The
    route removes the user, identities, sessions and tokens, runs
    `OnDeleteUser` in the same transaction for the app's rows (an error
    rolls it all back), and clears the cookies. From the app or an admin

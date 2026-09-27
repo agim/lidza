@@ -39,7 +39,7 @@ type Session struct {
 }
 
 // ErrDisabled is the error a disabled account gets at login and refresh.
-var ErrDisabled = router.Errorf(http.StatusForbidden, "account disabled")
+var ErrDisabled = router.ErrorCode(http.StatusForbidden, "account_disabled", "account disabled")
 
 // seen records a sign-in: the account row is created or its last-seen
 // time and label updated. A disabled account is refused.

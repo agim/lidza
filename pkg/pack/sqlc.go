@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -44,6 +45,13 @@ func SyncSQLCNames(root string, s *schema.Schema) (SQLCSync, error) {
 		return res, err
 	}
 	initialisms, rename := schema.SQLCNames(s)
+	// Query parameters are named in the queries, not the schema:
+	// sqlc.narg('ids') is spelled Ids unless renamed too.
+	for k, v := range schema.SQLCRenames(queryParams(root)) {
+		if _, ok := rename[k]; !ok {
+			rename[k] = v
+		}
+	}
 	block := func(indent string) []string {
 		quoted := make([]string, len(initialisms))
 		for i, v := range initialisms {
@@ -122,4 +130,46 @@ func SyncSQLCNames(root string, s *schema.Schema) (SQLCSync, error) {
 	}
 	res.Changed = true
 	return res, os.WriteFile(p, []byte(updated), 0o644)
+}
+
+// paramRe matches a named query parameter: sqlc.arg('x'), sqlc.narg(x),
+// sqlc.slice("x") or @x.
+var paramRe = regexp.MustCompile(`sqlc\.(?:arg|narg|slice)\(\s*['"]?([A-Za-z_][A-Za-z0-9_]*)['"]?\s*\)|(?:^|[^@:\w])@([A-Za-z_][A-Za-z0-9_]*)`)
+
+// queryParams lists the named parameters of root's queries (db/queries,
+// or the queries path sqlc.yaml names).
+func queryParams(root string) []string {
+	dirs := []string{filepath.Join(root, "db", "queries")}
+	if data, err := os.ReadFile(filepath.Join(root, SQLCFile)); err == nil {
+		for _, line := range strings.Split(string(data), "\n") {
+			if k, v, ok := strings.Cut(strings.TrimSpace(line), ":"); ok && k == "queries" {
+				if v = strings.Trim(strings.TrimSpace(v), `"'`); v != "" {
+					dirs = []string{filepath.Join(root, v)}
+				}
+			}
+		}
+	}
+	seen := map[string]bool{}
+	var out []string
+	for _, d := range dirs {
+		files, _ := filepath.Glob(filepath.Join(d, "*.sql"))
+		if st, err := os.Stat(d); err == nil && !st.IsDir() {
+			files = []string{d}
+		}
+		for _, f := range files {
+			data, err := os.ReadFile(f)
+			if err != nil {
+				continue
+			}
+			for _, m := range paramRe.FindAllStringSubmatch(string(data), -1) {
+				name := strings.ToLower(m[1] + m[2])
+				if name != "" && !seen[name] {
+					seen[name] = true
+					out = append(out, name)
+				}
+			}
+		}
+	}
+	sort.Strings(out)
+	return out
 }

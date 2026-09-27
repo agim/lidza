@@ -103,6 +103,19 @@ func SQLCNames(s *Schema) (initialisms []string, rename map[string]string) {
 	return Initialisms, rename
 }
 
+// SQLCRenames returns, for snake_case names sqlc turns into Go names
+// outside the schema (a query's sqlc.arg('ids') or @ids parameter), the
+// ones its initialisms alone spell differently from SQLCName.
+func SQLCRenames(names []string) map[string]string {
+	out := map[string]string{}
+	for _, n := range names {
+		if want := SQLCName(n); sqlcName(n, initialismSet) != want {
+			out[n] = want
+		}
+	}
+	return out
+}
+
 // sqlcKey is a Postgres name sqlc turns into a Go name, and where it is.
 type sqlcKey struct{ name, where string }
 

@@ -103,3 +103,39 @@ func TestSyncSQLCNames(t *testing.T) {
 		t.Errorf("query params:\n%s", queries)
 	}
 }
+
+// Named query parameters get renames too: sqlc.narg('ids') is spelled
+// IDs, not Ids, like a column would be.
+func TestSQLCParamNames(t *testing.T) {
+	root := t.TempDir()
+	os.WriteFile(filepath.Join(root, schema.FileName), []byte(artworkSchema), 0o644)
+	if _, _, err := Add(root, "db"); err != nil {
+		t.Fatal(err)
+	}
+	q := "-- name: ListArtworks :many\nSELECT * FROM artwork WHERE (sqlc.narg('ids')::uuid[] IS NULL OR id = ANY(sqlc.narg('ids')::uuid[])) AND url <> @skip_url AND html <> 'a@example.com';\n"
+	os.WriteFile(filepath.Join(root, QueriesDir, "queries.sql"), []byte(q), 0o644)
+	if got := strings.Join(queryParams(root), ","); got != "ids,skip_url" {
+		t.Fatalf("params: %s", got)
+	}
+	s, _ := schema.Load(root)
+	if _, err := SyncSQLCNames(root, s); err != nil {
+		t.Fatal(err)
+	}
+	cfg, _ := os.ReadFile(filepath.Join(root, SQLCFile))
+	if !strings.Contains(string(cfg), "ids: \"IDs\"") {
+		t.Fatalf("no rename for the parameter:\n%s", cfg)
+	}
+	if _, err := exec.LookPath("sqlc"); err != nil {
+		t.Skip("sqlc not installed")
+	}
+	os.WriteFile(filepath.Join(root, schema.SQLFile), []byte(schema.GenerateSQL(s)), 0o644)
+	cmd := exec.Command("sqlc", "generate")
+	cmd.Dir = root
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("sqlc: %v\n%s", err, out)
+	}
+	queries, _ := os.ReadFile(filepath.Join(root, "db", "queries", "gen", "queries.sql.go"))
+	if !strings.Contains(string(queries), "\tIDs ") || !strings.Contains(string(queries), "\tSkipURL ") {
+		t.Fatalf("params:\n%s", queries)
+	}
+}

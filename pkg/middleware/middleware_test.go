@@ -88,6 +88,26 @@ func TestTimeout(t *testing.T) {
 	}
 }
 
+// A request for server-sent events gets the stream deadline, anything
+// else the ordinary one.
+func TestStreamTimeout(t *testing.T) {
+	var got time.Duration
+	h := StreamTimeout(time.Second, time.Hour)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		dl, _ := r.Context().Deadline()
+		got = time.Until(dl)
+	}))
+	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/", nil))
+	if got > time.Second {
+		t.Fatalf("plain request: %s", got)
+	}
+	req := httptest.NewRequest("POST", "/", nil)
+	req.Header.Set("Accept", "text/event-stream")
+	h.ServeHTTP(httptest.NewRecorder(), req)
+	if got < 59*time.Minute {
+		t.Fatalf("stream: %s", got)
+	}
+}
+
 func TestMaxBody(t *testing.T) {
 	h := MaxBody(4)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, err := io.ReadAll(r.Body)

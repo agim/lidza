@@ -36,7 +36,8 @@ type StreamHandler[In, Event any] func(ctx context.Context, req *Request[In], se
 // does, with the status and a JSON body. After it the headers are gone:
 // the error is sent as an "error" event, its data the same body plus
 // "status", and the stream closes. send fails once the client has gone
-// or the request's deadline (App.Timeout) has passed; return then. send
+// or the request's deadline (App.StreamTimeout for a client that
+// accepts text/event-stream) has passed; return then. send
 // may be called from several goroutines, not after the handler returns.
 func Stream[In, Event any](r *Router, pattern string, h StreamHandler[In, Event], mw ...middleware.Middleware) {
 	_, noBody := any(*new(In)).(None)

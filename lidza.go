@@ -27,6 +27,9 @@ import (
 // DefaultTimeout is the per-request deadline for API handlers.
 const DefaultTimeout = 30 * time.Second
 
+// DefaultStreamTimeout is the deadline for streamed operations.
+const DefaultStreamTimeout = 10 * time.Minute
+
 // App describes one application.
 type App struct {
 	// Name is shown in logs.
@@ -46,6 +49,11 @@ type App struct {
 	// Timeout is the deadline every API request's context gets; default
 	// DefaultTimeout.
 	Timeout time.Duration
+	// StreamTimeout is the deadline of a streamed operation
+	// (router.Stream, asked for with Accept: text/event-stream, as the
+	// generated clients do); default DefaultStreamTimeout. A model's
+	// answer streams for longer than a JSON reply takes.
+	StreamTimeout time.Duration
 	// CSP is the Content-Security-Policy sent with every response. Empty
 	// sends none; Vite's dev server needs inline scripts, so set it for
 	// production builds only.
@@ -258,12 +266,16 @@ func handler(app App, services *Services) (http.Handler, *devserver.Sidecar, err
 	if timeout == 0 {
 		timeout = DefaultTimeout
 	}
+	streamTimeout := app.StreamTimeout
+	if streamTimeout == 0 {
+		streamTimeout = DefaultStreamTimeout
+	}
 	tel := telemetry.New(services.Each)
 	chain := []middleware.Middleware{
 		middleware.RequestID(),
 		middleware.Logger(log),
 		middleware.Recover(log),
-		middleware.Timeout(timeout),
+		middleware.StreamTimeout(timeout, streamTimeout),
 		tel.Middleware(),
 	}
 	for _, p := range app.Packs {

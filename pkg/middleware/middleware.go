@@ -156,6 +156,23 @@ func Timeout(d time.Duration) Middleware {
 	}
 }
 
+// StreamTimeout is Timeout with a second deadline, stream, for requests
+// that accept only server-sent events (Accept: text/event-stream, as the
+// generated clients send for a router.Stream operation).
+func StreamTimeout(d, stream time.Duration) Middleware {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			limit := d
+			if strings.HasPrefix(r.Header.Get("Accept"), "text/event-stream") {
+				limit = stream
+			}
+			ctx, cancel := context.WithTimeout(r.Context(), limit)
+			defer cancel()
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
 // MaxBody caps the request body; reading past n fails with a
 // *http.MaxBytesError, which the typed router reports as 400.
 func MaxBody(n int64) Middleware {

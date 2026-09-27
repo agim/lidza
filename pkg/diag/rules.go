@@ -615,6 +615,7 @@ func foreignTypes(ft *ast.FuncType, routerPkg, schemaPkg string) []ast.Expr {
 			out = append(out, e)
 		}
 	}
+	typed := false
 	for _, p := range ft.Params.List {
 		star, ok := p.Type.(*ast.StarExpr)
 		if !ok {
@@ -624,9 +625,13 @@ func foreignTypes(ft *ast.FuncType, routerPkg, schemaPkg string) []ast.Expr {
 		if !ok || exprText(idx.X) != routerPkg+".Request" {
 			continue
 		}
+		typed = true
 		check(idx.Index)
 	}
-	if ft.Results != nil && len(ft.Results.List) == 2 {
+	// Only a typed handler (one taking *router.Request[In]) has a
+	// contract; a function over *http.Request returning two values, such
+	// as an http.RoundTripper, is not one.
+	if typed && ft.Results != nil && len(ft.Results.List) == 2 {
 		check(ft.Results.List[0].Type)
 	}
 	return out

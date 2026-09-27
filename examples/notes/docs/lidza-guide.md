@@ -641,7 +641,13 @@ app's tools. The llm pack speaks the providers; the app never does.
    `LLM_PROVIDER=fake`; set `ollama` for a local model, or `anthropic`,
    `openai` or `google` with `LLM_API_KEY` and, when the default does not
    suit, `LLM_MODEL`. `.env.test` keeps `fake`. Try the setup with the
-   MCP tool `lidza_llm` before writing code.
+   MCP tool `lidza_llm` before writing code. Embeddings come from the
+   chat provider unless `EMBED_PROVIDER` names another: `openai`,
+   `google`, `ollama` or `compatible`, with `EMBED_API_KEY`,
+   `EMBED_MODEL` and `EMBED_BASE_URL` as needed. Anthropic has no
+   embedding model, so an Anthropic app that embeds sets it;
+   `EMBED_PROVIDER=none` turns embeddings off. Keys go in the
+   credentials (`lidza credentials set EMBED_API_KEY=...`).
 2. Declare the output in `schema.lidza` when the reply is data, not
    prose:
 
@@ -658,8 +664,13 @@ app's tools. The llm pack speaks the providers; the app never does.
    out, err := llm.Generate[schema.NoteTags](ctx, llm.From(ctx), llm.Request{
    	System:   "Tag notes with one to five short lowercase topics.",
    	Messages: []llm.Message{ {Role: llm.User, Content: note.Title + "\n\n" + note.Body} },
+   	Label:    "note.tags",
    })
    ```
+
+   `Label` names the feature: with the db pack every call is a row in
+   `llm_usage` under it, so the usage report and the admin's Language
+   model page show tokens per feature.
 
    `Chat` returns prose, `Stream` delivers it as it arrives (pass each
    piece to the `send` of a `router.Stream` route, see "Add an API
@@ -668,13 +679,31 @@ app's tools. The llm pack speaks the providers; the app never does.
    packs in its context. Keep the prompt in the handler or a `prompts/`
    file, never in the frontend, and never send a row the user may not
    read.
+
+   Embeddings for search or similar items:
+
+   ```go
+   res, err := llm.From(ctx).Embeddings(ctx, llm.EmbedRequest{
+   	Texts: []string{post.Title + "\n\n" + post.Body},
+   	Label: "post.index",
+   })
+   ```
+
+   `res.Vectors` has one vector per text, `res.Usage.Input` the tokens
+   (Gemini reports none); the call is a row in `llm_usage` under its
+   label, as a chat is. `Embed(ctx, texts)` is the same call without a
+   label. When nothing can embed (`EMBED_PROVIDER=none`, or Anthropic
+   without `EMBED_PROVIDER`) the error wraps `llm.ErrNoEmbeddings`;
+   test it with `errors.Is` to fall back to keyword search.
 4. Long calls (a summary of many rows, a batch) go through the jobs
    pack; the request enqueues and the page reads the result later.
 5. Test with the fake: `.env.test` has `LLM_PROVIDER=fake`, so
    `llm.From(srv.Context()).Fake().ReplyJSON(schema.NoteTags{Tags:
    []string{"go"}})` scripts the next reply and `Fake().Calls()` shows
    the prompt the handler sent. Assert on both. The snippet
-   `llm-handler` and `routes_test.go` in the reference app show it.
+   `llm-handler` and `routes_test.go` in the reference app show it. The
+   fake embeds too, the same vector for the same text; when `.env` sets
+   `EMBED_PROVIDER`, `.env.test` sets `EMBED_PROVIDER=fake`.
 6. `lidza check`, then `lidza test`.
 
 ### Store a file

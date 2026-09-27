@@ -64,6 +64,9 @@ type Hub struct {
 type client struct {
 	send   chan Message
 	topics map[string]bool
+	// dropped is set, under the hub's lock, when send is closed: a
+	// subscribe arriving afterwards must not put it back.
+	dropped bool
 }
 
 // Pack returns the pack for packs.go.
@@ -170,16 +173,27 @@ func (h *Hub) Publish(ctx context.Context, topic string, data any) error {
 // deliver fans a message out to this node's subscribers. A subscriber
 // whose queue is full is dropped: it will reconnect, and the node keeps
 // its memory bounded.
+//
+// Dropping changes the topic map, so it takes the write lock, and it
+// removes the subscriber from every topic it had: one left in another
+// topic would be sent to on a closed channel.
 func (h *Hub) deliver(topic string, data []byte) {
 	msg := Message{Topic: topic, Data: data}
-	h.mu.RLock()
-	defer h.mu.RUnlock()
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	for c := range h.topics[topic] {
 		select {
 		case c.send <- msg:
 		default:
 			close(c.send)
-			delete(h.topics[topic], c)
+			c.dropped = true
+			for t := range c.topics {
+				delete(h.topics[t], c)
+				if len(h.topics[t]) == 0 {
+					delete(h.topics, t)
+				}
+			}
+			c.topics = map[string]bool{}
 		}
 	}
 }
@@ -220,6 +234,9 @@ func (h *Hub) Ready(ctx context.Context) error {
 func (h *Hub) subscribe(c *client, topics []string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if c.dropped {
+		return
+	}
 	for _, t := range topics {
 		if t == "" {
 			continue

@@ -98,7 +98,9 @@ func TestLimits(t *testing.T) {
 	h := New(Config{MaxConns: 1, Buffer: 2}, nil)
 	srv := serve(t, h)
 	c := dial(t, srv, "t")
-	for h.Connections() < 1 {
+	// Subscribed, not only counted: the hub counts a connection before the
+	// upgrade, and a publish before the subscription reaches no one.
+	for h.Subscribers("t") < 1 {
 		time.Sleep(5 * time.Millisecond)
 	}
 	res, err := http.Get(srv.URL + "/api/v1/realtime?topics=t")
@@ -200,5 +202,26 @@ func TestAuthorize(t *testing.T) {
 	h.Publish(ctx, "public2", "hello")
 	if m := read(t, conn); m.Topic != "public2" {
 		t.Fatalf("got %+v, want the public2 message first (private must not arrive)", m)
+	}
+}
+
+// A slow subscriber of two topics, dropped for one, is gone from both:
+// a publish on the other must not send on its closed queue (a panic).
+func TestDropLeavesEveryTopic(t *testing.T) {
+	h := New(Config{MaxConns: 4, Buffer: 1}, nil)
+	c := &client{send: make(chan Message, 1), topics: map[string]bool{}}
+	h.mu.Lock()
+	h.conns++
+	h.mu.Unlock()
+	h.subscribe(c, []string{"a", "b"})
+	h.Publish(context.Background(), "a", 1)
+	h.Publish(context.Background(), "a", 2) // overflows: dropped
+	if h.Subscribers("a") != 0 || h.Subscribers("b") != 0 {
+		t.Fatalf("still subscribed: a=%d b=%d", h.Subscribers("a"), h.Subscribers("b"))
+	}
+	h.Publish(context.Background(), "b", 3) // would panic before
+	h.subscribe(c, []string{"b"})
+	if h.Subscribers("b") != 0 {
+		t.Fatal("a dropped client subscribed again")
 	}
 }

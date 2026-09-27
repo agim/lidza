@@ -114,6 +114,9 @@ Fixes from the Galeria sample app's report of framework gaps.
 - `lidza_brief` and `lidza brief` count an answer saved garbled before
   v0.1.26 (the pasted question, menu numbers) as open, so the agent asks
   again instead of building on it.
+- realtime: a slow subscriber dropped on one topic is removed from all
+  of its topics; before, a publish on another topic sent on its closed
+  queue and panicked the node. The drop takes the hub's write lock.
 - The repository no longer carries a 36 MB `lidza` binary committed by
   mistake in v0.1.23 to v0.1.25, which every app fetching the module
   downloaded; `scripts/release.sh` refuses tracked files over 2 MB.

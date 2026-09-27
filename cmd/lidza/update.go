@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/agim/lidza/pkg/devserver"
 	"github.com/agim/lidza/pkg/version"
 )
 
@@ -123,6 +124,9 @@ func runUpdate(ctx context.Context, args []string) error {
 		case pending > 0:
 			fmt.Printf("[update] %d migration(s) wait: lidza db migrate (or lidza update --migrate); lidza test applies them to the test database itself\n", pending)
 		}
+	}
+	if pid, v, ok := devserver.RunningDev(abs); ok && v != target {
+		fmt.Printf("[update] lidza dev (pid %d) still runs %s and would regenerate with it: stop it and run lidza dev again\n", pid, v)
 	}
 	fmt.Printf("[update] done: %s; what changed is in CHANGELOG.md of the framework (https://github.com/agim/lidza/blob/%s/CHANGELOG.md)\n", target, target)
 	if current != target {

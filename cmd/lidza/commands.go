@@ -16,6 +16,7 @@ import (
 	"github.com/agim/lidza/pkg/pack"
 	"github.com/agim/lidza/pkg/scaffold"
 	"github.com/agim/lidza/pkg/schema"
+	"github.com/agim/lidza/pkg/version"
 )
 
 func runNew(ctx context.Context, args []string) error {
@@ -104,6 +105,25 @@ func runDev(ctx context.Context, args []string) error {
 	}
 	defer logFile.Close()
 	out := io.MultiWriter(os.Stdout, logFile)
+	// Recorded for lidza update, which names a dev server still on an
+	// older CLI.
+	if err := devserver.WritePID(cfg.Dir, version.String()); err == nil {
+		defer devserver.RemovePID(cfg.Dir)
+	}
+	// An update replaces this CLI on disk: from then on this process would
+	// regenerate with the old release's generators and undo the new ones,
+	// so it stops generating and says to restart.
+	exe, _ := os.Executable()
+	exeStamp := fileStamp(exe)
+	stale := false
+	cliChanged := func() bool {
+		if stale || exe == "" || fileStamp(exe) == exeStamp {
+			return stale
+		}
+		stale = true
+		fmt.Fprintf(out, "[lidza] the lidza CLI changed on disk (lidza update?); this dev server is %s and stops generating: stop it and run lidza dev again\n", version.String())
+		return true
+	}
 	// lidza.json is read again before every build: a pack added or
 	// scaffolded while dev runs is generated into packs.go and watched.
 	watch := func() []string {
@@ -115,6 +135,9 @@ func runDev(ctx context.Context, args []string) error {
 		Watch:   watch(),
 		Rewatch: watch,
 		BeforeBuild: func() error {
+			if cliChanged() {
+				return nil
+			}
 			if fresh, err := config.Load(cfg.Dir); err != nil {
 				fmt.Fprintf(out, "[lidza] lidza.json: %v (keeping the previous one)\n", err)
 			} else {
@@ -126,6 +149,9 @@ func runDev(ctx context.Context, args []string) error {
 			return generatePacks(ctx, cfg.Dir, cfg, out)
 		},
 		AfterBuild: func() {
+			if cliChanged() {
+				return
+			}
 			if err := generateClient(cfg.Dir, cfg, out); err != nil {
 				fmt.Fprintf(out, "[lidza] %v\n", err)
 			}
@@ -205,4 +231,14 @@ func packWatch(cfg *config.Config) []string {
 		out = append(out, filepath.Join(pack.Dir, name, pack.ManifestFile), filepath.Join(pack.Dir, name, "rust", "src"), filepath.Join(pack.Dir, name, "rust", "Cargo.toml"))
 	}
 	return out
+}
+
+// fileStamp identifies a file's version by size and modification time;
+// "" when it cannot be read.
+func fileStamp(p string) string {
+	info, err := os.Stat(p)
+	if err != nil {
+		return ""
+	}
+	return fmt.Sprintf("%d %d", info.Size(), info.ModTime().UnixNano())
 }

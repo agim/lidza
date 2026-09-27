@@ -11,3 +11,6 @@ func terminate(cmd *exec.Cmd, force bool) {
 		_ = cmd.Process.Kill()
 	}
 }
+
+// alive is unknown on Windows: a recorded dev server counts as running.
+func alive(pid int) bool { return pid > 0 }

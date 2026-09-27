@@ -94,3 +94,26 @@ func TestRequestRestart(t *testing.T) {
 		t.Fatal("a second request did not move the stamp")
 	}
 }
+
+// The pid file names a live dev server and its version; a dead pid or no
+// file is no dev server.
+func TestRunningDev(t *testing.T) {
+	dir := t.TempDir()
+	if _, _, ok := RunningDev(dir); ok {
+		t.Fatal("dev server without a record")
+	}
+	if err := WritePID(dir, "v0.1.28"); err != nil {
+		t.Fatal(err)
+	}
+	if pid, v, ok := RunningDev(dir); !ok || pid != os.Getpid() || v != "v0.1.28" {
+		t.Fatalf("running: %d %s %v", pid, v, ok)
+	}
+	RemovePID(dir)
+	if _, _, ok := RunningDev(dir); ok {
+		t.Fatal("still recorded after RemovePID")
+	}
+	os.WriteFile(filepath.Join(dir, PIDFile), []byte("999999999 v0.1.1\n"), 0o644)
+	if _, _, ok := RunningDev(dir); ok {
+		t.Fatal("a dead pid counts as running")
+	}
+}

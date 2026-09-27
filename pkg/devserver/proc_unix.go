@@ -24,3 +24,8 @@ func terminate(cmd *exec.Cmd, force bool) {
 	}
 	_ = syscall.Kill(-cmd.Process.Pid, sig)
 }
+
+// alive reports whether a process with pid runs (signal 0 checks only).
+func alive(pid int) bool {
+	return pid > 0 && syscall.Kill(pid, 0) == nil
+}

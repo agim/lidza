@@ -83,7 +83,9 @@ lose data or fail on existing rows).
 - **Container**: the image runs as `nonroot` on port 3000; pass the
   environment at run time (`docker run --env-file .env.production`).
 - **Shutdown**: SIGTERM drains in-flight requests up to the request
-  timeout, then stops the packs (jobs finish their current run).
+  timeout, then stops the packs: a running job gets `JOBS_DRAIN` (1s) to
+  finish, then its context is cancelled and it goes back to pending, due
+  at once for another node or the restart.
 
 ## TLS without a proxy
 

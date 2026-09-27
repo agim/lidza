@@ -9,6 +9,21 @@
   {{end}}
 </div>
 {{if $d.Error}}<div class="alert alert-danger">{{$d.Error}}</div>{{end}}
+{{if $d.Schedules}}
+<div class="card mb-3">
+  <div class="card-header"><h2 class="card-title">Schedules</h2><div class="card-actions small text-secondary">declared on this node</div></div>
+  {{if $d.ScheduleError}}<div class="card-body pb-0"><div class="alert alert-warning">Next runs are computed: the job_schedule table could not be read (run <code>lidza gen</code> and <code>lidza db migrate</code>). {{$d.ScheduleError}}</div></div>{{end}}
+  <div class="table-responsive"><table class="table table-vcenter card-table">
+    <thead><tr><th>Kind</th><th>Schedule</th><th>Next run</th><th>Last run</th></tr></thead>
+    <tbody>{{range $d.Schedules}}<tr>
+      <td><span class="badge bg-secondary-lt font-monospace">{{.Kind}}</span></td>
+      <td class="small font-monospace">{{.Spec}}</td>
+      <td>{{.NextRun.Format "Mon 2 Jan 15:04 MST"}} <span class="small text-secondary">{{until .NextRun}}</span></td>
+      <td class="text-secondary">{{if .LastRun}}<span title="{{.LastRun.Format "2006-01-02 15:04 MST"}}">{{since .LastRun}}</span>{{else}}not yet{{end}}</td>
+    </tr>{{end}}</tbody>
+  </table></div>
+</div>
+{{end}}
 <div class="card">
   <div class="card-header"><h2 class="card-title">Recent jobs</h2><div class="card-actions small text-secondary">{{int (index $d.Stats "workers")}} worker(s) on this node · {{int (index $d.Stats "active")}} busy</div></div>
   {{if $d.Rows}}

@@ -118,16 +118,18 @@ var Officials = []Official{
 	},
 	{
 		Name:        "jobs",
-		Description: "Background jobs on Postgres: bounded workers per node, retries with backoff, scheduling, takeover of jobs whose node died.",
+		Description: "Background jobs on Postgres: bounded workers per node, retries with backoff, delayed and recurring runs, takeover of jobs whose node died, release of running jobs at shutdown.",
 		Env: []string{
 			"# lidza/jobs (needs lidza/db)",
 			"JOBS_WORKERS=4",
 			"JOBS_MAX_ATTEMPTS=5",
+			"# JOBS_DRAIN=1s   # at shutdown, running jobs may finish this long, then go back to pending",
 		},
 		Notes: []string{
 			"register handlers in OnStart: jobs.FromServices(s).Handle(\"email\", func(ctx, payload) error {...})",
 			"enqueue from a handler: jobs.From(ctx).Enqueue(ctx, \"email\", payload, jobs.RunAt(t))",
-			"run `lidza gen` and `lidza db migrate`: the job table comes from schema.lidza",
+			"recurring: jobs.FromServices(s).Schedule(\"digest\", jobs.Weekly(time.Monday, \"09:00\", \"Europe/Tirane\"), nil) in OnStart; also jobs.Every(15*time.Minute), jobs.Daily(\"06:30\", zone)",
+			"run `lidza gen` and `lidza db migrate`: the job and job_schedule tables come from schema.lidza",
 		},
 	},
 	{

@@ -12,3 +12,14 @@ model Job @table("job") {
   createdAt   time   @default(now())
   @@index(state, runAt)
 }
+
+// Recurring schedules (jobs.Queue.Schedule): one row per scheduled kind
+// with its next due time; the node that moves nextRunAt on enqueues.
+model JobSchedule @table("job_schedule") {
+  kind      string @id
+  spec      string
+  nextRunAt time
+  lastRunAt time?
+  lastJobId uuid?
+  updatedAt time   @default(now())
+}

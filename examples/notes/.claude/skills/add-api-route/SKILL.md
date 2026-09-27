@@ -47,8 +47,10 @@ is validated on the server and callable from the client by name.
    event is a schema type, a string or a number. Return nil to end the
    stream. An error before the first `send` is an ordinary reply, after
    it the client gets it as an error with its status. `send` fails when
-   the client has gone; return then. The request deadline bounds a
-   stream like any request (`App.Timeout`, 30 seconds by default).
+   the client has gone; return then. A stream's deadline is
+   `App.StreamTimeout` (10 minutes by default; the generated clients ask
+   with `Accept: text/event-stream`), not the 30 seconds of other
+   requests.
 
 3. Save. `lidza dev` regenerates `schema/`, rebuilds, and rewrites the
    client (without it: `lidza gen`, MCP `lidza_gen`). Check with

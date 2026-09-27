@@ -29,6 +29,10 @@ func TestI18n(t *testing.T) {
 	if i.T(ctx, "greeting", "Agim") != "Hallo, Agim" {
 		t.Fatalf("de: %q", i.T(ctx, "greeting", "Agim"))
 	}
+	// The mail pack writes in this language (mail.Localizer).
+	if i.Language(ctx) != "de" || i.Language(req.Context()) != "en" {
+		t.Fatalf("language: %q %q", i.Language(ctx), i.Language(req.Context()))
+	}
 	if i.T(ctx, "items.one") != "one item" {
 		t.Fatal("fallback to default locale")
 	}

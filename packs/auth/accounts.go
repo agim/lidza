@@ -124,6 +124,90 @@ func (a *Auth) Enable(ctx context.Context, subject string) error {
 	return err
 }
 
+// DeleteUser removes an account and everything the pack keeps about it,
+// in one transaction: the user (auth_user), its provider identities,
+// its sessions, its one-time tokens (issued for the subject or its
+// address) and the account row. Options.OnDeleteUser of the mounted
+// sign-in runs first in the same transaction, for the app's own rows;
+// its error rolls everything back. The subject's sessions end at once.
+// A subject the pack does not know is a 404 (router.NotFound).
+//
+// When the subject is the app's first account (FirstSubject, an admin),
+// its first session row stays, revoked, so the first account does not
+// pass to the next user who signed in.
+func (a *Auth) DeleteUser(ctx context.Context, subject string) error {
+	// Known (and cached) before the transaction holds a connection.
+	if _, err := a.FirstSubject(ctx); err != nil {
+		return err
+	}
+	tx, err := a.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	mountedMu.Lock()
+	var hook func(context.Context, pgx.Tx, string) error
+	if mounted != nil {
+		hook = mounted.opt.OnDeleteUser
+	}
+	mountedMu.Unlock()
+	if hook != nil {
+		if err := hook(ctx, tx, subject); err != nil {
+			return fmt.Errorf("auth: delete user: %w", err)
+		}
+	}
+	if err := a.DeleteUserTx(ctx, tx, subject); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+// DeleteUserTx is DeleteUser inside the caller's transaction and
+// without OnDeleteUser: for an app with its own users table, which
+// deletes its row in the same transaction.
+func (a *Auth) DeleteUserTx(ctx context.Context, tx pgx.Tx, subject string) error {
+	var email, label string
+	userErr := tx.QueryRow(ctx, `DELETE FROM auth_user WHERE subject = $1 RETURNING coalesce(email, '')`, subject).Scan(&email)
+	if userErr != nil && !errors.Is(userErr, pgx.ErrNoRows) {
+		return fmt.Errorf("auth: delete user: %w", userErr)
+	}
+	accountErr := tx.QueryRow(ctx, `DELETE FROM auth_account WHERE subject = $1 RETURNING coalesce(label, '')`, subject).Scan(&label)
+	if accountErr != nil && !errors.Is(accountErr, pgx.ErrNoRows) {
+		return fmt.Errorf("auth: delete account: %w", accountErr)
+	}
+	if userErr != nil && accountErr != nil {
+		return router.NotFound("user")
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM auth_identity WHERE subject = $1`, subject); err != nil {
+		return fmt.Errorf("auth: delete identities: %w", err)
+	}
+	keys := []string{subject}
+	for _, k := range []string{email, label} {
+		if k != "" {
+			keys = append(keys, k)
+		}
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM auth_token WHERE subject = ANY($1)`, keys); err != nil {
+		return fmt.Errorf("auth: delete tokens: %w", err)
+	}
+	first, err := a.FirstSubject(ctx)
+	if err != nil {
+		return err
+	}
+	if subject == first {
+		_, err = tx.Exec(ctx, `DELETE FROM auth_session WHERE subject = $1 AND id <> (SELECT id FROM auth_session WHERE subject = $1 ORDER BY created_at, id LIMIT 1)`, subject)
+		if err == nil {
+			_, err = tx.Exec(ctx, `UPDATE auth_session SET revoked_at = coalesce(revoked_at, now()), prev_refresh_hash = NULL WHERE subject = $1`, subject)
+		}
+	} else {
+		_, err = tx.Exec(ctx, `DELETE FROM auth_session WHERE subject = $1`, subject)
+	}
+	if err != nil {
+		return fmt.Errorf("auth: delete sessions: %w", err)
+	}
+	return nil
+}
+
 // Sessions lists an account's sessions, newest first.
 func (a *Auth) Sessions(ctx context.Context, subject string) ([]Session, error) {
 	rows, err := a.pool.Query(ctx, `SELECT id, created_at, expires_at, revoked_at, rotated_at FROM auth_session WHERE subject = $1 ORDER BY created_at DESC LIMIT 100`, subject)

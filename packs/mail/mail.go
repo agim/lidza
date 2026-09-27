@@ -5,7 +5,8 @@
 // outbox: status, provider id, error, attempts); with the jobs pack
 // delivery runs in a job with retries, so a request never waits on a
 // mail API. Bodies come from templates in mail/ (<name>.txt.tmpl,
-// <name>.html.tmpl) or from the message itself.
+// <name>.html.tmpl, and <name>.<lang>.txt.tmpl for a language) or from
+// the message itself.
 package mail
 
 import (
@@ -16,9 +17,12 @@ import (
 	"fmt"
 	htmltemplate "html/template"
 	"log/slog"
+	"net/http"
 	"net/mail"
 	"os"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -28,6 +32,7 @@ import (
 	"github.com/agim/lidza"
 	"github.com/agim/lidza/packs/jobs"
 	"github.com/agim/lidza/pkg/env"
+	"github.com/agim/lidza/pkg/middleware"
 	texttemplate "text/template"
 )
 
@@ -78,17 +83,24 @@ type Config struct {
 
 // Message is what Send takes. Text and HTML are the bodies; Template
 // names mail/<Template>.txt.tmpl and mail/<Template>.html.tmpl, rendered
-// with Data, and fills whichever body is empty.
+// with Data, and fills whichever body is empty. A template that defines
+// "subject" ({{define "subject"}}...{{end}} in the .txt.tmpl) gives the
+// message its subject, over Subject.
 type Message struct {
-	To       string            `json:"to"`
-	Subject  string            `json:"subject"`
-	Text     string            `json:"text,omitempty"`
-	HTML     string            `json:"html,omitempty"`
-	Template string            `json:"template,omitempty"`
-	Data     any               `json:"data,omitempty"`
-	From     string            `json:"from,omitempty"`
-	ReplyTo  string            `json:"replyTo,omitempty"`
-	Headers  map[string]string `json:"headers,omitempty"`
+	To       string `json:"to"`
+	Subject  string `json:"subject"`
+	Text     string `json:"text,omitempty"`
+	HTML     string `json:"html,omitempty"`
+	Template string `json:"template,omitempty"`
+	// Lang is the language to write the message in ("de", "pt-BR"): Send
+	// renders <Template>.<Lang> when the app has it, then
+	// <Template>.<base language> ("pt"), then <Template>. Empty means the
+	// languages of the context (Languages): the request's.
+	Lang    string            `json:"lang,omitempty"`
+	Data    any               `json:"data,omitempty"`
+	From    string            `json:"from,omitempty"`
+	ReplyTo string            `json:"replyTo,omitempty"`
+	Headers map[string]string `json:"headers,omitempty"`
 }
 
 // Status values of an outbox row.
@@ -229,7 +241,7 @@ func (m *Mail) Link(path string) string {
 // returning otherwise, and the row records the outcome. Without the
 // outbox the provider's message id comes back.
 func (m *Mail) Send(ctx context.Context, msg Message) (string, error) {
-	if err := m.prepare(&msg); err != nil {
+	if err := m.prepare(ctx, &msg); err != nil {
 		return "", err
 	}
 	if m.pool == nil {
@@ -273,21 +285,28 @@ func (m *Mail) Deliver(ctx context.Context, id string) error {
 }
 
 // prepare validates the address, applies the default sender and renders
-// the template bodies.
-func (m *Mail) prepare(msg *Message) error {
+// the template bodies, in the message's language or the context's.
+func (m *Mail) prepare(ctx context.Context, msg *Message) error {
 	if _, err := mail.ParseAddress(msg.To); err != nil {
 		return fmt.Errorf("mail: to %q: %w", msg.To, err)
-	}
-	if msg.Subject == "" {
-		return errors.New("mail: subject is empty")
 	}
 	if msg.From == "" {
 		msg.From = m.cfg.From
 	}
 	if msg.Template != "" {
-		text, html, err := m.render(msg.Template, msg.Data)
+		langs := []string{msg.Lang}
+		if msg.Lang == "" {
+			langs = Languages(ctx)
+		}
+		if name, ok := m.TemplateFor(msg.Template, langs...); ok {
+			msg.Template = name
+		}
+		subject, text, html, err := m.render(msg.Template, msg.Data)
 		if err != nil {
 			return err
+		}
+		if subject != "" {
+			msg.Subject = subject
 		}
 		if msg.Text == "" {
 			msg.Text = text
@@ -296,6 +315,9 @@ func (m *Mail) prepare(msg *Message) error {
 			msg.HTML = html
 		}
 	}
+	if msg.Subject == "" {
+		return errors.New("mail: subject is empty")
+	}
 	if msg.Text == "" && msg.HTML == "" {
 		return errors.New("mail: no body: set Text or HTML, or a Template with mail/<name>.txt.tmpl")
 	}
@@ -303,8 +325,9 @@ func (m *Mail) prepare(msg *Message) error {
 }
 
 // loadTemplates parses every <name>.txt.tmpl (text/template) and
-// <name>.html.tmpl (html/template) in the templates directory. A missing
-// directory means no templates.
+// <name>.html.tmpl (html/template) in the templates directory; a
+// language's are <name>.<lang>.txt.tmpl and <name>.<lang>.html.tmpl. A
+// missing directory means no templates.
 func (m *Mail) loadTemplates() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -334,7 +357,8 @@ func (m *Mail) loadTemplates() error {
 	return nil
 }
 
-// Templates lists the template names found.
+// Templates lists the template names found; a language's carry it
+// ("verify.de").
 func (m *Mail) Templates() []string {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -352,28 +376,177 @@ func (m *Mail) Templates() []string {
 	return out
 }
 
-func (m *Mail) render(name string, data any) (text, html string, err error) {
+// TemplateFor returns the template Send renders for name in langs, best
+// first: <name>.<lang>, then <name>.<base language> ("pt" for "pt-BR"),
+// for each language in turn, then <name> itself. The language part
+// matches in any case. False when none of them exists.
+func (m *Mail) TemplateFor(name string, langs ...string) (string, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	for _, candidate := range candidates(name, langs) {
+		if m.text[candidate] != nil || m.html[candidate] != nil {
+			return candidate, true
+		}
+		for n := range m.text {
+			if strings.EqualFold(n, candidate) {
+				return n, true
+			}
+		}
+		for n := range m.html {
+			if strings.EqualFold(n, candidate) {
+				return n, true
+			}
+		}
+	}
+	return "", false
+}
+
+// candidates lists the template names to try for name in langs.
+func candidates(name string, langs []string) []string {
+	var out []string
+	seen := map[string]bool{}
+	add := func(c string) {
+		if !seen[c] {
+			seen[c] = true
+			out = append(out, c)
+		}
+	}
+	for _, l := range langs {
+		l = strings.ToLower(strings.ReplaceAll(strings.TrimSpace(l), "_", "-"))
+		if l == "" {
+			continue
+		}
+		add(name + "." + l)
+		if base, _, ok := strings.Cut(l, "-"); ok {
+			add(name + "." + base)
+		}
+	}
+	add(name)
+	return out
+}
+
+func (m *Mail) render(name string, data any) (subject, text, html string, err error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	t, h := m.text[name], m.html[name]
 	if t == nil && h == nil {
-		return "", "", fmt.Errorf("mail: no template %q in %s (expected %s.txt.tmpl or %s.html.tmpl)", name, m.cfg.TemplatesDir, name, name)
+		return "", "", "", fmt.Errorf("mail: no template %q in %s (expected %s.txt.tmpl or %s.html.tmpl)", name, m.cfg.TemplatesDir, name, name)
 	}
 	var buf bytes.Buffer
 	if t != nil {
 		if err := t.Execute(&buf, data); err != nil {
-			return "", "", fmt.Errorf("mail template %s: %w", name, err)
+			return "", "", "", fmt.Errorf("mail template %s: %w", name, err)
 		}
 		text = buf.String()
 		buf.Reset()
+		if st := t.Lookup("subject"); st != nil {
+			if err := st.Execute(&buf, data); err != nil {
+				return "", "", "", fmt.Errorf("mail template %s: subject: %w", name, err)
+			}
+			subject = strings.Join(strings.Fields(buf.String()), " ")
+			buf.Reset()
+		}
 	}
 	if h != nil {
 		if err := h.Execute(&buf, data); err != nil {
-			return "", "", fmt.Errorf("mail template %s: %w", name, err)
+			return "", "", "", fmt.Errorf("mail template %s: %w", name, err)
 		}
 		html = buf.String()
 	}
-	return text, html, nil
+	return subject, text, html, nil
+}
+
+// Localizer is a service that knows the language of a context; the i18n
+// pack is one (the locale it negotiated for the request, or its
+// default). Languages asks it.
+type Localizer interface {
+	Language(ctx context.Context) string
+}
+
+type acceptKey struct{}
+
+// WithAcceptLanguage records a request's Accept-Language header in ctx
+// for Languages; the pack's middleware does it on every API request.
+func WithAcceptLanguage(ctx context.Context, header string) context.Context {
+	if header == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, acceptKey{}, header)
+}
+
+// Middleware records the request's Accept-Language
+// (WithAcceptLanguage), so a message sent while handling it is written
+// in the visitor's language. It runs with the pack; nothing to register.
+func (m *Mail) Middleware() middleware.Middleware {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if h := r.Header.Get("Accept-Language"); h != "" {
+				r = r.WithContext(WithAcceptLanguage(r.Context(), h))
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// Languages returns the languages a message sent with ctx is written
+// in, best first: the i18n pack's locale when that pack runs (a
+// Localizer among the services), else the request's Accept-Language
+// (recorded by the pack's middleware or WithAcceptLanguage). Nil when
+// neither says; outside a request without i18n, set Message.Lang (the
+// user's stored language) instead.
+func Languages(ctx context.Context) []string {
+	if s := lidza.ServicesFrom(ctx); s != nil {
+		lang := ""
+		s.Each(func(v any) {
+			if l, ok := v.(Localizer); ok && lang == "" {
+				lang = l.Language(ctx)
+			}
+		})
+		if lang != "" {
+			return []string{lang}
+		}
+	}
+	h, _ := ctx.Value(acceptKey{}).(string)
+	return ParseAcceptLanguage(h)
+}
+
+// ParseAcceptLanguage returns the languages of an Accept-Language
+// header by preference ("de-CH, fr;q=0.8" gives de-CH, fr). The
+// wildcard and q=0 entries are left out, and at most ten are read.
+func ParseAcceptLanguage(header string) []string {
+	type pref struct {
+		tag string
+		q   float64
+	}
+	var prefs []pref
+	for _, part := range strings.Split(header, ",") {
+		if len(prefs) == 10 {
+			break
+		}
+		tag, params, _ := strings.Cut(part, ";")
+		tag = strings.TrimSpace(tag)
+		if tag == "" || tag == "*" || len(tag) > 35 {
+			continue
+		}
+		q := 1.0
+		if v, ok := strings.CutPrefix(strings.TrimSpace(params), "q="); ok {
+			f, err := strconv.ParseFloat(strings.TrimSpace(v), 64)
+			if err != nil {
+				continue
+			}
+			q = f
+		}
+		if q <= 0 {
+			continue
+		}
+		prefs = append(prefs, pref{tag, q})
+	}
+	sort.SliceStable(prefs, func(a, b int) bool { return prefs[a].q > prefs[b].q })
+	var out []string
+	for _, p := range prefs {
+		out = append(out, p.tag)
+	}
+	return out
 }
 
 // Stored is a row of the outbox.

@@ -242,7 +242,7 @@ func main() {}
 	if login.Handler.File != "lidza/packs/auth/signin.go" || login.Handler.Line == 0 {
 		t.Fatalf("handler: %+v", login.Handler)
 	}
-	for _, id := range []string{"authRegister", "authLogout", "authSession", "authMe", "authVerify", "authForgot", "authReset", "authPassword", "authProviders"} {
+	for _, id := range []string{"authRegister", "authLogout", "authSession", "authMe", "authVerify", "authForgot", "authReset", "authPassword", "authDelete", "authProviders"} {
 		if _, ok := byID[id]; !ok {
 			t.Errorf("operation %s missing", id)
 		}

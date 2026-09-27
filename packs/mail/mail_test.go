@@ -116,7 +116,7 @@ func TestTemplatesAndValidation(t *testing.T) {
 		t.Fatalf("templates: %v", names)
 	}
 	msg := Message{To: "ada@example.com", Subject: "Verify", Template: "verify", Data: map[string]string{"Name": "Ada", "Link": "https://x/verify?token=1&a=<b>"}}
-	if err := m.prepare(&msg); err != nil {
+	if err := m.prepare(context.Background(), &msg); err != nil {
 		t.Fatal(err)
 	}
 	if msg.Text != "Hello Ada, open https://x/verify?token=1&a=<b>" || !strings.Contains(msg.HTML, `href="https://x/verify?token=1&amp;a=%3cb%3e"`) || msg.From != "app@example.com" {
@@ -128,7 +128,7 @@ func TestTemplatesAndValidation(t *testing.T) {
 		{To: "a@b.c", Subject: "x"},
 		{To: "a@b.c", Subject: "x", Template: "missing"},
 	} {
-		if err := m.prepare(&bad); err == nil {
+		if err := m.prepare(context.Background(), &bad); err == nil {
 			t.Errorf("accepted %+v", bad)
 		}
 	}
@@ -137,6 +137,76 @@ func TestTemplatesAndValidation(t *testing.T) {
 		t.Fatalf("send without outbox: %q %v", id, err)
 	}
 }
+
+// TestLocalizedTemplates: <name>.<lang> is chosen by the message's Lang,
+// the i18n pack's locale or Accept-Language, with the base language and
+// then <name> as the fallbacks; a template's "subject" is the subject.
+func TestLocalizedTemplates(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "welcome.txt.tmpl"), []byte("Welcome {{.Name}}"), 0o644)
+	os.WriteFile(filepath.Join(dir, "welcome.de.txt.tmpl"), []byte(`{{define "subject"}}Willkommen, {{.Name}}
+{{end}}Willkommen {{.Name}}`), 0o644)
+	os.WriteFile(filepath.Join(dir, "welcome.pt-BR.html.tmpl"), []byte("<p>Bem-vindo {{.Name}}</p>"), 0o644)
+	m, err := New(Config{Provider: "outbox", From: "app@example.com", TemplatesDir: dir}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	send := func(ctx context.Context, lang string) Message {
+		t.Helper()
+		msg := Message{To: "ada@example.com", Subject: "Welcome", Template: "welcome", Lang: lang, Data: map[string]string{"Name": "Ada"}}
+		if err := m.prepare(ctx, &msg); err != nil {
+			t.Fatal(err)
+		}
+		return msg
+	}
+	bg := context.Background()
+	if msg := send(bg, "de"); msg.Template != "welcome.de" || msg.Text != "Willkommen Ada" || msg.Subject != "Willkommen, Ada" {
+		t.Fatalf("de: %+v", msg)
+	}
+	// A regional tag falls back to its base language, any case.
+	if msg := send(bg, "DE-at"); msg.Template != "welcome.de" {
+		t.Fatalf("de-AT: %+v", msg)
+	}
+	if msg := send(bg, "pt-br"); msg.Template != "welcome.pt-BR" || msg.HTML != "<p>Bem-vindo Ada</p>" || msg.Subject != "Welcome" {
+		t.Fatalf("pt-BR: %+v", msg)
+	}
+	// A language without templates, or none, gets the default.
+	if msg := send(bg, "fr"); msg.Template != "welcome" || msg.Text != "Welcome Ada" || msg.Subject != "Welcome" {
+		t.Fatalf("fr: %+v", msg)
+	}
+	if msg := send(bg, ""); msg.Template != "welcome" {
+		t.Fatalf("no language: %+v", msg)
+	}
+	// The request's Accept-Language, recorded by the middleware.
+	var seen context.Context
+	h := m.Middleware()(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { seen = r.Context() }))
+	req := httptest.NewRequest("POST", "/api/v1/x", nil)
+	req.Header.Set("Accept-Language", "fr-CH, fr;q=0.9, de;q=0.8, *;q=0.1")
+	h.ServeHTTP(httptest.NewRecorder(), req)
+	if got := strings.Join(Languages(seen), ","); got != "fr-CH,fr,de" {
+		t.Fatalf("languages: %s", got)
+	}
+	if msg := send(seen, ""); msg.Template != "welcome.de" {
+		t.Fatalf("accept-language: %+v", msg)
+	}
+	// An explicit Lang wins over the request.
+	if msg := send(seen, "pt-BR"); msg.Template != "welcome.pt-BR" {
+		t.Fatalf("explicit lang: %+v", msg)
+	}
+	// The i18n pack's locale (a Localizer service) wins over the header.
+	s := lidza.NewServices()
+	lidza.Provide[Localizer](s, fixedLocale("pt-BR"))
+	if msg := send(lidza.WithServices(seen, s), ""); msg.Template != "welcome.pt-BR" {
+		t.Fatalf("localizer: %+v", msg)
+	}
+	if got := ParseAcceptLanguage("en;q=0.5, de;q=bad, ja;q=0, it"); strings.Join(got, ",") != "it,en" {
+		t.Fatalf("parse: %v", got)
+	}
+}
+
+type fixedLocale string
+
+func (f fixedLocale) Language(context.Context) string { return string(f) }
 
 func TestMIME(t *testing.T) {
 	msg := Message{Subject: "Hi there", Text: "plain ünïcode", HTML: "<p>hi</p>", ReplyTo: "r@example.com", Headers: map[string]string{"X-Tag": "welcome"}}

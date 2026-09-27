@@ -9,8 +9,10 @@ import (
 // Initialisms are the name parts Go spells in capitals: authorId is
 // AuthorID, url is URL. Their plurals keep a lowercase s: artworkIds is
 // ArtworkIDs, imageUrls is ImageURLs. The schema package and sqlc's
-// db/queries/gen use the same names: `lidza gen` writes this list and the
-// plurals into sqlc.yaml (SQLCNames).
+// db/queries/gen follow the same rule: `lidza gen` writes this list and
+// the plurals into sqlc.yaml (SQLCNames). Model and enum names are the
+// ones schema.lidza gives; sqlc derives its struct and enum names from
+// the table and the Postgres type (SQLCName).
 var Initialisms = []string{"id", "url", "api", "http", "json", "uuid", "sql", "ip", "html"}
 
 var initialismSet = func() map[string]bool {
@@ -53,18 +55,28 @@ func pluralInitialism(p string) bool {
 	return len(p) > 1 && p[len(p)-1] == 's' && initialismSet[p[:len(p)-1]] && p != "https"
 }
 
-// sqlcName is the name sqlc gives a column with Initialisms configured
-// and no rename (its StructName): parts split on anything but letters
-// and digits, initialisms in capitals, the rest title-cased.
-func sqlcName(column string, initialisms map[string]bool) string {
-	column = strings.Map(func(r rune) rune {
+// SQLCName is the Go name sqlc gives a Postgres name (a column, a table
+// in the singular, an enum type, or an enum type and value joined by _)
+// once sqlc.yaml carries SQLCNames: api_key is APIKey, artwork_ids is
+// ArtworkIDs, status_draft is StatusDraft.
+func SQLCName(name string) string { return joinParts(sqlcParts(name), true) }
+
+// sqlcParts replaces what is not a letter or digit with _, as sqlc does.
+func sqlcParts(name string) string {
+	return strings.Map(func(r rune) rune {
 		if unicode.IsLetter(r) || unicode.IsDigit(r) {
 			return r
 		}
 		return '_'
-	}, column)
+	}, name)
+}
+
+// sqlcName is the name sqlc gives a Postgres name with these initialisms
+// and no rename (its StructName): parts split on anything but letters
+// and digits, initialisms in capitals, the rest title-cased.
+func sqlcName(name string, initialisms map[string]bool) string {
 	var b strings.Builder
-	for _, p := range strings.Split(column, "_") {
+	for _, p := range strings.Split(sqlcParts(name), "_") {
 		if p == "" {
 			continue
 		}
@@ -77,24 +89,49 @@ func sqlcName(column string, initialisms map[string]bool) string {
 	return b.String()
 }
 
-// SQLCNames returns what sqlc.yaml needs so that db/queries/gen names
-// columns as the schema package names fields: the initialisms, and a
-// rename for each column whose name sqlc cannot spell from them alone
-// (a plural: artwork_ids is ArtworkIDs).
+// SQLCNames returns what sqlc.yaml needs so that db/queries/gen follows
+// the naming of the schema package: the initialisms, and a rename for
+// each name sqlc cannot spell from them alone (a plural: artwork_ids is
+// ArtworkIDs). A column's name is then its field's name in schema/.
 func SQLCNames(s *Schema) (initialisms []string, rename map[string]string) {
 	rename = map[string]string{}
-	if s == nil {
-		return Initialisms, rename
-	}
-	for _, m := range s.Models {
-		for _, f := range m.Fields {
-			col := snake(f.Name)
-			if want := GoName(f.Name); sqlcName(col, initialismSet) != want {
-				rename[col] = want
-			}
+	for _, k := range sqlcKeys(s) {
+		if want := SQLCName(k.name); sqlcName(k.name, initialismSet) != want {
+			rename[k.name] = want
 		}
 	}
 	return Initialisms, rename
+}
+
+// sqlcKey is a Postgres name sqlc turns into a Go name, and where it is.
+type sqlcKey struct{ name, where string }
+
+// sqlcKeys lists the names of s that sqlc turns into Go names: columns,
+// tables (sqlc makes them singular; a trailing s is dropped here), enum
+// types and enum values.
+func sqlcKeys(s *Schema) []sqlcKey {
+	var out []sqlcKey
+	if s == nil {
+		return out
+	}
+	for _, e := range s.Enums {
+		name := snake(e.Name)
+		out = append(out, sqlcKey{name, "enum type " + name})
+		for _, v := range e.Values {
+			out = append(out, sqlcKey{name + "_" + v, "enum value " + name + "." + v})
+		}
+	}
+	for _, m := range s.Models {
+		singular := m.Table
+		if strings.HasSuffix(singular, "s") && !strings.HasSuffix(singular, "ss") {
+			singular = strings.TrimSuffix(singular, "s")
+		}
+		out = append(out, sqlcKey{singular, "table " + m.Table})
+		for _, f := range m.Fields {
+			out = append(out, sqlcKey{snake(f.Name), "column " + m.Table + "." + snake(f.Name)})
+		}
+	}
+	return out
 }
 
 // Rename is a Go name that changed with a Līdza release.
@@ -106,27 +143,22 @@ type Rename struct {
 
 func (r Rename) String() string { return r.Where + ": " + r.Old + " is now " + r.New }
 
-// QueryRenames lists the db/queries/gen field names that change when
-// sqlc.yaml first gets the names SQLCNames gives: before, sqlc knew only
-// the initialism id.
+// QueryRenames lists the db/queries/gen names that change when sqlc.yaml
+// first gets the names SQLCNames gives: before, sqlc knew only the
+// initialism id. Fields of the query rows and parameters change with the
+// columns they come from.
 func QueryRenames(s *Schema) []Rename {
 	var out []Rename
-	if s == nil {
-		return out
-	}
 	seen := map[string]bool{}
-	for _, m := range s.Models {
-		for _, f := range m.Fields {
-			col := snake(f.Name)
-			old, cur := sqlcName(col, map[string]bool{"id": true}), GoName(f.Name)
-			if old == cur || seen[col] {
-				continue
-			}
-			seen[col] = true
-			out = append(out, Rename{Where: "queries (column " + m.Table + "." + col + ")", Old: old, New: cur})
+	for _, k := range sqlcKeys(s) {
+		old, cur := sqlcName(k.name, map[string]bool{"id": true}), SQLCName(k.name)
+		if old == cur || seen[old] {
+			continue
 		}
+		seen[old] = true
+		out = append(out, Rename{Where: "queries (" + k.where + ")", Old: old, New: cur})
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Old < out[j].Old })
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Old < out[j].Old })
 	return out
 }
 

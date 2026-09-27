@@ -368,12 +368,16 @@ func TestNames(t *testing.T) {
 // TestSQLCNames: sqlc gets the schema's initialisms, and a rename where
 // they are not enough (plurals), so both packages spell a column alike.
 func TestSQLCNames(t *testing.T) {
-	s := mustParse(`model Artwork {
+	s := mustParse(`enum Source { api ids plain }
+model Artwork {
   id         uuid     @id
   url        string
   artworkIds uuid[]
   html       text?
   metId      int
+}
+model ApiKey {
+  id uuid @id
 }
 type Search {
   pageIds int[]
@@ -383,8 +387,11 @@ type Search {
 	if strings.Join(initialisms, ",") != strings.Join(Initialisms, ",") {
 		t.Errorf("initialisms %v", initialisms)
 	}
-	if len(rename) != 1 || rename["artwork_ids"] != "ArtworkIDs" {
+	if len(rename) != 2 || rename["artwork_ids"] != "ArtworkIDs" || rename["source_ids"] != "SourceIDs" {
 		t.Errorf("rename %v", rename)
+	}
+	if SQLCName("api_key") != "APIKey" || SQLCName("source_ids") != "SourceIDs" || SQLCName("note") != "Note" {
+		t.Error("SQLCName")
 	}
 	for _, f := range s.Models[0].Fields {
 		col := snake(f.Name)
@@ -400,8 +407,11 @@ type Search {
 	for _, r := range QueryRenames(s) {
 		renames = append(renames, r.String())
 	}
-	want := "queries (column artwork.artwork_ids): ArtworkIds is now ArtworkIDs," +
+	want := "queries (table api_key): ApiKey is now APIKey," +
+		"queries (column artwork.artwork_ids): ArtworkIds is now ArtworkIDs," +
 		"queries (column artwork.html): Html is now HTML," +
+		"queries (enum value source.api): SourceApi is now SourceAPI," +
+		"queries (enum value source.ids): SourceIds is now SourceIDs," +
 		"queries (column artwork.url): Url is now URL"
 	if strings.Join(renames, ",") != want {
 		t.Errorf("query renames:\n%s\nwant\n%s", strings.Join(renames, ","), want)

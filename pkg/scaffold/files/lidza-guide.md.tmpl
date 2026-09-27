@@ -1039,10 +1039,11 @@ referenced one, `@ref(Model, setnull)` clears an optional field), `@min(n)` / `@
 
 Go names follow the field names with initialisms in capitals and their
 plurals with a lowercase s: `authorId` is `AuthorID`, `url` is `URL`,
-`artworkIds` is `ArtworkIDs`. The structs in `schema/` and the ones
-sqlc writes to `db/queries/gen` use the same names: `lidza gen` keeps
-the initialisms and renames in `sqlc.yaml` between two `# lidza gen`
-comments.
+`artworkIds` is `ArtworkIDs`. sqlc follows the same rule in
+`db/queries/gen`, so a field has the same name in both, and its struct
+and enum names come from the table and type names the same way
+(`api_key` is `APIKey`): `lidza gen` keeps the initialisms and
+renames in `sqlc.yaml` between two `# lidza gen` comments.
 
 `lidza gen` writes the full DDL to
 `db/schema.sql` and, when models changed since `db/schema.lock.json`, a

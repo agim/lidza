@@ -164,7 +164,7 @@ func generateQueries(ctx context.Context, dir string, out io.Writer) error {
 		fmt.Fprintf(out, "[lidza] %s\n", sync.Note)
 	}
 	if sync.Added {
-		fmt.Fprintf(out, "[lidza] %s: db/queries/gen now names columns as schema/ names fields (initialisms such as URL and HTML, plurals as IDs)\n", pack.SQLCFile)
+		fmt.Fprintf(out, "[lidza] %s: db/queries/gen now spells Go names as schema/ does (initialisms such as URL and HTML in capitals, their plurals as IDs and URLs)\n", pack.SQLCFile)
 		if renames := schema.QueryRenames(s); len(renames) > 0 {
 			printRenames(out, renames)
 		}

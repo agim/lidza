@@ -230,7 +230,7 @@ func (r *Resource) Handlers() string {
 	fmt.Fprintf(&b, "func delete%s(ctx context.Context, req *router.Request[router.None]) (router.None, error) {\n\tvar out router.None\n\t%s", name, idParse)
 	fmt.Fprintf(&b, "\tn, err := queries.New(db.From(ctx)).Delete%s(ctx, id)\n\tif err != nil {\n\t\treturn out, err\n\t}\n\tif n == 0 {\n\t\treturn out, router.NotFound(\"%s\")\n\t}\n\treturn out, nil\n}\n\n", name, lower)
 
-	fmt.Fprintf(&b, "// to%s maps a row to the API type.\nfunc to%s(row queries.%s) schema.%s {\n\treturn schema.%s{\n", name, name, name, name, name)
+	fmt.Fprintf(&b, "// to%s maps a row to the API type.\nfunc to%s(row queries.%s) schema.%s {\n\treturn schema.%s{\n", name, name, schema.SQLCName(snake(name)), name, name)
 	for _, f := range r.Model.Fields {
 		fmt.Fprintf(&b, "\t\t%s: %s,\n", exported(f.Name), r.fromRow(f, "row."+sqlcName(f)))
 	}
@@ -288,9 +288,9 @@ func (r *Resource) toParam(f *schema.Field, expr string, forUpdate bool) string 
 	case f.Type == "json":
 		return "[]byte(" + expr + ")"
 	case isEnum && optional:
-		return fmt.Sprintf("(*queries.%s)(%s)", f.Type, expr)
+		return fmt.Sprintf("(*queries.%s)(%s)", schema.SQLCName(snake(f.Type)), expr)
 	case isEnum:
-		return fmt.Sprintf("queries.%s(%s)", f.Type, expr)
+		return fmt.Sprintf("queries.%s(%s)", schema.SQLCName(snake(f.Type)), expr)
 	case forUpdate && !f.Optional && !f.Array && f.Type != "bytes":
 		// Update types make every field optional (pointer); sqlc nargs take
 		// pointers too.

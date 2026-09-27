@@ -10,12 +10,17 @@ import (
 	"github.com/agim/lidza/pkg/schema"
 )
 
-const artworkSchema = `model Artwork {
+const artworkSchema = `enum Source { api ids plain }
+model Artwork {
   id         uuid     @id
   url        string
   artworkIds uuid[]
   html       text?
   providerId string?
+  source     Source
+}
+model ApiKey {
+  id uuid @id
 }
 `
 
@@ -35,7 +40,7 @@ func TestSyncSQLCNames(t *testing.T) {
 	cfg, _ := os.ReadFile(p)
 	for _, want := range []string{
 		"      go:\n        " + sqlcNamesStart + "\n        initialisms: [\"id\", \"url\", ",
-		"        rename:\n          artwork_ids: \"ArtworkIDs\"\n        " + sqlcNamesEnd + "\n        package: \"queries\"",
+		"        rename:\n          artwork_ids: \"ArtworkIDs\"\n          source_ids: \"SourceIDs\"\n        " + sqlcNamesEnd + "\n        package: \"queries\"",
 	} {
 		if !strings.Contains(string(cfg), want) {
 			t.Fatalf("sqlc.yaml missing %q:\n%s", want, cfg)
@@ -87,6 +92,11 @@ func TestSyncSQLCNames(t *testing.T) {
 	for _, f := range s.Models[0].Fields {
 		if !strings.Contains(string(models), "\t"+schema.GoName(f.Name)+" ") {
 			t.Errorf("models.go lacks %s:\n%s", schema.GoName(f.Name), models)
+		}
+	}
+	for _, want := range []string{"type APIKey struct", "type Source string", "\tSourceAPI ", "\tSourceIDs ", "\tSourcePlain "} {
+		if !strings.Contains(string(models), want) || schema.SQLCName("api_key") != "APIKey" {
+			t.Errorf("models.go lacks %q:\n%s", want, models)
 		}
 	}
 	if !strings.Contains(string(queries), "\tArtworkIDs ") || !strings.Contains(string(queries), "\tURL ") {

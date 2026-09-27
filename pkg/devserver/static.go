@@ -15,25 +15,42 @@ const ShellFile = ".server/index.html"
 // Static serves a built single-page app from dist: files by path, hashed
 // assets under /assets/ with a long cache lifetime, prerendered pages at
 // <path>/index.html, and the shell for every other path (client-side
-// routing).
-func Static(dist fs.FS) http.Handler {
+// routing). When the build has a page per locale (dist/.locales), pages
+// and the shell come in the request's locale, negotiated as the i18n pack
+// does (WithLocale passes the pack's own negotiation).
+func Static(dist fs.FS, opts ...Option) http.Handler {
 	files := http.FileServerFS(dist)
+	loc := loadLocales(dist, collect(opts).locale)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		name := strings.TrimPrefix(path.Clean("/"+r.URL.Path), "/")
-		// Dot directories (dist/.server) are build internals, never pages.
+		// Dot directories (dist/.server, dist/.locales) are build
+		// internals, never pages.
 		if strings.HasPrefix(name, ".") || strings.Contains(name, "/.") {
 			http.NotFound(w, r)
 			return
 		}
-		// A prerendered page lives at <path>/index.html.
-		if name != "" && exists(dist, name+"/index.html") {
-			page, err := fs.ReadFile(dist, name+"/index.html")
-			if err == nil {
-				w.Header().Set("Content-Type", "text/html; charset=utf-8")
-				w.Header().Set("Cache-Control", "no-cache")
-				_, _ = w.Write(page)
-				return
+		// A page in the visitor's locale: the prerendered page (the home
+		// page at "/"), else that locale's shell.
+		if loc != nil && (name == "" || !exists(dist, name)) {
+			dir := path.Join(LocalesDir, loc.pick(r))
+			candidates := []string{path.Join(dir, name, "index.html")}
+			if name != "" {
+				candidates = append(candidates, path.Join(dir, "shell.html"))
+				// Without a kept shell (the svelte template) the one page
+				// serves every path, as below.
+				if !exists(dist, ShellFile) {
+					candidates = append(candidates, path.Join(dir, "index.html"))
+				}
 			}
+			for _, file := range candidates {
+				if exists(dist, file) && servePage(w, dist, file, true) {
+					return
+				}
+			}
+		}
+		// A prerendered page lives at <path>/index.html.
+		if name != "" && exists(dist, name+"/index.html") && servePage(w, dist, name+"/index.html", false) {
+			return
 		}
 		// index.html is written directly: FileServer would redirect it to "/".
 		if name != "" && name != "index.html" && exists(dist, name) {
@@ -63,6 +80,22 @@ func Static(dist fs.FS) http.Handler {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(index)
 	})
+}
+
+// servePage writes an HTML file of dist; false when it cannot be read.
+// varies marks a page chosen by the request's language.
+func servePage(w http.ResponseWriter, dist fs.FS, file string, varies bool) bool {
+	page, err := fs.ReadFile(dist, file)
+	if err != nil {
+		return false
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	if varies {
+		w.Header().Add("Vary", "Accept-Language, Cookie")
+	}
+	_, _ = w.Write(page)
+	return true
 }
 
 func exists(fsys fs.FS, name string) bool {

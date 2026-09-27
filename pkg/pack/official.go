@@ -138,7 +138,8 @@ var Officials = []Official{
 		Env:         []string{"# lidza/i18n", "I18N_DEFAULT=en"},
 		Notes: []string{
 			"messages: i18n.From(ctx).T(ctx, \"greeting\", name); add locales/<lang>.json files",
-			"frontend catalog: r.Handle(\"GET /api/v1/i18n/{lang}\", i18n.Handler())",
+			"pages (react, svelte): t('key') from src/i18n.ts; npm run build prerenders each page per locale and the binary serves the visitor's",
+			"catalog for other clients: r.Handle(\"GET /api/v1/i18n/{lang}\", i18n.Handler())",
 		},
 	},
 	{

@@ -28,7 +28,15 @@ Add a client-side route rendered by React, prerendered at build time.
    tokens in `src/index.css` (`bg-brand`, `text-ink`, `border-line`,
    `text-muted`, `text-danger`). Change the tokens, not the classes, to
    rebrand. No other CSS framework.
-9. Add a browser test in `e2e/things.spec.ts` (see "Write a test"), then
+9. Text in more than one language (the `i18n` pack, one
+   `locales/<lang>.json` per language): write every string as
+   `t('things.title')` from `src/i18n.ts`, never a literal, and add the
+   key to every catalog (`t('things.count', n)` fills a `%d` or `%s`).
+   `npm run build` renders each page once per locale and the binary
+   serves the visitor's, with `<html lang>` and its catalog, so the first
+   paint and hydration are in that language. Format numbers and dates
+   with `Intl` and `locale()`; a language switch calls `setLocale('sq')`.
+10. Add a browser test in `e2e/things.spec.ts` (see "Write a test"), then
    `lidza check` and `lidza test --e2e`.
 
 Task: {{args}}

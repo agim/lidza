@@ -189,6 +189,7 @@ What each frontend template ships; the API contract, `lidza check`,
 | Accessibility | `jsx-a11y`, errors | Svelte compiler a11y checks, errors | `jsx-a11y` through `eslint-plugin-astro`, errors | none automated |
 | Browser tests | `e2e/` (Playwright), `lidza test --e2e` | same | same | `pages_test.go` in Go |
 | Time zone cookie | `src/timezone.ts` | same | same | inline in `views/layout.html` |
+| Translated pages | `src/i18n.ts`, a page per locale at build | same | none | Go handlers (`i18n.From(ctx).T`) |
 | Analytics reporter | `VITE_ANALYTICS=1` | `VITE_ANALYTICS=1` | `PUBLIC_ANALYTICS=1` | `ANALYTICS_FRONTEND=1`, `static/analytics.js` |
 | Styling | Tailwind v4 | `app.css` | `<style is:global>` in the layout | `static/app.css` |
 
@@ -503,7 +504,15 @@ Add a client-side route rendered by React, prerendered at build time.
    tokens in `src/index.css` (`bg-brand`, `text-ink`, `border-line`,
    `text-muted`, `text-danger`). Change the tokens, not the classes, to
    rebrand. No other CSS framework.
-9. Add a browser test in `e2e/things.spec.ts` (see "Write a test"), then
+9. Text in more than one language (the `i18n` pack, one
+   `locales/<lang>.json` per language): write every string as
+   `t('things.title')` from `src/i18n.ts`, never a literal, and add the
+   key to every catalog (`t('things.count', n)` fills a `%d` or `%s`).
+   `npm run build` renders each page once per locale and the binary
+   serves the visitor's, with `<html lang>` and its catalog, so the first
+   paint and hydration are in that language. Format numbers and dates
+   with `Intl` and `locale()`; a language switch calls `setLocale('sq')`.
+10. Add a browser test in `e2e/things.spec.ts` (see "Write a test"), then
    `lidza check` and `lidza test --e2e`.
 {{- end}}
 
@@ -1006,10 +1015,25 @@ Official Go packs, configured from `.env` (see `.env.example` after
 - `i18n`: `i18n.From(ctx).T(ctx, "key", args...)`, `Number`, `Currency`,
   `Date`, `Time`, `DateTime` (in the visitor's zone: the template sets a
   `tz` cookie, API clients send `X-Timezone`; `I18N_TIMEZONE` is the
-  default); catalogs in `locales/<lang>.json`; serve them with
+  default); catalogs in `locales/<lang>.json` (nested keys join with
+  dots); serve them to other clients with
   `r.Handle("GET /api/v1/i18n/{lang}", i18n.Handler())`. Store and send
   times in UTC; format at the edge. The mail pack writes in the
-  request's locale (`mail/<name>.<lang>.txt.tmpl`).
+  request's locale (`mail/<name>.<lang>.txt.tmpl`). Pages (react and
+  svelte templates) translate with `t('key', args...)`, `locale()` and
+  `setLocale(lang)` from `src/i18n.ts`, over the same catalogs. With more than one catalog
+  `npm run build` writes every prerendered page once per locale
+  (`dist/.locales/<lang>/`, the `I18N_DEFAULT` one also at the plain
+  path), and the binary serves the one the request negotiates (`?lang`,
+  the `lang` cookie, `Accept-Language`, then `I18N_DEFAULT`) with
+  `Vary: Accept-Language, Cookie`; the page carries `<html lang>` and its
+  catalog, so nothing renders in another language first. `LIDZA_SSR=1`
+  renders in the same locale; paths that are not prerendered get that
+  locale's shell. `setLocale` sets the `lang` cookie and reloads. An app
+  created before `src/i18n.ts` existed takes it, `scripts/` and the
+  i18n lines of `src/main.*` and `src/entry-server.*` from a new app
+  (`lidza new tmp --template react --no-setup`, or `svelte`). Recipe:
+  "Add a page".
 - `realtime`: `realtime.From(ctx).Publish(ctx, topic, value)` and
   `r.Handle("GET /api/v1/realtime", realtime.Handler(realtime.Authorize(fn)))`
   behind `auth.Require()`; `fn(r, topic)` decides per topic, and without

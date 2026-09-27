@@ -50,6 +50,8 @@ type I18n struct {
 // it here.
 func Pack(locales fs.FS) lidza.Pack { return &I18n{locales: locales} }
 
+var _ lidza.LocaleNegotiator = (*I18n)(nil)
+
 // New loads the catalogs outside the lifecycle (tests).
 func New(locales fs.FS, def string) (*I18n, error) {
 	i := &I18n{locales: locales, cfg: Config{Default: def, Timezone: "UTC"}}
@@ -224,6 +226,15 @@ func (i *I18n) Negotiate(r *http.Request) language.Tag {
 		}
 	}
 	return i.def
+}
+
+// NegotiateLocale implements lidza.LocaleNegotiator: the locale Negotiate
+// picks, for the frontend build's page per locale. Empty before Start.
+func (i *I18n) NegotiateLocale(r *http.Request) string {
+	if i.matcher == nil {
+		return ""
+	}
+	return i.Negotiate(r).String()
 }
 
 // Locales lists the available locales.

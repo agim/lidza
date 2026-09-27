@@ -230,7 +230,7 @@ func (r *Resource) Handlers() string {
 	fmt.Fprintf(&b, "func delete%s(ctx context.Context, req *router.Request[router.None]) (router.None, error) {\n\tvar out router.None\n\t%s", name, idParse)
 	fmt.Fprintf(&b, "\tn, err := queries.New(db.From(ctx)).Delete%s(ctx, id)\n\tif err != nil {\n\t\treturn out, err\n\t}\n\tif n == 0 {\n\t\treturn out, router.NotFound(\"%s\")\n\t}\n\treturn out, nil\n}\n\n", name, lower)
 
-	fmt.Fprintf(&b, "// to%s maps a row to the API type.\nfunc to%s(row queries.%s) schema.%s {\n\treturn schema.%s{\n", name, name, name, name, name)
+	fmt.Fprintf(&b, "// to%s maps a row to the API type.\nfunc to%s(row queries.%s) schema.%s {\n\treturn schema.%s{\n", name, name, schema.SQLCName(snake(name)), name, name)
 	for _, f := range r.Model.Fields {
 		fmt.Fprintf(&b, "\t\t%s: %s,\n", exported(f.Name), r.fromRow(f, "row."+sqlcName(f)))
 	}
@@ -288,9 +288,9 @@ func (r *Resource) toParam(f *schema.Field, expr string, forUpdate bool) string 
 	case f.Type == "json":
 		return "[]byte(" + expr + ")"
 	case isEnum && optional:
-		return fmt.Sprintf("(*queries.%s)(%s)", f.Type, expr)
+		return fmt.Sprintf("(*queries.%s)(%s)", schema.SQLCName(snake(f.Type)), expr)
 	case isEnum:
-		return fmt.Sprintf("queries.%s(%s)", f.Type, expr)
+		return fmt.Sprintf("queries.%s(%s)", schema.SQLCName(snake(f.Type)), expr)
 	case forUpdate && !f.Optional && !f.Array && f.Type != "bytes":
 		// Update types make every field optional (pointer); sqlc nargs take
 		// pointers too.
@@ -477,39 +477,12 @@ func snake(s string) string {
 	return b.String()
 }
 
-var initialisms = map[string]bool{"id": true, "url": true, "api": true, "http": true, "json": true, "uuid": true, "sql": true, "ip": true, "html": true}
+// exported is the schema package's name for a field. sqlcName is sqlc's
+// name for its column: the same, since lidza gen writes the schema's
+// initialisms and their plurals into sqlc.yaml.
+func exported(s string) string { return schema.GoName(s) }
 
-func exported(s string) string {
-	var b strings.Builder
-	for _, p := range strings.Split(snake(s), "_") {
-		if p == "" {
-			continue
-		}
-		if initialisms[p] {
-			b.WriteString(strings.ToUpper(p))
-		} else {
-			b.WriteString(strings.ToUpper(p[:1]) + p[1:])
-		}
-	}
-	return b.String()
-}
-
-// sqlcName is sqlc's struct field for a column: each part title-cased,
-// "id" as "ID".
-func sqlcName(f *schema.Field) string {
-	var b strings.Builder
-	for _, p := range strings.Split(snake(f.Name), "_") {
-		if p == "" {
-			continue
-		}
-		if p == "id" {
-			b.WriteString("ID")
-		} else {
-			b.WriteString(strings.ToUpper(p[:1]) + p[1:])
-		}
-	}
-	return b.String()
-}
+func sqlcName(f *schema.Field) string { return schema.GoName(f.Name) }
 
 var reserved = map[string]bool{"user": true, "order": true, "group": true, "table": true, "select": true, "from": true, "where": true, "limit": true, "offset": true, "default": true, "check": true, "primary": true, "references": true, "to": true, "in": true, "on": true, "or": true, "and": true, "not": true, "null": true, "with": true, "all": true, "any": true, "as": true, "asc": true, "desc": true, "column": true, "constraint": true, "create": true, "distinct": true, "do": true, "else": true, "end": true, "grant": true, "having": true, "into": true, "only": true, "then": true, "union": true, "unique": true, "using": true, "when": true}
 

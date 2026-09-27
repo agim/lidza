@@ -76,7 +76,14 @@ func routes(r *router.Router) {
 		return router.None{}, nil
 	})
 	r.HandleFunc("GET /api/v1/raw", nil)
+	router.Stream(r, "POST /api/v1/curate", curate)
+	router.Stream(r, "GET /api/v1/posts/feed", feed)
 }
+
+func curate(ctx context.Context, req *router.Request[schema.CreatePost], send func(string) error) error {
+	return send("x")
+}
+func feed(ctx context.Context, req *router.Request[router.None], send func(Post) error) error { return nil }
 
 func listPosts(ctx context.Context, req *router.Request[router.None]) (PostList, error) { return PostList{}, nil }
 func getPost(ctx context.Context, req *router.Request[router.None]) (Post, error)      { return Post{}, nil }
@@ -104,7 +111,7 @@ func main() { _ = routes }
 	for _, op := range c.Operations {
 		byID[op.ID] = op
 	}
-	if len(c.Operations) != 5 {
+	if len(c.Operations) != 7 {
 		t.Fatalf("operations: %+v", c.Operations)
 	}
 	if op := byID["getPost"]; op.Method != "GET" || op.Path != "/api/v1/posts/{id}" || op.Params[0] != "id" || op.Input != "" || op.Output != "Post" ||
@@ -119,6 +126,25 @@ func main() { _ = routes }
 	}
 	if op := byID["health"]; !op.Builtin || op.Output != "Health" {
 		t.Errorf("health: %+v", op)
+	}
+	// A stream's event of an unnamed type is named after the operation.
+	if op := byID["curate"]; !op.Stream || op.Input != "CreatePost" || op.Output != "CurateEvent" {
+		t.Errorf("curate: %+v", op)
+	}
+	if ev, _ := c.Schemas["CurateEvent"].(map[string]any); ev["type"] != "string" {
+		t.Errorf("CurateEvent: %v", c.Schemas["CurateEvent"])
+	}
+	if op := byID["feed"]; !op.Stream || op.Output != "Post" || byID["getPost"].Stream {
+		t.Errorf("feed: %+v", op)
+	}
+	typedRoute := false
+	for _, r := range c.Routes {
+		if r.Path == "/api/v1/curate" {
+			typedRoute = r.Typed
+		}
+	}
+	if !typedRoute {
+		t.Error("the stream route should be listed as typed")
 	}
 
 	post := c.Schemas["Post"].(map[string]any)
@@ -167,6 +193,14 @@ func main() { _ = routes }
 	}
 	if del := paths["/api/v1/posts/{id}"].(map[string]any)["delete"].(map[string]any); del["responses"].(map[string]any)["204"] == nil {
 		t.Errorf("delete: %v", del)
+	}
+	curate := paths["/api/v1/curate"].(map[string]any)["post"].(map[string]any)
+	ok := curate["x-lidza-stream"] == true
+	if content, _ := curate["responses"].(map[string]any)["200"].(map[string]any)["content"].(map[string]any); content["text/event-stream"] == nil {
+		ok = false
+	}
+	if !ok {
+		t.Errorf("openapi curate: %v", curate)
 	}
 	if _, ok := doc["components"].(map[string]any)["schemas"].(map[string]any)["ValidationError"]; !ok {
 		t.Error("ValidationError component missing")

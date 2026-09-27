@@ -8,34 +8,7 @@ import (
 )
 
 func TestTypeScript(t *testing.T) {
-	c := &inspect.Context{
-		Operations: []inspect.Operation{
-			{ID: "health", Method: "GET", Path: "/api/v1/health", Params: []string{}, Output: "Health", Builtin: true},
-			{ID: "getPost", Method: "GET", Path: "/api/v1/posts/{id}", Params: []string{"id"}, Output: "Post"},
-			{ID: "createPost", Method: "POST", Path: "/api/v1/posts", Params: []string{}, Input: "CreatePost", Output: "Post"},
-			{ID: "deletePost", Method: "DELETE", Path: "/api/v1/posts/{id}", Params: []string{"id"}},
-			{ID: "getFiles", Method: "GET", Path: "/api/v1/files/{path...}", Params: []string{"path"}, Output: "Post"},
-		},
-		Schemas: map[string]any{
-			"Health": map[string]any{"type": "object", "properties": map[string]any{
-				"status": map[string]any{"type": "string"}, "time": map[string]any{"type": "string", "format": "date-time"},
-			}, "required": []string{"status", "time"}},
-			"Status": map[string]any{"type": "string", "enum": []string{"draft", "published"}},
-			"Post": map[string]any{"type": "object", "properties": map[string]any{
-				"id":     map[string]any{"type": "string", "format": "uuid"},
-				"body":   map[string]any{"type": []any{"string", "null"}},
-				"status": map[string]any{"$ref": "#/components/schemas/Status"},
-				"tags":   map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
-				"meta":   map[string]any{},
-				"extra":  map[string]any{"type": "object", "additionalProperties": map[string]any{"type": "integer"}},
-				"author": map[string]any{"oneOf": []any{map[string]any{"$ref": "#/components/schemas/User"}, map[string]any{"type": "null"}}},
-				"opt":    map[string]any{"type": "integer"},
-			}, "required": []string{"id", "body", "status", "tags", "meta", "extra", "author"}},
-			"User":       map[string]any{"type": "object", "properties": map[string]any{"name": map[string]any{"type": "string"}}, "required": []any{"name"}},
-			"CreatePost": map[string]any{"type": "object", "properties": map[string]any{"title": map[string]any{"type": "string", "minLength": 1}}, "required": []string{"title"}, "x-lidza": "schema"},
-		},
-	}
-	files := TypeScript(c)
+	files := TypeScript(sampleContext())
 	types := files["types.ts"]
 	for _, want := range []string{
 		`export type Status = "draft" | "published"`,
@@ -63,6 +36,10 @@ func TestTypeScript(t *testing.T) {
 		"deletePost(params: { id: string }, options?: RequestOptions): Promise<void>",
 		"`/api/v1/files/${params.path}`",
 		"export class ApiError extends Error",
+		"curate(body: T.CreatePost, options?: RequestOptions): AsyncGenerator<T.CurateEvent, void, undefined> {",
+		"return stream<T.CurateEvent>(\"POST\", `/api/v1/curate`, body, options)",
+		"feed(params: { id: string }, options?: RequestOptions): AsyncGenerator<T.Post, void, undefined> {",
+		"async function* stream<E>(",
 	} {
 		if !strings.Contains(client, want) {
 			t.Errorf("client.ts missing %q\n%s", want, client)
@@ -87,5 +64,61 @@ func TestTypeScript(t *testing.T) {
 	}
 	if strings.Contains(validators, "const EMAIL") || strings.Contains(validators, "function isURL") {
 		t.Error("unused helpers emitted")
+	}
+}
+
+// TestTypeScriptUnused: an API without {name} path parameters or schema
+// rules gets neither the encoder nor the types import (noUnusedLocals).
+func TestTypeScriptUnused(t *testing.T) {
+	files := TypeScript(&inspect.Context{Operations: []inspect.Operation{
+		{ID: "ping", Method: "POST", Path: "/api/v1/ping", Params: []string{}},
+		{ID: "getFiles", Method: "GET", Path: "/api/v1/files/{path...}", Params: []string{"path"}},
+	}})
+	if strings.Contains(files["client.ts"], "const p =") {
+		t.Error("client.ts declares p without a {name} parameter")
+	}
+	if strings.Contains(files["validators.ts"], "import type") {
+		t.Error("validators.ts imports the types without a validator")
+	}
+	if strings.Contains(files["client.ts"], "function* stream") {
+		t.Error("client.ts declares stream without a streamed operation")
+	}
+	if !strings.Contains(TypeScript(sampleContext())["client.ts"], "const p = encodeURIComponent") {
+		t.Error("client.ts lacks p with a {name} parameter")
+	}
+}
+
+// sampleContext is an API with path parameters, bodies, enums, nullable
+// and optional fields, and schema rules.
+func sampleContext() *inspect.Context {
+	return &inspect.Context{
+		Operations: []inspect.Operation{
+			{ID: "health", Method: "GET", Path: "/api/v1/health", Params: []string{}, Output: "Health", Builtin: true},
+			{ID: "getPost", Method: "GET", Path: "/api/v1/posts/{id}", Params: []string{"id"}, Output: "Post"},
+			{ID: "createPost", Method: "POST", Path: "/api/v1/posts", Params: []string{}, Input: "CreatePost", Output: "Post"},
+			{ID: "deletePost", Method: "DELETE", Path: "/api/v1/posts/{id}", Params: []string{"id"}},
+			{ID: "getFiles", Method: "GET", Path: "/api/v1/files/{path...}", Params: []string{"path"}, Output: "Post"},
+			{ID: "curate", Method: "POST", Path: "/api/v1/curate", Params: []string{}, Input: "CreatePost", Output: "CurateEvent", Stream: true},
+			{ID: "feed", Method: "GET", Path: "/api/v1/posts/{id}/feed", Params: []string{"id"}, Output: "Post", Stream: true},
+		},
+		Schemas: map[string]any{
+			"Health": map[string]any{"type": "object", "properties": map[string]any{
+				"status": map[string]any{"type": "string"}, "time": map[string]any{"type": "string", "format": "date-time"},
+			}, "required": []string{"status", "time"}},
+			"Status": map[string]any{"type": "string", "enum": []string{"draft", "published"}},
+			"Post": map[string]any{"type": "object", "properties": map[string]any{
+				"id":     map[string]any{"type": "string", "format": "uuid"},
+				"body":   map[string]any{"type": []any{"string", "null"}},
+				"status": map[string]any{"$ref": "#/components/schemas/Status"},
+				"tags":   map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+				"meta":   map[string]any{},
+				"extra":  map[string]any{"type": "object", "additionalProperties": map[string]any{"type": "integer"}},
+				"author": map[string]any{"oneOf": []any{map[string]any{"$ref": "#/components/schemas/User"}, map[string]any{"type": "null"}}},
+				"opt":    map[string]any{"type": "integer"},
+			}, "required": []string{"id", "body", "status", "tags", "meta", "extra", "author"}},
+			"User":        map[string]any{"type": "object", "properties": map[string]any{"name": map[string]any{"type": "string"}}, "required": []any{"name"}},
+			"CreatePost":  map[string]any{"type": "object", "properties": map[string]any{"title": map[string]any{"type": "string", "minLength": 1}}, "required": []string{"title"}, "x-lidza": "schema"},
+			"CurateEvent": map[string]any{"type": "string"},
+		},
 	}
 }

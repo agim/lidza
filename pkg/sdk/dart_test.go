@@ -14,6 +14,9 @@ func TestDart(t *testing.T) {
 			{ID: "getPost", Method: "GET", Path: "/api/v1/posts/{id}", Params: []string{"id"}, Output: "Post"},
 			{ID: "createPost", Method: "POST", Path: "/api/v1/posts", Params: []string{}, Input: "CreatePost", Output: "Post"},
 			{ID: "deletePost", Method: "DELETE", Path: "/api/v1/posts/{id}", Params: []string{"id"}},
+			{ID: "curate", Method: "POST", Path: "/api/v1/curate", Params: []string{}, Input: "CreatePost", Output: "CurateEvent", Stream: true},
+			{ID: "feed", Method: "GET", Path: "/api/v1/posts/{id}/feed", Params: []string{"id"}, Output: "Post", Stream: true},
+			{ID: "listPosts", Method: "GET", Path: "/api/v1/posts", Params: []string{}, Output: "Anonymous9"},
 		},
 		Schemas: map[string]any{
 			"Status": map[string]any{"type": "string", "enum": []string{"draft", "in-review"}},
@@ -29,8 +32,10 @@ func TestDart(t *testing.T) {
 				"author":    map[string]any{"oneOf": []any{map[string]any{"$ref": "#/components/schemas/User"}, map[string]any{"type": "null"}}},
 				"class":     map[string]any{"type": "string"},
 			}, "required": []string{"id", "body", "status", "tags", "views", "score", "createdAt", "counts", "author", "class"}},
-			"User":       map[string]any{"type": "object", "properties": map[string]any{"name": map[string]any{"type": "string"}}, "required": []any{"name"}},
-			"CreatePost": map[string]any{"type": "object", "properties": map[string]any{"title": map[string]any{"type": "string"}}, "required": []string{"title"}},
+			"User":        map[string]any{"type": "object", "properties": map[string]any{"name": map[string]any{"type": "string"}}, "required": []any{"name"}},
+			"CreatePost":  map[string]any{"type": "object", "properties": map[string]any{"title": map[string]any{"type": "string"}}, "required": []string{"title"}},
+			"CurateEvent": map[string]any{"type": "string"},
+			"Anonymous9":  map[string]any{"type": []any{"array", "null"}, "items": map[string]any{"$ref": "#/components/schemas/Post"}},
 		},
 	}
 	files := Dart(c)
@@ -69,6 +74,12 @@ func TestDart(t *testing.T) {
 		"body: body.toJson()",
 		"Future<void> deletePost({required String id}) async {",
 		"class ApiException implements Exception",
+		"Stream<String> curate(CreatePost body) =>\n      _events('POST', '/api/v1/curate', body: body.toJson()).map((e) => e as String);",
+		"Stream<Post> feed({required String id}) =>\n      _events('GET', '/api/v1/posts/${Uri.encodeComponent(id)}/feed').map((e) => Post.fromJson(e as Map<String, dynamic>));",
+		"Stream<Object?> _events(String method, String path, {Object? body}) async* {",
+		// An unnamed output is its shape, not a class that does not exist.
+		"Future<List<Post>?> listPosts() async {",
+		"return json == null ? null : (json as List<dynamic>).map((e) => Post.fromJson(e as Map<String, dynamic>)).toList();",
 	} {
 		if !strings.Contains(client, want) {
 			t.Errorf("client.dart missing %q\n%s", want, client)

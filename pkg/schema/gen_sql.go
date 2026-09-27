@@ -18,7 +18,7 @@ func GenerateSQL(s *Schema) string {
 	for _, e := range s.Enums {
 		b.WriteString(createEnum(e) + "\n\n")
 	}
-	for _, m := range s.Models {
+	for _, m := range refOrder(s.Models, false) {
 		b.WriteString(createTable(s, m) + "\n")
 		for _, stmt := range createIndexes(m) {
 			b.WriteString(stmt + "\n")

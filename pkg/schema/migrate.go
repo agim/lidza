@@ -73,7 +73,7 @@ func Diff(prev, cur *Schema, seq int) *Migration {
 		curModels[t.Name] = t
 	}
 
-	for _, t := range cur.Models {
+	for _, t := range refOrder(cur.Models, false) {
 		old, ok := prevModels[t.Name]
 		if !ok {
 			m.Up = append(m.Up, createTable(cur, t))
@@ -181,7 +181,8 @@ func Diff(prev, cur *Schema, seq int) *Migration {
 			desc = append(desc, "alter_"+t.Table)
 		}
 	}
-	for _, old := range prev.Models {
+	// Dropped tables go the other way: the ones that reference first.
+	for _, old := range refOrder(prev.Models, true) {
 		if _, ok := curModels[old.Name]; !ok {
 			m.Up = append(m.Up, fmt.Sprintf("DROP TABLE %s; -- review: data loss", qid(old.Table)))
 			m.Down = append([]string{createTable(prev, old)}, m.Down...)

@@ -25,7 +25,9 @@ func GenerateRust(s *Schema) string {
 	for _, e := range s.Enums {
 		fmt.Fprintf(&b, "#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]\npub enum %s {\n", e.Name)
 		for _, v := range e.Values {
-			fmt.Fprintf(&b, "    #[serde(rename = %q)]\n    %s,\n", v, exported(v))
+			// Rust variants keep the names they had before Go spelled
+			// plurals of initialisms as IDs.
+			fmt.Fprintf(&b, "    #[serde(rename = %q)]\n    %s,\n", v, joinParts(snake(v), false))
 		}
 		b.WriteString("}\n\n")
 	}

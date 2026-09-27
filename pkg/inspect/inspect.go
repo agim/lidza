@@ -65,8 +65,8 @@ type Route struct {
 	Handler Handler `json:"handler"`
 	// Builtin marks routes the framework registers in every app.
 	Builtin bool `json:"builtin,omitempty"`
-	// Typed marks routes registered with router.Route; their schemas are
-	// in Context.Operations.
+	// Typed marks routes registered with router.Route or router.Stream;
+	// their schemas are in Context.Operations.
 	Typed bool `json:"typed,omitempty"`
 	// Pack names the framework pack whose Mount registered the route.
 	Pack string `json:"pack,omitempty"`
@@ -254,12 +254,12 @@ func goRoutes(root string) ([]Route, error) {
 				if !ok {
 					return true
 				}
-				// r.HandleFunc(pattern, h), r.Handle(pattern, h) and
-				// router.Route(r, pattern, h).
+				// r.HandleFunc(pattern, h), r.Handle(pattern, h),
+				// router.Route(r, pattern, h) and router.Stream(r, pattern, h).
 				patternArg, handlerArg := 0, 1
 				switch sel.Sel.Name {
 				case "HandleFunc", "Handle":
-				case "Route":
+				case "Route", "Stream":
 					if len(call.Args) < 3 {
 						return true
 					}
@@ -276,8 +276,12 @@ func goRoutes(root string) ([]Route, error) {
 					return true
 				}
 				method, path := splitPattern(pattern)
+				if patternArg == 1 && !strings.HasPrefix(path, "/") {
+					// Not a route: another package's Route or Stream.
+					return true
+				}
 				h := describeHandler(fset, root, pkg.name, call.Args[handlerArg], decls)
-				routes = append(routes, Route{Method: method, Path: path, Pattern: pattern, Handler: h, Typed: sel.Sel.Name == "Route"})
+				routes = append(routes, Route{Method: method, Path: path, Pattern: pattern, Handler: h, Typed: sel.Sel.Name != "HandleFunc" && sel.Sel.Name != "Handle"})
 				return true
 			})
 		}

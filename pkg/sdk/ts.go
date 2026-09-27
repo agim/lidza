@@ -253,48 +253,29 @@ export function configure(options: { baseUrl?: string; headers?: Record<string, 
   if (options.headers !== undefined) defaultHeaders = { ...options.headers }
 }
 
-async function request<R>(method: string, path: string, body: unknown, options?: RequestOptions): Promise<R> {
-  const headers: Record<string, string> = { Accept: 'application/json', ...defaultHeaders, ...options?.headers }
-  const init: RequestInit = { method, headers, signal: options?.signal }
-  if (options?.body !== undefined) {
-    // A raw body: the cookie session accepts it same-origin.
-    init.body = options.body
-    const own = typeof Blob !== 'undefined' && options.body instanceof Blob ? options.body.type : ''
-    const type = options.contentType ?? own
-    if (type) headers['Content-Type'] = type
-    else if (!(typeof FormData !== 'undefined' && options.body instanceof FormData)) headers['Content-Type'] = 'application/octet-stream'
-  } else {
-    // Every request that can change state is declared JSON, body or not:
-    // a cookie session is only accepted with this content type (CSRF guard).
-    if (method !== 'GET' && method !== 'HEAD') headers['Content-Type'] = 'application/json'
-    if (body !== undefined) init.body = JSON.stringify(body)
-  }
-  if (options?.query) {
-    const q = new URLSearchParams()
-    for (const [k, v] of Object.entries(options.query)) if (v !== undefined && v !== null) q.set(k, String(v))
-    const s = q.toString()
-    if (s) path += (path.includes('?') ? '&' : '?') + s
-  }
-  const res = await fetch(baseUrl + path, init)
-  const text = await res.text()
-  let parsed: unknown = undefined
-  if (text) {
-    try {
-      parsed = JSON.parse(text)
-    } catch {
-      parsed = text
-    }
-  }
-  if (!res.ok) {
-    const message = (parsed as Partial<T.ApiErrorBody> | undefined)?.error ?? res.statusText
-    throw new ApiError(res.status, parsed, ` + "`${method} ${path}: ${res.status} ${message}`" + `)
-  }
-  return parsed as R
-}
-
-const p = encodeURIComponent
-
 `)
+	// Only what the operations use: the template compiles with
+	// noUnusedLocals.
+	streams, calls := 0, 0
+	for _, op := range c.Operations {
+		if op.Stream {
+			streams++
+		} else {
+			calls++
+		}
+	}
+	if streams+calls > 0 {
+		b.WriteString(tsHelpers)
+	}
+	if calls > 0 {
+		b.WriteString(tsRequest)
+	}
+	if streams > 0 {
+		b.WriteString(tsStream)
+	}
+	if usesEncodedParam(c.Operations) {
+		b.WriteString("const p = encodeURIComponent\n\n")
+	}
 	b.WriteString("export const api = {\n")
 	for _, op := range c.Operations {
 		var args []string
@@ -315,6 +296,12 @@ const p = encodeURIComponent
 		if op.Output != "" {
 			ret = "T." + op.Output
 		}
+		if op.Stream {
+			fmt.Fprintf(&b, "  /** %s %s: server-sent events, read with for await; break or options.signal closes it. */\n", op.Method, op.Path)
+			fmt.Fprintf(&b, "  %s(%s): AsyncGenerator<%s, void, undefined> {\n", op.ID, strings.Join(args, ", "), ret)
+			fmt.Fprintf(&b, "    return stream<%s>(%q, %s, %s, options)\n  },\n", ret, op.Method, tsPath(op.Path), bodyArg)
+			continue
+		}
 		fmt.Fprintf(&b, "  /** %s %s */\n", op.Method, op.Path)
 		fmt.Fprintf(&b, "  %s(%s): Promise<%s> {\n", op.ID, strings.Join(args, ", "), ret)
 		fmt.Fprintf(&b, "    return request<%s>(%q, %s, %s, options)\n  },\n", ret, op.Method, tsPath(op.Path), bodyArg)
@@ -322,6 +309,102 @@ const p = encodeURIComponent
 	b.WriteString("}\n")
 	return b.String()
 }
+
+// tsHelpers build a request and read an error reply, for request and
+// stream.
+const tsHelpers = `/** The path with its query string, and the fetch options. */
+function prepare(method: string, path: string, body: unknown, accept: string, options?: RequestOptions): [string, RequestInit] {
+  const headers: Record<string, string> = { Accept: accept, ...defaultHeaders, ...options?.headers }
+  const init: RequestInit = { method, headers, signal: options?.signal }
+  if (options?.body !== undefined) {
+    // A raw body: the cookie session accepts it same-origin.
+    init.body = options.body
+    const own = typeof Blob !== 'undefined' && options.body instanceof Blob ? options.body.type : ''
+    const type = options.contentType ?? own
+    if (type) headers['Content-Type'] = type
+    else if (!(typeof FormData !== 'undefined' && options.body instanceof FormData)) headers['Content-Type'] = 'application/octet-stream'
+  } else {
+    // Every request that can change state is declared JSON, body or not:
+    // a cookie session is only accepted with this content type (CSRF guard).
+    if (method !== 'GET' && method !== 'HEAD') headers['Content-Type'] = 'application/json'
+    if (body !== undefined) init.body = JSON.stringify(body)
+  }
+  if (options?.query) {
+    const q = new URLSearchParams()
+    for (const [k, v] of Object.entries(options.query)) if (v !== undefined && v !== null) q.set(k, String(v))
+    const s = q.toString()
+    if (s) path += (path.includes('?') ? '&' : '?') + s
+  }
+  return [path, init]
+}
+
+function parse(text: string): unknown {
+  if (!text) return undefined
+  try {
+    return JSON.parse(text)
+  } catch {
+    return text
+  }
+}
+
+function failure(method: string, path: string, status: number, statusText: string, parsed: unknown): ApiError {
+  const message = (parsed as Partial<T.ApiErrorBody> | undefined)?.error ?? statusText
+  return new ApiError(status, parsed, ` + "`${method} ${path}: ${status} ${message}`" + `)
+}
+
+`
+
+// tsRequest sends a request and reads its JSON reply.
+const tsRequest = `async function request<R>(method: string, path: string, body: unknown, options?: RequestOptions): Promise<R> {
+  const [url, init] = prepare(method, path, body, 'application/json', options)
+  const res = await fetch(baseUrl + url, init)
+  const parsed = parse(await res.text())
+  if (!res.ok) throw failure(method, url, res.status, res.statusText, parsed)
+  return parsed as R
+}
+
+`
+
+// tsStream reads a router.Stream reply: server-sent events whose data is
+// one JSON value each, closed by an "end" event; an "error" event
+// carries the error body with its status.
+const tsStream = `/** Reads a server-sent event stream, one JSON value per event. Leaving
+ * the loop or aborting options.signal closes the connection. */
+async function* stream<E>(method: string, path: string, body: unknown, options?: RequestOptions): AsyncGenerator<E, void, undefined> {
+  const [url, init] = prepare(method, path, body, 'text/event-stream', options)
+  const res = await fetch(baseUrl + url, init)
+  if (!res.ok || !res.body) throw failure(method, url, res.status, res.statusText, parse(await res.text()))
+  const reader = res.body.pipeThrough(new TextDecoderStream()).getReader()
+  let buffer = ''
+  try {
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += value.replace(/\r/g, '')
+      let end: number
+      while ((end = buffer.indexOf('\n\n')) >= 0) {
+        const block = buffer.slice(0, end)
+        buffer = buffer.slice(end + 2)
+        let event = 'message'
+        const data: string[] = []
+        for (const line of block.split('\n')) {
+          if (line.startsWith('event:')) event = line.slice(6).trim()
+          else if (line.startsWith('data:')) data.push(line.slice(line.startsWith('data: ') ? 6 : 5))
+        }
+        if (data.length === 0) continue
+        const parsed = parse(data.join('\n'))
+        if (event === 'end') return
+        if (event === 'error') throw failure(method, url, (parsed as { status?: number } | undefined)?.status ?? 500, 'error', parsed)
+        yield parsed as E
+      }
+    }
+  } finally {
+    await reader.cancel().catch(() => undefined)
+  }
+  throw new ApiError(res.status, undefined, ` + "`${method} ${url}: the stream closed before its end`" + `)
+}
+
+`
 
 // tsPath renders "/api/v1/posts/{id}" as a template literal with encoded
 // parameters.
@@ -332,6 +415,19 @@ func tsPath(path string) string {
 		out = strings.ReplaceAll(out, "{"+name+"...}", "${params."+name+"}")
 	}
 	return strings.ReplaceAll(out, "{$}", "")
+}
+
+// usesEncodedParam reports whether a path has a {name} parameter, the
+// kind the client encodes with p (a {name...} one is sent as is).
+func usesEncodedParam(ops []inspect.Operation) bool {
+	for _, op := range ops {
+		for _, name := range pathParamsOf(op.Path) {
+			if strings.Contains(op.Path, "{"+name+"}") {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func pathParamsOf(path string) []string {

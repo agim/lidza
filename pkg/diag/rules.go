@@ -32,8 +32,9 @@ import (
 //   - L004: an import under the framework's module path that names no
 //     package of the framework version the app uses (an error: it will
 //     not compile, and `go get` cannot help);
-//   - L005: a typed handler whose input or output type is not declared in
-//     schema.lidza, so it is neither validated nor known to the client;
+//   - L005: a typed handler whose input, output or stream event type is
+//     not declared in schema.lidza, so it is neither validated nor known
+//     to the client;
 //   - L006: an import of an email vendor SDK; the mail pack speaks those
 //     APIs already, with the outbox, templates and retries;
 //   - L007: an import of a language-model vendor SDK or client library;
@@ -617,6 +618,12 @@ func foreignTypes(ft *ast.FuncType, routerPkg, schemaPkg string) []ast.Expr {
 	}
 	typed := false
 	for _, p := range ft.Params.List {
+		// A stream handler's send func(Event) error: the event type.
+		if send, ok := p.Type.(*ast.FuncType); ok && send.Params != nil && len(send.Params.List) == 1 && len(send.Params.List[0].Names) <= 1 &&
+			send.Results != nil && len(send.Results.List) == 1 && exprText(send.Results.List[0].Type) == "error" {
+			check(send.Params.List[0].Type)
+			continue
+		}
 		star, ok := p.Type.(*ast.StarExpr)
 		if !ok {
 			continue

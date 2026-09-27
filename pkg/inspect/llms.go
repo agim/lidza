@@ -59,6 +59,9 @@ func LLMS(c *Context, cfg *config.Config, guide string) (short, full string) {
 			if op.Output != "" {
 				out = op.Output
 			}
+			if op.Stream {
+				out = "a stream of " + op.Output + " (server-sent events; for await in TS, a Stream in Dart)"
+			}
 			fmt.Fprintf(&f, "- `api.%s`: %s %s, body %s, returns %s\n", op.ID, op.Method, op.Path, in, out)
 		}
 		f.WriteString("\nSchemas (JSON Schema) are in .lidza/openapi.json, served at /openapi.json in dev.\n")

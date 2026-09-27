@@ -34,8 +34,9 @@ app's tools. The llm pack speaks the providers; the app never does.
    })
    ```
 
-   `Chat` returns prose, `Stream` delivers it as it arrives (write each
-   piece to the response, or publish it on the realtime pack), and
+   `Chat` returns prose, `Stream` delivers it as it arrives (pass each
+   piece to the `send` of a `router.Stream` route, see "Add an API
+   route", or publish it on the realtime pack), and
    `Run(ctx, req, tools())` lets the model call the app's tools with the
    packs in its context. Keep the prompt in the handler or a `prompts/`
    file, never in the frontend, and never send a row the user may not

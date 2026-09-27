@@ -356,15 +356,25 @@ class LidzaClient {
       }
     }
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      final message = parsed is Map<String, dynamic> && parsed['error'] is String
-          ? parsed['error'] as String
-          : response.reasonPhrase ?? 'error';
-      throw ApiException(response.statusCode, parsed, '$method $path: ${response.statusCode} $message');
+      throw _failure(method, path, response.statusCode, response.reasonPhrase, parsed);
     }
     return parsed;
   }
 
+  ApiException _failure(String method, String path, int status, String? reason, Object? parsed) {
+    final message = parsed is Map<String, dynamic> && parsed['error'] is String
+        ? parsed['error'] as String
+        : reason ?? 'error';
+    return ApiException(status, parsed, '$method $path: $status $message');
+  }
+
 `)
+	for _, op := range c.Operations {
+		if op.Stream {
+			b.WriteString(dartEvents)
+			break
+		}
+	}
 	for _, op := range c.Operations {
 		var params []string
 		for _, p := range op.Params {
@@ -377,25 +387,91 @@ class LidzaClient {
 		if op.Input != "" {
 			args = append([]string{op.Input + " body"}, args...)
 		}
-		ret := "void"
-		if op.Output != "" {
-			ret = op.Output
-		}
-		fmt.Fprintf(&b, "  /// %s %s\n", op.Method, op.Path)
-		fmt.Fprintf(&b, "  Future<%s> %s(%s) async {\n", ret, op.ID, strings.Join(args, ", "))
 		body := ""
 		if op.Input != "" {
 			body = ", body: body.toJson()"
 		}
+		if op.Stream {
+			out := dartOutput(op.Output, c.Schemas)
+			fmt.Fprintf(&b, "  /// %s %s: server-sent events; cancelling the subscription closes it.\n", op.Method, op.Path)
+			fmt.Fprintf(&b, "  Stream<%s> %s(%s) =>\n      _events('%s', %s%s).map((e) => %s);\n\n", out.full(), op.ID, strings.Join(args, ", "), op.Method, dartPath(op.Path), body, out.decode("e", out.nullable))
+			continue
+		}
 		if op.Output == "" {
+			fmt.Fprintf(&b, "  /// %s %s\n", op.Method, op.Path)
+			fmt.Fprintf(&b, "  Future<void> %s(%s) async {\n", op.ID, strings.Join(args, ", "))
 			fmt.Fprintf(&b, "    await _send('%s', %s%s);\n  }\n\n", op.Method, dartPath(op.Path), body)
 			continue
 		}
-		fmt.Fprintf(&b, "    final json = await _send('%s', %s%s);\n    return %s.fromJson(json as Map<String, dynamic>);\n  }\n\n", op.Method, dartPath(op.Path), body, op.Output)
+		out := dartOutput(op.Output, c.Schemas)
+		fmt.Fprintf(&b, "  /// %s %s\n", op.Method, op.Path)
+		fmt.Fprintf(&b, "  Future<%s> %s(%s) async {\n", out.full(), op.ID, strings.Join(args, ", "))
+		fmt.Fprintf(&b, "    final json = await _send('%s', %s%s);\n    return %s;\n  }\n\n", op.Method, dartPath(op.Path), body, out.decode("json", out.nullable))
 	}
 	b.WriteString("}\n")
 	return b.String()
 }
+
+// dartOutput is the Dart type of an operation's output component: its
+// class or enum, or for an unnamed shape (a string event, a list) the
+// type itself.
+func dartOutput(name string, all map[string]any) dartT {
+	def, _ := all[name].(map[string]any)
+	if enumOf(def, all) != nil && def["$ref"] == nil {
+		return dartT{name: name, kind: "enum"}
+	}
+	if def["type"] == "object" && def["properties"] != nil {
+		return dartT{name: name, kind: "class"}
+	}
+	return dartType(def, all)
+}
+
+// dartEvents reads a router.Stream reply: server-sent events whose data
+// is one JSON value each, closed by an "end" event; an "error" event
+// carries the error body with its status.
+const dartEvents = `  Stream<Object?> _events(String method, String path, {Object? body}) async* {
+    final request = http.Request(method, Uri.parse('$baseUrl$path'));
+    request.headers.addAll({'Accept': 'text/event-stream', ..._headers});
+    if (method != 'GET' && method != 'HEAD') request.headers['Content-Type'] = 'application/json';
+    if (body != null) request.body = jsonEncode(body);
+    final streamed = await _client.send(request);
+    if (streamed.statusCode < 200 || streamed.statusCode >= 300) {
+      final response = await http.Response.fromStream(streamed);
+      Object? parsed;
+      try {
+        parsed = response.body.isEmpty ? null : jsonDecode(response.body);
+      } on FormatException {
+        parsed = response.body;
+      }
+      throw _failure(method, path, response.statusCode, response.reasonPhrase, parsed);
+    }
+    var event = 'message';
+    final data = <String>[];
+    final lines = streamed.stream.transform(utf8.decoder).transform(const LineSplitter());
+    await for (final line in lines) {
+      if (line.startsWith('event:')) {
+        event = line.substring(6).trim();
+      } else if (line.startsWith('data:')) {
+        data.add(line.substring(line.startsWith('data: ') ? 6 : 5));
+      } else if (line.isEmpty && data.isNotEmpty) {
+        final parsed = jsonDecode(data.join('\n'));
+        final name = event;
+        event = 'message';
+        data.clear();
+        if (name == 'end') return;
+        if (name == 'error') {
+          final status = parsed is Map<String, dynamic> && parsed['status'] is int ? parsed['status'] as int : 500;
+          throw _failure(method, path, status, 'error', parsed);
+        }
+        yield parsed;
+      } else if (line.isEmpty) {
+        event = 'message';
+      }
+    }
+    throw ApiException(streamed.statusCode, null, '$method $path: the stream closed before its end');
+  }
+
+`
 
 // dartPath renders "/api/v1/posts/{id}" as a Dart string with encoded
 // parameters.

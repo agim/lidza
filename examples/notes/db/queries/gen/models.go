@@ -84,7 +84,7 @@ type MailMessage struct {
 	Recipient  string     `json:"recipient"`
 	Subject    string     `json:"subject"`
 	Text       *string    `json:"text"`
-	Html       *string    `json:"html"`
+	HTML       *string    `json:"html"`
 	Template   *string    `json:"template"`
 	Status     string     `json:"status"`
 	ProviderID *string    `json:"provider_id"`

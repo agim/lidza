@@ -99,6 +99,13 @@ func runUpdate(ctx context.Context, args []string) error {
 		if err := run(ctx, abs, exe, "gen", "--dir", abs); err != nil {
 			return errors.New("update: lidza gen failed")
 		}
+		// A release may rename generated Go names (lidza gen lists them):
+		// say at once when the app's code has not followed.
+		build := exec.CommandContext(ctx, "go", "build", "./...")
+		build.Dir = abs
+		if res, err := build.CombinedOutput(); err != nil {
+			fmt.Printf("[update] go build ./... fails with %s; rename what lidza gen listed above (and see CHANGELOG.md):\n%s", target, res)
+		}
 		// The deployment files came from the templates of the release
 		// that created the app; the new ones may carry a fix.
 		if err := run(ctx, abs, exe, "gen", "deploy", "--dir", abs); err != nil {

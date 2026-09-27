@@ -241,26 +241,6 @@ func snake(s string) string {
 	return b.String()
 }
 
-var initialisms = map[string]bool{"id": true, "url": true, "api": true, "http": true, "json": true, "uuid": true, "sql": true, "ip": true, "html": true}
-
-// exported converts a field name to an exported Go identifier with
-// initialisms upper-cased: authorId -> AuthorID, url -> URL.
-func exported(s string) string {
-	parts := strings.Split(snake(s), "_")
-	var b strings.Builder
-	for _, p := range parts {
-		if p == "" {
-			continue
-		}
-		if initialisms[p] {
-			b.WriteString(strings.ToUpper(p))
-		} else {
-			b.WriteString(strings.ToUpper(p[:1]) + p[1:])
-		}
-	}
-	return b.String()
-}
-
 // sortedFields returns the map's keys sorted, for deterministic output
 // where order is not semantic.
 func sortedFields[V any](m map[string]V) []string {

@@ -23,6 +23,10 @@ type Result struct {
 	Files []string
 	// Migration is the new migration's name, empty when nothing changed.
 	Migration string
+	// Renamed are the Go names in the schema package that changed from
+	// the previous schema/schema.go with this release's naming (plurals
+	// of initialisms as IDs, URLs): the app's code must follow.
+	Renamed []Rename
 }
 
 // Generate runs every generator for the project in root: the Go package,
@@ -43,6 +47,9 @@ func Generate(root string, s *Schema, cargoDir, tsFile string) (*Result, error) 
 		return os.WriteFile(p, []byte(content), 0o644)
 	}
 
+	if old, err := os.ReadFile(filepath.Join(root, GoFile)); err == nil {
+		res.Renamed = schemaRenames(s, string(old))
+	}
 	if err := write(GoFile, Gofmt(GenerateGo(s))); err != nil {
 		return nil, err
 	}

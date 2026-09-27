@@ -8,6 +8,9 @@ sql:
     queries: "db/queries"
     gen:
       go:
+        # lidza gen: Go names as in schema/ (from schema.lidza; edit that, not these lines)
+        initialisms: ["id", "url", "api", "http", "json", "uuid", "sql", "ip", "html"]
+        # lidza gen: end of Go names
         package: "queries"
         out: "db/queries/gen"
         sql_package: "pgx/v5"

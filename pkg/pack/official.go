@@ -532,6 +532,11 @@ sql:
 	if err := os.WriteFile(p, []byte(cfg), 0o644); err != nil {
 		return err
 	}
+	// The Go names of schema/; lidza gen keeps them in step.
+	s, _ := schema.Load(root)
+	if _, err := SyncSQLCNames(root, s); err != nil {
+		return err
+	}
 	if err := os.MkdirAll(filepath.Join(root, QueriesDir), 0o755); err != nil {
 		return err
 	}

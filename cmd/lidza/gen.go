@@ -152,6 +152,23 @@ func generateQueries(ctx context.Context, dir string, out io.Writer) error {
 	if _, err := os.Stat(filepath.Join(dir, schema.SQLFile)); err != nil {
 		return nil
 	}
+	s, err := schema.Load(dir)
+	if err != nil {
+		return err
+	}
+	sync, err := pack.SyncSQLCNames(dir, s)
+	if err != nil {
+		return fmt.Errorf("%s: %w", pack.SQLCFile, err)
+	}
+	if sync.Note != "" {
+		fmt.Fprintf(out, "[lidza] %s\n", sync.Note)
+	}
+	if sync.Added {
+		fmt.Fprintf(out, "[lidza] %s: db/queries/gen now names columns as schema/ names fields (initialisms such as URL and HTML, plurals as IDs)\n", pack.SQLCFile)
+		if renames := schema.QueryRenames(s); len(renames) > 0 {
+			printRenames(out, renames)
+		}
+	}
 	if _, err := exec.LookPath("sqlc"); err != nil {
 		fmt.Fprintln(out, "[lidza] sqlc is not installed; db/queries not generated (run install.sh)")
 		return nil
@@ -186,7 +203,20 @@ func generateSchema(dir string, out io.Writer) error {
 	if len(res.Files) > 0 {
 		fmt.Fprintf(out, "[lidza] %s\n", res.Describe())
 	}
+	if len(res.Renamed) > 0 {
+		fmt.Fprintf(out, "[lidza] schema/: plurals of initialisms are now spelled IDs and URLs\n")
+		printRenames(out, res.Renamed)
+	}
 	return nil
+}
+
+// printRenames lists Go names a new release changed, for the app's code
+// to follow.
+func printRenames(out io.Writer, renames []schema.Rename) {
+	fmt.Fprintln(out, "[lidza] rename in the app's code (go build ./... lists every use):")
+	for _, r := range renames {
+		fmt.Fprintf(out, "[lidza]   %s\n", r)
+	}
 }
 
 // generateClient refreshes the context files (context.json, openapi.json,

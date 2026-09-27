@@ -477,39 +477,12 @@ func snake(s string) string {
 	return b.String()
 }
 
-var initialisms = map[string]bool{"id": true, "url": true, "api": true, "http": true, "json": true, "uuid": true, "sql": true, "ip": true, "html": true}
+// exported is the schema package's name for a field. sqlcName is sqlc's
+// name for its column: the same, since lidza gen writes the schema's
+// initialisms and their plurals into sqlc.yaml.
+func exported(s string) string { return schema.GoName(s) }
 
-func exported(s string) string {
-	var b strings.Builder
-	for _, p := range strings.Split(snake(s), "_") {
-		if p == "" {
-			continue
-		}
-		if initialisms[p] {
-			b.WriteString(strings.ToUpper(p))
-		} else {
-			b.WriteString(strings.ToUpper(p[:1]) + p[1:])
-		}
-	}
-	return b.String()
-}
-
-// sqlcName is sqlc's struct field for a column: each part title-cased,
-// "id" as "ID".
-func sqlcName(f *schema.Field) string {
-	var b strings.Builder
-	for _, p := range strings.Split(snake(f.Name), "_") {
-		if p == "" {
-			continue
-		}
-		if p == "id" {
-			b.WriteString("ID")
-		} else {
-			b.WriteString(strings.ToUpper(p[:1]) + p[1:])
-		}
-	}
-	return b.String()
-}
+func sqlcName(f *schema.Field) string { return schema.GoName(f.Name) }
 
 var reserved = map[string]bool{"user": true, "order": true, "group": true, "table": true, "select": true, "from": true, "where": true, "limit": true, "offset": true, "default": true, "check": true, "primary": true, "references": true, "to": true, "in": true, "on": true, "or": true, "and": true, "not": true, "null": true, "with": true, "all": true, "any": true, "as": true, "asc": true, "desc": true, "column": true, "constraint": true, "create": true, "distinct": true, "do": true, "else": true, "end": true, "grant": true, "having": true, "into": true, "only": true, "then": true, "union": true, "unique": true, "using": true, "when": true}
 

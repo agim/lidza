@@ -350,13 +350,87 @@ func TestGenerateRust(t *testing.T) {
 }
 
 func TestNames(t *testing.T) {
-	for in, want := range map[string]string{"authorId": "AuthorID", "url": "URL", "createdAt": "CreatedAt", "id": "ID", "htmlBody": "HTMLBody", "x": "X"} {
-		if got := exported(in); got != want {
-			t.Errorf("exported(%q) = %q, want %q", in, got, want)
+	for in, want := range map[string]string{
+		"authorId": "AuthorID", "url": "URL", "createdAt": "CreatedAt", "id": "ID", "htmlBody": "HTMLBody", "x": "X",
+		"artworkIds": "ArtworkIDs", "imageUrls": "ImageURLs", "ids": "IDs", "metId": "MetID", "https": "Https", "idsSeen": "IDsSeen",
+		"artwork_ids": "ArtworkIDs",
+	} {
+		if got := GoName(in); got != want {
+			t.Errorf("GoName(%q) = %q, want %q", in, got, want)
 		}
 	}
 	if snake("createdAt") != "created_at" || snake("id") != "id" {
 		t.Error("snake")
+	}
+}
+
+// TestSQLCNames: sqlc gets the schema's initialisms, and a rename where
+// they are not enough (plurals), so both packages spell a column alike.
+func TestSQLCNames(t *testing.T) {
+	s := mustParse(`model Artwork {
+  id         uuid     @id
+  url        string
+  artworkIds uuid[]
+  html       text?
+  metId      int
+}
+type Search {
+  pageIds int[]
+}
+`)
+	initialisms, rename := SQLCNames(s)
+	if strings.Join(initialisms, ",") != strings.Join(Initialisms, ",") {
+		t.Errorf("initialisms %v", initialisms)
+	}
+	if len(rename) != 1 || rename["artwork_ids"] != "ArtworkIDs" {
+		t.Errorf("rename %v", rename)
+	}
+	for _, f := range s.Models[0].Fields {
+		col := snake(f.Name)
+		got := sqlcName(col, initialismSet)
+		if r, ok := rename[col]; ok {
+			got = r
+		}
+		if got != GoName(f.Name) {
+			t.Errorf("%s: sqlc %s, schema %s", f.Name, got, GoName(f.Name))
+		}
+	}
+	var renames []string
+	for _, r := range QueryRenames(s) {
+		renames = append(renames, r.String())
+	}
+	want := "queries (column artwork.artwork_ids): ArtworkIds is now ArtworkIDs," +
+		"queries (column artwork.html): Html is now HTML," +
+		"queries (column artwork.url): Url is now URL"
+	if strings.Join(renames, ",") != want {
+		t.Errorf("query renames:\n%s\nwant\n%s", strings.Join(renames, ","), want)
+	}
+}
+
+// TestSchemaRenames: Generate names what changed in schema/ since the
+// file it replaces, and nothing on the next run.
+func TestSchemaRenames(t *testing.T) {
+	dir := t.TempDir()
+	s := mustParse("enum Kind { urls plain }\n\ntype Search {\n  pageIds int[]\n  url string\n}\n")
+	old := "package schema\n\nconst (\n\tKindUrls Kind = \"urls\"\n)\n\ntype Search struct {\n\tPageIds []int  `json:\"pageIds\"`\n\tURL     string `json:\"url\"`\n}\n"
+	os.MkdirAll(filepath.Join(dir, "schema"), 0o755)
+	os.WriteFile(filepath.Join(dir, GoFile), []byte(old), 0o644)
+	res, err := Generate(dir, s, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, r := range res.Renamed {
+		got = append(got, r.String())
+	}
+	if strings.Join(got, ",") != "schema: KindUrls is now KindURLs,schema.Search: PageIds is now PageIDs" {
+		t.Errorf("renamed: %v", got)
+	}
+	if res, _ := Generate(dir, s, "", ""); len(res.Renamed) != 0 {
+		t.Errorf("second run: %v", res.Renamed)
+	}
+	if rs := GenerateRust(s); !strings.Contains(rs, "    Urls,") {
+		t.Errorf("rust variants keep their names:\n%s", rs)
 	}
 }
 

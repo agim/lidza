@@ -1036,6 +1036,13 @@ optional field), `@min(n)` / `@max(n)` (length or value), `@email`,
 `@url`, `@pattern("re")`. Block attributes inside a model:
 `@@unique(a, b)`, `@@index(a, b)`; `@table("name")` after the model name.
 
+Go names follow the field names with initialisms in capitals and their
+plurals with a lowercase s: `authorId` is `AuthorID`, `url` is `URL`,
+`artworkIds` is `ArtworkIDs`. The structs in `schema/` and the ones
+sqlc writes to `db/queries/gen` use the same names: `lidza gen` keeps
+the initialisms and renames in `sqlc.yaml` between two `# lidza gen`
+comments.
+
 `lidza gen` writes the full DDL to
 `db/schema.sql` and, when models changed since `db/schema.lock.json`, a
 numbered pair in `db/migrations/` (`NNNN_name.up.sql`, `.down.sql`).

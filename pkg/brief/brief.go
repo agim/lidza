@@ -141,7 +141,7 @@ func Save(dir string, b Brief) error {
 func (b Brief) Open() []Question {
 	var out []Question
 	for _, q := range Questions {
-		if b.Answers[q.ID] == "" && !b.Skipped[q.ID] {
+		if (b.Answers[q.ID] == "" || Garbled(q, b.Answers[q.ID])) && !b.Skipped[q.ID] {
 			out = append(out, q)
 		}
 	}
@@ -288,6 +288,22 @@ func Clean(q Question, answer string) string {
 		}
 	}
 	return strings.TrimSpace(answer)
+}
+
+// menuRe matches an answer that is only menu numbers ("1,3", "2").
+var menuRe = regexp.MustCompile(`^[\d\s,;]+$`)
+
+// Garbled reports whether a saved answer is not an answer: the pasted
+// question or its explanation, an interview header, or menu numbers a
+// terminal saved as text (briefs answered before those were resolved).
+// Such a question counts as open, so the agent asks again instead of
+// building on it.
+func Garbled(q Question, answer string) bool {
+	answer = strings.TrimSpace(answer)
+	if answer == "" {
+		return false
+	}
+	return Clean(q, answer) != answer || menuRe.MatchString(answer)
 }
 
 func firstLine(s string) string { return strings.SplitN(s, "\n", 2)[0] }

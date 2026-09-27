@@ -169,13 +169,18 @@ func addBriefTools(s *server.MCPServer, dir string, cfg *config.Config) {
 		type item struct {
 			brief.Question
 			Answer string `json:"answer,omitempty"`
+			// Garbled marks a saved answer that is not one (the pasted
+			// question, menu numbers): ask the developer again.
+			Garbled bool `json:"garbled,omitempty"`
 		}
 		var qs []item
 		for _, q := range brief.Questions {
-			if openOnly && b.Answers[q.ID] != "" {
+			a := b.Answers[q.ID]
+			garbled := brief.Garbled(q, a)
+			if openOnly && a != "" && !garbled {
 				continue
 			}
-			qs = append(qs, item{Question: q, Answer: b.Answers[q.ID]})
+			qs = append(qs, item{Question: q, Answer: a, Garbled: garbled})
 		}
 		return jsonResult(map[string]any{"file": brief.File, "app": cfg.Name, "open": len(b.Open()), "openRequired": len(b.OpenRequired()), "skipped": len(b.Skipped), "total": len(brief.Questions), "questions": qs})
 	})

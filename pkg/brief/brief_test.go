@@ -246,3 +246,31 @@ func TestCleanOnAnswer(t *testing.T) {
 		t.Fatalf("pasted why kept: %q", b.Answers["purpose"])
 	}
 }
+
+// An answer saved garbled before the interview cleaned answers (the
+// question pasted back, menu numbers) counts as open again.
+func TestGarbledIsOpen(t *testing.T) {
+	dir := app(t)
+	Ensure(dir, "galeria")
+	purpose, _ := Find("purpose")
+	users, _ := Find("users")
+	b, _ := Load(dir)
+	b.Answers["purpose"] = "[Product 1/31] " + purpose.Ask
+	b.Answers["users"] = users.Why + "1,2,4"
+	b.Answers["done"] = "1,3"
+	b.Answers["signin"] = "Email and password, Google"
+	if err := Save(dir, b); err != nil {
+		t.Fatal(err)
+	}
+	b, _ = Load(dir)
+	open := map[string]bool{}
+	for _, q := range b.Open() {
+		open[q.ID] = true
+	}
+	if !open["purpose"] || !open["users"] || !open["done"] || open["signin"] {
+		t.Fatalf("open: %v", open)
+	}
+	if Garbled(purpose, "Discover art from The Met, 1,500 works") {
+		t.Fatal("a real answer with numbers is not garbled")
+	}
+}

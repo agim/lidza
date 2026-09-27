@@ -154,7 +154,7 @@ func typedRegistration(name string) bool { return name == "Route" || name == "St
 
 // types sets the operation's Input and Output from the registration's
 // type arguments. A stream's event of an unnamed type (string, []Item)
-// gets a component named after the operation: curate streams CurateEvent.
+// gets a component named after the operation: summarize streams SummarizeEvent.
 func (b *schemaBuilder) types(op *Operation, args *types.TypeList) {
 	op.Input = b.component(args.At(0))
 	if op.Stream {

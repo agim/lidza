@@ -56,8 +56,6 @@ change. A release without one is additive: an app updates with
 
 ## v0.1.27 (2026-09-27)
 
-Fixes from the Galeria sample app's report of framework gaps.
-
 - Breaking: Go names follow one rule, `schema.Initialisms` (id, url,
   api, http, json, uuid, sql, ip, html) in capitals and their plurals as
   `IDs`, `URLs`. `lidza gen` writes the list and the renames plurals
@@ -69,9 +67,9 @@ Fixes from the Galeria sample app's report of framework gaps.
   `HTTP`, `Json` to `JSON`, `Uuid` to `UUID`, `Sql` to `SQL`, `Ip` to
   `IP` inside any name (`ImageUrl` to `ImageURL`, `ApiKey` to `APIKey`
   for table `api_key`, enum constants such as `SourceApi` to
-  `SourceAPI`), and `Ids` to `IDs`, `Urls` to `URLs` (`ArtworkIds` to
-  `ArtworkIDs`); in `schema/` plurals only (`ArtworkIds` to
-  `ArtworkIDs`, `KindUrls` to `KindURLs`).
+  `SourceAPI`), and `Ids` to `IDs`, `Urls` to `URLs` (`TagIds` to
+  `TagIDs`); in `schema/` plurals only (`TagIds` to
+  `TagIDs`, `KindUrls` to `KindURLs`).
 - `router.Stream(r, pattern, h)`: a typed operation that replies with
   server-sent events; `send` flushes each event, and an error after the
   first reaches the client as an error event with its status. It is

@@ -36,7 +36,7 @@ func TestProductionEnv(t *testing.T) {
 // ship names what the enabled packs need in production and the
 // credentials do not hold, including a development-only value.
 func TestProductionNeeds(t *testing.T) {
-	cfg := &config.Config{Name: "galeria", Packs: []string{"lidza/db", "lidza/cache", "lidza/auth", "lidza/mail", "lidza/llm", "packs/palette"}}
+	cfg := &config.Config{Name: "demo", Packs: []string{"lidza/db", "lidza/cache", "lidza/auth", "lidza/mail", "lidza/llm", "packs/palette"}}
 	needs := strings.Join(productionNeeds(cfg, map[string]string{"AUTH_SECRET": "x", "MAIL_PROVIDER": "mailgun", "MAIL_FROM": "a@b.c", "LLM_PROVIDER": "Fake"}), "\n")
 	for _, want := range []string{"CACHE_URL (lidza/cache)", "APP_URL (lidza/mail)", `LLM_PROVIDER (lidza/llm) is "Fake", which suits development only`} {
 		if !strings.Contains(needs, want) {

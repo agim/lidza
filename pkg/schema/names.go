@@ -7,8 +7,8 @@ import (
 )
 
 // Initialisms are the name parts Go spells in capitals: authorId is
-// AuthorID, url is URL. Their plurals keep a lowercase s: artworkIds is
-// ArtworkIDs, imageUrls is ImageURLs. The schema package and sqlc's
+// AuthorID, url is URL. Their plurals keep a lowercase s: tagIds is
+// TagIDs, imageUrls is ImageURLs. The schema package and sqlc's
 // db/queries/gen follow the same rule: `lidza gen` writes this list and
 // the plurals into sqlc.yaml (SQLCNames). Model and enum names are the
 // ones schema.lidza gives; sqlc derives its struct and enum names from
@@ -57,8 +57,8 @@ func pluralInitialism(p string) bool {
 
 // SQLCName is the Go name sqlc gives a Postgres name (a column, a table
 // in the singular, an enum type, or an enum type and value joined by _)
-// once sqlc.yaml carries SQLCNames: api_key is APIKey, artwork_ids is
-// ArtworkIDs, status_draft is StatusDraft.
+// once sqlc.yaml carries SQLCNames: api_key is APIKey, tag_ids is
+// TagIDs, status_draft is StatusDraft.
 func SQLCName(name string) string { return joinParts(sqlcParts(name), true) }
 
 // sqlcParts replaces what is not a letter or digit with _, as sqlc does.
@@ -91,8 +91,8 @@ func sqlcName(name string, initialisms map[string]bool) string {
 
 // SQLCNames returns what sqlc.yaml needs so that db/queries/gen follows
 // the naming of the schema package: the initialisms, and a rename for
-// each name sqlc cannot spell from them alone (a plural: artwork_ids is
-// ArtworkIDs). A column's name is then its field's name in schema/.
+// each name sqlc cannot spell from them alone (a plural: tag_ids is
+// TagIDs). A column's name is then its field's name in schema/.
 func SQLCNames(s *Schema) (initialisms []string, rename map[string]string) {
 	rename = map[string]string{}
 	for _, k := range sqlcKeys(s) {
@@ -149,7 +149,7 @@ func sqlcKeys(s *Schema) []sqlcKey {
 
 // Rename is a Go name that changed with a Līdza release.
 type Rename struct {
-	// Where is "schema.Artwork" or "queries (column artwork.artwork_ids)".
+	// Where is "schema.Post" or "queries (column post.tag_ids)".
 	Where    string
 	Old, New string
 }

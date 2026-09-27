@@ -248,14 +248,14 @@ func TestMultiSelector(t *testing.T) {
 // too, and saves the checked options.
 func TestMultiField(t *testing.T) {
 	sec := Section{Key: "import", Title: "Import", Fields: []Field{
-		{Name: "IMPORT_DEPARTMENTS", Label: "Departments", Kind: "multi", Options: []string{"1", "11"}, Labels: map[string]string{"1": "American Wing", "11": "European Paintings"}},
+		{Name: "IMPORT_CATEGORIES", Label: "Categories", Kind: "multi", Options: []string{"1", "11"}, Labels: map[string]string{"1": "Books", "11": "Music"}},
 		{Name: "IMPORT_BATCH", Label: "Batch size", Kind: "number"},
 	}}
 	dir := t.TempDir()
 	t.Setenv(credentials.EnvMasterKey, "")
 	t.Cleanup(func() { credentials.SetOverrides(nil) })
 	credentials.Generate(dir)
-	credentials.Set(dir, map[string]string{"IMPORT_DEPARTMENTS": "11"})
+	credentials.Set(dir, map[string]string{"IMPORT_CATEGORIES": "11"})
 	srv := serve(t, Options{Auth: noAuth, Allow: func(context.Context) bool { return true }, CredentialsDir: dir, Dir: dir, Sections: []Section{sec}}, lidza.NewServices())
 	res, err := http.Get(srv.URL + "/admin/settings")
 	if err != nil {
@@ -264,17 +264,17 @@ func TestMultiField(t *testing.T) {
 	body, _ := io.ReadAll(res.Body)
 	res.Body.Close()
 	page := string(body)
-	if !strings.Contains(page, `name="present_IMPORT_DEPARTMENTS"`) || !strings.Contains(page, `type="checkbox" name="IMPORT_DEPARTMENTS" value="11" checked`) || !strings.Contains(page, "European Paintings") {
+	if !strings.Contains(page, `name="present_IMPORT_CATEGORIES"`) || !strings.Contains(page, `type="checkbox" name="IMPORT_CATEGORIES" value="11" checked`) || !strings.Contains(page, "Music") {
 		t.Fatalf("multi field not rendered as checkboxes: %s", page)
 	}
 	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	res, err = client.PostForm(srv.URL+"/admin/settings", url.Values{"section": {"import"}, "present_IMPORT_DEPARTMENTS": {"1"}, "IMPORT_DEPARTMENTS": {"1", "11"}})
+	res, err = client.PostForm(srv.URL+"/admin/settings", url.Values{"section": {"import"}, "present_IMPORT_CATEGORIES": {"1"}, "IMPORT_CATEGORIES": {"1", "11"}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	res.Body.Close()
-	if got := credentials.Values(dir)["IMPORT_DEPARTMENTS"]; got != "1,11" {
-		t.Fatalf("departments: %q", got)
+	if got := credentials.Values(dir)["IMPORT_CATEGORIES"]; got != "1,11" {
+		t.Fatalf("categories: %q", got)
 	}
 }
 

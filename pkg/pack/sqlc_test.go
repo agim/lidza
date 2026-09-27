@@ -10,11 +10,11 @@ import (
 	"github.com/agim/lidza/pkg/schema"
 )
 
-const artworkSchema = `enum Source { api ids plain }
-model Artwork {
+const productSchema = `enum Source { api ids plain }
+model Product {
   id         uuid     @id
   url        string
-  artworkIds uuid[]
+  productIds uuid[]
   html       text?
   providerId string?
   source     Source
@@ -30,7 +30,7 @@ model ApiKey {
 // generated models use the names of schema/.
 func TestSyncSQLCNames(t *testing.T) {
 	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, schema.FileName), []byte(artworkSchema), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, schema.FileName), []byte(productSchema), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, err := Add(root, "db"); err != nil {
@@ -40,7 +40,7 @@ func TestSyncSQLCNames(t *testing.T) {
 	cfg, _ := os.ReadFile(p)
 	for _, want := range []string{
 		"      go:\n        " + sqlcNamesStart + "\n        initialisms: [\"id\", \"url\", ",
-		"        rename:\n          artwork_ids: \"ArtworkIDs\"\n          source_ids: \"SourceIDs\"\n        " + sqlcNamesEnd + "\n        package: \"queries\"",
+		"        rename:\n          product_ids: \"ProductIDs\"\n          source_ids: \"SourceIDs\"\n        " + sqlcNamesEnd + "\n        package: \"queries\"",
 	} {
 		if !strings.Contains(string(cfg), want) {
 			t.Fatalf("sqlc.yaml missing %q:\n%s", want, cfg)
@@ -65,13 +65,13 @@ func TestSyncSQLCNames(t *testing.T) {
 	if res, err := SyncSQLCNames(root, &s2); err != nil || !res.Changed || res.Added {
 		t.Fatalf("schema change: %+v %v", res, err)
 	}
-	if cfg, _ := os.ReadFile(p); !strings.Contains(string(cfg), "image_urls: \"ImageURLs\"") || strings.Contains(string(cfg), "artwork_ids") || strings.Count(string(cfg), "initialisms:") != 1 {
+	if cfg, _ := os.ReadFile(p); !strings.Contains(string(cfg), "image_urls: \"ImageURLs\"") || strings.Contains(string(cfg), "product_ids") || strings.Count(string(cfg), "initialisms:") != 1 {
 		t.Fatalf("kept in step:\n%s", cfg)
 	}
 
 	custom := filepath.Join(t.TempDir(), SQLCFile)
 	os.WriteFile(custom, []byte("version: \"2\"\nsql:\n  - gen:\n      go:\n        initialisms: [\"id\"]\n"), 0o644)
-	if res, err := SyncSQLCNames(filepath.Dir(custom), s); err != nil || res.Changed || !strings.Contains(res.Note, "ArtworkIDs") {
+	if res, err := SyncSQLCNames(filepath.Dir(custom), s); err != nil || res.Changed || !strings.Contains(res.Note, "ProductIDs") {
 		t.Fatalf("custom file: %+v %v", res, err)
 	}
 
@@ -81,7 +81,7 @@ func TestSyncSQLCNames(t *testing.T) {
 	SyncSQLCNames(root, s)
 	os.MkdirAll(filepath.Join(root, "db"), 0o755)
 	os.WriteFile(filepath.Join(root, schema.SQLFile), []byte(schema.GenerateSQL(s)), 0o644)
-	os.WriteFile(filepath.Join(root, QueriesDir, "queries.sql"), []byte("-- name: GetArtwork :one\nSELECT * FROM artwork WHERE id = $1;\n\n-- name: SetURL :exec\nUPDATE artwork SET url = $1, artwork_ids = $2 WHERE id = $3;\n"), 0o644)
+	os.WriteFile(filepath.Join(root, QueriesDir, "queries.sql"), []byte("-- name: GetProduct :one\nSELECT * FROM product WHERE id = $1;\n\n-- name: SetURL :exec\nUPDATE product SET url = $1, product_ids = $2 WHERE id = $3;\n"), 0o644)
 	cmd := exec.Command("sqlc", "generate")
 	cmd.Dir = root
 	if out, err := cmd.CombinedOutput(); err != nil {
@@ -99,7 +99,7 @@ func TestSyncSQLCNames(t *testing.T) {
 			t.Errorf("models.go lacks %q:\n%s", want, models)
 		}
 	}
-	if !strings.Contains(string(queries), "\tArtworkIDs ") || !strings.Contains(string(queries), "\tURL ") {
+	if !strings.Contains(string(queries), "\tProductIDs ") || !strings.Contains(string(queries), "\tURL ") {
 		t.Errorf("query params:\n%s", queries)
 	}
 }
@@ -108,11 +108,11 @@ func TestSyncSQLCNames(t *testing.T) {
 // IDs, not Ids, like a column would be.
 func TestSQLCParamNames(t *testing.T) {
 	root := t.TempDir()
-	os.WriteFile(filepath.Join(root, schema.FileName), []byte(artworkSchema), 0o644)
+	os.WriteFile(filepath.Join(root, schema.FileName), []byte(productSchema), 0o644)
 	if _, _, err := Add(root, "db"); err != nil {
 		t.Fatal(err)
 	}
-	q := "-- name: ListArtworks :many\nSELECT * FROM artwork WHERE (sqlc.narg('ids')::uuid[] IS NULL OR id = ANY(sqlc.narg('ids')::uuid[])) AND url <> @skip_url AND html <> 'a@example.com';\n"
+	q := "-- name: ListProducts :many\nSELECT * FROM product WHERE (sqlc.narg('ids')::uuid[] IS NULL OR id = ANY(sqlc.narg('ids')::uuid[])) AND url <> @skip_url AND html <> 'a@example.com';\n"
 	os.WriteFile(filepath.Join(root, QueriesDir, "queries.sql"), []byte(q), 0o644)
 	if got := strings.Join(queryParams(root), ","); got != "ids,skip_url" {
 		t.Fatalf("params: %s", got)

@@ -353,8 +353,8 @@ func TestGenerateRust(t *testing.T) {
 func TestNames(t *testing.T) {
 	for in, want := range map[string]string{
 		"authorId": "AuthorID", "url": "URL", "createdAt": "CreatedAt", "id": "ID", "htmlBody": "HTMLBody", "x": "X",
-		"artworkIds": "ArtworkIDs", "imageUrls": "ImageURLs", "ids": "IDs", "metId": "MetID", "https": "Https", "idsSeen": "IDsSeen",
-		"artwork_ids": "ArtworkIDs",
+		"productIds": "ProductIDs", "imageUrls": "ImageURLs", "ids": "IDs", "metId": "MetID", "https": "Https", "idsSeen": "IDsSeen",
+		"product_ids": "ProductIDs",
 	} {
 		if got := GoName(in); got != want {
 			t.Errorf("GoName(%q) = %q, want %q", in, got, want)
@@ -369,10 +369,10 @@ func TestNames(t *testing.T) {
 // they are not enough (plurals), so both packages spell a column alike.
 func TestSQLCNames(t *testing.T) {
 	s := mustParse(`enum Source { api ids plain }
-model Artwork {
+model Product {
   id         uuid     @id
   url        string
-  artworkIds uuid[]
+  productIds uuid[]
   html       text?
   metId      int
 }
@@ -387,7 +387,7 @@ type Search {
 	if strings.Join(initialisms, ",") != strings.Join(Initialisms, ",") {
 		t.Errorf("initialisms %v", initialisms)
 	}
-	if len(rename) != 2 || rename["artwork_ids"] != "ArtworkIDs" || rename["source_ids"] != "SourceIDs" {
+	if len(rename) != 2 || rename["product_ids"] != "ProductIDs" || rename["source_ids"] != "SourceIDs" {
 		t.Errorf("rename %v", rename)
 	}
 	if SQLCName("api_key") != "APIKey" || SQLCName("source_ids") != "SourceIDs" || SQLCName("note") != "Note" {
@@ -408,11 +408,11 @@ type Search {
 		renames = append(renames, r.String())
 	}
 	want := "queries (table api_key): ApiKey is now APIKey," +
-		"queries (column artwork.artwork_ids): ArtworkIds is now ArtworkIDs," +
-		"queries (column artwork.html): Html is now HTML," +
+		"queries (column product.html): Html is now HTML," +
+		"queries (column product.product_ids): ProductIds is now ProductIDs," +
 		"queries (enum value source.api): SourceApi is now SourceAPI," +
 		"queries (enum value source.ids): SourceIds is now SourceIDs," +
-		"queries (column artwork.url): Url is now URL"
+		"queries (column product.url): Url is now URL"
 	if strings.Join(renames, ",") != want {
 		t.Errorf("query renames:\n%s\nwant\n%s", strings.Join(renames, ","), want)
 	}
@@ -485,13 +485,13 @@ model Task {
 // string, uuid), names it when the field differs, and tables are created
 // after the ones they reference and dropped before them.
 func TestRefKeyTypes(t *testing.T) {
-	s, err := Parse(`model Artwork {
+	s, err := Parse(`model Product {
   id           uuid    @id
-  departmentId int     @ref(Department)
+  categoryId int     @ref(Category)
   accountKey   string? @ref(Account, setnull)
   objectId     bigint  @ref(MetObject, cascade)
 }
-model Department {
+model Category {
   id   int    @id
   name string
 }
@@ -506,7 +506,7 @@ model MetObject {
 	}
 	ddl := GenerateSQL(s)
 	for _, want := range []string{
-		"department_id integer NOT NULL REFERENCES department(id)",
+		"category_id integer NOT NULL REFERENCES category(id)",
 		"account_key text REFERENCES account(key) ON DELETE SET NULL",
 		"object_id bigint NOT NULL REFERENCES met_object(id) ON DELETE CASCADE",
 	} {
@@ -514,28 +514,28 @@ model MetObject {
 			t.Errorf("DDL lacks %s:\n%s", want, ddl)
 		}
 	}
-	if strings.Index(ddl, "CREATE TABLE department") > strings.Index(ddl, "CREATE TABLE artwork") ||
-		strings.Index(ddl, "CREATE TABLE met_object") > strings.Index(ddl, "CREATE TABLE artwork") {
+	if strings.Index(ddl, "CREATE TABLE category") > strings.Index(ddl, "CREATE TABLE product") ||
+		strings.Index(ddl, "CREATE TABLE met_object") > strings.Index(ddl, "CREATE TABLE product") {
 		t.Errorf("referenced tables come first:\n%s", ddl)
 	}
 	up := strings.Join(Diff(nil, s, 1).Up, "\n")
-	if strings.Index(up, "CREATE TABLE department") > strings.Index(up, "CREATE TABLE artwork") {
-		t.Errorf("migration creates artwork before department:\n%s", up)
+	if strings.Index(up, "CREATE TABLE category") > strings.Index(up, "CREATE TABLE product") {
+		t.Errorf("migration creates product before category:\n%s", up)
 	}
 	drop := strings.Join(Diff(s, &Schema{}, 2).Up, "\n")
-	if strings.Index(drop, "DROP TABLE artwork") > strings.Index(drop, "DROP TABLE department") {
-		t.Errorf("migration drops department before artwork:\n%s", drop)
+	if strings.Index(drop, "DROP TABLE product") > strings.Index(drop, "DROP TABLE category") {
+		t.Errorf("migration drops category before product:\n%s", drop)
 	}
-	if src := GenerateGo(s); !strings.Contains(src, "DepartmentID int `json:\"departmentId\"") || !strings.Contains(src, "ObjectID int64") {
+	if src := GenerateGo(s); !strings.Contains(src, "CategoryID int `json:\"categoryId\"") || !strings.Contains(src, "ObjectID int64") {
 		t.Errorf("Go:\n%s", src)
 	}
 
-	_, err = Parse("model Department {\n  id int @id\n}\nmodel Artwork {\n  id uuid @id\n  departmentId uuid @ref(Department)\n}")
-	if err == nil || !strings.Contains(err.Error(), "Artwork.departmentId: @ref(Department) needs type int, the type of Department.id, not uuid") {
+	_, err = Parse("model Category {\n  id int @id\n}\nmodel Product {\n  id uuid @id\n  categoryId uuid @ref(Category)\n}")
+	if err == nil || !strings.Contains(err.Error(), "Product.categoryId: @ref(Category) needs type int, the type of Category.id, not uuid") {
 		t.Errorf("mismatch: %v", err)
 	}
-	_, err = Parse("model Department {\n  id int @id\n}\nmodel Artwork {\n  id uuid @id\n  department Department\n}")
-	if err == nil || !strings.Contains(err.Error(), "use int @ref(Department)") {
+	_, err = Parse("model Category {\n  id int @id\n}\nmodel Product {\n  id uuid @id\n  category Category\n}")
+	if err == nil || !strings.Contains(err.Error(), "use int @ref(Category)") {
 		t.Errorf("model-typed field: %v", err)
 	}
 }

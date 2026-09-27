@@ -28,11 +28,11 @@ func app(t *testing.T) string {
 
 func TestRoundTrip(t *testing.T) {
 	dir := app(t)
-	if created, err := Ensure(dir, "galeria"); err != nil || !created {
+	if created, err := Ensure(dir, "demo"); err != nil || !created {
 		t.Fatalf("ensure: %v %v", created, err)
 	}
 	b, err := Load(dir)
-	if err != nil || b.App != "galeria" || len(b.Answers) != 0 || len(b.Open()) != len(Questions) || len(b.OpenRequired()) == 0 {
+	if err != nil || b.App != "demo" || len(b.Answers) != 0 || len(b.Open()) != len(Questions) || len(b.OpenRequired()) == 0 {
 		t.Fatalf("empty brief: %+v %v", b, err)
 	}
 	b.Answers["purpose"] = "Discover art.\n\nAnd save it to collections."
@@ -52,21 +52,21 @@ func TestRoundTrip(t *testing.T) {
 	if got, _ := Load(dir); !strings.HasPrefix(got.Answers["purpose"], "Discover and collect art.") {
 		t.Fatalf("hand edit: %q", got.Answers["purpose"])
 	}
-	if created, _ := Ensure(dir, "galeria"); created {
+	if created, _ := Ensure(dir, "demo"); created {
 		t.Fatal("ensure overwrote the brief")
 	}
 }
 
 func TestAnswerApplies(t *testing.T) {
 	dir := app(t)
-	Ensure(dir, "galeria")
+	Ensure(dir, "demo")
 
 	// A decision, once per change.
-	res, err := Answer(dir, "galeria", "signin", "Email and password, Google")
+	res, err := Answer(dir, "demo", "signin", "Email and password, Google")
 	if err != nil || res.Decision != "Sign-in: Email and password, Google" {
 		t.Fatalf("signin: %+v %v", res, err)
 	}
-	if res, _ := Answer(dir, "galeria", "signin", "Email and password, Google"); res.Decision != "" {
+	if res, _ := Answer(dir, "demo", "signin", "Email and password, Google"); res.Decision != "" {
 		t.Fatal("the same answer recorded twice")
 	}
 	es, _ := decisions.Load(dir)
@@ -75,7 +75,7 @@ func TestAnswerApplies(t *testing.T) {
 	}
 
 	// The palette: tokens and the admin theme.
-	res, err = Answer(dir, "galeria", "palette", "Forest and linen")
+	res, err = Answer(dir, "demo", "palette", "Forest and linen")
 	if err != nil || len(res.Manual) != 0 {
 		t.Fatalf("palette: %+v %v", res, err)
 	}
@@ -93,17 +93,17 @@ func TestAnswerApplies(t *testing.T) {
 	}
 	// An admin theme the app wrote itself is left alone.
 	os.WriteFile(filepath.Join(dir, "admin", "theme.css"), []byte(":root{--admin-accent:red}"), 0o644)
-	res, _ = Answer(dir, "galeria", "palette", "Ink and saffron")
+	res, _ = Answer(dir, "demo", "palette", "Ink and saffron")
 	if theme, _ := os.ReadFile(filepath.Join(dir, "admin", "theme.css")); string(theme) != ":root{--admin-accent:red}" || len(res.Manual) != 1 {
 		t.Fatalf("own theme: %s %+v", theme, res)
 	}
 	// An own palette is for the agent to apply.
-	if res, _ := Answer(dir, "galeria", "palette", OwnBrand+": #0b3d2e and #f2e8cf"); len(res.Manual) == 0 {
+	if res, _ := Answer(dir, "demo", "palette", OwnBrand+": #0b3d2e and #f2e8cf"); len(res.Manual) == 0 {
 		t.Fatal("own brand colours need the agent")
 	}
 
 	// Ownership seeds the scope recipe for its model, once.
-	res, _ = Answer(dir, "galeria", "ownership", "Shared with invited members")
+	res, _ = Answer(dir, "demo", "ownership", "Shared with invited members")
 	rs, _ := recipes.Load(dir)
 	var scope recipes.Recipe
 	for _, r := range rs {
@@ -114,20 +114,20 @@ func TestAnswerApplies(t *testing.T) {
 	if res.Recipe != scope.Name || !strings.Contains(scope.Body, "requireMember") {
 		t.Fatalf("scope recipe: %+v %+v", res, scope)
 	}
-	if res, _ := Answer(dir, "galeria", "ownership", "Each user owns their rows"); res.Recipe != "" {
+	if res, _ := Answer(dir, "demo", "ownership", "Each user owns their rows"); res.Recipe != "" {
 		t.Fatal("the recipe was seeded twice")
 	}
 	// Content: only a dataset or an import seeds the data recipe.
-	if res, _ := Answer(dir, "galeria", "content", "People create it in the app"); res.Recipe != "" {
+	if res, _ := Answer(dir, "demo", "content", "People create it in the app"); res.Recipe != "" {
 		t.Fatal("no data recipe for user content")
 	}
-	if res, _ := Answer(dir, "galeria", "content", "A public dataset: The Met Open Access, CC0"); res.Recipe != recipes.Slug(RecipeData) {
+	if res, _ := Answer(dir, "demo", "content", "A public dataset: OpenStreetMap, ODbL"); res.Recipe != recipes.Slug(RecipeData) {
 		t.Fatalf("data recipe: %+v", res)
 	}
 
 	// Working agreements land in every agent file.
-	Answer(dir, "galeria", "push", "After every verified commit")
-	Answer(dir, "galeria", "tests", "A Go test for every handler")
+	Answer(dir, "demo", "push", "After every verified commit")
+	Answer(dir, "demo", "tests", "A Go test for every handler")
 	for _, f := range AgentFiles {
 		data, _ := os.ReadFile(filepath.Join(dir, f))
 		s := string(data)
@@ -136,11 +136,11 @@ func TestAnswerApplies(t *testing.T) {
 		}
 	}
 	// Clearing an answer reopens it.
-	Answer(dir, "galeria", "push", "")
+	Answer(dir, "demo", "push", "")
 	if b, _ := Load(dir); b.Answers["push"] != "" {
 		t.Fatal("not cleared")
 	}
-	if _, err := Answer(dir, "galeria", "nope", "x"); err == nil {
+	if _, err := Answer(dir, "demo", "nope", "x"); err == nil {
 		t.Fatal("unknown question accepted")
 	}
 }
@@ -200,8 +200,8 @@ func TestQuestions(t *testing.T) {
 // brief can be skipped; an answer given later replaces the skip.
 func TestSkip(t *testing.T) {
 	dir := app(t)
-	Ensure(dir, "galeria")
-	if done, err := Skip(dir, "galeria", "domain", "palette"); err != nil || len(done) != 2 {
+	Ensure(dir, "demo")
+	if done, err := Skip(dir, "demo", "domain", "palette"); err != nil || len(done) != 2 {
 		t.Fatalf("skip: %v %v", done, err)
 	}
 	b, _ := Load(dir)
@@ -217,17 +217,17 @@ func TestSkip(t *testing.T) {
 	if strings.Count(string(data), skipped) != 2 {
 		t.Fatalf("file: %s", data)
 	}
-	Answer(dir, "galeria", "purpose", "Art")
-	done, _ := Skip(dir, "galeria")
+	Answer(dir, "demo", "purpose", "Art")
+	done, _ := Skip(dir, "demo")
 	b, _ = Load(dir)
 	if len(done) != len(Questions)-3 || len(b.Open()) != 0 || len(b.OpenRequired()) != 0 || b.Answers["purpose"] != "Art" {
 		t.Fatalf("skip all: %d %+v", len(done), b.Open())
 	}
-	Answer(dir, "galeria", "palette", "Forest and linen")
+	Answer(dir, "demo", "palette", "Forest and linen")
 	if b, _ := Load(dir); b.Skipped["palette"] || b.Answers["palette"] != "Forest and linen" {
 		t.Fatalf("answer after skip: %+v", b)
 	}
-	if _, err := Skip(dir, "galeria", "nope"); err == nil {
+	if _, err := Skip(dir, "demo", "nope"); err == nil {
 		t.Fatal("unknown id skipped")
 	}
 }
@@ -235,13 +235,13 @@ func TestSkip(t *testing.T) {
 // An answer that is only the pasted question is not recorded.
 func TestCleanOnAnswer(t *testing.T) {
 	dir := app(t)
-	Ensure(dir, "galeria")
+	Ensure(dir, "demo")
 	q, _ := Find("purpose")
-	Answer(dir, "galeria", "purpose", "[Product 1/31] "+q.Ask)
+	Answer(dir, "demo", "purpose", "[Product 1/31] "+q.Ask)
 	if b, _ := Load(dir); b.Answers["purpose"] != "" {
 		t.Fatalf("pasted question saved: %q", b.Answers["purpose"])
 	}
-	Answer(dir, "galeria", "purpose", q.Why+" Discover art.")
+	Answer(dir, "demo", "purpose", q.Why+" Discover art.")
 	if b, _ := Load(dir); b.Answers["purpose"] != "Discover art." {
 		t.Fatalf("pasted why kept: %q", b.Answers["purpose"])
 	}
@@ -251,7 +251,7 @@ func TestCleanOnAnswer(t *testing.T) {
 // question pasted back, menu numbers) counts as open again.
 func TestGarbledIsOpen(t *testing.T) {
 	dir := app(t)
-	Ensure(dir, "galeria")
+	Ensure(dir, "demo")
 	purpose, _ := Find("purpose")
 	users, _ := Find("users")
 	b, _ := Load(dir)
@@ -270,7 +270,7 @@ func TestGarbledIsOpen(t *testing.T) {
 	if !open["purpose"] || !open["users"] || !open["done"] || open["signin"] {
 		t.Fatalf("open: %v", open)
 	}
-	if Garbled(purpose, "Discover art from The Met, 1,500 works") {
+	if Garbled(purpose, "Map 1,500 cafés from OpenStreetMap") {
 		t.Fatal("a real answer with numbers is not garbled")
 	}
 }

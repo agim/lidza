@@ -58,7 +58,7 @@ func TestTypeScriptStream(t *testing.T) {
 	}
 	closed := make(chan struct{})
 	r := router.New()
-	router.Stream(r, "POST /api/v1/curate", func(ctx context.Context, req *router.Request[title], send func(string) error) error {
+	router.Stream(r, "POST /api/v1/summarize", func(ctx context.Context, req *router.Request[title], send func(string) error) error {
 		for _, s := range []string{req.Body.Title, "b"} {
 			if err := send(s); err != nil {
 				return err
@@ -86,13 +86,13 @@ func TestTypeScriptStream(t *testing.T) {
 
 	c := &inspect.Context{
 		Operations: []inspect.Operation{
-			{ID: "curate", Method: "POST", Path: "/api/v1/curate", Params: []string{}, Input: "Title", Output: "CurateEvent", Stream: true},
-			{ID: "fail", Method: "GET", Path: "/api/v1/fail", Params: []string{}, Output: "CurateEvent", Stream: true},
-			{ID: "forever", Method: "GET", Path: "/api/v1/forever", Params: []string{}, Output: "CurateEvent", Stream: true},
+			{ID: "summarize", Method: "POST", Path: "/api/v1/summarize", Params: []string{}, Input: "Title", Output: "SummarizeEvent", Stream: true},
+			{ID: "fail", Method: "GET", Path: "/api/v1/fail", Params: []string{}, Output: "SummarizeEvent", Stream: true},
+			{ID: "forever", Method: "GET", Path: "/api/v1/forever", Params: []string{}, Output: "SummarizeEvent", Stream: true},
 		},
 		Schemas: map[string]any{
-			"Title":       map[string]any{"type": "object", "properties": map[string]any{"title": map[string]any{"type": "string"}}, "required": []string{"title"}},
-			"CurateEvent": map[string]any{"type": "string"},
+			"Title":          map[string]any{"type": "object", "properties": map[string]any{"title": map[string]any{"type": "string"}}, "required": []string{"title"}},
+			"SummarizeEvent": map[string]any{"type": "string"},
 		},
 	}
 	dir := t.TempDir()
@@ -113,7 +113,7 @@ func TestTypeScriptStream(t *testing.T) {
 configure({ baseUrl: process.argv[2] })
 ;(async () => {
   const out = []
-  for await (const e of api.curate({ title: 'a' })) out.push(e)
+  for await (const e of api.summarize({ title: 'a' })) out.push(e)
   let err = ''
   try {
     for await (const e of api.fail()) out.push(e)

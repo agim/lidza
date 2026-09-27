@@ -23,9 +23,9 @@ type StreamHandler[In, Event any] func(ctx context.Context, req *Request[In], se
 // returns nil. The generated clients read it as an async iterable (TS)
 // or a Stream (Dart):
 //
-//	router.Stream(r, "POST /api/v1/curate", curate)
+//	router.Stream(r, "POST /api/v1/summaries", summarize)
 //
-//	func curate(ctx context.Context, req *router.Request[schema.CurateInput], send func(string) error) error {
+//	func summarize(ctx context.Context, req *router.Request[schema.SummaryInput], send func(string) error) error {
 //		_, err := llm.From(ctx).Stream(ctx, llm.Request{
 //			Messages: []llm.Message{{Role: llm.User, Content: req.Body.Prompt}},
 //		}, send)

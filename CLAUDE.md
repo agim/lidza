@@ -37,6 +37,11 @@ Working agreements (Agim's standing decisions):
 - Docs and comments carry framework facts only. A host fact that belongs
   to the environment contract goes in `docs/environment.md`; incidental
   findings (another project's port, a probe mishap) stay out of the repo.
+- Always neutral: framework code, comments, docs, tests, examples and
+  the changelog never name a sample or user app (Galeria, the tracker)
+  or borrow its domain (artworks, a curator, museum departments). A gap
+  an app found is described as the framework's gap, with neutral
+  examples (posts, tags, categories, products).
 - No stock palette (Tailwind or Tabler blue, slate or navy): Līdza's
   palette is a mulberry accent on warm neutrals, defined in
   `packs/admin/templates/theme.css` and the templates' tokens; status

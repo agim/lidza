@@ -76,11 +76,11 @@ func routes(r *router.Router) {
 		return router.None{}, nil
 	})
 	r.HandleFunc("GET /api/v1/raw", nil)
-	router.Stream(r, "POST /api/v1/curate", curate)
+	router.Stream(r, "POST /api/v1/summarize", summarize)
 	router.Stream(r, "GET /api/v1/posts/feed", feed)
 }
 
-func curate(ctx context.Context, req *router.Request[schema.CreatePost], send func(string) error) error {
+func summarize(ctx context.Context, req *router.Request[schema.CreatePost], send func(string) error) error {
 	return send("x")
 }
 func feed(ctx context.Context, req *router.Request[router.None], send func(Post) error) error { return nil }
@@ -128,18 +128,18 @@ func main() { _ = routes }
 		t.Errorf("health: %+v", op)
 	}
 	// A stream's event of an unnamed type is named after the operation.
-	if op := byID["curate"]; !op.Stream || op.Input != "CreatePost" || op.Output != "CurateEvent" {
-		t.Errorf("curate: %+v", op)
+	if op := byID["summarize"]; !op.Stream || op.Input != "CreatePost" || op.Output != "SummarizeEvent" {
+		t.Errorf("summarize: %+v", op)
 	}
-	if ev, _ := c.Schemas["CurateEvent"].(map[string]any); ev["type"] != "string" {
-		t.Errorf("CurateEvent: %v", c.Schemas["CurateEvent"])
+	if ev, _ := c.Schemas["SummarizeEvent"].(map[string]any); ev["type"] != "string" {
+		t.Errorf("SummarizeEvent: %v", c.Schemas["SummarizeEvent"])
 	}
 	if op := byID["feed"]; !op.Stream || op.Output != "Post" || byID["getPost"].Stream {
 		t.Errorf("feed: %+v", op)
 	}
 	typedRoute := false
 	for _, r := range c.Routes {
-		if r.Path == "/api/v1/curate" {
+		if r.Path == "/api/v1/summarize" {
 			typedRoute = r.Typed
 		}
 	}
@@ -194,13 +194,13 @@ func main() { _ = routes }
 	if del := paths["/api/v1/posts/{id}"].(map[string]any)["delete"].(map[string]any); del["responses"].(map[string]any)["204"] == nil {
 		t.Errorf("delete: %v", del)
 	}
-	curate := paths["/api/v1/curate"].(map[string]any)["post"].(map[string]any)
-	ok := curate["x-lidza-stream"] == true
-	if content, _ := curate["responses"].(map[string]any)["200"].(map[string]any)["content"].(map[string]any); content["text/event-stream"] == nil {
+	summarize := paths["/api/v1/summarize"].(map[string]any)["post"].(map[string]any)
+	ok := summarize["x-lidza-stream"] == true
+	if content, _ := summarize["responses"].(map[string]any)["200"].(map[string]any)["content"].(map[string]any); content["text/event-stream"] == nil {
 		ok = false
 	}
 	if !ok {
-		t.Errorf("openapi curate: %v", curate)
+		t.Errorf("openapi summarize: %v", summarize)
 	}
 	if _, ok := doc["components"].(map[string]any)["schemas"].(map[string]any)["ValidationError"]; !ok {
 		t.Error("ValidationError component missing")

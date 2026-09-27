@@ -32,7 +32,7 @@ type SQLCSync struct {
 // SyncSQLCNames writes the schema's initialisms and the renames sqlc
 // needs for plurals (schema.SQLCNames) into the go options of root's
 // sqlc.yaml, so db/queries/gen names a column as schema/ names the field:
-// URL, ProviderID, ArtworkIDs. A file without sqlc.yaml is left alone,
+// URL, ProviderID, TagIDs. A file without sqlc.yaml is left alone,
 // and so is one that sets initialisms or rename itself.
 func SyncSQLCNames(root string, s *schema.Schema) (SQLCSync, error) {
 	var res SQLCSync

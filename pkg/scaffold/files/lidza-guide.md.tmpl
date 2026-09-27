@@ -1170,7 +1170,7 @@ union in the clients. Field types: `string`, `text`, `int`, `bigint`,
 field optional (nullable), `[]` an array. Field attributes: `@id`,
 `@default(uuid())` / `@default(now())` / `@default(value)`, `@unique`,
 `@index`, `@ref(Model)` for a foreign key, the field typed as the
-model's id (`departmentId int @ref(Department)` when `Department` has
+model's id (`categoryId int @ref(Category)` when `Category` has
 `id int @id`; `@ref(Model, cascade)` deletes the row with the
 referenced one, `@ref(Model, setnull)` clears an optional field), `@min(n)` / `@max(n)` (length or value), `@email`,
 `@url`, `@pattern("re")`. Block attributes inside a model:
@@ -1178,7 +1178,7 @@ referenced one, `@ref(Model, setnull)` clears an optional field), `@min(n)` / `@
 
 Go names follow the field names with initialisms in capitals and their
 plurals with a lowercase s: `authorId` is `AuthorID`, `url` is `URL`,
-`artworkIds` is `ArtworkIDs`. sqlc follows the same rule in
+`tagIds` is `TagIDs`. sqlc follows the same rule in
 `db/queries/gen`, so a field has the same name in both, and its struct
 and enum names come from the table and type names the same way
 (`api_key` is `APIKey`): `lidza gen` keeps the initialisms and

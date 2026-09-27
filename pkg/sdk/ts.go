@@ -292,9 +292,12 @@ async function request<R>(method: string, path: string, body: unknown, options?:
   return parsed as R
 }
 
-const p = encodeURIComponent
-
 `)
+	// Only what the operations use: the template compiles with
+	// noUnusedLocals.
+	if usesEncodedParam(c.Operations) {
+		b.WriteString("const p = encodeURIComponent\n\n")
+	}
 	b.WriteString("export const api = {\n")
 	for _, op := range c.Operations {
 		var args []string
@@ -332,6 +335,19 @@ func tsPath(path string) string {
 		out = strings.ReplaceAll(out, "{"+name+"...}", "${params."+name+"}")
 	}
 	return strings.ReplaceAll(out, "{$}", "")
+}
+
+// usesEncodedParam reports whether a path has a {name} parameter, the
+// kind the client encodes with p (a {name...} one is sent as is).
+func usesEncodedParam(ops []inspect.Operation) bool {
+	for _, op := range ops {
+		for _, name := range pathParamsOf(op.Path) {
+			if strings.Contains(op.Path, "{"+name+"}") {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func pathParamsOf(path string) []string {

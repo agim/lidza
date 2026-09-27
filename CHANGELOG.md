@@ -9,7 +9,7 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
-## Unreleased
+## v0.1.27 (2026-09-27)
 
 Fixes from the Galeria sample app's report of framework gaps.
 

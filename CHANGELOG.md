@@ -9,7 +9,7 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
-## Unreleased
+## v0.1.28 (2026-09-27)
 
 - Admin: `ADMIN_USERS` counts every layer: the environment, the sealed
   credentials file deployed with the app (`lidza admin add`) and the

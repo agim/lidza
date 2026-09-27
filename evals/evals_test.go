@@ -272,10 +272,6 @@ func TestGuidanceSurfaces(t *testing.T) {
 	if out, err = command(app, lidza, "admin", "list"); err != nil || strings.TrimSpace(string(out)) != "dev@example.com" {
 		t.Errorf("lidza admin list: %v\n%s", err, out)
 	}
-	// Rails' spelling works: credentials:show prints the decrypted file.
-	if out, err = command(app, lidza, "credentials:show"); err != nil || !strings.Contains(string(out), "ADMIN_USERS: dev@example.com") {
-		t.Errorf("lidza credentials:show: %v\n%s", err, out)
-	}
 	out, err = command(app, lidza, "api", "pkg/orm")
 	if err == nil || !strings.Contains(string(out), "no package") {
 		t.Errorf("lidza api on an invented package: %v\n%s", err, out)

@@ -92,7 +92,7 @@ func addCredentialTools(s *server.MCPServer, dir string, cfg *config.Config) {
 		return
 	}
 	s.AddTool(mcp.NewTool("lidza_credentials_set",
-		mcp.WithDescription("Seal secrets (an API key, an SMTP URL, a storage secret) into config/credentials.yml.enc with the app's master key (created when missing, kept out of git). Every pack reads them by their environment name (MAIL_API_KEY, LLM_API_KEY, STORAGE_SECRET_KEY): prefer this over .env for anything secret. A running app reads them at its next start."),
+		mcp.WithDescription("Seal secrets (an API key, an SMTP URL, a storage secret) into config/credentials.yml.enc with the app's master key (created when missing, kept out of git). Every pack reads them by their environment name (MAIL_API_KEY, LLM_API_KEY, EMBED_API_KEY, STORAGE_SECRET_KEY): prefer this over .env for anything secret. A running app reads them at its next start."),
 		mcp.WithObject("values", mcp.Required(), mcp.Description("NAME: value pairs; names are environment variable names."), mcp.AdditionalProperties(map[string]any{"type": "string"})),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		raw, _ := req.GetArguments()["values"].(map[string]any)

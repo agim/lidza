@@ -2,8 +2,10 @@
 // Generate and Run over Anthropic, OpenAI, Google and Ollama, spoken
 // directly over HTTP, plus a fake provider for tests. Handlers and jobs
 // call llm.From(ctx); the provider and model come from .env
-// (LLM_PROVIDER, LLM_MODEL, LLM_API_KEY). Every call has a deadline,
-// retries on 429 and 5xx with backoff, and counts tokens on /metrics.
+// (LLM_PROVIDER, LLM_MODEL, LLM_API_KEY), and embeddings may come from
+// another provider (EMBED_PROVIDER, EMBED_MODEL, EMBED_API_KEY). Every
+// call has a deadline, retries on 429 and 5xx with backoff, and counts
+// tokens on /metrics.
 package llm
 
 import (
@@ -12,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -35,13 +38,28 @@ type Config struct {
 	Provider string `env:"LLM_PROVIDER" default:"fake"`
 	// Model is the chat model; each provider has a default.
 	Model string `env:"LLM_MODEL"`
-	// EmbedModel is the embedding model; each provider has a default.
-	EmbedModel string `env:"LLM_EMBED_MODEL"`
 	// APIKey authenticates anthropic, openai and google.
 	APIKey string `env:"LLM_API_KEY"`
 	// BaseURL overrides the provider's API base (a proxy, a region,
 	// Ollama on another host: http://127.0.0.1:11434 by default).
 	BaseURL string `env:"LLM_BASE_URL"`
+	// EmbedProvider serves Embed: openai, google, ollama, compatible or
+	// fake, or none to turn embeddings off. Empty uses the chat provider
+	// (Provider), which cannot embed when it is anthropic.
+	EmbedProvider string `env:"EMBED_PROVIDER"`
+	// EmbedModel is the embedding model; each provider has a default.
+	EmbedModel string `env:"EMBED_MODEL"`
+	// LLMEmbedModel is the older name of EmbedModel (LLM_EMBED_MODEL),
+	// read when EMBED_MODEL is empty.
+	LLMEmbedModel string `env:"LLM_EMBED_MODEL"`
+	// EmbedAPIKey authenticates EmbedProvider (openai, google; optional
+	// for compatible). When EmbedProvider is the chat provider, empty
+	// uses APIKey.
+	EmbedAPIKey string `env:"EMBED_API_KEY"`
+	// EmbedBaseURL overrides EmbedProvider's API base, as BaseURL does
+	// for chat; required for compatible. When EmbedProvider is the chat
+	// provider, empty uses BaseURL.
+	EmbedBaseURL string `env:"EMBED_BASE_URL"`
 	// MaxTokens bounds a reply unless the request says otherwise.
 	MaxTokens int `env:"LLM_MAX_TOKENS" default:"1024"`
 	// Timeout bounds one attempt of one call.
@@ -172,11 +190,44 @@ type Provider interface {
 // Providers lists the provider names.
 var Providers = []string{"fake", "ollama", "anthropic", "openai", "google", "compatible"}
 
+// EmbedProviders lists the values of EMBED_PROVIDER: the providers that
+// can embed, and none.
+var EmbedProviders = []string{"none", "openai", "google", "ollama", "compatible", "fake"}
+
+// ErrNoEmbeddings is what Embed returns when no provider can embed:
+// EMBED_PROVIDER=none, or a chat provider without embeddings
+// (anthropic) and no EMBED_PROVIDER. Test it with errors.Is to run a
+// feature without its vectors (search by keyword instead).
+var ErrNoEmbeddings = errors.New("llm: no embeddings provider")
+
+var (
+	errEmbedOff       = fmt.Errorf("%w: embeddings are off (EMBED_PROVIDER=none)", ErrNoEmbeddings)
+	errAnthropicEmbed = fmt.Errorf("%w: anthropic has no embedding model; set EMBED_PROVIDER to openai, google, ollama or compatible (with EMBED_API_KEY) for Embed", ErrNoEmbeddings)
+)
+
+// embedResult is one Embed call's vectors, the model that made them and
+// the tokens it reported.
+type embedResult struct {
+	vectors [][]float32
+	model   string
+	usage   Usage
+}
+
+// embedder is a provider that reports what an Embed call used; the
+// built-in providers all are.
+type embedder interface {
+	embed(ctx context.Context, model string, texts []string) (embedResult, error)
+}
+
 // LLM is the running pack.
 type LLM struct {
 	cfg      Config
 	log      *slog.Logger
 	provider Provider
+	// embed serves Embed (the chat provider unless EMBED_PROVIDER is
+	// set); nil with embedErr when nothing can embed.
+	embed    Provider
+	embedErr error
 	pool     *pgxpool.Pool
 	sleep    func(context.Context, time.Duration) error
 	mu       sync.RWMutex
@@ -192,12 +243,46 @@ func Pack() lidza.Pack { return &LLM{log: slog.Default()} }
 func New(cfg Config) (*LLM, error) {
 	l := &LLM{cfg: cfg, log: slog.Default(), sleep: sleepCtx}
 	l.defaults()
-	p, err := newProvider(l.cfg)
+	p, err := newProvider(l.cfg, chatSettings)
 	if err != nil {
 		return nil, err
 	}
 	l.provider = p
+	if l.embed, l.embedErr, err = newEmbedder(l.cfg, p); err != nil {
+		return nil, err
+	}
 	return l, nil
+}
+
+// newEmbedder picks the provider behind Embed: the chat provider when
+// EMBED_PROVIDER is empty, else its own, built from the EMBED_*
+// settings. When nothing can embed, the second result is the error
+// Embed returns; the pack still starts, so an app that never embeds
+// runs on anthropic alone. The third is a configuration error.
+func newEmbedder(cfg Config, chat Provider) (Provider, error, error) {
+	switch cfg.EmbedProvider {
+	case "":
+		if cfg.Provider == "anthropic" {
+			return nil, errAnthropicEmbed, nil
+		}
+		return chat, nil, nil
+	case "none":
+		return nil, errEmbedOff, nil
+	case "anthropic":
+		return nil, nil, fmt.Errorf("llm: EMBED_PROVIDER: anthropic has no embedding model (one of %s)", strings.Join(EmbedProviders, ", "))
+	}
+	if !slices.Contains(EmbedProviders, cfg.EmbedProvider) {
+		return nil, nil, fmt.Errorf("llm: unknown embeddings provider %q (EMBED_PROVIDER: one of %s)", cfg.EmbedProvider, strings.Join(EmbedProviders, ", "))
+	}
+	ec := Config{Provider: cfg.EmbedProvider, EmbedModel: cfg.EmbedModel, APIKey: cfg.EmbedAPIKey, BaseURL: cfg.EmbedBaseURL}
+	// The same provider for both: its key and address serve both unless
+	// the EMBED_ ones say otherwise. Another provider never gets the chat
+	// provider's key.
+	if cfg.EmbedProvider == cfg.Provider {
+		ec.APIKey, ec.BaseURL = or(ec.APIKey, cfg.APIKey), or(ec.BaseURL, cfg.BaseURL)
+	}
+	p, err := newProvider(ec, embedSettings)
+	return p, nil, err
 }
 
 func (l *LLM) defaults() {
@@ -216,6 +301,7 @@ func (l *LLM) defaults() {
 	if l.cfg.MaxToolRounds <= 0 {
 		l.cfg.MaxToolRounds = 8
 	}
+	l.cfg.EmbedModel = or(l.cfg.EmbedModel, l.cfg.LLMEmbedModel)
 }
 
 // From returns the pack from a handler's, job's or tool's context.
@@ -234,7 +320,7 @@ func (l *LLM) Start(ctx context.Context, s *lidza.Services) error {
 	if err != nil {
 		return err
 	}
-	l.cfg, l.provider, l.sleep = built.cfg, built.provider, built.sleep
+	l.cfg, l.provider, l.embed, l.embedErr, l.sleep = built.cfg, built.provider, built.embed, built.embedErr, built.sleep
 	if pool, ok := s.Lookup(typeOf[*pgxpool.Pool]()); ok {
 		l.pool = pool.(*pgxpool.Pool)
 	}
@@ -252,9 +338,17 @@ func (l *LLM) providerNow() Provider {
 	return l.provider
 }
 
+// embedderNow is the embeddings provider under the lock, or the error
+// that says why there is none.
+func (l *LLM) embedderNow() (Provider, error) {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	return l.embed, l.embedErr
+}
+
 // Reconfigure reads .env and the credentials again and switches the
-// provider and model: what the admin pages call after an LLM setting is
-// saved.
+// providers and models, chat and embeddings: what the admin pages call
+// after an LLM or embeddings setting is saved.
 func (l *LLM) Reconfigure(ctx context.Context) error {
 	var cfg Config
 	if err := env.Load(".", &cfg); err != nil {
@@ -265,9 +359,9 @@ func (l *LLM) Reconfigure(ctx context.Context) error {
 		return err
 	}
 	l.mu.Lock()
-	l.cfg, l.provider = built.cfg, built.provider
+	l.cfg, l.provider, l.embed, l.embedErr = built.cfg, built.provider, built.embed, built.embedErr
 	l.mu.Unlock()
-	l.log.Info("llm: reconfigured", "provider", l.cfg.Provider, "model", l.cfg.Model)
+	l.log.Info("llm: reconfigured", "provider", built.cfg.Provider, "model", built.cfg.Model, "embed", built.EmbedProvider())
 	return nil
 }
 
@@ -276,6 +370,17 @@ func (l *LLM) Provider() string { return l.cfg.Provider }
 
 // Model returns the configured chat model.
 func (l *LLM) Model() string { return l.cfg.Model }
+
+// EmbedProvider returns the name of the provider behind Embed: the chat
+// provider's unless EMBED_PROVIDER names another, "none" when nothing
+// can embed.
+func (l *LLM) EmbedProvider() string {
+	p, _ := l.embedderNow()
+	if p == nil {
+		return "none"
+	}
+	return p.Name()
+}
 
 // Fake returns the fake provider to script replies in a test, nil when
 // another provider is configured.
@@ -295,25 +400,67 @@ func (l *LLM) Stream(ctx context.Context, req Request, fn func(text string) erro
 	return l.call(ctx, req, fn)
 }
 
-// Embed returns one vector per text, from LLM_EMBED_MODEL.
+// EmbedRequest is one call for embeddings.
+type EmbedRequest struct {
+	// Texts to embed; the reply has one vector per text, in order.
+	Texts []string `json:"texts"`
+	// Model overrides EMBED_MODEL.
+	Model string `json:"model,omitempty"`
+	// Label names the feature making the call ("post.index") for the
+	// usage report, as Request.Label does for a chat.
+	Label string `json:"label,omitempty"`
+}
+
+// EmbedResponse is the vectors, the model that made them and the input
+// tokens the provider reported (none for google).
+type EmbedResponse struct {
+	Vectors [][]float32 `json:"vectors"`
+	Model   string      `json:"model"`
+	Usage   Usage       `json:"usage"`
+}
+
+// Embed returns one vector per text from the embeddings provider
+// (EMBED_PROVIDER, else the chat provider) and EMBED_MODEL. The call is
+// recorded unlabelled; Embeddings takes a label.
 func (l *LLM) Embed(ctx context.Context, texts []string) ([][]float32, error) {
-	if len(texts) == 0 {
-		return nil, nil
+	res, err := l.Embeddings(ctx, EmbedRequest{Texts: texts})
+	return res.Vectors, err
+}
+
+// Embeddings embeds the request's texts and records the call in
+// llm_usage under its label, with the tokens the provider reported. An
+// error wraps ErrNoEmbeddings when no provider can embed.
+func (l *LLM) Embeddings(ctx context.Context, req EmbedRequest) (EmbedResponse, error) {
+	if len(req.Texts) == 0 {
+		return EmbedResponse{}, nil
 	}
+	p, err := l.embedderNow()
+	if err != nil {
+		return EmbedResponse{}, err
+	}
+	model := or(req.Model, l.cfg.EmbedModel)
 	start := time.Now()
-	var out [][]float32
-	err := l.retry(ctx, func(ctx context.Context) error {
+	var out embedResult
+	err = l.retry(ctx, func(ctx context.Context) error {
 		var err error
-		out, err = l.providerNow().Embed(ctx, l.cfg.EmbedModel, texts)
+		if e, ok := p.(embedder); ok {
+			out, err = e.embed(ctx, model, req.Texts)
+		} else {
+			out.vectors, err = p.Embed(ctx, model, req.Texts)
+		}
 		return err
 	})
 	l.calls.Add(1)
+	res := EmbedResponse{Vectors: out.vectors, Model: or(out.model, or(model, p.Name())), Usage: out.usage}
+	l.record(ctx, p.Name(), res.Model, req.Label, res.Usage, time.Since(start), err)
 	if err != nil {
 		l.failures.Add(1)
-		return nil, err
+		lidza.Log(ctx).Warn("llm embed failed", "provider", p.Name(), "model", res.Model, "label", req.Label, "texts", len(req.Texts), "error", err, "ms", time.Since(start).Milliseconds())
+		return EmbedResponse{}, err
 	}
-	lidza.Log(ctx).Info("llm embed", "provider", l.cfg.Provider, "texts", len(texts), "ms", time.Since(start).Milliseconds())
-	return out, nil
+	l.inputTokens.Add(int64(res.Usage.Input))
+	lidza.Log(ctx).Info("llm embed", "provider", p.Name(), "model", res.Model, "label", req.Label, "texts", len(req.Texts), "in", res.Usage.Input, "ms", time.Since(start).Milliseconds())
+	return res, nil
 }
 
 // Generate asks for a T: the request's Schema is T's JSON Schema, the
@@ -436,7 +583,7 @@ func (l *LLM) call(ctx context.Context, req Request, stream func(string) error) 
 		return err
 	})
 	l.calls.Add(1)
-	l.record(ctx, req, res, time.Since(start), err)
+	l.record(ctx, l.cfg.Provider, or(res.Model, req.Model), req.Label, res.Usage, time.Since(start), err)
 	if err != nil {
 		l.failures.Add(1)
 		lidza.Log(ctx).Warn("llm chat failed", "provider", l.cfg.Provider, "model", req.Model, "label", req.Label, "error", err, "ms", time.Since(start).Milliseconds())
@@ -500,10 +647,19 @@ func (l *LLM) TelemetryStats() map[string]float64 {
 	}
 }
 
-func newProvider(cfg Config) (Provider, error) {
+// settingNames are the names a provider's configuration errors cite:
+// the chat provider's (LLM_*) or the embeddings provider's (EMBED_*).
+type settingNames struct{ what, key, base string }
+
+var (
+	chatSettings  = settingNames{"provider", "LLM_API_KEY", "LLM_BASE_URL"}
+	embedSettings = settingNames{"embeddings provider", "EMBED_API_KEY", "EMBED_BASE_URL"}
+)
+
+func newProvider(cfg Config, names settingNames) (Provider, error) {
 	need := func() error {
 		if cfg.APIKey == "" {
-			return fmt.Errorf("llm: provider %s needs LLM_API_KEY", cfg.Provider)
+			return fmt.Errorf("llm: %s %s needs %s", names.what, cfg.Provider, names.key)
 		}
 		return nil
 	}
@@ -524,7 +680,7 @@ func newProvider(cfg Config) (Provider, error) {
 		return &openai{key: cfg.APIKey, base: or(cfg.BaseURL, "https://api.openai.com"), model: or(cfg.Model, "gpt-5-mini"), embedModel: or(cfg.EmbedModel, "text-embedding-3-small")}, nil
 	case "compatible":
 		if cfg.BaseURL == "" {
-			return nil, fmt.Errorf("llm: provider compatible needs LLM_BASE_URL, the server's address (http://127.0.0.1:8080 for llama-server)")
+			return nil, fmt.Errorf("llm: %s compatible needs %s, the server's address (http://127.0.0.1:8080 for llama-server)", names.what, names.base)
 		}
 		// The paths add /v1; an address written with it works too.
 		base := strings.TrimSuffix(strings.TrimRight(cfg.BaseURL, "/"), "/v1")

@@ -167,6 +167,7 @@ func productionNeeds(cfg *config.Config, sealed map[string]string) []string {
 				seen[s.Name] = true
 				v := strings.TrimSpace(sealed[s.Name])
 				switch {
+				case v == "" && s.Optional:
 				case v == "":
 					out = append(out, fmt.Sprintf("%s (%s): %s", s.Name, name, s.Why))
 				case slices.Contains(s.Dev, strings.ToLower(v)):

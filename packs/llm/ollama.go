@@ -127,15 +127,23 @@ func (p *ollama) Chat(ctx context.Context, req Request, stream func(string) erro
 }
 
 func (p *ollama) Embed(ctx context.Context, model string, texts []string) ([][]float32, error) {
+	r, err := p.embed(ctx, model, texts)
+	return r.vectors, err
+}
+
+func (p *ollama) embed(ctx context.Context, model string, texts []string) (embedResult, error) {
+	model = or(model, p.embedModel)
 	var out struct {
+		Model      string      `json:"model"`
 		Embeddings [][]float32 `json:"embeddings"`
+		Tokens     int         `json:"prompt_eval_count"`
 		Error      string      `json:"error"`
 	}
-	if err := postJSON(ctx, "ollama", p.base+"/api/embed", nil, map[string]any{"model": or(model, p.embedModel), "input": texts}, &out); err != nil {
-		return nil, err
+	if err := postJSON(ctx, "ollama", p.base+"/api/embed", nil, map[string]any{"model": model, "input": texts}, &out); err != nil {
+		return embedResult{}, err
 	}
 	if out.Error != "" {
-		return nil, &Error{Provider: "ollama", Status: 400, Body: out.Error}
+		return embedResult{}, &Error{Provider: "ollama", Status: 400, Body: out.Error}
 	}
-	return out.Embeddings, nil
+	return embedResult{vectors: out.Embeddings, model: or(out.Model, model), usage: Usage{Input: out.Tokens}}, nil
 }

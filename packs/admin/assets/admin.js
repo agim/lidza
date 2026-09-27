@@ -100,12 +100,13 @@
         })
         return out
       }
-      // The console links sit beside the form, outside it.
-      var aside = document.querySelectorAll('[data-admin-nolinks]')
+      // The console links sit beside the form, outside it, marked with
+      // the selector they follow; a page may hold several forms.
+      var aside = document.querySelectorAll('[data-admin-nolinks="' + name + '"]')
       function run() {
         var values = chosen()
         var links = 0
-        all('[data-for]').forEach(function (el) {
+        all('[data-for]', form).concat(all('[data-for-selector="' + name + '"]')).forEach(function (el) {
           var wanted = el.getAttribute('data-for').split(',')
           var hit = wanted.some(function (v) { return values.indexOf(v) >= 0 })
           el.classList.toggle('d-none', !hit)

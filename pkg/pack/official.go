@@ -41,6 +41,9 @@ type Setting struct {
 	// Dev are values that only suit development and tests (the log
 	// mailer, the fake model); a deployment set to one is flagged too.
 	Dev []string
+	// Optional settings are not flagged when missing, only when set to
+	// a Dev value (EMBED_PROVIDER, which defaults to the chat provider).
+	Optional bool
 }
 
 // Officials lists the packs `lidza pack add` knows.
@@ -184,25 +187,30 @@ var Officials = []Official{
 	},
 	{
 		Name:        "llm",
-		Description: "Language models behind one Chat, Stream, Embed, Generate and Run: Anthropic, OpenAI, Google and Ollama spoken directly over HTTP, a fake provider for tests, structured output from schema types, the app's tools offered to the model, retries, and token usage per call in llm_usage with the db pack.",
+		Description: "Language models behind one Chat, Stream, Embed, Generate and Run: Anthropic, OpenAI, Google and Ollama spoken directly over HTTP, a fake provider for tests, structured output from schema types, the app's tools offered to the model, embeddings from the chat provider or another, retries, and token usage per call (chats and embeddings, by label) in llm_usage with the db pack.",
 		Env: []string{
 			"# lidza/llm",
-			"LLM_PROVIDER=fake          # fake | ollama | anthropic | openai | google",
+			"LLM_PROVIDER=fake          # fake | ollama | anthropic | openai | google | compatible",
 			"# LLM_MODEL=                # the provider's default when empty (claude-sonnet-5, gpt-5-mini, gemini-2.5-flash, llama3.2)",
-			"# LLM_API_KEY=              # anthropic, openai, google",
-			"# LLM_BASE_URL=             # a proxy or region; Ollama elsewhere than http://127.0.0.1:11434",
-			"# LLM_EMBED_MODEL=          # text-embedding-3-small, text-embedding-004, nomic-embed-text",
+			"# LLM_API_KEY=              # anthropic, openai, google (a secret: lidza credentials set)",
+			"# LLM_BASE_URL=             # a proxy or region; Ollama elsewhere than http://127.0.0.1:11434; required for compatible",
 			"# LLM_MAX_TOKENS=1024       # reply bound; LLM_TIMEOUT=60s per attempt; LLM_MAX_ATTEMPTS=3 on 429 and 5xx",
+			"# EMBED_PROVIDER=           # Embed's provider: empty uses LLM_PROVIDER (anthropic cannot embed) | openai | google | ollama | compatible | none | fake",
+			"# EMBED_MODEL=              # text-embedding-3-small, text-embedding-004, nomic-embed-text (LLM_EMBED_MODEL is read when empty)",
+			"# EMBED_API_KEY=            # openai, google (a secret: lidza credentials set); empty reuses LLM_API_KEY when EMBED_PROVIDER is LLM_PROVIDER",
+			"# EMBED_BASE_URL=           # as LLM_BASE_URL, for the embeddings provider",
 		},
 		Notes: []string{
 			"chat: llm.From(ctx).Chat(ctx, llm.Request{System: \"...\", Messages: []llm.Message{{Role: llm.User, Content: text}}}) returns Text and Usage; Stream delivers the text as it arrives",
 			"structured: out, err := llm.Generate[schema.NoteTags](ctx, llm.From(ctx), req) sends the type's JSON Schema and validates the reply",
 			"tools: llm.From(ctx).Run(ctx, req, tools()) offers the app's lidza.Tool values to the model and runs the calls it makes",
 			"tests: LLM_PROVIDER=fake in .env.test; llm.From(srv.Context()).Fake().Reply(\"...\") or .ReplyJSON(v) scripts the next reply",
-			"usage: with the db pack every call is a row in llm_usage (set Request.Label to the feature name); llm.From(ctx).Usage(ctx, since) reports it, the MCP tool lidza_llm_usage too; run `lidza gen` and `lidza db migrate` for the table",
+			"embeddings: llm.From(ctx).Embeddings(ctx, llm.EmbedRequest{Texts: texts, Label: \"post.index\"}) returns Vectors and Usage (Embed(ctx, texts) is the unlabelled form); with an anthropic chat set EMBED_PROVIDER, and EMBED_PROVIDER=none makes Embed return llm.ErrNoEmbeddings",
+			"usage: with the db pack every call, chat or embedding, is a row in llm_usage (set Request.Label or EmbedRequest.Label to the feature name); llm.From(ctx).Usage(ctx, since) reports it, the MCP tool lidza_llm_usage too; run `lidza gen` and `lidza db migrate` for the table",
 			"never import a vendor SDK (lidza check L007): the pack speaks each API directly",
 		},
-		Production: []Setting{{Name: "LLM_PROVIDER", Why: "anthropic, openai, google, ollama or compatible, with its key", Dev: []string{"fake"}}},
+		Production: []Setting{{Name: "LLM_PROVIDER", Why: "anthropic, openai, google, ollama or compatible, with its key", Dev: []string{"fake"}},
+			{Name: "EMBED_PROVIDER", Why: "openai, google, ollama or compatible with EMBED_API_KEY, none, or unset for the chat provider", Dev: []string{"fake"}, Optional: true}},
 	},
 	{
 		Name:        "storage",

@@ -93,7 +93,13 @@ func (f *Fake) Chat(ctx context.Context, req Request, stream func(string) error)
 // Embed returns an 8-dimensional vector per text, the same for the same
 // text.
 func (f *Fake) Embed(ctx context.Context, model string, texts []string) ([][]float32, error) {
-	out := make([][]float32, len(texts))
+	r, err := f.embed(ctx, model, texts)
+	return r.vectors, err
+}
+
+// embed counts a token per word, as Chat does.
+func (f *Fake) embed(ctx context.Context, model string, texts []string) (embedResult, error) {
+	out := embedResult{vectors: make([][]float32, len(texts)), model: or(model, "fake")}
 	for i, t := range texts {
 		h := fnv.New64a()
 		h.Write([]byte(t))
@@ -102,7 +108,8 @@ func (f *Fake) Embed(ctx context.Context, model string, texts []string) ([][]flo
 		for j := range v {
 			v[j] = float32((sum>>(uint(j)*8))&0xff)/255 - 0.5
 		}
-		out[i] = v
+		out.vectors[i] = v
+		out.usage.Input += len(strings.Fields(t))
 	}
 	return out, nil
 }

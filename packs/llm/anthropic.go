@@ -192,5 +192,5 @@ func (p *anthropic) Chat(ctx context.Context, req Request, stream func(string) e
 }
 
 func (p *anthropic) Embed(context.Context, string, []string) ([][]float32, error) {
-	return nil, fmt.Errorf("llm: anthropic has no embedding model; set LLM_PROVIDER to openai, google or ollama for Embed")
+	return nil, errAnthropicEmbed
 }

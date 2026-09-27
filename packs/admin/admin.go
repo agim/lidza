@@ -359,13 +359,14 @@ func (h *Handler) tabsFor(ctx context.Context, name string) []tab {
 	default:
 		return nil
 	}
-	sec, _ := h.sectionFor(ctx, page)
-	return h.tabs(pages[page][0], pages[page][1], sec, false)
+	sec, more, _ := h.sectionFor(ctx, page)
+	return h.tabs(pages[page][0], pages[page][1], sec, more, false)
 }
 
 // tabs builds a pack page's two tabs: its data, and its settings when the
-// pack's section applies.
-func (h *Handler) tabs(page, first string, sec *sectionView, settingsActive bool) []tab {
+// pack's section applies. The settings tab's dot is the first section's
+// status, or a later section's when that one needs a look.
+func (h *Handler) tabs(page, first string, sec *sectionView, more []sectionView, settingsActive bool) []tab {
 	out := []tab{{Name: first, Href: h.path + "/" + page, Icon: map[string]string{"mail": "inbox", "llm": "chart-bar", "storage": "folder", "users": "users"}[page], Active: !settingsActive}}
 	if sec != nil {
 		name, href := "Settings", h.path+"/"+page+"/settings"
@@ -375,6 +376,11 @@ func (h *Handler) tabs(page, first string, sec *sectionView, settingsActive bool
 		t := tab{Name: name, Href: href, Icon: "settings", Active: settingsActive}
 		if sec.Status == "partial" || sec.Status == "dev" || sec.Status == "off" {
 			t.Status = statusColor(sec.Status)
+		}
+		for _, m := range more {
+			if m.Status == "partial" {
+				t.Status = statusColor(m.Status)
+			}
 		}
 		out = append(out, t)
 	}
@@ -488,7 +494,8 @@ func (h *Handler) renderWith(w http.ResponseWriter, r *http.Request, status int,
 			if d, ok := data.(map[string]any); ok {
 				if sec, ok := d["Section"].(*sectionView); ok && sec != nil {
 					first := map[string]string{"mail": "Outbox", "llm": "Usage", "storage": "Files", "users": "Accounts"}[sec.Page]
-					p.Tabs = h.tabs(sec.Page, first, sec, true)
+					more, _ := d["More"].([]sectionView)
+					p.Tabs = h.tabs(sec.Page, first, sec, more, true)
 				}
 			}
 		}

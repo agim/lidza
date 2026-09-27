@@ -43,10 +43,16 @@ func TestProductionNeeds(t *testing.T) {
 			t.Errorf("missing %q in:\n%s", want, needs)
 		}
 	}
-	for _, not := range []string{"DATABASE_URL", "AUTH_SECRET", "MAIL_PROVIDER", "MAIL_FROM", "STORAGE"} {
+	// EMBED_PROVIDER is optional (unset embeds with the chat provider):
+	// flagged only when set to a development value.
+	for _, not := range []string{"DATABASE_URL", "AUTH_SECRET", "MAIL_PROVIDER", "MAIL_FROM", "STORAGE", "EMBED_PROVIDER"} {
 		if strings.Contains(needs, not) {
 			t.Errorf("%s flagged:\n%s", not, needs)
 		}
+	}
+	needs = strings.Join(productionNeeds(cfg, map[string]string{"LLM_PROVIDER": "anthropic", "EMBED_PROVIDER": "fake"}), "\n")
+	if !strings.Contains(needs, `EMBED_PROVIDER (lidza/llm) is "fake", which suits development only`) {
+		t.Errorf("a fake embeddings provider not flagged:\n%s", needs)
 	}
 	dir := t.TempDir()
 	writeProductionEnv(dir, cfg)

@@ -198,14 +198,24 @@ func (p *openai) Chat(ctx context.Context, req Request, stream func(string) erro
 }
 
 func (p *openai) Embed(ctx context.Context, model string, texts []string) ([][]float32, error) {
+	r, err := p.embed(ctx, model, texts)
+	return r.vectors, err
+}
+
+func (p *openai) embed(ctx context.Context, model string, texts []string) (embedResult, error) {
+	model = or(model, p.embedModel)
 	var out struct {
-		Data []struct {
+		Model string `json:"model"`
+		Data  []struct {
 			Index     int       `json:"index"`
 			Embedding []float32 `json:"embedding"`
 		} `json:"data"`
+		Usage struct {
+			PromptTokens int `json:"prompt_tokens"`
+		} `json:"usage"`
 	}
-	if err := postJSON(ctx, "openai", p.base+"/v1/embeddings", p.headers(), map[string]any{"model": or(model, p.embedModel), "input": texts}, &out); err != nil {
-		return nil, err
+	if err := postJSON(ctx, "openai", p.base+"/v1/embeddings", p.headers(), map[string]any{"model": model, "input": texts}, &out); err != nil {
+		return embedResult{}, err
 	}
 	vectors := make([][]float32, len(texts))
 	for _, d := range out.Data {
@@ -213,5 +223,5 @@ func (p *openai) Embed(ctx context.Context, model string, texts []string) ([][]f
 			vectors[d.Index] = d.Embedding
 		}
 	}
-	return vectors, nil
+	return embedResult{vectors: vectors, model: or(out.Model, model), usage: Usage{Input: out.Usage.PromptTokens}}, nil
 }

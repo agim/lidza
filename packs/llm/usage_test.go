@@ -58,6 +58,27 @@ func TestUsage(t *testing.T) {
 	if r := byLabel[""]; r.Calls != 1 {
 		t.Fatalf("unlabelled: %+v", r)
 	}
+
+	// Embeddings are rows too, under their label, with their tokens.
+	if _, err := l.Embeddings(ctx, EmbedRequest{Texts: []string{"one two", "three"}, Label: "post.index"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := l.Embed(ctx, []string{"unlabelled text"}); err != nil {
+		t.Fatal(err)
+	}
+	rows, _ = l.Usage(ctx, time.Now().Add(-time.Hour))
+	embeds := map[string]UsageRow{}
+	for _, r := range rows {
+		if r.Model == "fake" {
+			embeds[r.Label] = r
+		}
+	}
+	if r := embeds["post.index"]; r.Calls != 1 || r.Input != 3 || r.Output != 0 || r.Provider != "fake" {
+		t.Fatalf("post.index: %+v", r)
+	}
+	if r := embeds[""]; r.Calls != 1 || r.Input != 2 {
+		t.Fatalf("unlabelled embedding: %+v", r)
+	}
 	broken := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"model not found"}`, http.StatusNotFound)
 	}))

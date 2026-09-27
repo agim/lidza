@@ -208,6 +208,77 @@ func TestCredentialsPage(t *testing.T) {
 	}
 }
 
+// The llm page's Settings tab holds two forms, the model provider and
+// Embeddings, each with its own selector; saving EMBED_PROVIDER and its
+// key reaches the running pack without a restart.
+func TestEmbedSettings(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir) // the llm pack reads the credentials from the working directory
+	t.Setenv(credentials.EnvMasterKey, "")
+	t.Setenv("LIDZA_MODE", "test")
+	t.Cleanup(func() { credentials.SetOverrides(nil) })
+	// The chat provider comes from the environment, as a deployment's
+	// would; Reconfigure reads it again with the saved EMBED_ settings.
+	t.Setenv("LLM_PROVIDER", "anthropic")
+	t.Setenv("LLM_API_KEY", "k")
+	l, _ := llm.New(llm.Config{Provider: "anthropic", APIKey: "k"})
+	s := lidza.NewServices()
+	lidza.Provide(s, l)
+	srv := serve(t, Options{Auth: noAuth, Allow: func(context.Context) bool { return true }, CredentialsDir: dir, Dir: dir}, s)
+
+	_, body := get(t, srv, "/admin/llm/settings")
+	for _, want := range []string{`name="section" value="llm"`, `name="section" value="embed"`, `data-admin-selector="LLM_PROVIDER"`, `data-admin-selector="EMBED_PROVIDER"`,
+		"Same as the chat provider", `name="EMBED_PROVIDER" value="" class="form-selectgroup-input" checked`, "Same as chat", `data-for-selector="LLM_PROVIDER"`, `data-admin-nolinks="LLM_PROVIDER"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("missing %q", want)
+		}
+	}
+	// Same as chat: the model applies, the key and address wait for a
+	// provider of their own.
+	if !regexp.MustCompile(`<div class="mb-3" data-for=",openai,google,compatible,ollama">\s*<label[^>]*for="f-EMBED_MODEL"`).MatchString(body) {
+		t.Error("EMBED_MODEL should show while embeddings follow the chat provider")
+	}
+	if !regexp.MustCompile(`d-none" data-for="openai,google,compatible">\s*<label[^>]*for="f-EMBED_API_KEY"`).MatchString(body) {
+		t.Error("EMBED_API_KEY should be hidden until a provider is chosen")
+	}
+	if strings.Contains(body, `name="LLM_EMBED_MODEL"`) {
+		t.Error("LLM_EMBED_MODEL is read, no longer offered")
+	}
+
+	post := func(form url.Values) string {
+		t.Helper()
+		client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+		res, err := client.PostForm(srv.URL+"/admin/settings", form)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		return res.Header.Get("Location")
+	}
+	if loc := post(url.Values{"section": {"embed"}, "EMBED_PROVIDER": {"openai"}, "EMBED_API_KEY": {"sk-embed"}, "EMBED_MODEL": {""}}); !strings.Contains(loc, "Embeddings+saved") || !strings.HasPrefix(loc, "/admin/llm/settings") {
+		t.Fatalf("save: %s", loc)
+	}
+	if vals := credentials.Values(dir); vals["EMBED_PROVIDER"] != "openai" || vals["EMBED_API_KEY"] != "sk-embed" {
+		t.Fatalf("saved: %v", vals)
+	}
+	if l.EmbedProvider() != "openai" {
+		t.Fatalf("not applied: %s", l.EmbedProvider())
+	}
+	_, body = get(t, srv, "/admin/llm/settings")
+	if strings.Contains(body, "sk-embed") || !regexp.MustCompile(`<div class="mb-3" data-for="openai,google,compatible">`).MatchString(body) || !strings.Contains(body, `name="EMBED_PROVIDER" value="openai" class="form-selectgroup-input" checked`) {
+		t.Error("the key should show as stored, never its value, with openai chosen")
+	}
+	// Off: Embed says so, chat is untouched.
+	post(url.Values{"section": {"embed"}, "EMBED_PROVIDER": {"none"}})
+	if _, err := l.Embed(context.Background(), []string{"x"}); !errors.Is(err, llm.ErrNoEmbeddings) || l.Provider() != "anthropic" {
+		t.Fatalf("off: %v", err)
+	}
+	// A provider that cannot embed is refused.
+	if loc := post(url.Values{"section": {"embed"}, "EMBED_PROVIDER": {"anthropic"}}); !strings.Contains(loc, "error=") {
+		t.Fatalf("anthropic embeddings accepted: %s", loc)
+	}
+}
+
 // A multi selector (the sign-in providers) saves the checked options and
 // keeps names the page does not offer.
 func TestMultiSelector(t *testing.T) {
@@ -281,7 +352,15 @@ func TestMultiField(t *testing.T) {
 // Each built-in settings list offers every provider its pack knows, so a
 // provider added to a pack cannot go missing from its page.
 func TestSettingsCoverProviders(t *testing.T) {
-	want := map[string][]string{"MAIL_PROVIDER": mail.Providers, "LLM_PROVIDER": llm.Providers, "STORAGE_PROVIDER": storage.Providers, "MAIL_SMTP_SECURITY": mail.SMTPSecurities, "MAIL_REGION": mail.Regions}
+	// EMBED_PROVIDER offers "same as chat" (empty) and every value but
+	// fake, which only tests use.
+	embed := []string{""}
+	for _, p := range llm.EmbedProviders {
+		if p != "fake" {
+			embed = append(embed, p)
+		}
+	}
+	want := map[string][]string{"MAIL_PROVIDER": mail.Providers, "LLM_PROVIDER": llm.Providers, "EMBED_PROVIDER": embed, "STORAGE_PROVIDER": storage.Providers, "MAIL_SMTP_SECURITY": mail.SMTPSecurities, "MAIL_REGION": mail.Regions}
 	for _, sec := range builtinSections() {
 		for _, f := range sec.Fields {
 			if w, ok := want[f.Name]; ok {

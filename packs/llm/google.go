@@ -168,6 +168,13 @@ func (p *google) Chat(ctx context.Context, req Request, stream func(string) erro
 }
 
 func (p *google) Embed(ctx context.Context, model string, texts []string) ([][]float32, error) {
+	r, err := p.embed(ctx, model, texts)
+	return r.vectors, err
+}
+
+// embed asks batchEmbedContents, which reports no token count: the
+// usage row of a Gemini embedding has zero tokens.
+func (p *google) embed(ctx context.Context, model string, texts []string) (embedResult, error) {
 	model = or(model, p.embedModel)
 	var requests []map[string]any
 	for _, t := range texts {
@@ -179,13 +186,13 @@ func (p *google) Embed(ctx context.Context, model string, texts []string) ([][]f
 		} `json:"embeddings"`
 	}
 	if err := postJSON(ctx, "google", p.base+"/v1beta/models/"+model+":batchEmbedContents", p.headers(), map[string]any{"requests": requests}, &out); err != nil {
-		return nil, err
+		return embedResult{}, err
 	}
 	vectors := make([][]float32, len(out.Embeddings))
 	for i, e := range out.Embeddings {
 		vectors[i] = e.Values
 	}
-	return vectors, nil
+	return embedResult{vectors: vectors, model: model}, nil
 }
 
 // googleSchema keeps the OpenAPI subset Gemini accepts: no

@@ -29,9 +29,10 @@ CREATE INDEX IF NOT EXISTS llm_usage_label_idx ON llm_usage (label);`
 // does it when the db pack runs. Tests call it with their pool.
 func (l *LLM) TrackUsage(pool *pgxpool.Pool) { l.pool = pool }
 
-// record writes one call. A failure to record is logged, never returned:
-// accounting must not break the feature.
-func (l *LLM) record(ctx context.Context, req Request, res Response, elapsed time.Duration, err error) {
+// record writes one call, a chat or an embedding (output 0). A failure
+// to record is logged, never returned: accounting must not break the
+// feature.
+func (l *LLM) record(ctx context.Context, provider, model, label string, usage Usage, elapsed time.Duration, err error) {
 	if l.pool == nil {
 		return
 	}
@@ -47,7 +48,7 @@ func (l *LLM) record(ctx context.Context, req Request, res Response, elapsed tim
 	wctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
 	if _, werr := l.pool.Exec(wctx, `INSERT INTO llm_usage (provider, model, label, input, output, ms, status, error) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-		l.cfg.Provider, or(res.Model, req.Model), req.Label, res.Usage.Input, res.Usage.Output, int(elapsed.Milliseconds()), status, errText); werr != nil {
+		provider, model, label, usage.Input, usage.Output, int(elapsed.Milliseconds()), status, errText); werr != nil {
 		l.log.Warn("llm: usage not recorded", "error", werr)
 	}
 }

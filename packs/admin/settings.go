@@ -68,7 +68,9 @@ type Field struct {
 	// SMTP server).
 	Group string
 	// For lists the values of the section's selector under which the
-	// field applies (mailgun, sendgrid); empty means always.
+	// field applies (mailgun, sendgrid); empty means always. The empty
+	// value ("") names the state where nothing is chosen, for a selector
+	// whose empty value works (Section.None).
 	For []string
 	// Advanced folds the field away under "Advanced" (a proxy address, a
 	// token limit): rarely needed, never required.
@@ -137,7 +139,7 @@ func builtinSections() []Section {
 				{Name: "MAIL_BASE_URL", Label: "API address", Kind: "text", For: []string{"mailgun", "sendgrid", "postmark", "resend"}, Advanced: true, Help: "Only for a proxy in front of the provider's API."},
 			}},
 		{Key: "llm", Page: "llm", Title: "Model provider", Icon: "sparkles", Selector: "LLM_PROVIDER",
-			Description: "The model behind the llm pack: chat, structured output and embeddings.",
+			Description: "The model behind the llm pack: chat, structured output, tools, and embeddings unless Embeddings below names another provider.",
 			Enabled:     func(ctx context.Context) bool { _, ok := lidza.Optional[llmService](ctx); return ok },
 			Links: []Link{
 				{For: "anthropic", Title: "Anthropic console: API keys", URL: "https://console.anthropic.com/settings/keys"},
@@ -157,10 +159,23 @@ func builtinSections() []Section {
 				{Name: "LLM_MODEL", Label: "Model", Kind: "text", For: []string{"anthropic", "openai", "google", "compatible", "ollama"},
 					Placeholders: map[string]string{"anthropic": "claude-sonnet-5", "openai": "gpt-5-mini", "google": "gemini-2.5-flash", "compatible": "the model the server loaded", "ollama": "llama3.2"},
 					Help:         "Empty uses the placeholder's model."},
-				{Name: "LLM_EMBED_MODEL", Label: "Embedding model", Kind: "text", For: []string{"openai", "google", "compatible", "ollama"}, Advanced: true,
-					Placeholders: map[string]string{"openai": "text-embedding-3-small", "google": "text-embedding-004", "ollama": "nomic-embed-text"}},
 				{Name: "LLM_MAX_TOKENS", Label: "Longest reply (tokens)", Kind: "number", For: []string{"anthropic", "openai", "google", "compatible", "ollama"}, Advanced: true, Default: "1024",
 					Help: "A request's own limit wins."},
+			}},
+		{Key: "embed", Page: "llm", Title: "Embeddings", Icon: "search", Selector: "EMBED_PROVIDER", None: "Same as the chat provider",
+			Description: "The provider behind Embed (semantic search, similar items), which may differ from the chat provider: Anthropic has no embedding model.",
+			Enabled:     func(ctx context.Context) bool { _, ok := lidza.Optional[llmService](ctx); return ok },
+			Fields: []Field{
+				{Name: "EMBED_PROVIDER", Label: "Provider", Kind: "select", Options: []string{"", "none", "openai", "google", "ollama", "compatible"},
+					Labels: map[string]string{"": "Same as chat", "none": "Off", "openai": "OpenAI", "google": "Google Gemini", "ollama": "Ollama", "compatible": "Custom server"},
+					Help:   "Same as chat embeds with the model provider above and its key. Off makes Embed return llm.ErrNoEmbeddings."},
+				{Name: "EMBED_BASE_URL", Label: "Server address", Kind: "text", For: []string{"compatible", "ollama"},
+					Placeholders: map[string]string{"compatible": "http://127.0.0.1:8080", "ollama": "http://127.0.0.1:11434"}, Help: "Where the server listens; /v1 may be left off."},
+				{Name: "EMBED_API_KEY", Label: "API key", Kind: "secret", For: []string{"openai", "google", "compatible"},
+					Placeholders: map[string]string{"openai": "sk-…", "google": "AIza…", "compatible": "only if the server asks for one"}},
+				{Name: "EMBED_MODEL", Label: "Model", Kind: "text", For: []string{"", "openai", "google", "compatible", "ollama"}, Placeholder: "the chat provider's default",
+					Placeholders: map[string]string{"": "the chat provider's default", "openai": "text-embedding-3-small", "google": "text-embedding-004", "compatible": "the model the server loaded", "ollama": "nomic-embed-text"},
+					Help:         "Empty uses the placeholder's model. Replaces LLM_EMBED_MODEL, which is read when this is empty."},
 			}},
 		{Key: "storage", Page: "storage", Title: "File storage", Icon: "folder", Selector: "STORAGE_PROVIDER",
 			Description: "Where the storage pack keeps uploads and generated files.",
@@ -283,6 +298,9 @@ func view(s Section, values, origins map[string]string) sectionView {
 	}
 	applies := func(f Field) bool {
 		if len(f.For) == 0 {
+			return true
+		}
+		if len(selected) == 0 && slices.Contains(f.For, "") {
 			return true
 		}
 		for _, v := range selected {
@@ -437,12 +455,12 @@ func originLabel(origin string) string {
 func (h *Handler) packSettings(page, active string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		sec, err := h.sectionFor(ctx, page)
+		sec, more, err := h.sectionFor(ctx, page)
 		if err == nil && sec == nil {
 			http.NotFound(w, r)
 			return
 		}
-		data := map[string]any{"Section": sec, "HasKey": credentials.HasKey(h.opt.CredentialsDir)}
+		data := map[string]any{"Section": sec, "More": more, "HasKey": credentials.HasKey(h.opt.CredentialsDir)}
 		if err != nil {
 			data["Error"] = err.Error()
 		}
@@ -635,19 +653,25 @@ func normalizeList(s string) string {
 	return strings.Join(out, ",")
 }
 
-// sectionFor is the view of the section on a pack page, nil when that
-// pack's section does not apply.
-func (h *Handler) sectionFor(ctx context.Context, page string) (*sectionView, error) {
+// sectionFor is the view of the first section on a pack page, nil when
+// that pack's sections do not apply. more are the page's other
+// sections, in order (the llm page's Embeddings).
+func (h *Handler) sectionFor(ctx context.Context, page string) (first *sectionView, more []sectionView, err error) {
 	views, err := h.settingsViews(ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	for i := range views {
-		if views[i].Page == page {
-			return &views[i], nil
+		if views[i].Page != page {
+			continue
+		}
+		if first == nil {
+			first = &views[i]
+		} else {
+			more = append(more, views[i])
 		}
 	}
-	return nil, nil
+	return first, more, nil
 }
 
 // settingsHref is where a section is edited.

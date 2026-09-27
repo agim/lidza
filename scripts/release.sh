@@ -15,6 +15,10 @@ cd "$(dirname "$0")/.."
 git rev-parse -q --verify "refs/tags/$ver" >/dev/null && { echo "tag $ver exists" >&2; exit 1; }
 grep -q '^## Unreleased$' CHANGELOG.md || { echo "CHANGELOG.md has no '## Unreleased' section" >&2; exit 1; }
 sed -n '/^## Unreleased$/,/^## v/p' CHANGELOG.md | grep -q '^- ' || { echo "'## Unreleased' has no entries" >&2; exit 1; }
+# The module zip carries every tracked file to every app that fetches
+# Līdza: nothing over 2 MB (a stray `go build` at the root was once).
+big=$(git ls-files -z | xargs -0 -r ls -ln 2>/dev/null | awk '$5 > 2097152 {print $9}')
+[ -z "$big" ] || { echo "tracked files over 2 MB: $big" >&2; exit 1; }
 git pull -q --rebase origin master
 today=$(date -u +%Y-%m-%d)
 sed -i.bak "s/^## Unreleased$/## $ver ($today)/" CHANGELOG.md && rm CHANGELOG.md.bak

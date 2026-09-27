@@ -19,6 +19,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 
 	"github.com/agim/lidza"
+	"github.com/agim/lidza/packs/mail"
 	"github.com/agim/lidza/pkg/router"
 )
 
@@ -26,6 +27,13 @@ import (
 // context and serves it; the client keeps cookies and stops at
 // redirects so the test reads them.
 func signinServer(t *testing.T, a *Auth, opt Options) (*httptest.Server, *http.Client) {
+	t.Helper()
+	return signinServerWith(t, a, opt, nil)
+}
+
+// signinServerWith is signinServer with the mail pack, whose middleware
+// runs as in an app.
+func signinServerWith(t *testing.T, a *Auth, opt Options, m *mail.Mail) (*httptest.Server, *http.Client) {
 	t.Helper()
 	// The tests make many credential calls from one address: a relaxed
 	// throttle on the instance the routes see (the same tables).
@@ -41,6 +49,10 @@ func signinServer(t *testing.T, a *Auth, opt Options) (*httptest.Server, *http.C
 			next.ServeHTTP(w, req.WithContext(lidza.WithServices(req.Context(), s)))
 		})
 	})
+	if m != nil {
+		lidza.Provide(s, m)
+		r.Use(m.Middleware())
+	}
 	Mount(r, opt)
 	srv := httptest.NewServer(r.Handler())
 	t.Cleanup(srv.Close)

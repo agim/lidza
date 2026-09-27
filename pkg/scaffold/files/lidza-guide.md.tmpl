@@ -351,9 +351,10 @@ OAuth flow.
    `auth.Mount(r, auth.Options{Title: "{{.Name}}"})`. `lidza gen` then
    writes the client: `api.authRegister`, `authLogin`, `authLogout`,
    `authSession`, `authMe`, `authVerify`, `authForgot`, `authReset`,
-   `authPassword`, `authProviders`. Accounts live in `auth_user`; the
-   app's rows carry the user's id, `auth.CurrentUser(ctx).ID` (recipe
-   "Scope a query to the signed-in user").
+   `authPassword`, `authDelete`, `authProviders`. Accounts live in
+   `auth_user`; the app's rows carry the user's id,
+   `auth.CurrentUser(ctx).ID` (recipe "Scope a query to the signed-in
+   user").
 2. Pages: the sign-in page calls `api.authLogin({ email, password })`
    and shows a 401 as "wrong email or password" and `err.fields` from a
    422; registration calls `api.authRegister`; the app shell reads
@@ -375,10 +376,45 @@ OAuth flow.
    Options: `NoRegister` (invite-only; `auth.From(ctx).CreateUser` adds
    accounts), `NoLocal` (providers only), `RequireVerified`, `Claims`
    (roles into the token), `AfterSignIn`.
-4. Emails: with the mail pack the links go out as plain text, or
+4. New accounts: `OnSignUp` runs once per account the routes create (a
+   registration, or a provider's first sign-in that makes a new
+   account; not a later sign-in, not an identity joining an existing
+   account, not `CreateUser`), inside the transaction that inserts it.
+   Write the app's rows there, with the transaction:
+
+   ```go
+   auth.Mount(r, auth.Options{
+   	OnSignUp: func(ctx context.Context, tx pgx.Tx, s auth.SignUp) error {
+   		// s.Method is "password" or the provider ("google"); s.Lang the request's language.
+   		return queries.New(tx).CreateProfile(ctx, queries.CreateProfileParams{UserID: s.Profile.Subject, Lang: s.Lang})
+   	},
+   	OnDeleteUser: func(ctx context.Context, tx pgx.Tx, subject string) error {
+   		return queries.New(tx).DeleteProfile(ctx, subject)
+   	},
+   })
+   ```
+
+   An error from `OnSignUp` rolls the account back: registration replies
+   with it (`router.Errorf(403, ...)` as is), a provider sign-in lands on
+   `/login?error=signup`. Do not detect sign-ups in `Claims`.
+5. Deleting an account: the account page links to a form that calls
+   `api.authDelete({ password })`; an account without a password (a
+   provider only) sends `{}` and must have signed in within ten minutes,
+   else a 403 "sign in again to delete the account" (send the user
+   through the provider's `url` with `?redirect=` back to the form). The
+   route removes the user, identities, sessions and tokens, runs
+   `OnDeleteUser` in the same transaction for the app's rows (an error
+   rolls it all back), and clears the cookies. From the app or an admin
+   action: `auth.From(ctx).DeleteUser(ctx, id)`; an app with its own
+   users table uses `DeleteUserTx(ctx, tx, id)` in its transaction.
+   `NoDelete` leaves the route out.
+6. Emails: with the mail pack the links go out as plain text, or
    through `mail/auth_verify.txt.tmpl` and `mail/auth_reset.txt.tmpl`
-   when the app has them (Data: `App`, `Link`, `Email`, `Name`).
-5. Test: `lidzatest.Start`, `POST /api/v1/auth/register`, then a scoped
+   when the app has them (Data: `App`, `Link`, `Email`, `Name`). A
+   language's copy is `mail/auth_verify.<lang>.txt.tmpl` (`de`, `pt-BR`),
+   chosen by the request's language (recipe "Send an email"); it names
+   its subject with `{{"{{"}}define "subject"{{"}}"}}...{{"{{"}}end{{"}}"}}`.
+7. Test: `lidzatest.Start`, `POST /api/v1/auth/register`, then a scoped
    route with the cookies the reply set. The providers are tested by the
    framework (against an OIDC issuer in a test server), not by the app.
    `lidza check`, then `lidza test`.
@@ -500,7 +536,15 @@ mail pack, never through a vendor SDK.
    set `MAIL_FROM` and, in production, `MAIL_PROVIDER` with its key in
    `.env`. `.env.test` gets `MAIL_PROVIDER=outbox`.
 2. Write the bodies as Go templates: `mail/<name>.txt.tmpl` (always) and
-   `mail/<name>.html.tmpl` (optional), over the `Data` you pass.
+   `mail/<name>.html.tmpl` (optional), over the `Data` you pass. Other
+   languages: `mail/<name>.<lang>.txt.tmpl` (`verify.de.txt.tmpl`,
+   `verify.pt-BR.txt.tmpl`). Send picks `<name>.<lang>`, then the base
+   language (`pt` for `pt-BR`), then `<name>`, for the message's `Lang`,
+   else the request's language: the `i18n` pack's locale when it runs,
+   else `Accept-Language`. Outside a request (a job), set `Lang` from
+   the user's stored language. A template that defines
+   `{{"{{"}}define "subject"{{"}}"}}...{{"{{"}}end{{"}}"}}` in its
+   `.txt.tmpl` sets the subject, so it is translated with the body.
 3. From a handler or a job:
 
    ```go
@@ -875,7 +919,11 @@ Official Go packs, configured from `.env` (see `.env.example` after
   `g := r.Group("/api/v1/notes", auth.Require())` and read
   `auth.CurrentUser(ctx)`; `auth.Optional()` for a route that serves
   visitors too (the user is nil then). Logout:
-  `auth.From(ctx).Logout(ctx, user.SessionID)`. Sessions slide: when
+  `auth.From(ctx).Logout(ctx, user.SessionID)`. Delete an account and
+  every row the pack keeps with `auth.From(ctx).DeleteUser(ctx, id)`
+  (or `DeleteUserTx` in the app's transaction); with `auth.Mount`,
+  `OnSignUp` and `OnDeleteUser` run the app's code in the same
+  transactions (recipe "Add sign-in"). Sessions slide: when
   a browser's access token has expired, `Require` and `Optional` renew
   it from the refresh cookie on that request and set both cookies again,
   so a tab stays signed in for `AUTH_REFRESH_TTL` without a refresh
@@ -904,7 +952,8 @@ Official Go packs, configured from `.env` (see `.env.example` after
   `tz` cookie, API clients send `X-Timezone`; `I18N_TIMEZONE` is the
   default); catalogs in `locales/<lang>.json`; serve them with
   `r.Handle("GET /api/v1/i18n/{lang}", i18n.Handler())`. Store and send
-  times in UTC; format at the edge.
+  times in UTC; format at the edge. The mail pack writes in the
+  request's locale (`mail/<name>.<lang>.txt.tmpl`).
 - `realtime`: `realtime.From(ctx).Publish(ctx, topic, value)` and
   `r.Handle("GET /api/v1/realtime", realtime.Handler(realtime.Authorize(fn)))`
   behind `auth.Require()`; `fn(r, topic)` decides per topic, and without
@@ -913,7 +962,10 @@ Official Go packs, configured from `.env` (see `.env.example` after
 - `mail`: `mail.From(ctx).Send(ctx, mail.Message{To, Subject, Template:
   "verify", Data: data})` renders `mail/verify.txt.tmpl` and
   `mail/verify.html.tmpl` (Go templates over `Data`; links through
-  `mail.From(ctx).Link(path)`, absolute with `APP_URL`) and delivers through
+  `mail.From(ctx).Link(path)`, absolute with `APP_URL`), or
+  `mail/verify.<lang>.*` for the message's `Lang` or the request's
+  language (`mail.Languages(ctx)`: the `i18n` locale, else
+  `Accept-Language`), and delivers through
   `MAIL_PROVIDER` (`mailgun`, `sendgrid`, `postmark`, `resend`, `smtp`;
   `log` by default, `outbox` in tests). With the `db` pack every message
   is a row in `mail_message` (`Outbox(ctx, n)`, `WaitFor(ctx, to,

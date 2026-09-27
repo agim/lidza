@@ -56,15 +56,52 @@ type Options struct {
 	// Claims adds claims to every session (roles, a tenant); they ride in
 	// the access token as auth.CurrentUser(ctx).Claims.
 	Claims func(ctx context.Context, p Profile) (map[string]any, error)
+	// OnSignUp runs once for every account the routes create: a
+	// registration, or the first sign-in through a provider that makes a
+	// new account (an identity that joins an existing account is not a
+	// sign-up, and neither is CreateUser). It runs inside the transaction
+	// that inserts the account, before the session opens: write the
+	// app's own rows with tx (queries.New(tx)). An error rolls the
+	// account back and fails the sign-up: registration replies with it
+	// (a router.Errorf status as is, else 500), a provider sign-in lands
+	// on FailurePath with ?error=signup.
+	OnSignUp func(ctx context.Context, tx pgx.Tx, s SignUp) error
+	// OnDeleteUser runs inside DeleteUser's transaction (the delete route
+	// and the app's own calls), before the pack's rows go: delete or
+	// anonymize the app's rows of the subject with tx. An error rolls the
+	// whole deletion back.
+	OnDeleteUser func(ctx context.Context, tx pgx.Tx, subject string) error
+	// NoDelete leaves out POST /api/v1/auth/delete, the signed-in user's
+	// "delete my account"; DeleteUser still works for the app.
+	NoDelete bool
 	// Client is the HTTP client the providers use (tests).
 	Client *http.Client
 }
+
+// SignUp is a new account, as Options.OnSignUp sees it.
+type SignUp struct {
+	Profile Profile
+	// Method is how the account signed up: "password" for a
+	// registration, else the provider's name ("google").
+	Method string
+	// Identity is what the provider said about the user; nil for a
+	// registration.
+	Identity *Identity
+	// Lang is the request's language (the i18n pack's locale, else the
+	// first of Accept-Language; mail.Languages), for an app that keeps
+	// the user's language; empty when the request names none.
+	Lang string
+}
+
+// MethodPassword is SignUp.Method for a registration with email and
+// password, and the sign-in method SignInMethods names for a password.
+const MethodPassword = "password"
 
 // Prefix is where Mount registers the sign-in routes.
 const Prefix = "/api/v1/auth"
 
 // Mount registers the sign-in routes under /api/v1/auth: register,
-// login, logout, session, me, verify, forgot, reset, password,
+// login, logout, session, me, verify, forgot, reset, password, delete,
 // providers, and {provider}/start plus {provider}/callback for the
 // external sign-ins. Sessions are the pack's usual ones: HttpOnly
 // cookies that slide, and the access token in the reply for other
@@ -87,6 +124,9 @@ func Mount(r *router.Router, opt Options) {
 	router.Route(r, "GET /api/v1/auth/session", s.authSession, Optional())
 	router.Route(r, "GET /api/v1/auth/me", s.authMe, Require())
 	router.Route(r, "POST /api/v1/auth/logout", s.authLogout, Require())
+	if !opt.NoDelete {
+		router.Route(r, "POST /api/v1/auth/delete", s.authDelete, Throttle(), Require())
+	}
 	router.Route(r, "GET /api/v1/auth/providers", s.authProviders)
 	r.HandleFunc("GET /api/v1/auth/{provider}/start", s.start)
 	r.HandleFunc("GET /api/v1/auth/{provider}/callback", s.callback)
@@ -320,6 +360,14 @@ func (p PasswordChange) Validate() error {
 	return errs.Result()
 }
 
+// AccountDeletion confirms deleting the signed-in account: Password is
+// the account's password, required when it has one. An account without
+// a password (provider sign-in only) confirms by a sign-in within
+// ReauthWindow instead.
+type AccountDeletion struct {
+	Password string `json:"password,omitempty"`
+}
+
 // ProviderLink is one sign-in button: its name, label and the URL to
 // send the browser to (append ?redirect=/path to land elsewhere).
 type ProviderLink struct {
@@ -382,12 +430,18 @@ func (a *Auth) CreateUser(ctx context.Context, email, name, password string) (Pr
 			return Profile{}, err
 		}
 	}
-	return a.createUser(ctx, NormalizeEmail(email), name, hash, nil)
+	return createUser(ctx, a.pool, NormalizeEmail(email), name, hash, nil)
 }
 
-func (a *Auth) createUser(ctx context.Context, email, name, hash string, verifiedAt *time.Time) (Profile, error) {
+// querier is a pool or a transaction.
+type querier interface {
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
+func createUser(ctx context.Context, q querier, email, name, hash string, verifiedAt *time.Time) (Profile, error) {
 	p := Profile{Subject: newUUID(), Email: email, Name: name, HasPassword: hash != "", VerifiedAt: verifiedAt}
-	err := a.pool.QueryRow(ctx, `INSERT INTO auth_user (subject, email, name, password_hash, verified_at) VALUES ($1, NULLIF($2, ''), NULLIF($3, ''), NULLIF($4, ''), $5) RETURNING created_at`,
+	err := q.QueryRow(ctx, `INSERT INTO auth_user (subject, email, name, password_hash, verified_at) VALUES ($1, NULLIF($2, ''), NULLIF($3, ''), NULLIF($4, ''), $5) RETURNING created_at`,
 		p.Subject, email, name, hash, verifiedAt).Scan(&p.CreatedAt)
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == uniqueViolation {
@@ -479,7 +533,7 @@ func (a *Auth) SignInMethods(ctx context.Context, subject string) ([]string, err
 		return nil, err
 	}
 	if hasPassword {
-		out = append(out, "password")
+		out = append(out, MethodPassword)
 	}
 	ids, err := a.Identities(ctx, subject)
 	if err != nil {
@@ -493,9 +547,10 @@ func (a *Auth) SignInMethods(ctx context.Context, subject string) ([]string, err
 
 // link resolves a provider identity to a subject: the linked one; else a
 // local account with the same verified address, which the identity
-// joins; else a new account. The provider's name and picture fill an
-// empty profile.
-func (a *Auth) link(ctx context.Context, id Identity) (Profile, error) {
+// joins; else a new account, created with its identity in one
+// transaction with OnSignUp. The provider's name fills an empty profile.
+func (s *signin) link(ctx context.Context, id Identity) (Profile, error) {
+	a := From(ctx)
 	key := id.Provider + ":" + id.Subject
 	var subject string
 	err := a.pool.QueryRow(ctx, `UPDATE auth_identity SET last_used_at = now(), email = coalesce(NULLIF($2, ''), email), name = coalesce(NULLIF($3, ''), name) WHERE id = $1 RETURNING subject`,
@@ -519,25 +574,80 @@ func (a *Auth) link(ctx context.Context, id Identity) (Profile, error) {
 			}
 		}
 	}
-	if p.Subject == "" {
+	insertIdentity := func(q querier, subject string) error {
+		if _, err := q.Exec(ctx, `INSERT INTO auth_identity (id, provider, provider_subject, subject, email, name) VALUES ($1, $2, $3, $4, NULLIF($5, ''), NULLIF($6, ''))`,
+			key, id.Provider, id.Subject, subject, email, id.Name); err != nil {
+			return fmt.Errorf("auth: link identity: %w", err)
+		}
+		return nil
+	}
+	if p.Subject != "" {
+		return p, insertIdentity(a.pool, p.Subject)
+	}
+	return s.signUp(ctx, func(tx pgx.Tx) (Profile, error) {
 		var verified *time.Time
 		if email != "" && id.EmailVerified {
 			now := time.Now()
 			verified = &now
 		}
-		p, err = a.createUser(ctx, email, id.Name, "", verified)
-		if errors.Is(err, ErrEmailTaken) {
-			// The address belongs to a local account the provider does
-			// not vouch for: a separate account without an address.
-			p, err = a.createUser(ctx, "", id.Name, "", nil)
-		}
+		// A savepoint: a taken address must not abort the transaction.
+		sp, err := tx.Begin(ctx)
 		if err != nil {
 			return Profile{}, err
 		}
+		p, err := createUser(ctx, sp, email, id.Name, "", verified)
+		switch {
+		case errors.Is(err, ErrEmailTaken):
+			// The address belongs to a local account the provider does
+			// not vouch for: a separate account without an address.
+			if err := sp.Rollback(ctx); err != nil {
+				return Profile{}, err
+			}
+			p, err = createUser(ctx, tx, "", id.Name, "", nil)
+			if err != nil {
+				return Profile{}, err
+			}
+		case err != nil:
+			return Profile{}, err
+		default:
+			if err := sp.Commit(ctx); err != nil {
+				return Profile{}, err
+			}
+		}
+		return p, insertIdentity(tx, p.Subject)
+	}, SignUp{Method: id.Provider, Identity: &id})
+}
+
+// signUpError is an error of Options.OnSignUp.
+type signUpError struct{ err error }
+
+func (e *signUpError) Error() string { return "auth: sign-up: " + e.err.Error() }
+func (e *signUpError) Unwrap() error { return e.err }
+
+// signUp creates an account with create inside a transaction and runs
+// OnSignUp in it, so the account and the app's rows exist together or
+// not at all.
+func (s *signin) signUp(ctx context.Context, create func(tx pgx.Tx) (Profile, error), su SignUp) (Profile, error) {
+	tx, err := From(ctx).pool.Begin(ctx)
+	if err != nil {
+		return Profile{}, err
 	}
-	if _, err := a.pool.Exec(ctx, `INSERT INTO auth_identity (id, provider, provider_subject, subject, email, name) VALUES ($1, $2, $3, $4, NULLIF($5, ''), NULLIF($6, ''))`,
-		key, id.Provider, id.Subject, p.Subject, email, id.Name); err != nil {
-		return Profile{}, fmt.Errorf("auth: link identity: %w", err)
+	defer tx.Rollback(ctx)
+	p, err := create(tx)
+	if err != nil {
+		return Profile{}, err
+	}
+	if s.opt.OnSignUp != nil {
+		su.Profile = p
+		if langs := mail.Languages(ctx); len(langs) > 0 {
+			su.Lang = langs[0]
+		}
+		if err := s.opt.OnSignUp(ctx, tx, su); err != nil {
+			return Profile{}, &signUpError{err}
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return Profile{}, err
 	}
 	return p, nil
 }
@@ -603,7 +713,10 @@ func (s *signin) authRegister(ctx context.Context, req *router.Request[Registrat
 	if err != nil {
 		return SignedIn{}, err
 	}
-	p, err := a.createUser(ctx, email, strings.TrimSpace(req.Body.Name), hash, nil)
+	ctx = withRequestLanguage(ctx, req.Raw)
+	p, err := s.signUp(ctx, func(tx pgx.Tx) (Profile, error) {
+		return createUser(ctx, tx, email, strings.TrimSpace(req.Body.Name), hash, nil)
+	}, SignUp{Method: MethodPassword})
 	if err != nil {
 		return SignedIn{}, err
 	}
@@ -752,6 +865,60 @@ func (s *signin) authPassword(ctx context.Context, req *router.Request[PasswordC
 	return router.None{}, nil
 }
 
+// ReauthWindow is how recent the sign-in of an account without a
+// password must be for the delete route: it stands in for the password.
+const ReauthWindow = 10 * time.Minute
+
+// ErrReauthenticate is the 403 of the delete route for an account
+// without a password whose session is older than ReauthWindow: the
+// client sends the user through the provider again (its start URL with
+// ?redirect= back to the page), then repeats the request.
+var ErrReauthenticate = router.Errorf(http.StatusForbidden, "sign in again to delete the account")
+
+// authDelete deletes the signed-in user's account (DeleteUser, with
+// OnDeleteUser) after a confirmation: the password when the account has
+// one, else a sign-in within ReauthWindow. The cookies are cleared.
+func (s *signin) authDelete(ctx context.Context, req *router.Request[AccountDeletion]) (router.None, error) {
+	a := From(ctx)
+	u := CurrentUser(ctx)
+	p, err := a.Profile(ctx, u.ID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return router.None{}, router.Errorf(http.StatusUnauthorized, "account no longer exists")
+	}
+	if err != nil {
+		return router.None{}, err
+	}
+	if p.HasPassword {
+		_, hash, _, err := a.passwordHash(ctx, p.Email)
+		if err != nil || !CheckPassword(hash, req.Body.Password) {
+			return router.None{}, router.Errorf(http.StatusForbidden, "password does not match")
+		}
+	} else {
+		var created time.Time
+		err := a.pool.QueryRow(ctx, `SELECT created_at FROM auth_session WHERE id = $1`, u.SessionID).Scan(&created)
+		if err != nil || time.Since(created) > ReauthWindow {
+			return router.None{}, ErrReauthenticate
+		}
+	}
+	if err := a.DeleteUser(ctx, p.Subject); err != nil {
+		return router.None{}, err
+	}
+	for _, c := range ClearedCookies() {
+		req.SetCookie(c)
+	}
+	return router.None{}, nil
+}
+
+// withRequestLanguage records the request's Accept-Language for
+// mail.Languages when the mail pack's middleware has not (the pack is
+// not enabled), so SignUp.Lang has it.
+func withRequestLanguage(ctx context.Context, r *http.Request) context.Context {
+	if len(mail.Languages(ctx)) > 0 || r == nil {
+		return ctx
+	}
+	return mail.WithAcceptLanguage(ctx, r.Header.Get("Accept-Language"))
+}
+
 func (s *signin) authProviders(ctx context.Context, req *router.Request[router.None]) (ProviderList, error) {
 	out := ProviderList{Providers: []ProviderLink{}, Local: !s.opt.NoLocal, Register: !s.opt.NoLocal && !s.opt.NoRegister}
 	for _, p := range s.providers() {
@@ -762,7 +929,9 @@ func (s *signin) authProviders(ctx context.Context, req *router.Request[router.N
 
 // sendLink emails the verification or reset link through the mail pack
 // when it runs: the app's mail/auth_verify.* or mail/auth_reset.*
-// templates (Data: App, Link, Email, Name), else a plain text.
+// templates (Data: App, Link, Email, Name), in the request's language
+// when the app has one for it (auth_verify.de.txt.tmpl, which may
+// define "subject"), else a plain English text.
 func (s *signin) sendLink(ctx context.Context, p Profile, purpose string) error {
 	m, ok := lidza.Optional[*mail.Mail](ctx)
 	if !ok || p.Email == "" {
@@ -788,21 +957,12 @@ func (s *signin) sendLink(ctx context.Context, p Profile, purpose string) error 
 		text = fmt.Sprintf("Open this link to set a new password for %s:\n\n%s\n\nIf you did not ask for it, ignore this message; your password stays as it is.\n", app, link)
 	}
 	msg := mail.Message{To: p.Email, Subject: subject}
-	if hasTemplate(m, tmpl) {
-		msg.Template = tmpl
+	if name, ok := m.TemplateFor(tmpl, mail.Languages(ctx)...); ok {
+		msg.Template = name
 		msg.Data = map[string]string{"App": app, "Link": link, "Email": p.Email, "Name": p.Name}
 	} else {
 		msg.Text = text
 	}
 	_, err = m.Send(ctx, msg)
 	return err
-}
-
-func hasTemplate(m *mail.Mail, name string) bool {
-	for _, t := range m.Templates() {
-		if t == name {
-			return true
-		}
-	}
-	return false
 }

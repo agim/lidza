@@ -258,6 +258,11 @@ func (i *I18n) Locale(ctx context.Context) language.Tag {
 	return i.def
 }
 
+// Language returns the request's locale as a tag ("de", "pt-BR"), or the
+// default's: the language the mail pack writes a message in
+// (mail.Localizer), so mail/<name>.<lang>.txt.tmpl follows the catalog.
+func (i *I18n) Language(ctx context.Context) string { return i.Locale(ctx).String() }
+
 // T translates key for the request's locale, formatting args with
 // fmt.Sprintf verbs in the message. Falls back to the default locale, then
 // to the key itself.

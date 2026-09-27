@@ -671,12 +671,18 @@ func (s *signin) callback(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, "provider", err)
 		return
 	}
-	prof, err := a.link(r.Context(), id)
+	ctx := withRequestLanguage(r.Context(), r)
+	prof, err := s.link(ctx, id)
 	if err != nil {
+		var su *signUpError
+		if errors.As(err, &su) {
+			s.fail(w, r, "signup", err)
+			return
+		}
 		s.fail(w, r, "provider", err)
 		return
 	}
-	if _, err := s.session(r.Context(), cookieSetter{w}, prof, name, false); err != nil {
+	if _, err := s.session(ctx, cookieSetter{w}, prof, name, false); err != nil {
 		if errors.Is(err, ErrDisabled) {
 			s.fail(w, r, "disabled", nil)
 			return

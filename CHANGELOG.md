@@ -9,6 +9,84 @@ release is listed first under its version as "Breaking:", with what to
 change; every release so far is additive (an app updates with
 `lidza update --migrate`).
 
+## Unreleased
+
+Fixes from the Galeria sample app's report of framework gaps.
+
+- jobs: recurring schedules. `jobs.FromServices(s).Schedule(kind,
+  jobs.Every(15*time.Minute) | jobs.Daily("06:30", zone) |
+  jobs.Weekly(time.Monday, "09:00", "Europe/Tirane"), payload)` enqueues
+  one job per due time however many nodes run, and after downtime one
+  missed run. The `job_schedule` table comes from the jobs schema
+  fragment: run `lidza gen` and `lidza db migrate`. The admin Jobs page
+  lists the schedules with their next and last run.
+- jobs: at shutdown, running jobs get `JOBS_DRAIN` (default 1s) to
+  finish, then are cancelled and released back to pending with the
+  attempt uncounted, so a restart (`lidza dev` rebuilds included) runs
+  them at once instead of after `JOBS_STALE`. A job's result is written
+  only while its claim holds.
+- auth: `Options.OnSignUp(ctx, tx, auth.SignUp)` runs once per account
+  the sign-in creates (a registration, or a provider's first sign-in
+  that makes a new account), inside the transaction that inserts it,
+  with the method, the provider's identity and the request's language;
+  an error rolls the account back. Registration and provider sign-up now
+  create the account in one transaction.
+- auth: account deletion. `auth.From(ctx).DeleteUser(ctx, id)` removes
+  the user, identities, sessions, tokens and account row in one
+  transaction with `Options.OnDeleteUser(ctx, tx, subject)` for the
+  app's rows (`DeleteUserTx` inside the app's own transaction). Setting
+  `OnDeleteUser` also serves `POST /api/v1/auth/delete`
+  (`api.authDelete`): the password for an account with one, else a
+  sign-in within ten minutes (`ErrReauthenticate`). The first account
+  keeps its admin marker, so admin does not pass to the next user.
+- mail: templates per language. `mail/<name>.<lang>.txt.tmpl` (and
+  `.html.tmpl`) is chosen for `Message.Lang`, else the request's
+  language (the i18n pack's locale, else `Accept-Language`), falling
+  back to the base language and then `<name>`; a template's
+  `{{define "subject"}}` sets the subject. The auth pack's verification
+  and reset emails use `auth_verify.<lang>` and `auth_reset.<lang>`.
+- `lidza admin add EMAIL... | remove | list` edits `ADMIN_USERS` in the
+  credentials, read within seconds. In development the "not an admin"
+  page names the command: a test or screenshot script run against
+  `lidza dev` may have signed up the first account, which is the
+  automatic admin.
+- `lidza dev` reads `lidza.json` before every build, so a pack added or
+  scaffolded while it runs is generated into `packs.go` and watched;
+  `lidza db migrate` and `rollback` restart the app it runs.
+- `lidza mcp`: the app instance serving `app_*` tools runs no job
+  workers (they ran old code against the dev database) and rebuilds
+  itself when a Go source changed since its build.
+- `lidza api` and MCP `lidza_api` without a package or filter list the
+  packages instead of rendering every one (thousands of lines an agent
+  then carries each turn); a filter alone searches them all; `all`
+  renders everything.
+- `lidza check` runs cargo check on the app's local pack crates (for
+  wasm32-wasip1), not only a root `Cargo.toml`; `lidza pack build`
+  regenerates `schema.rs` from `schema.lidza` first.
+- `lidza ship` names the settings the enabled packs need in production
+  that the credentials lack or hold with a development-only value
+  (`CACHE_URL`, `APP_URL`, `LLM_PROVIDER=fake`), on screen and in
+  `deploy/production.env`.
+- `lidza test --e2e` raises the sign-in and analytics rate limits for the
+  run (every account signs up from 127.0.0.1) unless `.env.test` sets
+  them; Go tests keep the real limits.
+- `.env.test` is tracked in new apps (it holds no secrets, and tests and
+  CI need it); `lidza update` adds `!.env.test` to an older
+  `.gitignore`. The guide explains the `.env` layers: `.env` applies to
+  every mode, tests included, so development-only settings go in
+  `.env.dev`.
+- L005 no longer flags a function over `*http.Request` that is not a
+  typed handler, such as an `http.RoundTripper`.
+- Admin: a `multi` field renders as checkboxes in any section, not only
+  as the section's selector; the `num` template function takes any
+  number type.
+- `lidza_brief` and `lidza brief` count an answer saved garbled before
+  v0.1.26 (the pasted question, menu numbers) as open, so the agent asks
+  again instead of building on it.
+- The repository no longer carries a 36 MB `lidza` binary committed by
+  mistake in v0.1.23 to v0.1.25, which every app fetching the module
+  downloaded; `scripts/release.sh` refuses tracked files over 2 MB.
+
 ## v0.1.26 (2026-09-26)
 
 - `lidza brief`: several numbers combine suggestions on a free-text

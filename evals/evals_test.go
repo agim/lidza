@@ -259,6 +259,19 @@ func TestGuidanceSurfaces(t *testing.T) {
 	if err != nil || !strings.Contains(string(out), "func Route[In, Out any](") {
 		t.Errorf("lidza api: %v\n%s", err, out)
 	}
+	// Without a package: the list and how to ask for one, never every
+	// package rendered (an agent carries that output every turn).
+	out, err = command(app, lidza, "api")
+	if err != nil || !strings.Contains(string(out), "pkg/router") || strings.Contains(string(out), "func Route[") || len(out) > 20000 {
+		t.Errorf("lidza api without a package: %v (%d bytes)\n%.2000s", err, len(out), out)
+	}
+	out, err = command(app, lidza, "admin", "add", "dev@example.com")
+	if err != nil {
+		t.Errorf("lidza admin add: %v\n%s", err, out)
+	}
+	if out, err = command(app, lidza, "admin", "list"); err != nil || strings.TrimSpace(string(out)) != "dev@example.com" {
+		t.Errorf("lidza admin list: %v\n%s", err, out)
+	}
 	out, err = command(app, lidza, "api", "pkg/orm")
 	if err == nil || !strings.Contains(string(out), "no package") {
 		t.Errorf("lidza api on an invented package: %v\n%s", err, out)

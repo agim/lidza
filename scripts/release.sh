@@ -19,7 +19,7 @@ sed -n '/^## Unreleased$/,/^## v/p' CHANGELOG.md | grep -q '^- ' || { echo "'## 
 # Līdza: nothing over 2 MB (a stray `go build` at the root was once).
 big=$(git ls-files -z | xargs -0 -r ls -ln 2>/dev/null | awk '$5 > 2097152 {print $9}')
 [ -z "$big" ] || { echo "tracked files over 2 MB: $big" >&2; exit 1; }
-git pull -q --rebase origin master
+git pull -q --rebase=merges origin master
 today=$(date -u +%Y-%m-%d)
 sed -i.bak "s/^## Unreleased$/## $ver ($today)/" CHANGELOG.md && rm CHANGELOG.md.bak
 sed -i.bak "s/^LIDZA_VERSION=\"\${LIDZA_VERSION:-v[0-9.]*}\"$/LIDZA_VERSION=\"\${LIDZA_VERSION:-$ver}\"/" install.sh && rm install.sh.bak

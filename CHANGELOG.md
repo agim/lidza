@@ -9,6 +9,11 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- `lidza credentials show` without a name prints every value, decrypted;
+  `show NAME` still prints one.
+
 ## v0.1.30 (2026-09-27)
 
 - llm: embeddings can come from a provider other than the chat one:

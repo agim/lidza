@@ -13,11 +13,11 @@ import (
 )
 
 // runCredentials is `lidza credentials init | set NAME=value ... | unset
-// NAME ... | list | show NAME | edit`: the app's secrets, sealed in
+// NAME ... | list | show [NAME] | edit`: the app's secrets, sealed in
 // config/credentials.yml.enc with config/master.key.
 func runCredentials(_ context.Context, args []string) error {
 	if len(args) == 0 {
-		return errors.New("credentials: init, set NAME=value ..., unset NAME ..., list, show NAME, or edit")
+		return errors.New("credentials: init, set NAME=value ..., unset NAME ..., list, show [NAME], or edit")
 	}
 	fs := flags("credentials " + args[0])
 	dir := fs.String("dir", ".", "project directory")
@@ -76,12 +76,17 @@ func runCredentials(_ context.Context, args []string) error {
 		}
 		return nil
 	case "show":
-		if len(rest) != 1 {
-			return errors.New("credentials show: NAME")
+		if len(rest) > 1 {
+			return errors.New("credentials show: one NAME, or none for all of them")
 		}
 		vals, err := credentials.Read(abs)
 		if err != nil {
 			return err
+		}
+		if len(rest) == 0 {
+			// Every value, decrypted, as edit shows the file.
+			fmt.Print(credentials.Format(vals))
+			return nil
 		}
 		v, ok := vals[rest[0]]
 		if !ok {

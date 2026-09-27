@@ -35,7 +35,7 @@ Usage:
   lidza snippet [name]
   lidza recipe add "<title>" [--description ...] [--step ...] | lidza recipe list
   lidza decision add "<title>" --why "..." [--touches ...] | lidza decision list
-  lidza credentials init | set NAME=value ... | unset NAME ... | list | show NAME | edit
+  lidza credentials init | set NAME=value ... | unset NAME ... | list | show [NAME] | edit
   lidza admin add EMAIL... | remove EMAIL... | list
   lidza mcp [--dir .]
   lidza version

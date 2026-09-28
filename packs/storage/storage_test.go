@@ -5,6 +5,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -257,5 +259,44 @@ func TestNamedServices(t *testing.T) {
 		if _, err := newProvider(with(func(c *Config) { c.Provider = provider })); err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("%s without %s: %v", provider, want, err)
 		}
+	}
+}
+
+// STORAGE_PREFIX puts every key under a folder of the bucket; the app's
+// keys never carry it, and what comes back has it removed.
+func TestPrefix(t *testing.T) {
+	dir := t.TempDir()
+	s, err := New(Config{Provider: "local", Dir: dir, Prefix: "/myapp/"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	obj, err := s.Put(ctx, "avatars/u1.png", strings.NewReader("\x89PNG\r\n"), PutOptions{})
+	if err != nil || obj.Key != "avatars/u1.png" {
+		t.Fatalf("put: %+v %v", obj, err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "myapp", "avatars", "u1.png")); err != nil {
+		t.Fatalf("not stored under the prefix: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "avatars")); err == nil {
+		t.Fatal("stored at the root too")
+	}
+	if o, err := s.Stat(ctx, "avatars/u1.png"); err != nil || o.Key != "avatars/u1.png" {
+		t.Fatalf("stat: %+v %v", o, err)
+	}
+	rc, o, err := s.Get(ctx, "avatars/u1.png")
+	if err != nil || o.Key != "avatars/u1.png" {
+		t.Fatalf("get: %+v %v", o, err)
+	}
+	rc.Close()
+	list, err := s.List(ctx, "avatars/", 10)
+	if err != nil || len(list) != 1 || list[0].Key != "avatars/u1.png" {
+		t.Fatalf("list: %+v %v", list, err)
+	}
+	if err := s.Delete(ctx, "avatars/u1.png"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "myapp", "avatars", "u1.png")); err == nil {
+		t.Fatal("not deleted")
 	}
 }

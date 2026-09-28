@@ -58,6 +58,11 @@ type Config struct {
 	MaxSize int64 `env:"STORAGE_MAX_SIZE" default:"104857600"`
 	// Timeout bounds one operation.
 	Timeout time.Duration `env:"STORAGE_TIMEOUT" default:"60s"`
+	// Prefix is a folder every key lives under ("myapp" stores
+	// avatars/1.png as myapp/avatars/1.png), for a bucket several apps
+	// share. The app's keys never carry it: Put, Get, List and the rest
+	// add it, and the objects they return have it removed.
+	Prefix string `env:"STORAGE_PREFIX"`
 }
 
 // Object describes a stored file.
@@ -195,6 +200,19 @@ func (s *Storage) defaults() {
 	if s.cfg.Timeout <= 0 {
 		s.cfg.Timeout = time.Minute
 	}
+	s.cfg.Prefix = strings.Trim(strings.TrimSpace(s.cfg.Prefix), "/")
+	if s.cfg.Prefix != "" {
+		s.cfg.Prefix += "/"
+	}
+}
+
+// full is the key as the bucket stores it: under Prefix.
+func (s *Storage) full(key string) string { return s.cfg.Prefix + key }
+
+// short is the key as the app knows it: without Prefix.
+func (s *Storage) short(o Object) Object {
+	o.Key = strings.TrimPrefix(o.Key, s.cfg.Prefix)
+	return o
 }
 
 func newProvider(cfg Config) (Provider, error) {
@@ -285,12 +303,12 @@ func (s *Storage) Put(ctx context.Context, key string, r io.Reader, opt PutOptio
 	ctx, cancel := context.WithTimeout(ctx, s.cfg.Timeout)
 	defer cancel()
 	start := time.Now()
-	obj, err := s.providerNow().Put(ctx, key, data, opt)
+	obj, err := s.providerNow().Put(ctx, s.full(key), data, opt)
 	if err != nil {
 		return Object{}, err
 	}
-	lidza.Log(ctx).Info("storage put", "provider", s.cfg.Provider, "key", key, "bytes", len(data), "ms", time.Since(start).Milliseconds())
-	return obj, nil
+	lidza.Log(ctx).Info("storage put", "provider", s.cfg.Provider, "key", s.full(key), "bytes", len(data), "ms", time.Since(start).Milliseconds())
+	return s.short(obj), nil
 }
 
 // Get opens the object for reading; the caller closes it. ErrNotFound
@@ -299,7 +317,8 @@ func (s *Storage) Get(ctx context.Context, key string) (io.ReadCloser, Object, e
 	if err := checkKey(key); err != nil {
 		return nil, Object{}, err
 	}
-	return s.providerNow().Get(ctx, key)
+	rc, obj, err := s.providerNow().Get(ctx, s.full(key))
+	return rc, s.short(obj), err
 }
 
 // Stat describes the object without reading it.
@@ -309,7 +328,8 @@ func (s *Storage) Stat(ctx context.Context, key string) (Object, error) {
 	}
 	ctx, cancel := context.WithTimeout(ctx, s.cfg.Timeout)
 	defer cancel()
-	return s.providerNow().Stat(ctx, key)
+	obj, err := s.providerNow().Stat(ctx, s.full(key))
+	return s.short(obj), err
 }
 
 // Delete removes the object; a missing key is not an error.
@@ -319,7 +339,7 @@ func (s *Storage) Delete(ctx context.Context, key string) error {
 	}
 	ctx, cancel := context.WithTimeout(ctx, s.cfg.Timeout)
 	defer cancel()
-	return s.providerNow().Delete(ctx, key)
+	return s.providerNow().Delete(ctx, s.full(key))
 }
 
 // List returns up to limit objects under prefix, by key.
@@ -329,7 +349,11 @@ func (s *Storage) List(ctx context.Context, prefix string, limit int) ([]Object,
 	}
 	ctx, cancel := context.WithTimeout(ctx, s.cfg.Timeout)
 	defer cancel()
-	return s.providerNow().List(ctx, strings.TrimPrefix(prefix, "/"), limit)
+	objs, err := s.providerNow().List(ctx, s.full(strings.TrimPrefix(prefix, "/")), limit)
+	for i := range objs {
+		objs[i] = s.short(objs[i])
+	}
+	return objs, err
 }
 
 // PresignGet returns a URL that reads the object until ttl passes: hand
@@ -338,7 +362,7 @@ func (s *Storage) PresignGet(ctx context.Context, key string, ttl time.Duration)
 	if err := checkKey(key); err != nil {
 		return "", err
 	}
-	return s.providerNow().PresignGet(ctx, key, ttl)
+	return s.providerNow().PresignGet(ctx, s.full(key), ttl)
 }
 
 // PresignPut returns a URL a browser can PUT the file to directly, with
@@ -347,13 +371,13 @@ func (s *Storage) PresignPut(ctx context.Context, key string, ttl time.Duration,
 	if err := checkKey(key); err != nil {
 		return "", err
 	}
-	return s.providerNow().PresignPut(ctx, key, ttl, contentType)
+	return s.providerNow().PresignPut(ctx, s.full(key), ttl, contentType)
 }
 
 // URL returns the public address of the object (STORAGE_PUBLIC_URL plus
 // the key, or the bucket's own address), "" when there is none: then
 // use PresignGet or serve it through a handler.
-func (s *Storage) URL(key string) string { return s.providerNow().URL(key) }
+func (s *Storage) URL(key string) string { return s.providerNow().URL(s.full(key)) }
 
 // checkKey refuses keys that would escape a prefix or a directory.
 func checkKey(key string) error {

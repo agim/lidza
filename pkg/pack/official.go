@@ -224,6 +224,7 @@ var Officials = []Official{
 			"# STORAGE_REGION=us-east-1",
 			"# STORAGE_ACCESS_KEY=       # keep both keys in the credentials: lidza credentials set STORAGE_ACCESS_KEY=... STORAGE_SECRET_KEY=...",
 			"# STORAGE_PUBLIC_URL=       # a CDN or public bucket; URL(key) returns it plus the key",
+			"# STORAGE_PREFIX=           # a folder every key goes under, for a bucket several apps share",
 			"# STORAGE_MAX_SIZE=104857600   # one Put, bytes",
 		},
 		Notes: []string{

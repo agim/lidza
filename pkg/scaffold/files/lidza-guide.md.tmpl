@@ -1124,6 +1124,10 @@ Official Go packs, configured from `.env` (see `.env.example` after
   private objects through the app. Providers: `s3` (AWS S3, MinIO, R2,
   B2, Wasabi, Spaces: `STORAGE_BUCKET`, `STORAGE_ENDPOINT`, the keys in
   the credentials) and `local` (a directory, for development and tests).
+  In a bucket several apps share, `STORAGE_PREFIX=myapp` puts every key
+  under `myapp/`; the app's keys never carry it (`Put(ctx,
+  "avatars/1.png", ...)` stores `myapp/avatars/1.png`), and `List`,
+  `Stat` and `Put` return keys without it.
   Never import a storage SDK (`lidza check` L008) and never write an
   upload or a generated file to the local disk (`os.WriteFile`, L009):
   a node's disk is neither shared nor kept. The MCP tool `lidza_storage`

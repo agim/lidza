@@ -9,6 +9,14 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- storage: `STORAGE_PREFIX` puts every key under a folder, for a bucket
+  several apps share. The app's keys never carry it: `Put`, `Get`,
+  `Stat`, `Delete`, `List`, the presigned URLs and `URL` add it, and the
+  objects returned have it removed. The admin Storage settings have it
+  as "Folder".
+
 ## v0.1.32 (2026-09-28)
 
 - auth: `Options.OnSignIn(ctx, auth.SignIn{Profile, Method})` runs for

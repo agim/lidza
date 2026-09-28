@@ -201,6 +201,8 @@ func builtinSections() []Section {
 				{Name: "STORAGE_SECRET_KEY", Label: "Secret access key", Kind: "secret", For: []string{"s3", "r2", "spaces", "b2", "gcs", "minio"}},
 				{Name: "STORAGE_PUBLIC_URL", Label: "Public URL", Kind: "text", For: []string{"s3", "r2", "spaces", "b2", "gcs", "minio"}, Advanced: true,
 					Help: "A CDN or public bucket address for public files; leave empty to keep files private."},
+				{Name: "STORAGE_PREFIX", Label: "Folder", Kind: "text", For: []string{"s3", "r2", "spaces", "b2", "gcs", "minio"}, Advanced: true,
+					Help: "A folder every file goes under, for a bucket several apps share (for example the app's name)."},
 			}},
 	}
 }

@@ -9,7 +9,7 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
-## Unreleased
+## v0.1.32 (2026-09-28)
 
 - auth: `Options.OnSignIn(ctx, auth.SignIn{Profile, Method})` runs for
   every sign-in (a password, a provider, and the one after a sign-up),

@@ -66,6 +66,16 @@ type Options struct {
 	// (a router.Errorf status as is, else 500), a provider sign-in lands
 	// on FailurePath with ?error=signup.
 	OnSignUp func(ctx context.Context, tx pgx.Tx, s SignUp) error
+	// OnSignIn runs for every sign-in the routes make: a password, a
+	// provider, and the one that follows a sign-up (after OnSignUp). It
+	// runs before the session opens, so it suits work tied to the user
+	// arriving (claiming invitations sent to their email, finishing a
+	// join they started signed out). An error refuses the sign-in:
+	// password sign-in and registration reply with it (a router.Errorf
+	// status as is, else 500), a provider sign-in lands on FailurePath
+	// with ?error=signin. Token refreshes are not sign-ins and do not run
+	// it.
+	OnSignIn func(ctx context.Context, s SignIn) error
 	// OnDeleteUser runs inside DeleteUser's transaction (the delete route
 	// and the app's own calls), before the pack's rows go: delete or
 	// anonymize the app's rows of the subject with tx. An error rolls the
@@ -91,6 +101,13 @@ type SignUp struct {
 	// first of Accept-Language; mail.Languages), for an app that keeps
 	// the user's language; empty when the request names none.
 	Lang string
+}
+
+// SignIn is a sign-in, as Options.OnSignIn sees it.
+type SignIn struct {
+	Profile Profile
+	// Method is "password", or the provider's name ("google").
+	Method string
 }
 
 // MethodPassword is SignUp.Method for a registration with email and
@@ -618,6 +635,13 @@ func (s *signin) link(ctx context.Context, id Identity) (Profile, error) {
 	}, SignUp{Method: id.Provider, Identity: &id})
 }
 
+// signInError is an error of Options.OnSignIn; the typed routes reply
+// with the wrapped error, a provider sign-in lands on ?error=signin.
+type signInError struct{ err error }
+
+func (e *signInError) Error() string { return e.err.Error() }
+func (e *signInError) Unwrap() error { return e.err }
+
 // signUpError is an error of Options.OnSignUp.
 type signUpError struct{ err error }
 
@@ -673,6 +697,15 @@ func (s *signin) session(ctx context.Context, req interface{ SetCookie(*http.Coo
 		}
 		for k, v := range extra {
 			claims[k] = v
+		}
+	}
+	if s.opt.OnSignIn != nil {
+		method := provider
+		if method == "" {
+			method = MethodPassword
+		}
+		if err := s.opt.OnSignIn(ctx, SignIn{Profile: p, Method: method}); err != nil {
+			return SignedIn{}, &signInError{err}
 		}
 	}
 	tokens, err := a.Login(ctx, p.Subject, claims)

@@ -687,6 +687,11 @@ func (s *signin) callback(w http.ResponseWriter, r *http.Request) {
 			s.fail(w, r, "disabled", nil)
 			return
 		}
+		var si *signInError
+		if errors.As(err, &si) {
+			s.fail(w, r, "signin", err)
+			return
+		}
 		s.fail(w, r, "provider", err)
 		return
 	}

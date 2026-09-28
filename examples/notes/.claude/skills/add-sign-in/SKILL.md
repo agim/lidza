@@ -62,6 +62,13 @@ OAuth flow.
    An error from `OnSignUp` rolls the account back: registration replies
    with it (`router.Errorf(403, ...)` as is), a provider sign-in lands on
    `/login?error=signup`. Do not detect sign-ups in `Claims`.
+   Every sign-in (a password, a provider, and the one after a sign-up)
+   runs `OnSignIn(ctx, auth.SignIn{Profile, Method})` before the session
+   opens: claim invitations sent to the user's email there, or finish a
+   join they started signed out. An error refuses the sign-in
+   (`?error=signin` for a provider). Token refreshes do not run it, and
+   neither does `Claims`, which runs for every token and is for claims
+   only.
 5. Deleting an account: set `OnDeleteUser` (it deletes or anonymizes
    the app's rows of the subject; a no-op when the app keeps none), which
    also serves the route. The account page links to a form that calls

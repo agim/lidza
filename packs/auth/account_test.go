@@ -165,6 +165,63 @@ func TestSignUpHook(t *testing.T) {
 	}
 }
 
+// TestSignInHook: OnSignIn runs for a registration's session, a password
+// sign-in and a provider sign-in, before the session opens; an error
+// refuses the sign-in with no session; a refresh does not run it.
+func TestSignInHook(t *testing.T) {
+	a := testAuth(t)
+	issuer := newFakeIssuer(t, "client-1")
+	var mu sync.Mutex
+	var calls []SignIn
+	refuse := false
+	opt := Options{
+		Providers: []Provider{OIDC("fake", "Fake", issuer.srv.URL, "client-1", "secret")},
+		OnSignIn: func(ctx context.Context, s SignIn) error {
+			mu.Lock()
+			defer mu.Unlock()
+			if refuse {
+				return router.Errorf(http.StatusForbidden, "come back later")
+			}
+			calls = append(calls, s)
+			return nil
+		},
+	}
+	count := func() int {
+		mu.Lock()
+		defer mu.Unlock()
+		return len(calls)
+	}
+	srv, client := signinServer(t, a, opt)
+	api := srv.URL + Prefix
+
+	if code, _ := call(t, client, "POST", api+"/register", map[string]string{"email": "lea@example.com", "password": "correct horse battery"}); code != 201 || count() != 1 || calls[0].Method != MethodPassword || calls[0].Profile.Email != "lea@example.com" {
+		t.Fatalf("registration: %d %+v", code, calls)
+	}
+	call(t, client, "POST", api+"/logout", nil)
+	if code, _ := call(t, client, "POST", api+"/login", map[string]string{"email": "lea@example.com", "password": "correct horse battery"}); code != 200 || count() != 2 {
+		t.Fatalf("password sign-in: %d, %d calls", code, count())
+	}
+	if _, code := follow(t, browser(), api+"/fake/start"); code != 302 || count() != 3 || calls[2].Method != "fake" {
+		t.Fatalf("provider sign-in: %d %+v", code, calls)
+	}
+
+	// Refused: the hook's status, and no session opened.
+	mu.Lock()
+	refuse = true
+	mu.Unlock()
+	sessions := rows(t, a, `SELECT count(*) FROM auth_session`)
+	fresh := browser()
+	if code, out := call(t, fresh, "POST", api+"/login", map[string]string{"email": "lea@example.com", "password": "correct horse battery"}); code != 403 || out["error"] != "come back later" {
+		t.Fatalf("refused sign-in: %d %v", code, out)
+	}
+	if code, _ := call(t, fresh, "GET", api+"/me", nil); code != 401 || rows(t, a, `SELECT count(*) FROM auth_session`) != sessions {
+		t.Fatal("a refused sign-in opened a session")
+	}
+	if to, code := follow(t, browser(), api+"/fake/start"); code != 302 || to != "/login?error=signin" {
+		t.Fatalf("refused provider sign-in: %d %q", code, to)
+	}
+}
+
 // TestDeleteAccount: the delete route confirms with the password (or a
 // fresh sign-in without one), is refused to a cross-site form, and
 // removes every row of the pack and, through OnDeleteUser in the same

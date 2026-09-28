@@ -9,6 +9,14 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- auth: `Options.OnSignIn(ctx, auth.SignIn{Profile, Method})` runs for
+  every sign-in (a password, a provider, and the one after a sign-up),
+  before the session opens, for work tied to the user arriving
+  (claiming invitations sent to their address); an error refuses the
+  sign-in (`?error=signin` for a provider). Refreshes do not run it.
+
 ## v0.1.31 (2026-09-27)
 
 - `lidza credentials show` without a name prints every value, decrypted;

@@ -140,7 +140,11 @@ func setup(ctx context.Context, dir string, cfg *config.Config, opt setupOptions
 	hasMail := slices.Contains(cfg.Packs, pack.OfficialPrefix+"mail")
 
 	// 2. The master key for the credentials, kept out of git.
-	if created, err := credentials.Generate(dir); err != nil {
+	if created, err := credentials.Generate(dir); errors.Is(err, credentials.ErrKeyNotHere) {
+		// A clone: the app runs and tests without the credentials; the
+		// developer adds the key when a secret is needed.
+		step("%v", err)
+	} else if err != nil {
 		return err
 	} else if created {
 		step("%s created (kept out of git); secrets go in with lidza credentials set NAME=value", credentials.MasterKeyFile)

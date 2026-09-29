@@ -9,6 +9,15 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- `lidza setup` in a clone of an app whose credentials are sealed (a
+  teammate's checkout, CI, a cloud agent) created a new master key,
+  which could not open the file: every `lidza credentials set` then
+  failed with "wrong master key". No key is made when the sealed file
+  exists or `LIDZA_MASTER_KEY` is set; setup says where the key goes
+  and carries on, as the app and its tests run without it.
+
 ## v0.1.39 (2026-09-29)
 
 - `lidza update` on an app without the db pack checked its migrations

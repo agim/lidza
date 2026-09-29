@@ -177,3 +177,34 @@ AFTER: x
 		t.Error("indented outside a section accepted")
 	}
 }
+
+// A checkout with the sealed file but not its key (a clone, CI) gets no
+// new key, which could not open the file; LIDZA_MASTER_KEY is a key.
+func TestGenerateInClone(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv(EnvMasterKey, "")
+	if _, err := Generate(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := Set(dir, map[string]string{"PAY_KEY": "x"}); err != nil {
+		t.Fatal(err)
+	}
+	key, _ := os.ReadFile(filepath.Join(dir, MasterKeyFile))
+	os.Remove(filepath.Join(dir, MasterKeyFile))
+	if created, err := Generate(dir); created || err != ErrKeyNotHere {
+		t.Fatalf("clone: created %v, %v", created, err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, MasterKeyFile)); err == nil {
+		t.Fatal("a key was written that cannot open the file")
+	}
+	t.Setenv(EnvMasterKey, strings.TrimSpace(string(key)))
+	if created, err := Generate(dir); created || err != nil {
+		t.Fatalf("with %s: created %v, %v", EnvMasterKey, created, err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, MasterKeyFile)); err == nil {
+		t.Fatal("a key file was written beside " + EnvMasterKey)
+	}
+	if v := Values(dir)["PAY_KEY"]; v != "x" {
+		t.Fatalf("read with the variable: %q", v)
+	}
+}

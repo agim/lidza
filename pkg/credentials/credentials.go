@@ -43,6 +43,11 @@ const (
 	EnvMasterKey = "LIDZA_MASTER_KEY"
 )
 
+// ErrKeyNotHere is Generate's refusal to make a key for a checkout whose
+// credentials file was sealed with one it lacks: a clone, CI, another
+// machine. A new key could not open the file.
+var ErrKeyNotHere = errors.New("credentials: " + File + " is sealed with a master key this checkout lacks: put that key in " + MasterKeyFile + " or " + EnvMasterKey + " (from whoever set up the app); a new key could not open the file")
+
 // ErrNoKey is returned when neither the file nor the variable has a key.
 var ErrNoKey = errors.New("credentials: no master key: " + MasterKeyFile + " is missing and " + EnvMasterKey + " is not set (lidza credentials init creates one)")
 
@@ -72,13 +77,19 @@ func HasKey(dir string) bool {
 	return err == nil
 }
 
-// Generate writes a new master key to config/master.key (unless one
-// exists), adds it to .gitignore, and seals an empty credentials file
-// when there is none. It returns whether a key was created.
+// Generate writes a new master key to config/master.key (unless there is
+// a key, in the file or LIDZA_MASTER_KEY), adds it to .gitignore, and
+// seals an empty credentials file when there is none. It returns whether
+// a key was created, and ErrKeyNotHere when the credentials file exists
+// without its key: a new one would not open it.
 func Generate(dir string) (bool, error) {
 	p := filepath.Join(dir, filepath.FromSlash(MasterKeyFile))
 	created := false
-	if _, err := os.Stat(p); errors.Is(err, os.ErrNotExist) {
+	_, statErr := os.Stat(p)
+	if errors.Is(statErr, os.ErrNotExist) && os.Getenv(EnvMasterKey) == "" {
+		if _, err := os.Stat(filepath.Join(dir, filepath.FromSlash(File))); err == nil {
+			return false, ErrKeyNotHere
+		}
 		key := make([]byte, 32)
 		if _, err := rand.Read(key); err != nil {
 			return false, err

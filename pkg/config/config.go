@@ -38,6 +38,10 @@ type Deploy struct {
 	Domains []string `json:"domains,omitempty"`
 	// Email is LIDZA_TLS_EMAIL, the ACME account contact.
 	Email string `json:"email,omitempty"`
+	// Env are the app's production settings that are not secrets
+	// (MAIL_PROVIDER, LLM_MODEL, STORAGE_BUCKET): lidza ship writes them
+	// into deploy/production.env. Secrets stay in the credentials.
+	Env map[string]string `json:"env,omitempty"`
 }
 
 // SDK lists generated clients besides the TypeScript one.

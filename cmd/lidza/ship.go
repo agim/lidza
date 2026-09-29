@@ -84,11 +84,14 @@ func runShip(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	if bad := secretNames(cfg.Deploy.Env); len(bad) > 0 {
+		return fmt.Errorf("ship: lidza.json's deploy.env holds %s, which look like secrets; lidza.json is committed, so seal them instead (lidza credentials set NAME=value) and remove them from deploy.env", strings.Join(bad, ", "))
+	}
 	envFile, err := writeProductionEnv(abs, cfg)
 	if err != nil {
 		return err
 	}
-	for _, line := range productionNeeds(cfg, credentials.Values(abs)) {
+	for _, line := range productionNeeds(cfg, deployValues(cfg, credentials.Values(abs))) {
 		fmt.Println("[ship] set before deploying: " + line)
 	}
 	fmt.Printf("[ship] ready: %s (%.1f MB); %s carries the deployment settings\n", bin, float64(info.Size())/(1<<20), envFile)
@@ -131,8 +134,19 @@ func writeProductionEnv(dir string, cfg *config.Config) (string, error) {
 		b.WriteString("LIDZA_ADDR=0.0.0.0:3000\n")
 	}
 	b.WriteString("LIDZA_LOG=json\nDB_MIGRATE=true\n")
-	if needs := productionNeeds(cfg, credentials.Values(dir)); len(needs) > 0 {
-		b.WriteString("\n# The enabled packs need these, and the credentials do not hold them\n# (lidza credentials set NAME=value, the admin pages once deployed, or\n# the environment where the process runs):\n")
+	if len(cfg.Deploy.Env) > 0 {
+		b.WriteString("\n# The app's production settings, from lidza.json (deploy.env):\n")
+		names := make([]string, 0, len(cfg.Deploy.Env))
+		for k := range cfg.Deploy.Env {
+			names = append(names, k)
+		}
+		slices.Sort(names)
+		for _, k := range names {
+			fmt.Fprintf(&b, "%s=%s\n", k, cfg.Deploy.Env[k])
+		}
+	}
+	if needs := productionNeeds(cfg, deployValues(cfg, credentials.Values(dir))); len(needs) > 0 {
+		b.WriteString("\n# The enabled packs need these, and neither the credentials nor lidza.json's\n# deploy.env hold them (lidza credentials set NAME=value for a secret,\n# deploy.env for a setting, or the environment where the process runs):\n")
 		for _, line := range needs {
 			b.WriteString("# " + line + "\n")
 		}
@@ -142,6 +156,19 @@ func writeProductionEnv(dir string, cfg *config.Config) (string, error) {
 		return "", err
 	}
 	return filepath.Join("deploy", "production.env"), os.WriteFile(p, []byte(b.String()), 0o644)
+}
+
+// deployValues are what production will have: the sealed credentials,
+// with lidza.json's deploy.env over them.
+func deployValues(cfg *config.Config, sealed map[string]string) map[string]string {
+	out := map[string]string{}
+	for k, v := range sealed {
+		out[k] = v
+	}
+	for k, v := range cfg.Deploy.Env {
+		out[k] = v
+	}
+	return out
 }
 
 // productionNeeds lists the settings the enabled official packs need in
@@ -176,5 +203,22 @@ func productionNeeds(cfg *config.Config, sealed map[string]string) []string {
 			}
 		}
 	}
+	return out
+}
+
+// secretNames lists the names of env that look like secrets: keys,
+// tokens, passwords, secrets, a database address with its password.
+func secretNames(env map[string]string) []string {
+	var out []string
+	for k := range env {
+		u := strings.ToUpper(k)
+		for _, w := range []string{"KEY", "SECRET", "TOKEN", "PASSWORD", "DATABASE_URL"} {
+			if strings.Contains(u, w) {
+				out = append(out, k)
+				break
+			}
+		}
+	}
+	slices.Sort(out)
 	return out
 }

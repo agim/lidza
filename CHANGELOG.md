@@ -11,6 +11,11 @@ change. A release without one is additive: an app updates with
 
 ## Unreleased
 
+- `lidza.json`'s `deploy.env` holds the app's production settings that
+  are not secrets (`MAIL_PROVIDER`, `STORAGE_BUCKET`): `lidza ship` writes
+  them into `deploy/production.env` on every run (it rewrites the file)
+  and counts them as set; a name that looks like a secret there is
+  refused.
 - `lidza test --e2e` loads `e2e/seed.sql` into the test database before
   the app starts, when the app has one: rows the browser suite needs that
   no page creates. It runs on every run, so it is written to be rerun.

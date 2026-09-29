@@ -60,3 +60,25 @@ func TestProductionNeeds(t *testing.T) {
 		t.Fatalf("production.env:\n%s", data)
 	}
 }
+
+// lidza.json's deploy.env lands in production.env and counts as set;
+// a secret there is refused.
+func TestDeployEnv(t *testing.T) {
+	cfg := &config.Config{Name: "shop", Packs: []string{"lidza/mail", "lidza/storage"},
+		Deploy: config.Deploy{Env: map[string]string{"MAIL_PROVIDER": "mailgun", "STORAGE_PROVIDER": "spaces", "STORAGE_BUCKET": "shared"}}}
+	dir := t.TempDir()
+	writeProductionEnv(dir, cfg)
+	data, _ := os.ReadFile(filepath.Join(dir, "deploy", "production.env"))
+	for _, want := range []string{"MAIL_PROVIDER=mailgun\n", "STORAGE_BUCKET=shared\n", "STORAGE_PROVIDER=spaces\n"} {
+		if !strings.Contains(string(data), want) {
+			t.Errorf("missing %q:\n%s", want, data)
+		}
+	}
+	needs := strings.Join(productionNeeds(cfg, deployValues(cfg, nil)), "\n")
+	if strings.Contains(needs, "MAIL_PROVIDER") || strings.Contains(needs, "STORAGE_PROVIDER") || !strings.Contains(needs, "APP_URL") {
+		t.Fatalf("needs:\n%s", needs)
+	}
+	if got := secretNames(map[string]string{"MAIL_API_KEY": "x", "STORAGE_REGION": "nyc3", "AUTH_SECRET": "y"}); strings.Join(got, ",") != "AUTH_SECRET,MAIL_API_KEY" {
+		t.Fatalf("secrets: %v", got)
+	}
+}

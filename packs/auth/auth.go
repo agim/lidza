@@ -177,8 +177,14 @@ func (a *Auth) LoginWith(ctx context.Context, subject string, claims map[string]
 	sessionID := randomID()
 	refresh := randomID()
 	expires := time.Now().Add(a.cfg.RefreshTTL)
-	_, err := a.pool.Exec(ctx, `INSERT INTO auth_session (id, subject, refresh_hash, expires_at, remember) VALUES ($1, $2, $3, $4, $5)`,
-		sessionID, subject, hashToken(refresh), expires, !o.SessionOnly)
+	// A remembered session (the default) leaves remember to the column's
+	// default, so an app that has not migrated auth_session yet still
+	// signs people in; only a session-only sign-in needs the column.
+	q, args := `INSERT INTO auth_session (id, subject, refresh_hash, expires_at) VALUES ($1, $2, $3, $4)`, []any{sessionID, subject, hashToken(refresh), expires}
+	if o.SessionOnly {
+		q = `INSERT INTO auth_session (id, subject, refresh_hash, expires_at, remember) VALUES ($1, $2, $3, $4, false)`
+	}
+	_, err := a.pool.Exec(ctx, q, args...)
 	if err != nil {
 		return Tokens{}, fmt.Errorf("auth: create session: %w", err)
 	}
@@ -192,11 +198,15 @@ func (a *Auth) LoginWith(ctx context.Context, subject string, claims map[string]
 // unknown id.
 func (a *Auth) SessionRemembered(ctx context.Context, sessionID string) bool {
 	var remember bool
-	if err := a.pool.QueryRow(ctx, `SELECT remember FROM auth_session WHERE id = $1`, sessionID).Scan(&remember); err != nil {
+	if err := a.pool.QueryRow(ctx, `SELECT `+rememberCol+` FROM auth_session s WHERE id = $1`, sessionID).Scan(&remember); err != nil {
 		return false
 	}
 	return remember
 }
+
+// rememberCol reads auth_session.remember, true where the column does
+// not exist yet (an app that has not run the migration).
+const rememberCol = `COALESCE((to_jsonb(s)->>'remember')::bool, true)`
 
 // RefreshGrace is how long the refresh token a Refresh just replaced
 // keeps working: requests a browser sent in parallel with an expired
@@ -211,7 +221,7 @@ const RefreshGrace = time.Minute
 func (a *Auth) Refresh(ctx context.Context, refreshToken string, claims map[string]any) (Tokens, error) {
 	var sessionID, subject string
 	var current, remember bool
-	err := a.pool.QueryRow(ctx, `SELECT id, subject, refresh_hash = $1, remember FROM auth_session
+	err := a.pool.QueryRow(ctx, `SELECT id, subject, refresh_hash = $1, `+rememberCol+` FROM auth_session s
 		WHERE (refresh_hash = $1 OR (prev_refresh_hash = $1 AND rotated_at > now() - $2::interval))
 		AND revoked_at IS NULL AND expires_at > now()`,
 		hashToken(refreshToken), fmt.Sprintf("%d seconds", int(RefreshGrace.Seconds()))).Scan(&sessionID, &subject, &current, &remember)

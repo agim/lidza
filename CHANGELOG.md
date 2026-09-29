@@ -11,6 +11,21 @@ change. A release without one is additive: an app updates with
 
 ## Unreleased
 
+- auth: `OnSignIn` gets the request (`SignIn.Request`) and sets cookies
+  on the reply (`s.SetCookie`), sent only when the sign-in succeeds.
+- auth: "remember me": `remember: false` on `authLogin` or `authRegister`
+  (or `?remember=false` on a provider's start) makes the auth cookies
+  session cookies, on every renewal too; absent or `true` remembers as
+  before. `LoginWith(ctx, id, claims, auth.SessionOptions{SessionOnly:
+  true})` does the same for an app's own login. It needs
+  `auth_session.remember`: run `lidza gen` and `lidza db migrate`; until
+  then remembered sign-ins keep working.
+- auth: `Options.NoVerifyEmail` stops registration from sending the
+  "Verify your email" message; the verify route still redeems a link the
+  app sends itself.
+- auth: `auth.ThrottleSignIn()` gives the sign-in route its own limit,
+  `AUTH_SIGNIN_RPS` and `AUTH_SIGNIN_BURST`, falling back to
+  `AUTH_LOGIN_RPS` and `AUTH_LOGIN_BURST`; `auth.Mount`'s login uses it.
 - jobs: `jobs.Unique(key)` makes an enqueue idempotent: while a job of
   the kind with that key is pending or running, on any node, Enqueue
   stores nothing and returns that job's id (`jobs.Existed(&found)` says

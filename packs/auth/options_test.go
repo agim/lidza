@@ -325,3 +325,27 @@ func TestNoVerifyEmail(t *testing.T) {
 		t.Fatal("not verified")
 	}
 }
+
+// An app that has not run the migration adding auth_session.remember
+// still signs people in and refreshes: a remembered session never
+// needs the column.
+func TestSignInBeforeRememberMigration(t *testing.T) {
+	a := testAuth(t)
+	ctx := context.Background()
+	if _, err := a.pool.Exec(ctx, `ALTER TABLE auth_session DROP COLUMN remember`); err != nil {
+		t.Fatal(err)
+	}
+	tok, err := a.Login(ctx, "user-1", nil)
+	if err != nil {
+		t.Fatalf("login: %v", err)
+	}
+	next, err := a.Refresh(ctx, tok.Refresh, nil)
+	if err != nil || next.SessionOnly {
+		t.Fatalf("refresh: %+v %v", next, err)
+	}
+	var id string
+	a.pool.QueryRow(ctx, `SELECT id FROM auth_session WHERE subject = 'user-1' LIMIT 1`).Scan(&id)
+	if !a.SessionRemembered(ctx, id) {
+		t.Fatal("a session without the column is not remembered")
+	}
+}

@@ -114,7 +114,10 @@ start_service() { # name
 # pm_install installs system packages; returns 1 when it could not.
 pm_install() { # packages...
   case "$PM" in
-    apt) as_root env DEBIAN_FRONTEND=noninteractive apt-get install -y -q "$@" ;;
+    apt)
+      # A fresh container ships without package lists: refresh them once.
+      if [ -z "${APT_UPDATED:-}" ]; then as_root apt-get update -q >/dev/null && APT_UPDATED=1; fi
+      as_root env DEBIAN_FRONTEND=noninteractive apt-get install -y -q "$@" ;;
     dnf) as_root dnf install -y -q "$@" ;;
     pacman) as_root pacman -S --noconfirm --needed "$@" ;;
     brew) brew install "$@" ;;
@@ -368,8 +371,16 @@ install_lidza() {
       *) echo "  LIDZA_VERSION=$LIDZA_VERSION requested; replacing lidza $installed" ;;
     esac
   fi
+  # go install writes to GOBIN, else GOPATH/bin: on PATH now and in the
+  # env file, whoever installed Go (an image's own Go leaves it off).
+  gobin=$(go env GOBIN)
+  [ -n "$gobin" ] || gobin="$(go env GOPATH)/bin"
+  add_env "export PATH=\"$gobin:\$PATH\""
+  case ":$PATH:" in *":$gobin:"*) ;; *) PATH="$gobin:$PATH"; export PATH ;; esac
   echo "  go install $LIDZA_MODULE/cmd/lidza@$LIDZA_VERSION"
-  if go install "$LIDZA_MODULE/cmd/lidza@$LIDZA_VERSION" 2>/tmp/lidza-install.err; then
+  # GOTOOLCHAIN=auto: the framework's go.mod asks for a newer Go than an
+  # image may ship; Go fetches that toolchain itself.
+  if GOTOOLCHAIN=auto go install "$LIDZA_MODULE/cmd/lidza@$LIDZA_VERSION" 2>/tmp/lidza-install.err; then
     status_lidza
   else
     fail "lidza CLI: go install failed ($(tail -1 /tmp/lidza-install.err))"

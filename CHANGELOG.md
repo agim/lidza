@@ -9,6 +9,18 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- install.sh in containers (cloud agents, CI images): with Go already
+  installed, `lidza` landed in Go's bin directory, which nothing put on
+  PATH, and the installer failed right after installing it; that
+  directory is now on PATH and in `~/.lidza/env` whoever installed Go.
+  `go install` runs with `GOTOOLCHAIN=auto`, so an image's older Go
+  fetches the one the framework needs. `--services` refreshes apt's
+  package lists first; a fresh container has none, and Valkey was not
+  found. Tested as root in a container without systemd: Postgres and
+  Valkey installed and started.
+
 ## v0.1.40 (2026-09-29)
 
 - `lidza setup` in a clone of an app whose credentials are sealed (a

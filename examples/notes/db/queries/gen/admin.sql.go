@@ -14,6 +14,7 @@ const adminCountNotes = `-- name: AdminCountNotes :one
 SELECT count(*) FROM note
 `
 
+// lidza:ignore L018
 func (q *Queries) AdminCountNotes(ctx context.Context) (int64, error) {
 	row := q.db.QueryRow(ctx, adminCountNotes)
 	var count int64
@@ -25,6 +26,7 @@ const adminDeleteNote = `-- name: AdminDeleteNote :execrows
 DELETE FROM note WHERE id = $1
 `
 
+// lidza:ignore L018
 func (q *Queries) AdminDeleteNote(ctx context.Context, id string) (int64, error) {
 	result, err := q.db.Exec(ctx, adminDeleteNote, id)
 	if err != nil {
@@ -48,7 +50,9 @@ type AdminRecentNotesRow struct {
 }
 
 // Queries for the app's admin page (handlers/admin.go): across every
-// user, because only admins reach them.
+// user, because only admins reach them. Each is exempt from the owner
+// rule (lidza check L018) by the comment before it.
+// lidza:ignore L018
 func (q *Queries) AdminRecentNotes(ctx context.Context, limit int32) ([]AdminRecentNotesRow, error) {
 	rows, err := q.db.Query(ctx, adminRecentNotes, limit)
 	if err != nil {

@@ -153,6 +153,7 @@ func (s *Sidecar) Handler(next http.Handler) http.Handler {
 			return
 		}
 		html, status := withHead(s.head, r, html)
+		allowInline(w.Header(), html)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Vary", "Cookie, Accept-Language")

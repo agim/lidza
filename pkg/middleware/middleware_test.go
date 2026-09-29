@@ -178,6 +178,44 @@ func TestSecureHeaders(t *testing.T) {
 	}
 }
 
+func TestSecureHeadersNoCSP(t *testing.T) {
+	for _, policy := range []string{"", NoCSP} {
+		h := SecureHeaders(SecureHeadersOptions{CSP: policy})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest("GET", "/", nil))
+		if got, ok := rec.Header()["Content-Security-Policy"]; ok {
+			t.Errorf("CSP %q: sent %q", policy, got)
+		}
+	}
+}
+
+func TestAddCSP(t *testing.T) {
+	for _, c := range []struct {
+		policy, directive string
+		sources           []string
+		want              string
+	}{
+		{"default-src 'self'; img-src 'self' data:", "img-src", []string{"https://cdn.example.com"},
+			"default-src 'self'; img-src 'self' data: https://cdn.example.com"},
+		{"default-src 'self'; img-src 'self'", "IMG-SRC", []string{"'self'"}, "default-src 'self'; img-src 'self'"},
+		{"default-src 'self'", "media-src", []string{"https://media.example.com"},
+			"default-src 'self'; media-src 'self' https://media.example.com"},
+		{"default-src 'self'", "frame-ancestors", []string{"https://parent.example.com"},
+			"default-src 'self'; frame-ancestors https://parent.example.com"},
+		{"default-src 'self'; frame-ancestors 'none'", "frame-ancestors", []string{"'self'"},
+			"default-src 'self'; frame-ancestors 'self'"},
+		{"", "script-src", []string{"'self'"}, "script-src 'self'"},
+	} {
+		if got := AddCSP(c.policy, c.directive, c.sources...); got != c.want {
+			t.Errorf("AddCSP(%q, %q, %q) = %q, want %q", c.policy, c.directive, c.sources, got, c.want)
+		}
+	}
+	got := AddCSP(DefaultCSP, "script-src", "https://js.example.com")
+	if !strings.Contains(got, "script-src 'self' https://js.example.com;") || strings.Count(got, "script-src") != 1 {
+		t.Errorf("extended default: %q", got)
+	}
+}
+
 func TestSecureHeadersPermissionsPolicy(t *testing.T) {
 	for _, c := range []struct{ policy, want string }{
 		{"", DefaultPermissionsPolicy},

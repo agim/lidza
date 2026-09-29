@@ -272,16 +272,23 @@ type handlerOptions struct {
 // runs for every topic in ?topics= and in a later {"subscribe": [...]},
 // with the upgrade request (auth.CurrentUser(r.Context()) is the user
 // when the route sits behind auth.Require()). A refused topic is
-// dropped silently; the connection stays. Without it every topic is
-// open to every connection.
+// dropped silently; the connection stays. Without it no topic may be
+// subscribed: the endpoint is closed until the app says who may read
+// what. Authorize(AllowAll) opens every topic to every connection.
+// Publishing from the server is never affected.
 func Authorize(fn func(r *http.Request, topic string) bool) HandlerOption {
 	return func(o *handlerOptions) { o.authorize = fn }
 }
 
+// AllowAll is an Authorize func that allows every topic, for an app whose
+// topics carry nothing private: realtime.Handler(realtime.Authorize(realtime.AllowAll)).
+func AllowAll(*http.Request, string) bool { return true }
+
 // Handler returns the WebSocket endpoint. Register it with
-// r.Handle("GET /api/v1/realtime", realtime.Handler()). Clients pass
-// ?topics=a,b and may send {"subscribe":["c"]} later; they receive
-// {"topic":"a","data":...} per message.
+// r.Handle("GET /api/v1/realtime", realtime.Handler(realtime.Authorize(fn))).
+// Clients pass ?topics=a,b and may send {"subscribe":["c"]} later; they
+// receive {"topic":"a","data":...} per message. Without Authorize every
+// topic is refused.
 func Handler(opts ...HandlerOption) http.Handler {
 	var o handlerOptions
 	for _, opt := range opts {
@@ -293,8 +300,8 @@ func Handler(opts ...HandlerOption) http.Handler {
 }
 
 // ServeHTTP upgrades the connection and streams messages until the client
-// leaves or the server shuts down, every topic open; Handler with
-// Authorize restricts them.
+// leaves or the server shuts down. Like Handler without Authorize, it
+// refuses every topic; mount Handler with Authorize instead.
 func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.serve(w, r, nil)
 }
@@ -302,7 +309,7 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (h *Hub) serve(w http.ResponseWriter, r *http.Request, authorize func(*http.Request, string) bool) {
 	allowed := func(topics []string) []string {
 		if authorize == nil {
-			return topics
+			return nil
 		}
 		var out []string
 		for _, t := range topics {

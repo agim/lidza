@@ -4,8 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
+	"strings"
+
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/agim/lidza/packs/db"
 	"github.com/agim/lidza/pkg/devserver"
@@ -16,7 +20,9 @@ const dbUsage = `usage:
   lidza db migrate            apply pending migrations from db/migrations
   lidza db rollback [--steps 1]  revert the last applied migration(s)
   lidza db status             list migrations and whether they are applied
-DATABASE_URL comes from .env, .env.<mode> or the environment.
+DATABASE_URL comes from .env, .env.<mode> or the environment. migrate and
+rollback refuse a database on another host (not a Unix socket, localhost
+or a loopback address) unless --production is given.
 `
 
 func runDB(ctx context.Context, args []string) error {
@@ -28,6 +34,7 @@ func runDB(ctx context.Context, args []string) error {
 	fs := flags("db " + sub)
 	dir := fs.String("dir", ".", "project directory")
 	steps := fs.Int("steps", 1, "migrations to revert (rollback)")
+	production := fs.Bool("production", false, "allow migrate or rollback on a database on another host")
 	if err := fs.Parse(rest); err != nil {
 		return err
 	}
@@ -38,6 +45,11 @@ func runDB(ctx context.Context, args []string) error {
 	var cfg db.Config
 	if err := env.Load(abs, &cfg); err != nil {
 		return err
+	}
+	if (sub == "migrate" || sub == "rollback") && !*production {
+		if host := remoteDBHost(cfg.URL); host != "" {
+			return fmt.Errorf("db %s: DATABASE_URL points at %s, not this machine; run lidza db %s --production to change that database", sub, host, sub)
+		}
 	}
 	pool, err := db.Open(ctx, cfg)
 	if err != nil {
@@ -96,4 +108,32 @@ func runDB(ctx context.Context, args []string) error {
 		return fmt.Errorf("db: unknown subcommand %q", sub)
 	}
 	return nil
+}
+
+// remoteDBHost is the first host of a connection string that is not this
+// machine (a Unix socket, localhost or a loopback address), or "" when
+// every host is local. A string that does not parse is left to db.Open.
+func remoteDBHost(url string) string {
+	pc, err := pgconn.ParseConfig(url)
+	if err != nil {
+		return ""
+	}
+	hosts := []string{pc.Host}
+	for _, f := range pc.Fallbacks {
+		hosts = append(hosts, f.Host)
+	}
+	for _, h := range hosts {
+		if !localDBHost(h) {
+			return h
+		}
+	}
+	return ""
+}
+
+func localDBHost(host string) bool {
+	if host == "" || strings.HasPrefix(host, "/") || strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(strings.Trim(host, "[]"))
+	return ip != nil && ip.IsLoopback()
 }

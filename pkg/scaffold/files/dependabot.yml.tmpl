@@ -1,0 +1,38 @@
+# Dependency updates for {{.Name}}, weekly, grouped: one pull request per
+# ecosystem for minor and patch versions, a separate one per major.
+# Security updates come as they are published, whatever the schedule.
+# The framework is not among them: lidza update moves the CLI and the
+# module together and regenerates, which a version bump alone cannot.
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule: { interval: weekly, day: monday }
+    ignore:
+      - dependency-name: {{.Module}}
+    groups:
+      go:
+        update-types: [minor, patch]
+{{- if .Dist}}
+
+  # @types/node follows the Node the app runs (22), never ahead of it.
+  - package-ecosystem: npm
+    directory: /
+    schedule: { interval: weekly, day: monday }
+    ignore:
+      - dependency-name: "@types/node"
+        update-types: [version-update:semver-major]
+    groups:
+      npm:
+        update-types: [minor, patch]
+      npm-major:
+        update-types: [major]
+{{- end}}
+
+  # The CI workflow's actions.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly, day: monday }
+    groups:
+      actions:
+        update-types: [minor, patch]

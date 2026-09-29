@@ -54,6 +54,22 @@ func main() {}
 	names := map[string]bool{}
 	for _, tl := range tools.Tools {
 		names[tl.Name] = true
+		// A client asks before a tool that can lose data; the others
+		// say they are read-only or additive.
+		want := map[string][2]bool{
+			"lidza_db_rollback": {false, true},
+			"lidza_db_migrate":  {false, true},
+			"lidza_db_status":   {true, false},
+			"lidza_doctor":      {true, false},
+			"lidza_gen":         {false, false},
+			"lidza_ship":        {false, false},
+		}
+		if w, ok := want[tl.Name]; ok {
+			a := tl.Annotations
+			if a.ReadOnlyHint == nil || a.DestructiveHint == nil || *a.ReadOnlyHint != w[0] || *a.DestructiveHint != w[1] {
+				t.Errorf("%s: annotations %+v, want readOnly %v, destructive %v", tl.Name, a, w[0], w[1])
+			}
+		}
 	}
 	for _, want := range []string{"lidza_routes", "lidza_context", "lidza_check", "lidza_logs", "lidza_config", "lidza_gen", "lidza_gen_resource", "lidza_pack_add", "lidza_db_migrate", "lidza_test", "lidza_verify", "lidza_build", "lidza_ship", "lidza_doctor", "lidza_recipes", "lidza_decision_add", "lidza_brief", "lidza_brief_answer", "lidza_brief_skip", "lidza_note_add", "lidza_credentials_set", "lidza_credentials_list"} {
 		if !names[want] {

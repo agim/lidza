@@ -289,32 +289,53 @@ is validated on the server and callable from the client by name.
 ### Add a resource
 
 Give a model the five standard routes (list, get, create, patch, delete)
-backed by Postgres. Needs the `db` pack (`lidza pack add db`).
+backed by Postgres. Needs the `db` and `auth` packs (`lidza pack add db`,
+`lidza pack add auth`).
 
-1. Declare a `model` in `schema.lidza`:
+1. Declare a `model` in `schema.lidza`. A post belongs to its author:
 
    ```
    model Post {
      id        uuid     @id @default(uuid())
+     ownerId   uuid     @index
      title     string   @min(1) @max(200)
      body      string?
      createdAt time     @default(now())
    }
    ```
 
+   The model is owned when it has an owner field, the first of: a field
+   `ownerId`, a field `userId`, a field with `@ref(User)` or
+   `@ref(AuthUser)`. The owner is `uuid` or `string` and required: it
+   holds the signed-in user's id. A model whose rows belong to no one
+   and that visitors may change (rare) is marked `@public`
+   (`model Tag @public {`).
 2. Run `lidza gen resource Post` (MCP: `lidza_gen_resource` with
    `model: "Post"`): it writes `db/queries/post.sql`, the
    `CreatePost`, `UpdatePost` and `PostList` types in `schema.lidza`,
-   `handlers/post.go` with the routes under `/api/v1/posts`, and the
-   registration line in `routes.go`.
+   `handlers/post.go` with the routes under `/api/v1/posts`, and in
+   `routes.go` a group behind `auth.Require()` with the routes on it:
+
+   ```go
+   posts := r.Group("/api/v1/posts", auth.Require())
+   handlers.PostRoutes(posts)
+   ```
+
+   For an owned model every statement filters by `owner_id` (list,
+   count, get, update, delete), create sets it from
+   `auth.CurrentUser(ctx).ID`, the `Create` and `Update` types leave it
+   out, and another user's row is a 404. `--public` (MCP: `public: true`)
+   marks the model `@public`: no owner, routes open to visitors.
 3. Run `lidza db migrate` (MCP: `lidza_db_migrate`) to apply the new
    migration in `db/migrations/`.
-4. The generated handlers file is ordinary code: mount the routes on a
-   group (`handlers.PostRoutes(r.Group("/api/v1/posts", auth.Require()))`),
-   add filters or ownership checks there (the snippet
-   `resource-handlers` scopes every query to the signed-in user).
-   Regenerate with `--force` to reset it.
-5. `lidza check`, then `lidza test`.
+4. The generated files are ordinary code: add filters or routes there.
+   `lidza check` flags a query on an owned table that neither filters by
+   nor sets the owner (L018); a query meant to cross users (an admin
+   page) takes `-- lidza:ignore L018` on the line before its
+   `-- name:`. Regenerate with `--force` to reset the handlers (files
+   generated before owners were scoped keep their old code until then).
+5. `lidza check`, then `lidza test`: a second user lists nothing and
+   gets 404 on the first user's id.
 
 ### Add sign-in
 
@@ -442,17 +463,20 @@ OAuth flow.
 
 ### Scope a query to the signed-in user
 
-Make a resource answer only with the rows its user may see: the
-generated handlers are unscoped, and a row another user may not read is
-a 404, never a 403 (the reply must not confirm it exists).
+Make a resource answer only with the rows its user may see: a row
+another user may not read is a 404, never a 403 (the reply must not
+confirm it exists).
 
-1. Mount the routes behind `auth.Require()` and take the user from the
-   context: `user := auth.CurrentUser(ctx).ID` (never from the body; drop
-   `ownerId` from the `Create` and `Update` types the generator wrote).
-2. Owned rows: add `AND owner_id = $N` to every statement in
-   `db/queries/<table>.sql` (list, count, get, update, delete) and pass
-   the user; set `owner_id` from the user on create. The snippets
-   `queries` and `resource-handlers` are this case.
+1. Behind `auth.Require()`, take the user from the context:
+   `user := auth.CurrentUser(ctx).ID`, never from the body.
+2. Owned rows (one user each): give the model an owner field (`ownerId
+   uuid`) and `lidza gen resource` writes the scoped queries and
+   handlers (recipe "Add a resource"). By hand: `AND owner_id = $N` in
+   every statement of `db/queries/<table>.sql` (list, count, get,
+   update, delete), `owner_id` set from the user on create, and no
+   `ownerId` in the `Create` and `Update` types. `lidza check` flags a
+   query that misses it (L018). The snippets `queries` and
+   `resource-handlers` are this case.
 3. Shared rows (a team, a project): keep a membership table
    (`Membership { projectId @ref(Project, cascade), userId @ref(User,
    cascade), role }` with `@@unique(projectId, userId)`) and join on it:
@@ -718,7 +742,9 @@ the page subscribes and refetches.
 2. Name topics by resource, `project:<id>`, in one function both sides
    use.
 3. Mount the socket behind auth and authorize each topic; without
-   `Authorize`, any signed-in user can subscribe to any topic:
+   `Authorize` no topic can be subscribed (`realtime.AllowAll` opens
+   every topic to every connection, for topics that carry nothing
+   private):
 
    ```go
    live := realtime.Handler(realtime.Authorize(func(r *http.Request, topic string) bool {
@@ -863,6 +889,112 @@ pack, with the app deciding who may read them.
    row and check `Stat` returns `storage.ErrNotFound`. The snippet
    `storage-handler` and `routes_test.go` in the reference app show it.
 5. `lidza check`, then `lidza test`.
+
+### Receive a webhook
+
+Take a provider's deliveries (a payment provider's events, a mail
+provider's bounces) on a route that verifies the signature on the raw
+body, refuses replays and handles each delivery once, with
+`pkg/webhook`. Never decode the body or trust a field before it is
+verified.
+
+1. Seal the signing secret for each mode: `lidza credentials set
+   dev.PAYMENTS_WEBHOOK_SECRET=whsec_... production.PAYMENTS_WEBHOOK_SECRET=whsec_...`
+   (the sandbox endpoint's secret for `lidza dev`, the live one for
+   production). Without the setting every delivery is refused with 503
+   and the log names it; an endpoint never runs unverified. A value
+   saved from the admin pages applies within a minute.
+2. Register the endpoint in `routes.go`, on `r` and not in a group
+   behind `auth.Require()` (the provider has no session):
+
+   ```go
+   r.Handle("POST /api/v1/webhooks/payments", webhook.Stripe("PAYMENTS_WEBHOOK_SECRET", handlers.PaymentEvent))
+   r.Handle("POST /api/v1/webhooks/mail", webhook.Mailgun("MAIL_WEBHOOK_SIGNING_KEY", handlers.MailEvent))
+   ```
+
+   Other providers: `webhook.HMAC("NAME", "X-Hub-Signature-256", h,
+   webhook.Prefix("sha256="), webhook.IDHeader("X-GitHub-Delivery"))`
+   for an HMAC-SHA256 of the body in a header (`webhook.Base64()` when
+   it is base64); `webhook.Token("NAME", "Authorization", h,
+   webhook.Prefix("Bearer "))` or `webhook.TokenField("NAME",
+   "auth.token", h)` for a shared token in a header or a JSON field.
+   A token does not cover the body: use it only when the provider
+   offers nothing better. Stripe and Mailgun sign a timestamp, and a
+   delivery more than 5 minutes off is refused (`webhook.Tolerance`);
+   the body is capped at 1 MB (`webhook.MaxBody`, raise it for inbound
+   mail with attachments) and the handler has 10 seconds
+   (`webhook.Timeout`).
+3. Write the handler in `handlers/webhooks.go`:
+
+   ```go
+   func PaymentEvent(ctx context.Context, d *webhook.Delivery) error {
+   	ev, err := d.StripeEvent()
+   	if err != nil {
+   		return err
+   	}
+   	switch ev.Type {
+   	case "checkout.session.completed":
+   		var s struct {
+   			ID        string `json:"id"`
+   			Reference string `json:"client_reference_id"`
+   		}
+   		if err := json.Unmarshal(ev.Data.Object, &s); err != nil {
+   			return err
+   		}
+   		return jobs.From(ctx).Enqueue(ctx, "order.paid", schema.OrderPaid{OrderID: s.Reference})
+   	}
+   	return nil // events the app ignores are acknowledged too
+   }
+   ```
+
+   `d.Body` is the verified body, `d.Decode(&v)` decodes it,
+   `d.MailgunEvent()` reads a mail event (`Event`, `Recipient`,
+   `Severity`), `d.Form` holds a form post's fields. Returning nil
+   replies 200; an error replies 500 and the provider retries. Keep
+   the handler short and put slow work in a job.
+4. Each delivery id (the event id, the mail token, the `IDHeader`) is
+   handled once: a repeat replies 200 without calling the handler, and
+   an id whose handler failed is handled again on the retry. The ids
+   live in the `webhook_delivery` table when the db pack runs, kept
+   for 30 days (`webhook.Retention`); with several nodes the db pack is
+   required. Without it, dev and test keep them in memory and
+   production refuses (503) unless `webhook.WithStore` names a store.
+   The provider may still send two events about the same object, out
+   of order: write with upserts keyed by the object's id.
+5. Test it in `routes_test.go`, signing as the provider does:
+
+   ```go
+   func TestPaymentWebhook(t *testing.T) {
+   	t.Setenv("PAYMENTS_WEBHOOK_SECRET", "whsec_test")
+   	srv := lidzatest.Start(t, app())
+   	body := `{"id":"evt_1","type":"checkout.session.completed","data":{"object":{"id":"cs_1","client_reference_id":"42"}}}`
+   	sig := webhook.StripeSignature("whsec_test", srv.Clock.Now(), []byte(body))
+   	res := srv.JSON(t, "POST", "/api/v1/webhooks/payments", json.RawMessage(body), nil, lidzatest.Header("Stripe-Signature", sig))
+   	if res.StatusCode != http.StatusOK {
+   		t.Fatal(res.StatusCode)
+   	}
+   }
+   ```
+
+   Keep the body compact and free of `<`, `>` and `&`: `srv.JSON`
+   compacts and escapes a `json.RawMessage`, and the signature covers
+   the exact bytes. `srv.Clock.Now()` signs at the app's time, so a
+   test that moves the clock (`srv.Clock.Advance(10*time.Minute)`)
+   sees an old delivery refused. Also check a wrong secret gets 401. `webhook.MailgunSignature(key, t, token)`
+   builds the mail provider's `signature` object, `webhook.HMACSignature`
+   an HMAC header's value.
+6. By hand against `lidza dev`, sign with the dev secret:
+
+   ```sh
+   body='{"id":"evt_local_1","type":"ping"}'; t=$(date +%s)
+   sig=$(printf '%s.%s' "$t" "$body" | openssl dgst -sha256 -hmac "whsec_..." -r | cut -d' ' -f1)
+   curl -si http://127.0.0.1:3000/api/v1/webhooks/payments -H "Stripe-Signature: t=$t,v1=$sig" -d "$body"
+   ```
+
+   A provider's CLI that forwards its sandbox events (`stripe listen
+   --forward-to 127.0.0.1:3000/api/v1/webhooks/payments`) prints the
+   secret to seal as `dev.PAYMENTS_WEBHOOK_SECRET`.
+7. `lidza check`, then `lidza test`.
 
 ### Add the admin pages
 

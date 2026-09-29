@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"net/http"
 	"runtime/debug"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -255,9 +256,10 @@ func CORS(o CORSOptions) Middleware {
 
 // SecureHeadersOptions configures SecureHeaders.
 type SecureHeadersOptions struct {
-	// CSP is the Content-Security-Policy value; empty sends none. Vite's
-	// dev server injects inline scripts, so a strict policy is for
-	// production builds.
+	// CSP is the Content-Security-Policy value; empty or NoCSP sends
+	// none. Vite's dev server injects inline scripts, so a strict policy
+	// is for production builds; lidza.App sends DefaultCSP there unless
+	// it sets its own.
 	CSP string
 	// HSTS enables Strict-Transport-Security for a year; only behind TLS.
 	HSTS bool
@@ -280,6 +282,83 @@ const (
 	AllowGeolocation = "camera=(), microphone=(), geolocation=(self)"
 )
 
+// Content-Security-Policy values for SecureHeadersOptions.CSP and
+// lidza.App.CSP.
+const (
+	// DefaultCSP is the policy an app sends outside dev mode when it sets
+	// none: scripts, styles, fonts and connections from the app's own
+	// origin only (WebSockets to it included), images also from data: and
+	// blob: URLs, no plugins, no <base> elsewhere, forms posting only to
+	// the app, and no framing. The built templates hold under it: their
+	// scripts and styles are files, and the JSON <script> blocks a page
+	// carries (JSON-LD, the i18n catalog) are data the policy does not
+	// govern. An app that loads from another origin extends it with
+	// AddCSP.
+	DefaultCSP = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+	// NoCSP sends no Content-Security-Policy at all.
+	NoCSP = "off"
+)
+
+// AddCSP returns policy with sources added to one directive. A fetch
+// directive (script-src, media-src, ...) that policy lacks is created
+// with default-src's sources first, so adding to it keeps what it fell
+// back to. Browsers keep only the first of a
+// repeated directive, so a policy is extended here rather than by
+// appending "; img-src ...":
+//
+//	CSP: middleware.AddCSP(middleware.DefaultCSP, "script-src", "https://js.example.com")
+func AddCSP(policy, directive string, sources ...string) string {
+	directive = strings.ToLower(strings.TrimSpace(directive))
+	var parts []string
+	var fallback []string
+	found := false
+	for _, d := range strings.Split(policy, ";") {
+		d = strings.TrimSpace(d)
+		if d == "" {
+			continue
+		}
+		fields := strings.Fields(d)
+		if strings.ToLower(fields[0]) == "default-src" && fallback == nil {
+			fallback = append([]string{}, fields[1:]...)
+		}
+		if !found && strings.ToLower(fields[0]) == directive {
+			found = true
+			have := map[string]bool{}
+			for _, f := range fields[1:] {
+				have[f] = true
+			}
+			if have["'none'"] && len(sources) > 0 {
+				fields = fields[:1] // 'none' combined with a source is ignored
+			}
+			for _, src := range sources {
+				if !have[src] {
+					fields = append(fields, src)
+					have[src] = true
+				}
+			}
+			d = strings.Join(fields, " ")
+		}
+		parts = append(parts, d)
+	}
+	if !found {
+		fields := []string{directive}
+		if strings.HasSuffix(directive, "-src") {
+			for _, f := range fallback {
+				if f != "'none'" {
+					fields = append(fields, f)
+				}
+			}
+		}
+		for _, src := range sources {
+			if !slices.Contains(fields[1:], src) {
+				fields = append(fields, src)
+			}
+		}
+		parts = append(parts, strings.Join(fields, " "))
+	}
+	return strings.Join(parts, "; ")
+}
+
 // SecureHeaders sets the response headers every app should send.
 func SecureHeaders(o SecureHeadersOptions) Middleware {
 	return func(next http.Handler) http.Handler {
@@ -293,7 +372,7 @@ func SecureHeaders(o SecureHeadersOptions) Middleware {
 			} else {
 				h.Set("Permissions-Policy", DefaultPermissionsPolicy)
 			}
-			if o.CSP != "" {
+			if o.CSP != "" && o.CSP != NoCSP {
 				h.Set("Content-Security-Policy", o.CSP)
 			}
 			if o.HSTS {

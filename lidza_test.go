@@ -129,6 +129,35 @@ func TestHandlerPermissionsPolicy(t *testing.T) {
 	}
 }
 
+// TestHandlerCSP: an app that sets no policy sends DefaultCSP in
+// production and none in dev mode, where Vite needs inline scripts; its
+// own policy is sent in both; NoCSP sends none.
+func TestHandlerCSP(t *testing.T) {
+	custom := middleware.AddCSP(middleware.DefaultCSP, "script-src", "https://js.example.com")
+	for _, c := range []struct{ mode, policy, want string }{
+		{"", "", middleware.DefaultCSP},
+		{"test", "", middleware.DefaultCSP},
+		{"dev", "", ""},
+		{"", custom, custom},
+		{"dev", custom, custom},
+		{"", middleware.NoCSP, ""},
+	} {
+		t.Setenv(devserver.EnvMode, c.mode)
+		t.Setenv(devserver.EnvFrontendURL, "")
+		h, err := Handler(App{CSP: c.policy, Dist: fstest.MapFS{"index.html": {Data: []byte("app")}}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, path := range []string{"/", "/api/v1/health"} {
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+			if got := rec.Header().Get("Content-Security-Policy"); got != c.want {
+				t.Errorf("mode %q, CSP %q, %s: sent %q, want %q", c.mode, c.policy, path, got, c.want)
+			}
+		}
+	}
+}
+
 func TestHandlerHead(t *testing.T) {
 	t.Setenv(devserver.EnvMode, "")
 	h, err := Handler(App{

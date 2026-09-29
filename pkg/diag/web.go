@@ -17,10 +17,16 @@ import (
 //     `lidza check` when the API changes, a fetch does not;
 //   - L004: an import of a package that package.json does not declare; it
 //     resolves on one machine through a transitive dependency and breaks
-//     on the next, or does not exist at all.
+//     on the next, or does not exist at all;
 //
-// A line, or the line after a comment, containing "lidza:ignore L003" is
-// exempt from that rule.
+// and one against a secret shipped to every browser:
+//
+//   - L010: a string shaped like an API key, a token or a database URL
+//     with its password, as the Go rule reads it.
+//
+// Generated files and node_modules, dist and .lidza are skipped. A line,
+// or the line after a comment, containing "lidza:ignore L003" is exempt
+// from that rule.
 func WebRules(root string) []Diagnostic {
 	src := filepath.Join(root, "src")
 	if _, err := os.Stat(src); err != nil {
@@ -29,14 +35,20 @@ func WebRules(root string) []Diagnostic {
 	declared := declaredPackages(root)
 	var out []Diagnostic
 	_ = filepath.WalkDir(src, func(p string, d os.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			if p != src && (skipWebDirs[d.Name()] || strings.HasPrefix(d.Name(), ".")) {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 		if !webExt[filepath.Ext(p)] {
 			return nil
 		}
 		data, err := os.ReadFile(p)
-		if err != nil {
+		if err != nil || generatedWeb(string(data)) {
 			return nil
 		}
 		rel := filepath.ToSlash(strings.TrimPrefix(p, root+string(filepath.Separator)))
@@ -44,6 +56,18 @@ func WebRules(root string) []Diagnostic {
 		return nil
 	})
 	return out
+}
+
+var skipWebDirs = map[string]bool{"node_modules": true, "dist": true}
+
+// generatedWeb reports a file marked generated in its first lines
+// ("Code generated ... DO NOT EDIT" or "@generated").
+func generatedWeb(content string) bool {
+	head := content
+	if len(head) > 1024 {
+		head = head[:1024]
+	}
+	return strings.Contains(head, "@generated") || (strings.Contains(head, "Code generated") && strings.Contains(head, "DO NOT EDIT"))
 }
 
 var webExt = map[string]bool{".ts": true, ".tsx": true, ".js": true, ".jsx": true, ".mjs": true, ".svelte": true, ".astro": true, ".vue": true}
@@ -82,6 +106,10 @@ func checkWebFile(rel, content string, declared map[string]bool) []Diagnostic {
 		if loc := fetchAPI.FindStringIndex(l); loc != nil && !ignored(i, "L003") {
 			out = append(out, Diagnostic{Layer: "frontend", Tool: "lidza rules", Severity: "warning", Code: "L003", File: rel, Line: i + 1, Column: loc[0] + 1,
 				Message: "hand-written fetch of /api: call the API through @lidza/client (api.<operation>), generated from the handlers and checked by lidza check"})
+		}
+		if kind, at := secretAt(l); kind != "" && !ignored(i, "L010") {
+			out = append(out, Diagnostic{Layer: "frontend", Tool: "lidza rules", Severity: "warning", Code: "L010", File: rel, Line: i + 1, Column: at + 1,
+				Message: "a string that looks like " + kind + ": the frontend ships to every browser, so a secret never goes in it; keep it on the server, sealed with `lidza credentials set NAME=...` (MCP lidza_credentials_set), and call a handler that uses it"})
 		}
 	}
 	if declared == nil {

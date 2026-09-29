@@ -16,7 +16,9 @@ the page subscribes and refetches.
 2. Name topics by resource, `project:<id>`, in one function both sides
    use.
 3. Mount the socket behind auth and authorize each topic; without
-   `Authorize`, any signed-in user can subscribe to any topic:
+   `Authorize` no topic can be subscribed (`realtime.AllowAll` opens
+   every topic to every connection, for topics that carry nothing
+   private):
 
    ```go
    live := realtime.Handler(realtime.Authorize(func(r *http.Request, topic string) bool {

@@ -29,7 +29,7 @@ func TestGenerate(t *testing.T) {
 	os.WriteFile(filepath.Join(root, "sqlc.yaml"), []byte("version: 2\n"), 0o644)
 	os.WriteFile(filepath.Join(root, "routes.go"), []byte("package main\n\nimport (\n\t\"github.com/agim/lidza/pkg/router\"\n)\n\nfunc routes(r *router.Router) {\n}\n"), 0o644)
 
-	res, err := Generate(root, Options{Model: "Post", Module: "app"})
+	res, err := Generate(root, Options{Model: "Post", Module: "app", Auth: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,16 +84,24 @@ func TestGenerate(t *testing.T) {
 		t.Fatalf("appended schema does not parse: %v", err)
 	}
 	routes, _ := os.ReadFile(filepath.Join(root, "routes.go"))
-	if !strings.Contains(string(routes), "\thandlers.PostRoutes(r)\n") || !strings.Contains(string(routes), `"app/handlers"`) {
+	// Not owned (no owner field) but signed-in: behind auth.Require().
+	if !strings.Contains(string(routes), "\tposts := r.Group(\"/api/v1/posts\", auth.Require())\n\thandlers.PostRoutes(posts)\n") ||
+		!strings.Contains(string(routes), `"app/handlers"`) || !strings.Contains(string(routes), `"github.com/agim/lidza/packs/auth"`) {
 		t.Errorf("routes.go:\n%s", routes)
 	}
-	if _, err := Generate(root, Options{Model: "Post", Module: "app"}); err == nil || !strings.Contains(err.Error(), "--force") {
+	if res.Owner != "" || res.Public {
+		t.Errorf("owner %q public %v", res.Owner, res.Public)
+	}
+	if strings.Contains(string(h), "auth.") || strings.Contains(string(sql), "owner") {
+		t.Errorf("an unowned model is scoped:\n%s\n%s", sql, h)
+	}
+	if _, err := Generate(root, Options{Model: "Post", Module: "app", Auth: true}); err == nil || !strings.Contains(err.Error(), "--force") {
 		t.Fatalf("second run should refuse without --force: %v", err)
 	}
-	if _, err := Generate(root, Options{Model: "Post", Module: "app", Force: true}); err != nil {
+	if _, err := Generate(root, Options{Model: "Post", Module: "app", Auth: true, Force: true}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Generate(root, Options{Model: "Status", Module: "app"}); err == nil {
+	if _, err := Generate(root, Options{Model: "Status", Module: "app", Auth: true}); err == nil {
 		t.Fatal("enum accepted as resource")
 	}
 	if plural("Category") != "Categories" || plural("Box") != "Boxes" || plural("Day") != "Days" {

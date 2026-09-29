@@ -151,8 +151,10 @@ Three things keep an agent from inventing what is not there:
 - `lidza check` rules: an import of a framework package that does not
   exist is an error with the closest real package (L004), as is a frontend
   import that `package.json` does not declare (L004); a hand-written
-  `fetch` of `/api` (L003) and a handler type not declared in
-  `schema.lidza` (L005) are warnings.
+  `fetch` of `/api` (L003), a handler type not declared in
+  `schema.lidza` (L005), a secret in the Go or frontend source (L010), a
+  dropped error (L016) and a run of statements copied from elsewhere in
+  the app (L017) are warnings.
 - The recipes: every step names the file, the command and the check.
   The framework's live under "Recipes" in the app guide and follow the
   framework version; the app's own live under "App recipes"
@@ -238,12 +240,18 @@ framework's `CHANGELOG.md`.
 
 ## Resources
 
-With the `db` pack enabled, `lidza gen resource Post` turns a model into a
-working resource: SQL queries, `CreatePost`/`UpdatePost`/`PostList` types
+With the `db` and `auth` packs enabled, `lidza gen resource Post` turns a
+model into a working resource: SQL queries, `CreatePost`/`UpdatePost`/`PostList` types
 carrying the model's validation rules, `handlers/posts.go` with list, get,
-create, patch and delete under `/api/v1/posts`, and the line in
-`routes.go`. The client gets `api.listPosts()`, `api.createPost(body)` and
-the rest on the next `lidza gen`. The handlers are yours after that.
+create, patch and delete under `/api/v1/posts`, and a group behind
+`auth.Require()` in `routes.go`. A model with an owner field (`ownerId`,
+`userId`, or a field with `@ref(User)` or `@ref(AuthUser)`) is scoped to
+the signed-in user: every query filters by the owner, create sets it,
+and another user's row is a 404. `--public` marks the model `@public`
+for a resource visitors may change: open routes, no owner. The client
+gets `api.listPosts()`, `api.createPost(body)` and the rest on the next
+`lidza gen`. The handlers are yours after that; `lidza check` flags a
+query on an owned table that does not filter by the owner (L018).
 
 ## Packs
 

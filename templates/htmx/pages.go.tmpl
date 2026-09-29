@@ -32,7 +32,10 @@ var (
 // static files.
 func pages() http.Handler {
 	mux := http.NewServeMux()
-	static, _ := fs.Sub(assets, "static")
+	static, err := fs.Sub(assets, "static")
+	if err != nil {
+		panic(err) // static is embedded above: only a mistyped name fails
+	}
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServerFS(static)))
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		renderPage(w, "index", map[string]any{"Title": "__LIDZA_APP_NAME__"})

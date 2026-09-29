@@ -27,8 +27,10 @@ const HookDir = ".githooks"
 // hookScript is .githooks/pre-commit.
 const hookScript = `#!/bin/sh
 # Written by lidza new. Runs lidza verify before every commit: generated
-# files current and staged, lidza check clean, tests passing. Skip once
-# with git commit --no-verify.
+# files current and staged, no test deleted, skipped or stripped of its
+# assertions, lidza check clean, tests passing. Confirm a deliberate test
+# change with LIDZA_ALLOW_TEST_CHANGES=1 git commit; skip once with
+# git commit --no-verify.
 exec lidza verify
 `
 
@@ -48,7 +50,8 @@ type verifyReport struct {
 }
 
 // runVerify is the one command before a commit: regenerate and require
-// the generated files to be staged, run `lidza check`, run the Go tests.
+// the generated files to be staged, refuse staged changes that weaken the
+// tests, run `lidza check`, run the Go tests.
 // The pre-commit hook runs it; `--install-hook` sets the hook up on an
 // existing project.
 func runVerify(ctx context.Context, args []string) error {
@@ -58,6 +61,7 @@ func runVerify(ctx context.Context, args []string) error {
 	noTest := fs.Bool("no-test", false, "skip the Go tests")
 	strict := fs.Bool("strict", false, "warnings fail the check step too (for CI)")
 	installHook := fs.Bool("install-hook", false, "write .githooks/pre-commit and point git at it, then exit")
+	allowTests := fs.Bool("allow-test-changes", false, "confirm staged changes that delete a test file, skip a test or remove assertions (from the hook: "+EnvAllowTestChanges+"=1 git commit)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -102,6 +106,9 @@ func runVerify(ctx context.Context, args []string) error {
 	})
 	step("generated files staged", func() (string, error) {
 		return staleGenerated(ctx, abs, cfg)
+	})
+	step("tests not weakened", func() (string, error) {
+		return testGuard(ctx, abs, *allowTests)
 	})
 	os.Setenv("LIDZA_MODE", "test")
 	checkOK := step("check", func() (string, error) {

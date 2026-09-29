@@ -58,8 +58,11 @@ type App struct {
 	// answer streams for longer than a JSON reply takes.
 	StreamTimeout time.Duration
 	// CSP is the Content-Security-Policy sent with every response. Empty
-	// sends none; Vite's dev server needs inline scripts, so set it for
-	// production builds only.
+	// sends middleware.DefaultCSP, except in dev mode (LIDZA_MODE=dev),
+	// where Vite's dev server needs inline scripts and none is sent;
+	// middleware.AddCSP extends it for another origin (a script CDN, an
+	// image host). middleware.NoCSP sends none anywhere. A value set here
+	// is sent in dev mode too.
 	CSP string
 	// PermissionsPolicy is the Permissions-Policy sent with every
 	// response. Empty sends middleware.DefaultPermissionsPolicy (camera,
@@ -389,10 +392,18 @@ func handler(app App, services *Services) (http.Handler, *devserver.Sidecar, err
 	}
 	all := devserver.Split(router.APIPrefix, api, opsThenFrontend(ops, mounted(r.Mounts(), frontend), os.Getenv(devserver.EnvMode) == "dev"))
 	mw := append([]middleware.Middleware{
-		middleware.SecureHeaders(middleware.SecureHeadersOptions{CSP: app.CSP, PermissionsPolicy: app.PermissionsPolicy}),
+		middleware.SecureHeaders(middleware.SecureHeadersOptions{CSP: csp(app.CSP), PermissionsPolicy: app.PermissionsPolicy}),
 		servicesMiddleware(services),
 	}, app.Middleware...)
 	return middleware.Chain(all, mw...), sidecar, nil
+}
+
+// csp is the policy an app sends: its own, or DefaultCSP outside dev mode.
+func csp(set string) string {
+	if set == "" && os.Getenv(devserver.EnvMode) != "dev" {
+		return middleware.DefaultCSP
+	}
+	return set
 }
 
 // mounted serves the router's mounts (the admin pages, a webhook) by path

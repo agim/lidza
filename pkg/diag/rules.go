@@ -46,8 +46,10 @@ import (
 //     os.OpenFile, os.MkdirAll); a node's disk is neither shared nor
 //     kept, so uploads and generated files go through the storage pack;
 //   - L010: a string literal shaped like an API key or token (AWS,
-//     OpenAI, Anthropic, Google, SendGrid, Mailgun, Resend, Slack, a
-//     private key); secrets go in the credentials, never in source;
+//     OpenAI, Anthropic, Google, SendGrid, Mailgun, Resend, Slack,
+//     GitHub, Stripe secret and webhook keys, a JSON Web Token, a private
+//     key) or a database URL with its password; secrets go in the
+//     credentials, never in source (WebRules applies it to the frontend);
 //   - L011 (a note): a pack enabled in lidza.json that no app code
 //     imports; use it or remove it, so the next reader is not misled;
 //   - L012: a pack or a direct dependency (one the framework does not
@@ -62,7 +64,16 @@ import (
 //     accounts, so what it may do is recorded;
 //   - L015 (a note, not a warning): the brief (docs/brief.md) has
 //     required questions open; the agent runs the interview with the
-//     developer before building much. A note never fails --strict.
+//     developer before building much. A note never fails --strict;
+//   - L016: a call whose error result is dropped, as a statement or
+//     assigned to _ (type-checked; deferred calls, a Close on the way
+//     out of a failure, printing to the terminal and writes to a buffer
+//     or a hash are exempt);
+//   - L017: a run of statements that repeats another in the app, names
+//     and literals aside (at least 8 statements and 80 tokens); reuse
+//     the first or extract a function both call;
+//   - L018: a query in db/queries/*.sql on an owned table that neither
+//     filters by nor sets the owner column (owned.go).
 //
 // Except for L004 the findings are warnings: they point at the pattern,
 // the author decides. A comment "lidza:ignore L001" on the line, or the
@@ -72,6 +83,7 @@ func Rules(ctx context.Context, root string) []Diagnostic {
 	fset := token.NewFileSet()
 	imported := map[string]bool{}
 	var pages []adminPage
+	var files []sourceFile
 	moduleDir, err := apidoc.ModuleDir(ctx, root)
 	if err != nil {
 		moduleDir = ""
@@ -90,11 +102,16 @@ func Rules(ctx context.Context, root string) []Diagnostic {
 		if !strings.HasSuffix(p, ".go") || strings.HasSuffix(p, "_test.go") {
 			return nil
 		}
-		f, err := parser.ParseFile(fset, p, nil, parser.ParseComments)
+		src, err := os.ReadFile(p)
+		if err != nil {
+			return nil
+		}
+		f, err := parser.ParseFile(fset, p, src, parser.ParseComments)
 		if err != nil || ast.IsGenerated(f) {
 			return nil
 		}
 		rel := filepath.ToSlash(strings.TrimPrefix(strings.TrimPrefix(p, root), string(filepath.Separator)))
+		files = append(files, sourceFile{rel, src, f})
 		for _, imp := range f.Imports {
 			if path, err := strconv.Unquote(imp.Path.Value); err == nil {
 				imported[path] = true
@@ -104,10 +121,13 @@ func Rules(ctx context.Context, root string) []Diagnostic {
 		pages = append(pages, adminPages(fset, f, rel)...)
 		return nil
 	})
+	out = append(out, duplicates(fset, files)...)
+	out = append(out, discardedErrors(ctx, root)...)
 	out = append(out, unusedPacks(root, imported)...)
 	out = append(out, missingDecisions(root, moduleDir)...)
 	out = append(out, undecidedPages(root, pages)...)
 	out = append(out, openBrief(root)...)
+	out = append(out, ownedQueries(root)...)
 	return out
 }
 
@@ -433,16 +453,43 @@ var secretShapes = []struct {
 	{"a Slack token", regexp.MustCompile(`xox[abpr]-[A-Za-z0-9-]{10,}`)},
 	{"a GitHub token", regexp.MustCompile(`gh[pousr]_[A-Za-z0-9]{30,}`)},
 	{"a private key", regexp.MustCompile(`-----BEGIN [A-Z ]*PRIVATE KEY-----`)},
+	// Test keys are secrets too; publishable keys (pk_) are public.
+	{"a Stripe secret key", regexp.MustCompile(`\b[rs]k_(live|test)_[A-Za-z0-9]{20,}`)},
+	{"a Stripe webhook secret", regexp.MustCompile(`\bwhsec_[A-Za-z0-9+/]{24,}`)},
+	// Header and payload are JSON objects, so both start with eyJ.
+	{"a JSON Web Token", regexp.MustCompile(`\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{20,}`)},
 }
+
+// databaseURL matches a Postgres, MySQL or Redis URL with a password in
+// it; the password is the second group. Interpolations (%s, ${x}) are not
+// passwords.
+var databaseURL = regexp.MustCompile(`\b(postgres|postgresql|mysql|redis|rediss)://[^\s:/@'"` + "`" + `%$\{}]*:([^\s/@'"` + "`" + `%$\{}]+)@`)
+
+// placeholderPasswords are the stand-ins examples use.
+var placeholderPasswords = map[string]bool{"pass": true, "password": true, "pwd": true, "secret": true, "changeme": true, "passwd": true}
 
 // secretShape names the kind of secret a string literal looks like, "".
 func secretShape(lit string) string {
-	for _, s := range secretShapes {
-		if s.re.MatchString(lit) {
-			return s.kind
+	kind, _ := secretAt(lit)
+	return kind
+}
+
+// secretAt names the kind of secret found in s and its byte offset, or
+// "" and -1.
+func secretAt(s string) (string, int) {
+	for _, shape := range secretShapes {
+		if loc := shape.re.FindStringIndex(s); loc != nil {
+			return shape.kind, loc[0]
 		}
 	}
-	return ""
+	for _, m := range databaseURL.FindAllStringSubmatchIndex(s, -1) {
+		pw := strings.ToLower(s[m[4]:m[5]])
+		if placeholderPasswords[pw] || strings.Trim(pw, "x*.") == "" || strings.HasPrefix(pw, "<") {
+			continue
+		}
+		return "a database URL with its password", m[0]
+	}
+	return "", -1
 }
 
 // diskWrite names the os function a call writes files with, or "".

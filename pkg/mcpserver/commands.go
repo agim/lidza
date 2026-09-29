@@ -105,19 +105,27 @@ func addCommandTools(s *server.MCPServer, dir string, cfg *config.Config, after 
 		name, desc string
 		opts       []mcp.ToolOption
 		timeout    time.Duration
-		jsonOut    bool
-		changes    bool
-		args       func(req mcp.CallToolRequest) ([]string, error)
+		// jsonOut: the command prints one JSON report on stdout.
+		jsonOut bool
+		// changes: the command changes the project (run one at a time,
+		// the server refreshed after); without it the tool is read-only.
+		changes bool
+		args    func(req mcp.CallToolRequest) ([]string, error)
 	}
 	fixed := func(args ...string) func(mcp.CallToolRequest) ([]string, error) {
 		return func(mcp.CallToolRequest) ([]string, error) { return args, nil }
 	}
+	// A tool that can lose data says so: a client asks before running it.
+	// The others are marked by what they do: read-only when they change
+	// nothing, else additive.
+	destructive := []mcp.ToolOption{mcp.WithDestructiveHintAnnotation(true)}
 	tools := []tool{
 		{"lidza_check", "Regenerate, then run go vet, staticcheck, cargo check, tsc or svelte-check, eslint and the Līdza rules; one report with status and diagnostics (layer, file, line, code, message). Status is \"ok\" when there are no errors; fix until it is.", nil, 10 * time.Minute, true, true, fixed("check", "--json")},
 		{"lidza_gen", "Generate from schema.lidza (Go structs, SQL and a migration when models changed, Rust structs), the pack wrappers, the handlers' OpenAPI and client, the recipes' skills. lidza dev and lidza_check do it too; call it after editing schema.lidza to see the migration.", nil, 10 * time.Minute, false, true, fixed("gen")},
-		{"lidza_gen_resource", "Generate a resource for a model in schema.lidza: queries, Create/Update/List types, handlers with the five routes under /api/v1/<plural>, the registration line. Needs the db pack.", []mcp.ToolOption{
+		{"lidza_gen_resource", "Generate a resource for a model in schema.lidza: queries, Create/Update/List types, handlers with the five routes under /api/v1/<plural>, registered in routes.go behind auth.Require(). An owned model (a field ownerId, userId or @ref(User)) is scoped to the signed-in user: every query filters by the owner, create sets it, another user's row is a 404. Needs the db and auth packs, or public.", []mcp.ToolOption{
 			mcp.WithString("model", mcp.Required(), mcp.Description("The model name in schema.lidza, e.g. Post.")),
 			mcp.WithBoolean("force", mcp.Description("Overwrite an existing handlers file.")),
+			mcp.WithBoolean("public", mcp.Description("A resource anyone may read and write: marks the model @public; routes not behind sign-in, rows not scoped.")),
 		}, 10 * time.Minute, false, true, func(req mcp.CallToolRequest) ([]string, error) {
 			model := req.GetString("model", "")
 			if model == "" {
@@ -126,6 +134,9 @@ func addCommandTools(s *server.MCPServer, dir string, cfg *config.Config, after 
 			args := []string{"gen", "resource", model}
 			if req.GetBool("force", false) {
 				args = append(args, "--force")
+			}
+			if req.GetBool("public", false) {
+				args = append(args, "--public")
 			}
 			return args, nil
 		}},
@@ -156,8 +167,8 @@ func addCommandTools(s *server.MCPServer, dir string, cfg *config.Config, after 
 			}
 			return []string{"pack", "build"}, nil
 		}},
-		{"lidza_db_migrate", "Apply the pending migrations in db/migrations to DATABASE_URL from .env (db pack).", nil, 5 * time.Minute, false, true, fixed("db", "migrate")},
-		{"lidza_db_rollback", "Revert the last applied migration.", nil, 5 * time.Minute, false, true, fixed("db", "rollback")},
+		{"lidza_db_migrate", "Apply the pending migrations in db/migrations to DATABASE_URL from .env (db pack). A migration marked -- review can drop data. Refused when DATABASE_URL is on another host: the developer migrates a production database, never this tool.", destructive, 5 * time.Minute, false, true, fixed("db", "migrate")},
+		{"lidza_db_rollback", "Revert the last applied migration: its down script drops what the migration added, with the data in it. Refused when DATABASE_URL is on another host.", destructive, 5 * time.Minute, false, true, fixed("db", "rollback")},
 		{"lidza_db_status", "List the migrations and whether each is applied.", nil, time.Minute, false, false, fixed("db", "status")},
 		{"lidza_test", "Run the Go tests (the test database is created and migrated, LIDZA_MODE=test), then the frontend check; or the browser suite with e2e.", []mcp.ToolOption{
 			mcp.WithBoolean("e2e", mcp.Description("Build the app and run the Playwright suite instead of the Go tests.")),
@@ -181,7 +192,7 @@ func addCommandTools(s *server.MCPServer, dir string, cfg *config.Config, after 
 			}
 			return args, nil
 		}},
-		{"lidza_verify", "What the pre-commit hook runs: regenerate and require the generated files to be staged, the check, the Go tests. One JSON report with a step list and the diagnostics.", []mcp.ToolOption{
+		{"lidza_verify", "What the pre-commit hook runs: regenerate and require the generated files to be staged, refuse staged changes that weaken the tests (a test file deleted, a skip or only added, assertions removed), the check, the Go tests. Never weaken a test to pass it: if a test is wrong, tell the developer, who confirms the change. One JSON report with a step list and the diagnostics.", []mcp.ToolOption{
 			mcp.WithBoolean("no_test", mcp.Description("Skip the Go tests.")),
 		}, 20 * time.Minute, true, true, func(req mcp.CallToolRequest) ([]string, error) {
 			args := []string{"verify", "--json"}
@@ -212,7 +223,11 @@ func addCommandTools(s *server.MCPServer, dir string, cfg *config.Config, after 
 	}
 	for _, t := range tools {
 		t := t
-		opts := append([]mcp.ToolOption{mcp.WithDescription(t.desc)}, t.opts...)
+		opts := append([]mcp.ToolOption{
+			mcp.WithDescription(t.desc),
+			mcp.WithReadOnlyHintAnnotation(!t.changes),
+			mcp.WithDestructiveHintAnnotation(false),
+		}, t.opts...)
 		s.AddTool(mcp.NewTool(t.name, opts...), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			args, err := t.args(req)
 			if err != nil {

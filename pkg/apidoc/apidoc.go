@@ -157,7 +157,7 @@ func Listing(ctx context.Context, dir string) (string, error) {
 
 // Public lists the packages app code imports, relative to the module root
 // ("" is the root package). Every packs/<name> package is public too.
-var Public = []string{"", "pkg/router", "pkg/middleware", "pkg/lidzatest", "pkg/report", "pkg/resilience", "pkg/env", "pkg/decimal"}
+var Public = []string{"", "pkg/router", "pkg/middleware", "pkg/lidzatest", "pkg/report", "pkg/resilience", "pkg/env", "pkg/decimal", "pkg/webhook"}
 
 // ModuleDir returns the directory holding the framework's sources for the
 // project in dir: dir itself when it is the framework, otherwise what the

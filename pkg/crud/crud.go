@@ -1,7 +1,14 @@
 // Package crud generates a resource from a schema.lidza model: the sqlc
 // queries, the Create and Update types, a handlers file with the five
-// typed routes, and the registration line in routes.go. The output is
+// typed routes, and the registration in routes.go. The output is
 // ordinary app code, generated once and edited freely.
+//
+// A resource is signed-in by default: its routes are registered on a
+// group behind auth.Require(). An owned model (schema.Schema.Owner) is
+// scoped to the signed-in user as well: every statement filters by the
+// owner column, create sets it from auth.CurrentUser, the Create and
+// Update types leave it out, and another user's row is a 404. A model
+// marked @public (or generated with --public, which marks it) is neither.
 package crud
 
 import (
@@ -9,6 +16,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/agim/lidza/pkg/pack"
@@ -23,13 +31,29 @@ type Options struct {
 	Module string
 	// Force overwrites an existing handlers file.
 	Force bool
+	// Public marks the model @public in schema.lidza: its routes are open
+	// to visitors and its rows are not scoped to a user.
+	Public bool
+	// Auth is true when the app enables the auth pack, which a resource
+	// that is not public needs.
+	Auth bool
 }
 
 // Result lists what was written.
 type Result struct {
-	Files      []string
+	Files []string
+	// RoutesLine is the registration code, one or two lines, for a
+	// routes.go the generator could not edit.
 	RoutesLine string
 	Registered bool
+	// Owner is the owner field of an owned model, "" otherwise; Public is
+	// true for a @public model.
+	Owner  string
+	Public bool
+	// StaleInputs are the Create and Update types in schema.lidza that
+	// still take the owner field (written before the model was scoped);
+	// the handlers ignore it, and the field should go.
+	StaleInputs []string
 }
 
 // Generate writes the resource into root.
@@ -48,11 +72,31 @@ func Generate(root string, opt Options) (*Result, error) {
 	if _, err := os.Stat(filepath.Join(root, pack.SQLCFile)); err != nil {
 		return nil, errors.New("the resource generator needs the db pack: run `lidza pack add db` first")
 	}
-	r := &Resource{Schema: s, Model: m, Module: opt.Module}
+	if !m.Public && !opt.Public && !opt.Auth {
+		return nil, fmt.Errorf("resource %s: its routes go behind sign-in (auth.Require()) and the app has no auth pack: run `lidza pack add auth` first, or pass --public for a resource anyone may read and write", m.Name)
+	}
+	r := &Resource{Schema: s, Model: m, Module: opt.Module, Owner: s.Owner(m)}
+	if opt.Public {
+		r.Owner = nil
+	}
 	if err := r.check(); err != nil {
 		return nil, err
 	}
-	res := &Result{}
+	res := &Result{Public: m.Public || opt.Public}
+	if r.Owner != nil {
+		res.Owner = r.Owner.Name
+	}
+	handlersFile := filepath.Join("handlers", m.Table+".go")
+	if _, err := os.Stat(filepath.Join(root, handlersFile)); err == nil && !opt.Force {
+		return nil, fmt.Errorf("%s exists; pass --force to overwrite", filepath.ToSlash(handlersFile))
+	}
+	if opt.Public && !m.Public {
+		if err := markPublic(root, m); err != nil {
+			return nil, err
+		}
+		m.Public = true
+		res.Files = append(res.Files, schema.FileName)
+	}
 	write := func(rel, content string, overwrite bool) error {
 		p := filepath.Join(root, rel)
 		if _, err := os.Stat(p); err == nil && !overwrite {
@@ -67,7 +111,7 @@ func Generate(root string, opt Options) (*Result, error) {
 	if err := write(filepath.Join(pack.QueriesDir, m.Table+".sql"), r.SQL(), true); err != nil {
 		return nil, err
 	}
-	if err := write(filepath.Join("handlers", m.Table+".go"), schema.Gofmt(r.Handlers()), opt.Force); err != nil {
+	if err := write(handlersFile, schema.Gofmt(r.Handlers()), opt.Force); err != nil {
 		return nil, err
 	}
 	if _, err := os.Stat(filepath.Join(root, "handlers", "convert.go")); err != nil {
@@ -79,11 +123,13 @@ func Generate(root string, opt Options) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
-	if added {
+	if added && !slices.Contains(res.Files, schema.FileName) {
 		res.Files = append(res.Files, schema.FileName)
 	}
-	res.RoutesLine = "handlers." + m.Name + "Routes(r)"
-	registered, err := registerRoutes(root, opt.Module, res.RoutesLine)
+	res.StaleInputs = staleOwnerInputs(s, r)
+	reg := r.registration()
+	res.RoutesLine = strings.Join(reg.lines(), "\n")
+	registered, err := registerRoutes(root, opt.Module, reg, opt.Force)
 	if err != nil {
 		return nil, err
 	}
@@ -99,6 +145,9 @@ type Resource struct {
 	Schema *schema.Schema
 	Model  *schema.Model
 	Module string
+	// Owner is the field scoping the rows to the signed-in user, nil for
+	// a model that is not owned.
+	Owner *schema.Field
 }
 
 // Names.
@@ -112,6 +161,9 @@ func (r *Resource) check() error {
 	if id.Type != "uuid" && id.Type != "string" && id.Type != "int" && id.Type != "bigint" {
 		return fmt.Errorf("model %s: id must be uuid, string, int or bigint", r.Model.Name)
 	}
+	if o := r.Owner; o != nil && ((o.Type != "uuid" && o.Type != "string") || o.Optional) {
+		return fmt.Errorf("model %s: the owner field %s holds the signed-in user's id, a string: make it `%s uuid` or `%s string` (required), or mark the model @public (--public) if its rows belong to no one", r.Model.Name, o.Name, o.Name, o.Name)
+	}
 	for _, f := range r.Model.Fields {
 		if f.Array {
 			switch f.Type {
@@ -124,12 +176,16 @@ func (r *Resource) check() error {
 	return nil
 }
 
-// creatable fields: everything but the id, identity columns and
-// timestamps the database fills.
+// creatable fields: everything but the id, identity columns, timestamps
+// the database fills and the owner, which comes from the signed-in user.
+// editable reports whether the model has a field a client may set:
+// without one there is no update, and create takes no body.
+func (r *Resource) editable() bool { return len(r.creatable()) > 0 }
+
 func (r *Resource) creatable() []*schema.Field {
 	var out []*schema.Field
 	for _, f := range r.Model.Fields {
-		if f.ID || f.Autoincrement() || ((f.Type == "time" || f.Type == "date") && f.Default == "now()") {
+		if f.ID || f == r.Owner || f.Autoincrement() || ((f.Type == "time" || f.Type == "date") && f.Default == "now()") {
 			continue
 		}
 		out = append(out, f)
@@ -151,22 +207,51 @@ func (r *Resource) SQL() string {
 	t := qid(r.Model.Table)
 	id := r.Model.IDField()
 	var b strings.Builder
-	fmt.Fprintf(&b, "-- Queries for %s, generated by lidza gen resource. Edit freely; regenerate to reset.\n\n", r.Model.Name)
-	fmt.Fprintf(&b, "-- name: List%s :many\nSELECT * FROM %s ORDER BY %s LIMIT $1 OFFSET $2;\n\n", r.Plural(), t, r.orderBy())
-	fmt.Fprintf(&b, "-- name: Count%s :one\nSELECT count(*) FROM %s;\n\n", r.Plural(), t)
-	fmt.Fprintf(&b, "-- name: Get%s :one\nSELECT * FROM %s WHERE %s = $1;\n\n", r.Name(), t, col(id))
+	fmt.Fprintf(&b, "-- Queries for %s, generated by lidza gen resource. Edit freely; regenerate to reset.\n", r.Model.Name)
+	if o := r.Owner; o != nil {
+		// Owned: every statement filters by, or sets, the owner column.
+		oc := col(o)
+		fmt.Fprintf(&b, "-- Scoped to the signed-in user: every statement takes the owner (%s).\n\n", oc)
+		fmt.Fprintf(&b, "-- name: List%s :many\nSELECT * FROM %s WHERE %s = $1 ORDER BY %s LIMIT $2 OFFSET $3;\n\n", r.Plural(), t, oc, r.orderBy())
+		fmt.Fprintf(&b, "-- name: Count%s :one\nSELECT count(*) FROM %s WHERE %s = $1;\n\n", r.Plural(), t, oc)
+		fmt.Fprintf(&b, "-- name: Get%s :one\nSELECT * FROM %s WHERE %s = $1 AND %s = $2;\n\n", r.Name(), t, col(id), oc)
+	} else {
+		b.WriteString("\n")
+		fmt.Fprintf(&b, "-- name: List%s :many\nSELECT * FROM %s ORDER BY %s LIMIT $1 OFFSET $2;\n\n", r.Plural(), t, r.orderBy())
+		fmt.Fprintf(&b, "-- name: Count%s :one\nSELECT count(*) FROM %s;\n\n", r.Plural(), t)
+		fmt.Fprintf(&b, "-- name: Get%s :one\nSELECT * FROM %s WHERE %s = $1;\n\n", r.Name(), t, col(id))
+	}
 	var cols, vals []string
-	for i, f := range r.creatable() {
+	inserted := r.creatable()
+	if r.Owner != nil {
+		inserted = append([]*schema.Field{r.Owner}, inserted...)
+	}
+	for i, f := range inserted {
 		cols = append(cols, col(f))
 		vals = append(vals, fmt.Sprintf("$%d", i+1))
 	}
-	fmt.Fprintf(&b, "-- name: Create%s :one\nINSERT INTO %s (%s) VALUES (%s) RETURNING *;\n\n", r.Name(), t, strings.Join(cols, ", "), strings.Join(vals, ", "))
+	if len(cols) == 0 {
+		fmt.Fprintf(&b, "-- name: Create%s :one\nINSERT INTO %s DEFAULT VALUES RETURNING *;\n\n", r.Name(), t)
+	} else {
+		fmt.Fprintf(&b, "-- name: Create%s :one\nINSERT INTO %s (%s) VALUES (%s) RETURNING *;\n\n", r.Name(), t, strings.Join(cols, ", "), strings.Join(vals, ", "))
+	}
 	var sets []string
 	for _, f := range r.creatable() {
 		sets = append(sets, fmt.Sprintf("%s = COALESCE(sqlc.narg('%s'), %s)", col(f), snake(f.Name), col(f)))
 	}
-	fmt.Fprintf(&b, "-- name: Update%s :one\nUPDATE %s SET %s WHERE %s = sqlc.arg('%s') RETURNING *;\n\n", r.Name(), t, strings.Join(sets, ", "), col(id), snake(id.Name))
-	fmt.Fprintf(&b, "-- name: Delete%s :execrows\nDELETE FROM %s WHERE %s = $1;\n", r.Name(), t, col(id))
+	where := fmt.Sprintf("%s = sqlc.arg('%s')", col(id), snake(id.Name))
+	if o := r.Owner; o != nil {
+		where += fmt.Sprintf(" AND %s = sqlc.arg('%s')", col(o), snake(o.Name))
+	}
+	// A model with nothing to change (an id and timestamps) has no update.
+	if len(sets) > 0 {
+		fmt.Fprintf(&b, "-- name: Update%s :one\nUPDATE %s SET %s WHERE %s RETURNING *;\n\n", r.Name(), t, strings.Join(sets, ", "), where)
+	}
+	if o := r.Owner; o != nil {
+		fmt.Fprintf(&b, "-- name: Delete%s :execrows\nDELETE FROM %s WHERE %s = $1 AND %s = $2;\n", r.Name(), t, col(id), col(o))
+	} else {
+		fmt.Fprintf(&b, "-- name: Delete%s :execrows\nDELETE FROM %s WHERE %s = $1;\n", r.Name(), t, col(id))
+	}
 	return b.String()
 }
 
@@ -174,10 +259,13 @@ func (r *Resource) SQL() string {
 func (r *Resource) Handlers() string {
 	name, plural := r.Name(), r.Plural()
 	lower := lowerFirst(name)
-	lowerPlural := lowerFirst(plural)
 	id := r.Model.IDField()
 	var b strings.Builder
-	fmt.Fprintf(&b, "// Generated once by lidza gen resource %s; edit freely.\n\npackage handlers\n\n", name)
+	fmt.Fprintf(&b, "// Generated once by lidza gen resource %s; edit freely.\n", name)
+	if r.Owner != nil {
+		fmt.Fprintf(&b, "// Scoped to the signed-in user: every query takes %s from\n// auth.CurrentUser, so another user's row is a 404.\n", r.Owner.Name)
+	}
+	b.WriteString("\npackage handlers\n\n")
 	b.WriteString("import (\n\t\"context\"\n\t\"errors\"\n\t\"net/http\"\n")
 	if r.usesJSON() {
 		b.WriteString("\t\"encoding/json\"\n")
@@ -185,57 +273,95 @@ func (r *Resource) Handlers() string {
 	if id.Type == "int" || id.Type == "bigint" {
 		b.WriteString("\t\"strconv\"\n")
 	}
-	b.WriteString("\n\t\"github.com/jackc/pgx/v5\"\n\n\t\"github.com/agim/lidza/packs/db\"\n\t\"github.com/agim/lidza/pkg/router\"\n\n")
+	b.WriteString("\n\t\"github.com/jackc/pgx/v5\"\n\n")
+	if r.Owner != nil {
+		b.WriteString("\t\"github.com/agim/lidza/packs/auth\"\n")
+	}
+	b.WriteString("\t\"github.com/agim/lidza/packs/db\"\n\t\"github.com/agim/lidza/pkg/router\"\n\n")
 	fmt.Fprintf(&b, "\t\"%s/db/queries/gen\"\n\t\"%s/schema\"\n)\n\n", r.Module, r.Module)
 
 	fmt.Fprintf(&b, "// %sRoutes registers the %s resource under %s.\nfunc %sRoutes(r *router.Router) {\n", name, name, r.Path(), name)
 	fmt.Fprintf(&b, "\trouter.Route(r, \"GET %s\", list%s)\n", r.Path(), plural)
 	fmt.Fprintf(&b, "\trouter.Route(r, \"GET %s/{id}\", get%s)\n", r.Path(), name)
 	fmt.Fprintf(&b, "\trouter.Route(r, \"POST %s\", create%s)\n", r.Path(), name)
-	fmt.Fprintf(&b, "\trouter.Route(r, \"PATCH %s/{id}\", update%s)\n", r.Path(), name)
+	if r.editable() {
+		fmt.Fprintf(&b, "\trouter.Route(r, \"PATCH %s/{id}\", update%s)\n", r.Path(), name)
+	}
 	fmt.Fprintf(&b, "\trouter.Route(r, \"DELETE %s/{id}\", delete%s)\n}\n\n", r.Path(), name)
 
 	// id parsing
 	idParse := "id := req.Param(\"id\")\n"
-	idType := "string"
 	if id.Type == "int" {
-		idType = "int32"
 		idParse = "id64, err := strconv.ParseInt(req.Param(\"id\"), 10, 32)\n\tif err != nil {\n\t\treturn out, router.Errorf(http.StatusBadRequest, \"id must be a number\")\n\t}\n\tid := int32(id64)\n"
 	} else if id.Type == "bigint" {
-		idType = "int64"
 		idParse = "id, err := strconv.ParseInt(req.Param(\"id\"), 10, 64)\n\tif err != nil {\n\t\treturn out, router.Errorf(http.StatusBadRequest, \"id must be a number\")\n\t}\n"
 	}
-	_ = idType
+
+	// The owner: the signed-in user, never the request body. byID is the
+	// argument of the get and delete queries.
+	owner, ownerField, byID := "", "", "id"
+	if o := r.Owner; o != nil {
+		owner = "auth.CurrentUser(ctx).ID"
+		ownerField = fmt.Sprintf("\t\t%s: %s,\n", sqlcName(o), owner)
+		byID = fmt.Sprintf("queries.Get%sParams{%s: id, %s: %s}", name, sqlcName(id), sqlcName(o), owner)
+	}
 
 	fmt.Fprintf(&b, "func list%s(ctx context.Context, req *router.Request[router.None]) (schema.%sList, error) {\n", plural, name)
-	fmt.Fprintf(&b, "\tlimit, offset := PageParams(req, 50, 200)\n\tq := queries.New(db.From(ctx))\n\trows, err := q.List%s(ctx, queries.List%sParams{Limit: limit, Offset: offset})\n\tif err != nil {\n\t\treturn schema.%sList{}, err\n\t}\n", plural, plural, name)
-	fmt.Fprintf(&b, "\ttotal, err := q.Count%s(ctx)\n\tif err != nil {\n\t\treturn schema.%sList{}, err\n\t}\n", plural, name)
+	if r.Owner != nil {
+		fmt.Fprintf(&b, "\towner := %s\n", owner)
+		fmt.Fprintf(&b, "\tlimit, offset := PageParams(req, 50, 200)\n\tq := queries.New(db.From(ctx))\n\trows, err := q.List%s(ctx, queries.List%sParams{%s: owner, Limit: limit, Offset: offset})\n\tif err != nil {\n\t\treturn schema.%sList{}, err\n\t}\n", plural, plural, sqlcName(r.Owner), name)
+		fmt.Fprintf(&b, "\ttotal, err := q.Count%s(ctx, owner)\n\tif err != nil {\n\t\treturn schema.%sList{}, err\n\t}\n", plural, name)
+	} else {
+		fmt.Fprintf(&b, "\tlimit, offset := PageParams(req, 50, 200)\n\tq := queries.New(db.From(ctx))\n\trows, err := q.List%s(ctx, queries.List%sParams{Limit: limit, Offset: offset})\n\tif err != nil {\n\t\treturn schema.%sList{}, err\n\t}\n", plural, plural, name)
+		fmt.Fprintf(&b, "\ttotal, err := q.Count%s(ctx)\n\tif err != nil {\n\t\treturn schema.%sList{}, err\n\t}\n", plural, name)
+	}
 	fmt.Fprintf(&b, "\titems := make([]schema.%s, len(rows))\n\tfor i, row := range rows {\n\t\titems[i] = to%s(row)\n\t}\n\treturn schema.%sList{Items: items, Total: int(total)}, nil\n}\n\n", name, name, name)
 
 	fmt.Fprintf(&b, "func get%s(ctx context.Context, req *router.Request[router.None]) (schema.%s, error) {\n\tvar out schema.%s\n\t%s", name, name, name, idParse)
-	fmt.Fprintf(&b, "\trow, err := queries.New(db.From(ctx)).Get%s(ctx, id)\n\tif errors.Is(err, pgx.ErrNoRows) {\n\t\treturn out, router.NotFound(\"%s\")\n\t}\n\tif err != nil {\n\t\treturn out, err\n\t}\n\treturn to%s(row), nil\n}\n\n", name, lower, name)
+	fmt.Fprintf(&b, "\trow, err := queries.New(db.From(ctx)).Get%s(ctx, %s)\n\tif errors.Is(err, pgx.ErrNoRows) {\n\t\treturn out, router.NotFound(\"%s\")\n\t}\n\tif err != nil {\n\t\treturn out, err\n\t}\n\treturn to%s(row), nil\n}\n\n", name, byID, lower, name)
 
-	fmt.Fprintf(&b, "func create%s(ctx context.Context, req *router.Request[schema.Create%s]) (schema.%s, error) {\n\tin := req.Body\n\trow, err := queries.New(db.From(ctx)).Create%s(ctx, queries.Create%sParams{\n", name, name, name, name, name)
-	for _, f := range r.creatable() {
-		fmt.Fprintf(&b, "\t\t%s: %s,\n", sqlcName(f), r.toParam(f, "in."+exported(f.Name), false))
+	// sqlc passes no argument for a query without parameters, the value
+	// itself for one, and a Params struct for more.
+	body, in := "router.None", ""
+	if r.editable() {
+		body, in = "schema.Create"+name, "\tin := req.Body\n"
 	}
-	fmt.Fprintf(&b, "\t})\n\tif err != nil {\n\t\treturn schema.%s{}, err\n\t}\n\treq.Status(http.StatusCreated)\n\treturn to%s(row), nil\n}\n\n", name, name)
-
-	fmt.Fprintf(&b, "func update%s(ctx context.Context, req *router.Request[schema.Update%s]) (schema.%s, error) {\n\tvar out schema.%s\n\t%s\tin := req.Body\n\trow, err := queries.New(db.From(ctx)).Update%s(ctx, queries.Update%sParams{\n\t\t%s: id,\n", name, name, name, name, idParse, name, name, sqlcName(id))
-	for _, f := range r.creatable() {
-		fmt.Fprintf(&b, "\t\t%s: %s,\n", sqlcName(f), r.toParam(f, "in."+exported(f.Name), true))
+	fmt.Fprintf(&b, "func create%s(ctx context.Context, req *router.Request[%s]) (schema.%s, error) {\n%s\trow, err := queries.New(db.From(ctx)).Create%s(ctx", name, body, name, in, name)
+	switch params := r.creatable(); {
+	case len(params) == 0 && r.Owner == nil:
+		b.WriteString(")\n")
+	case len(params) == 0:
+		fmt.Fprintf(&b, ", %s)\n", owner)
+	case len(params) == 1 && r.Owner == nil:
+		fmt.Fprintf(&b, ", %s)\n", r.toParam(params[0], "in."+exported(params[0].Name), false))
+	default:
+		fmt.Fprintf(&b, ", queries.Create%sParams{\n%s", name, ownerField)
+		for _, f := range params {
+			fmt.Fprintf(&b, "\t\t%s: %s,\n", sqlcName(f), r.toParam(f, "in."+exported(f.Name), false))
+		}
+		b.WriteString("\t})\n")
 	}
-	fmt.Fprintf(&b, "\t})\n\tif errors.Is(err, pgx.ErrNoRows) {\n\t\treturn out, router.NotFound(\"%s\")\n\t}\n\tif err != nil {\n\t\treturn out, err\n\t}\n\treturn to%s(row), nil\n}\n\n", lower, name)
+	fmt.Fprintf(&b, "\tif err != nil {\n\t\treturn schema.%s{}, err\n\t}\n\treq.Status(http.StatusCreated)\n\treturn to%s(row), nil\n}\n\n", name, name)
 
+	if r.editable() {
+		fmt.Fprintf(&b, "func update%s(ctx context.Context, req *router.Request[schema.Update%s]) (schema.%s, error) {\n\tvar out schema.%s\n\t%s\tin := req.Body\n\trow, err := queries.New(db.From(ctx)).Update%s(ctx, queries.Update%sParams{\n\t\t%s: id,\n%s", name, name, name, name, idParse, name, name, sqlcName(id), ownerField)
+		for _, f := range r.creatable() {
+			fmt.Fprintf(&b, "\t\t%s: %s,\n", sqlcName(f), r.toParam(f, "in."+exported(f.Name), true))
+		}
+		fmt.Fprintf(&b, "\t})\n\tif errors.Is(err, pgx.ErrNoRows) {\n\t\treturn out, router.NotFound(\"%s\")\n\t}\n\tif err != nil {\n\t\treturn out, err\n\t}\n\treturn to%s(row), nil\n}\n\n", lower, name)
+	}
+
+	if r.Owner != nil {
+		byID = strings.Replace(byID, "queries.Get", "queries.Delete", 1)
+	}
 	fmt.Fprintf(&b, "func delete%s(ctx context.Context, req *router.Request[router.None]) (router.None, error) {\n\tvar out router.None\n\t%s", name, idParse)
-	fmt.Fprintf(&b, "\tn, err := queries.New(db.From(ctx)).Delete%s(ctx, id)\n\tif err != nil {\n\t\treturn out, err\n\t}\n\tif n == 0 {\n\t\treturn out, router.NotFound(\"%s\")\n\t}\n\treturn out, nil\n}\n\n", name, lower)
+	fmt.Fprintf(&b, "\tn, err := queries.New(db.From(ctx)).Delete%s(ctx, %s)\n\tif err != nil {\n\t\treturn out, err\n\t}\n\tif n == 0 {\n\t\treturn out, router.NotFound(\"%s\")\n\t}\n\treturn out, nil\n}\n\n", name, byID, lower)
 
-	fmt.Fprintf(&b, "// to%s maps a row to the API type.\nfunc to%s(row queries.%s) schema.%s {\n\treturn schema.%s{\n", name, name, schema.SQLCName(snake(name)), name, name)
+	fmt.Fprintf(&b, "// to%s maps a row to the API type.\nfunc to%s(row queries.%s) schema.%s {\n\treturn schema.%s{\n", name, name, schema.SQLCRowType(r.Model.Table), name, name)
 	for _, f := range r.Model.Fields {
 		fmt.Fprintf(&b, "\t\t%s: %s,\n", exported(f.Name), r.fromRow(f, "row."+sqlcName(f)))
 	}
 	b.WriteString("\t}\n}\n")
-	_ = lowerPlural
 	return b.String()
 }
 
@@ -367,14 +493,14 @@ func Int32sFrom(in []int) []int32 {
 func appendTypes(root string, s *schema.Schema, r *Resource) (bool, error) {
 	var b strings.Builder
 	name := r.Name()
-	if s.Model("Create"+name) == nil {
+	if s.Model("Create"+name) == nil && r.editable() {
 		fmt.Fprintf(&b, "\n// Body of POST %s.\ntype Create%s {\n", r.Path(), name)
 		for _, f := range r.creatable() {
 			b.WriteString("  " + fieldLine(f, false) + "\n")
 		}
 		b.WriteString("}\n")
 	}
-	if s.Model("Update"+name) == nil {
+	if s.Model("Update"+name) == nil && r.editable() {
 		fmt.Fprintf(&b, "\n// Body of PATCH %s/{id}: every field optional, absent fields keep their value.\ntype Update%s {\n", r.Path(), name)
 		for _, f := range r.creatable() {
 			b.WriteString("  " + fieldLine(f, true) + "\n")
@@ -431,24 +557,72 @@ func fieldLine(f *schema.Field, optional bool) string {
 	return strings.Join(parts, " ")
 }
 
-// registerRoutes adds handlers.<Model>Routes(r) to routes.go and the
-// handlers import, unless present. It reports false when routes.go does
-// not have the expected shape, so the caller prints the line to add.
-func registerRoutes(root, module, line string) (bool, error) {
+// registration is the routes.go code of a resource: for one that is not
+// public, a group behind auth.Require() and the call on it.
+type registration struct {
+	// call is "handlers.<Model>Routes(", the mark of a registration.
+	call string
+	// group is the group's variable, "" for a public resource.
+	group, prefix string
+}
+
+func (r *Resource) registration() registration {
+	reg := registration{call: "handlers." + r.Name() + "Routes("}
+	if !r.Model.Public {
+		reg.group, reg.prefix = lowerFirst(r.Plural()), r.Path()
+	}
+	return reg
+}
+
+// lines renders the registration.
+func (reg registration) lines() []string {
+	if reg.group == "" {
+		return []string{reg.call + "r)"}
+	}
+	return []string{
+		fmt.Sprintf("%s := r.Group(%q, auth.Require())", reg.group, reg.prefix),
+		reg.call + reg.group + ")",
+	}
+}
+
+// registerRoutes adds the registration to routes.go with the imports it
+// needs, unless the resource is registered already. With force, a
+// registration without sign-in (handlers.<Model>Routes(r)) moves behind
+// auth.Require(). It reports false when routes.go does not have the
+// expected shape, so the caller prints the lines to add.
+func registerRoutes(root, module string, reg registration, force bool) (bool, error) {
 	p := filepath.Join(root, "routes.go")
 	data, err := os.ReadFile(p)
 	if err != nil {
 		return false, nil
 	}
 	src := string(data)
-	if strings.Contains(src, line) {
-		return true, nil
+	if strings.Contains(src, reg.call) {
+		old := "\t" + reg.call + "r)\n"
+		if !force || reg.group == "" || !strings.Contains(src, old) {
+			return true, nil
+		}
+		src = strings.Replace(src, old, "", 1)
 	}
 	marker := "func routes(r *router.Router) {\n"
 	if !strings.Contains(src, marker) {
 		return false, nil
 	}
-	src = strings.Replace(src, marker, marker+"\t"+line+"\n", 1)
+	if reg.group != "" {
+		// A variable of that name in routes() already: take another.
+		if strings.Contains(src, "\t"+reg.group+" := ") || strings.Contains(src, "\t"+reg.group+", ") {
+			reg.group += "Group"
+		}
+		authImp := fmt.Sprintf("\t%q\n", "github.com/agim/lidza/packs/auth")
+		routerImp := fmt.Sprintf("\t%q\n", "github.com/agim/lidza/pkg/router")
+		if !strings.Contains(src, authImp) {
+			if !strings.Contains(src, routerImp) {
+				return false, nil
+			}
+			src = strings.Replace(src, routerImp, authImp+routerImp, 1)
+		}
+	}
+	src = strings.Replace(src, marker, marker+"\t"+strings.Join(reg.lines(), "\n\t")+"\n", 1)
 	imp := fmt.Sprintf("\t%q\n", module+"/handlers")
 	if !strings.Contains(src, imp) {
 		// Into the app's own import group when there is one, else a group
@@ -466,6 +640,46 @@ func registerRoutes(root, module, line string) (bool, error) {
 		}
 	}
 	return true, os.WriteFile(p, []byte(schema.Gofmt(src)), 0o644)
+}
+
+// markPublic adds @public to the model's line in schema.lidza.
+func markPublic(root string, m *schema.Model) error {
+	p := filepath.Join(root, schema.FileName)
+	data, err := os.ReadFile(p)
+	if err != nil {
+		return err
+	}
+	lines := strings.Split(string(data), "\n")
+	if m.Line < 1 || m.Line > len(lines) {
+		return fmt.Errorf("%s: model %s not found", schema.FileName, m.Name)
+	}
+	line := lines[m.Line-1]
+	brace := strings.Index(line, "{")
+	if brace < 0 || !strings.Contains(line[:brace], m.Name) {
+		return fmt.Errorf("%s: model %s not found on line %d", schema.FileName, m.Name, m.Line)
+	}
+	lines[m.Line-1] = strings.TrimRight(line[:brace], " \t") + " @public " + line[brace:]
+	return os.WriteFile(p, []byte(strings.Join(lines, "\n")), 0o644)
+}
+
+// staleOwnerInputs names the Create and Update types in schema.lidza that
+// still carry the owner field (written before the generator scoped the
+// model): the handlers ignore it, and the body should not take it.
+func staleOwnerInputs(s *schema.Schema, r *Resource) []string {
+	if r.Owner == nil {
+		return nil
+	}
+	var out []string
+	for _, name := range []string{"Create" + r.Name(), "Update" + r.Name()} {
+		if t := s.Model(name); t != nil {
+			for _, f := range t.Fields {
+				if f.Name == r.Owner.Name {
+					out = append(out, name)
+				}
+			}
+		}
+	}
+	return out
 }
 
 // Naming helpers, matching pkg/schema for the schema side and sqlc for

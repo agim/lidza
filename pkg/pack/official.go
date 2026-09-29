@@ -74,7 +74,7 @@ var Officials = []Official{
 			"REALTIME_MAX_CONNS=10000",
 		},
 		Notes: []string{
-			"register the endpoint in routes.go: r.Handle(\"GET /api/v1/realtime\", realtime.Handler())",
+			"register the endpoint in routes.go behind auth.Require(): r.Handle(\"GET /api/v1/realtime\", realtime.Handler(realtime.Authorize(fn))); without Authorize no topic can be subscribed, realtime.AllowAll opens them all",
 			"publish from a handler: realtime.From(ctx).Publish(ctx, \"topic\", value)",
 			"browser: new WebSocket(`ws://${location.host}/api/v1/realtime?topics=topic`)",
 		},

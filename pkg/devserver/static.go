@@ -54,6 +54,11 @@ func Static(dist fs.FS, opts ...Option) http.Handler {
 		if name != "" && exists(dist, name+"/index.html") && servePage(w, r, dist, name+"/index.html", false, o.head) {
 			return
 		}
+		// Any other HTML file is a page too: its inline code needs the
+		// policy's hashes.
+		if strings.HasSuffix(name, ".html") && name != "index.html" && exists(dist, name) && servePage(w, r, dist, name, false, nil) {
+			return
+		}
 		// index.html is written directly: FileServer would redirect it to "/".
 		if name != "" && name != "index.html" && exists(dist, name) {
 			if strings.HasPrefix(name, "assets/") {
@@ -78,6 +83,7 @@ func Static(dist fs.FS, opts ...Option) http.Handler {
 			return
 		}
 		index, status := withHead(o.head, r, index)
+		allowInline(w.Header(), index)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-cache")
 		w.WriteHeader(status)
@@ -94,6 +100,7 @@ func servePage(w http.ResponseWriter, r *http.Request, dist fs.FS, file string, 
 		return false
 	}
 	page, status := withHead(head, r, page)
+	allowInline(w.Header(), page)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
 	if varies {

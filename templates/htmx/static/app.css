@@ -4,3 +4,8 @@ nav { display: flex; gap: 1rem; padding: 0.75rem 1.5rem; border-bottom: 1px soli
 nav a { color: #2a2224; text-decoration: none; }
 main { max-width: 48rem; margin: 0 auto; padding: 1.5rem; }
 form { display: flex; gap: 0.5rem; align-items: center; }
+/* htmx's request indicator; htmx would inject these as an inline <style>,
+   which the default Content-Security-Policy refuses (htmx-config in the
+   layout turns that off). */
+.htmx-indicator { opacity: 0; }
+.htmx-request .htmx-indicator, .htmx-request.htmx-indicator { opacity: 1; transition: opacity 200ms ease-in; }

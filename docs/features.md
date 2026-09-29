@@ -8,7 +8,7 @@ does not reimplement).
 | Capability | Status | Where |
 |---|---|---|
 | CLI tools | done | `lidza new` (with `--packs` and `--agent`), `setup`, `dev`, `build`, `check`, `gen`, `gen resource`, `pack`, `db`, `test`, `verify`, `ship`, `update`, `benchmark`, `doctor`, `api`, `snippet`, `recipe`, `decision`, `credentials`, `mcp` |
-| CRUD | done | `lidza gen resource <Model>`: queries, Create/Update/List types with the model's rules, five typed routes, row mapping, registration; edited freely after |
+| CRUD | done | `lidza gen resource <Model>`: queries, Create/Update/List types with the model's rules, five typed routes, row mapping, registration behind `auth.Require()`; an owned model (`ownerId`, `userId`, `@ref(User)`) scoped to the signed-in user with 404 for another's rows, `@public` (`--public`) for open ones; edited freely after; rule L018 |
 | Hot module replacement | done | Vite HMR through the `lidza dev` proxy; Go handlers rebuild and restart, frontend state is kept |
 | API route parameter parsing | done | `net/http` patterns, `req.Param("id")` in typed handlers; the client takes them as a typed object; a group's prefix may hold them too (`r.Group("/api/v1/posts/{id}")`) |
 | Automated asset bundling | done | Vite: minify, hash, code split, `dist/` embedded in the binary. Image optimization: phase 3 template build |
@@ -19,7 +19,7 @@ does not reimplement).
 | Application lifecycle hooks (server) | done | `lidza.App.OnStart`, `OnReady`, `OnShutdown` |
 | HTTP middleware pipeline | done | `pkg/middleware`; request id, log, recovery and deadline on every API route; `router.Use`, `App.Middleware` |
 | CORS | done | `middleware.CORS`; off by default, same-origin is the normal case |
-| Built-in vulnerability shields | done | secure headers on every response, CSP and HSTS opt-in, the Permissions-Policy set per app (`App.PermissionsPolicy`, `middleware.AllowGeolocation` for location); body limits; SQL injection prevented by parameterized queries only (`sqlc`, `pgx`); XSS by template escaping plus CSP; CSRF tokens arrive with cookie sessions |
+| Built-in vulnerability shields | done | secure headers on every response, a strict CSP by default outside dev (`middleware.DefaultCSP`, extended with `middleware.AddCSP`; the served pages' own inline scripts allowed by hash), HSTS opt-in, the Permissions-Policy set per app (`App.PermissionsPolicy`, `middleware.AllowGeolocation` for location); body limits; SQL injection prevented by parameterized queries only (`sqlc`, `pgx`); XSS by template escaping plus CSP; CSRF tokens arrive with cookie sessions |
 | Environment configuration injection | done | `pkg/env`: typed struct from `.env`, `.env.<mode>` and the environment; secrets never in `lidza.json` |
 | Form validation | done | rules in `schema.lidza`; generated `Validate()` runs before every typed handler (422 with field errors, `ApiError.fields` on the client); `validators.ts` in `@lidza/client` applies the same rules in the browser |
 | Automatic error boundaries | done | React error boundary in the template; Go panic recovery returning a JSON error |
@@ -28,7 +28,7 @@ does not reimplement).
 | Client SDKs | done | `@lidza/client` (TypeScript) always; `lidza_client` (Dart) when `lidza.json` names a directory under `sdk.dart`; a `router.Stream` route (server-sent events) is an async iterable in TypeScript and a `Stream` in Dart; a `router.File` route (upload) takes a File or Blob with upload progress in TypeScript, bytes in Dart |
 | Object-relational mapping | done | `sqlc` via the `db` pack: SQL in `db/queries/*.sql`, `lidza gen` writes typed Go; see "Decisions" |
 | Dependency injection | done | `lidza.Services`: packs and `OnStart` provide values by type, handlers read them with `lidza.Service[T](ctx)`; explicit, no scanning |
-| Data binding | done | handlers publish over the `realtime` pack, `realtime.Authorize` decides per topic who may subscribe; `useLive(topics)` in the template invalidates the matching queries |
+| Data binding | done | handlers publish over the `realtime` pack, `realtime.Authorize` decides per topic who may subscribe (closed without it); `useLive(topics)` in the template invalidates the matching queries |
 | Session management and token auth | done | `auth` pack: argon2id, JWT access tokens, refresh sessions in Postgres, cookies or bearer, `auth.Require`; browser sessions slide (the middleware renews an expired access cookie from the refresh cookie) |
 | Job queues and background workers | done | `jobs` pack: Postgres queue, bounded workers, retries, delayed runs, idempotency keys (`Unique`: one pending or running job per kind and key across nodes), a per-kind cap on running jobs across nodes (`Concurrency`), recurring schedules (`Every`, `Daily`, `DailyAt` for several times a day, `Weekly` in a time zone; one job per due time across nodes), release of running jobs at shutdown; heavy work in a pack capability |
 | Localization | done | `i18n` pack: catalogs embedded, locale per request, numbers, currency, dates, catalog endpoint; react and svelte pages translate with `src/i18n.ts`, prerendered once per locale and served in the visitor's, catalog in the page; mail templates per language (`mail/<name>.<lang>.txt.tmpl`) in the request's locale or `Accept-Language` |

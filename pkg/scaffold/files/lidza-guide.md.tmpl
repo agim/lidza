@@ -51,7 +51,7 @@ app is always at one address: http://127.0.0.1:3000.
 | `lidza gen` | `schema.lidza` to `schema/schema.go`, `db/schema.sql`, a migration in `db/migrations` when models changed; handlers to `.lidza/openapi.json` and the client in `.lidza/client`. `lidza dev` runs it on every change. |
 | `lidza context` | writes `.lidza/context.json`: routes, handler signatures, Rust exports. |
 | `lidza mcp` | MCP server on stdio; see "Agent interface". |
-| `lidza gen resource <Model>` | queries, `Create/Update/<Model>List` types, `handlers/<table>.go` with list, get, create, patch, delete under `/api/v1/<plural>`, registered in `routes.go`. Needs the `db` pack. |
+| `lidza gen resource <Model> [--public]` | queries, `Create/Update/<Model>List` types, `handlers/<table>.go` with list, get, create, patch, delete under `/api/v1/<plural>`, registered in `routes.go` behind `auth.Require()`. An owned model (`ownerId`, `userId` or `@ref(User)`) is scoped to the signed-in user. `--public` marks the model `@public`: open routes, no owner. Needs the `db` and `auth` packs (`auth` not with `--public`). |
 | `lidza update [--migrate]` | moves the CLI and this app's framework module to the newest release together, regenerates, refreshes the deployment files, and names pending migrations. |
 | `lidza gen deploy [--force]` | the `Dockerfile`, `.dockerignore` and `deploy/{{.Name}}.service` from the current templates; a file the app changed is kept and named unless `--force`. |
 | `lidza pack add <name>` | enables an official pack: `db`, `auth`, `jobs`, `mail`, `llm`, `storage`, `cache`, `i18n`, `realtime`, `analytics`, `geo`, `media`. |
@@ -63,10 +63,10 @@ app is always at one address: http://127.0.0.1:3000.
 | `lidza test --e2e [--install]` | builds the app, starts the binary with `.env.test`, runs the Playwright suite in `e2e/`; `--install` fetches the browser when missing. The sign-in and analytics rate limits are raised for the run (every account signs up from 127.0.0.1) unless `.env.test` sets them; the Go tests keep the real limits. Rows the suite needs that no page creates (data a sync job would fetch) go in `e2e/seed.sql`, loaded into the test database before each run; write it to be rerun (`ON CONFLICT DO NOTHING`). |
 | `lidza setup [--packs db,auth,mail] [--agent claude]` | on an existing app: enables the packs (db added when one needs it), writes `.env` from `.env.example` with a random `AUTH_SECRET` and the app's database, writes `.env.test`, generates, creates and migrates the dev and test databases, installs `node_modules`, installs the agent CLI when asked, makes the first commit. `lidza new --packs ...` runs it for a new app. Rerunning is safe. |
 | `lidza ship [--domains a.example.com] [--email ops@example.com] [--no-e2e]` | before a deploy: `lidza verify`, the browser suite against the built binary, the production build, `deploy/production.env`; stops at the first failure. Then it names the settings the enabled packs need in production that neither the credentials nor `deploy.env` hold, or hold with a development-only value (`CACHE_URL`, `APP_URL`, `LLM_PROVIDER=fake`). The app's production settings that are not secrets (`MAIL_PROVIDER`, `STORAGE_BUCKET`, `STORAGE_PREFIX`) go in `lidza.json` under `deploy.env`, which ship writes into `deploy/production.env` on every run; a name that looks like a secret there is refused. |
-| `lidza verify [--json] [--no-test]` | before a commit: regenerates and requires the generated files to be staged, runs the checks, runs the Go tests. The pre-commit hook in `.githooks/` runs it (`git commit --no-verify` skips once; `lidza verify --install-hook` sets it up again). |
+| `lidza verify [--json] [--no-test] [--allow-test-changes]` | before a commit: regenerates and requires the generated files to be staged, refuses staged changes that weaken the tests, runs the checks, runs the Go tests. The pre-commit hook in `.githooks/` runs it (`git commit --no-verify` skips once; `lidza verify --install-hook` sets it up again). The test guard compares the staged changes with `HEAD` and names each file and line that deletes a test file (`*_test.go`, `*.spec.ts`, `*.test.ts(x)`), adds `t.Skip`, `t.Skipf`, `t.SkipNow`, `test.skip`, `it.skip`, `describe.skip`, `.only` or `.fixme`, or removes more assertions (`t.Error`, `t.Fatal`, `expect(`, `assert.`) from a file than it adds. A deliberate change is confirmed with `LIDZA_ALLOW_TEST_CHANGES=1 git commit ...` (or `lidza verify --allow-test-changes`); one skip with a stated reason passes with a `// lidza:allow-skip <reason>` comment on its line or the line above. A test is never weakened to make it pass: if it is wrong, the agent says so and the developer confirms. |
 | `lidza doctor` | toolchain, services, `node_modules`, pack builds, e2e browser; each missing item with its fix. |
 | `lidza pack scaffold <name>` | creates `packs/<name>` with a crate and an example capability; `lidza pack build` compiles it. |
-| `lidza db migrate\|rollback\|status` | applies `db/migrations` (db pack, `DATABASE_URL` from `.env`). |
+| `lidza db migrate\|rollback\|status [--production]` | applies `db/migrations` (db pack, `DATABASE_URL` from `.env`). `migrate` and `rollback` refuse a database on another host (not a Unix socket, `localhost` or a loopback address) unless `--production` is given; the MCP tools never pass it. |
 | `lidza benchmark [--vus 500] [--duration 1m]` | runs `benchmarks/scale_test.js` with k6 against the running app; heap and goroutines must stay flat. |
 | `lidza version` | prints the framework version. |
 | `go test ./...` | Go tests. |
@@ -354,32 +354,53 @@ is validated on the server and callable from the client by name.
 ### Add a resource
 
 Give a model the five standard routes (list, get, create, patch, delete)
-backed by Postgres. Needs the `db` pack (`lidza pack add db`).
+backed by Postgres. Needs the `db` and `auth` packs (`lidza pack add db`,
+`lidza pack add auth`).
 
-1. Declare a `model` in `schema.lidza`:
+1. Declare a `model` in `schema.lidza`. A post belongs to its author:
 
    ```
    model Post {
      id        uuid     @id @default(uuid())
+     ownerId   uuid     @index
      title     string   @min(1) @max(200)
      body      string?
      createdAt time     @default(now())
    }
    ```
 
+   The model is owned when it has an owner field, the first of: a field
+   `ownerId`, a field `userId`, a field with `@ref(User)` or
+   `@ref(AuthUser)`. The owner is `uuid` or `string` and required: it
+   holds the signed-in user's id. A model whose rows belong to no one
+   and that visitors may change (rare) is marked `@public`
+   (`model Tag @public {`).
 2. Run `lidza gen resource Post` (MCP: `lidza_gen_resource` with
    `model: "Post"`): it writes `db/queries/post.sql`, the
    `CreatePost`, `UpdatePost` and `PostList` types in `schema.lidza`,
-   `handlers/post.go` with the routes under `/api/v1/posts`, and the
-   registration line in `routes.go`.
+   `handlers/post.go` with the routes under `/api/v1/posts`, and in
+   `routes.go` a group behind `auth.Require()` with the routes on it:
+
+   ```go
+   posts := r.Group("/api/v1/posts", auth.Require())
+   handlers.PostRoutes(posts)
+   ```
+
+   For an owned model every statement filters by `owner_id` (list,
+   count, get, update, delete), create sets it from
+   `auth.CurrentUser(ctx).ID`, the `Create` and `Update` types leave it
+   out, and another user's row is a 404. `--public` (MCP: `public: true`)
+   marks the model `@public`: no owner, routes open to visitors.
 3. Run `lidza db migrate` (MCP: `lidza_db_migrate`) to apply the new
    migration in `db/migrations/`.
-4. The generated handlers file is ordinary code: mount the routes on a
-   group (`handlers.PostRoutes(r.Group("/api/v1/posts", auth.Require()))`),
-   add filters or ownership checks there (the snippet
-   `resource-handlers` scopes every query to the signed-in user).
-   Regenerate with `--force` to reset it.
-5. `lidza check`, then `lidza test`.
+4. The generated files are ordinary code: add filters or routes there.
+   `lidza check` flags a query on an owned table that neither filters by
+   nor sets the owner (L018); a query meant to cross users (an admin
+   page) takes `-- lidza:ignore L018` on the line before its
+   `-- name:`. Regenerate with `--force` to reset the handlers (files
+   generated before owners were scoped keep their old code until then).
+5. `lidza check`, then `lidza test`: a second user lists nothing and
+   gets 404 on the first user's id.
 
 ### Add sign-in
 
@@ -507,17 +528,20 @@ OAuth flow.
 
 ### Scope a query to the signed-in user
 
-Make a resource answer only with the rows its user may see: the
-generated handlers are unscoped, and a row another user may not read is
-a 404, never a 403 (the reply must not confirm it exists).
+Make a resource answer only with the rows its user may see: a row
+another user may not read is a 404, never a 403 (the reply must not
+confirm it exists).
 
-1. Mount the routes behind `auth.Require()` and take the user from the
-   context: `user := auth.CurrentUser(ctx).ID` (never from the body; drop
-   `ownerId` from the `Create` and `Update` types the generator wrote).
-2. Owned rows: add `AND owner_id = $N` to every statement in
-   `db/queries/<table>.sql` (list, count, get, update, delete) and pass
-   the user; set `owner_id` from the user on create. The snippets
-   `queries` and `resource-handlers` are this case.
+1. Behind `auth.Require()`, take the user from the context:
+   `user := auth.CurrentUser(ctx).ID`, never from the body.
+2. Owned rows (one user each): give the model an owner field (`ownerId
+   uuid`) and `lidza gen resource` writes the scoped queries and
+   handlers (recipe "Add a resource"). By hand: `AND owner_id = $N` in
+   every statement of `db/queries/<table>.sql` (list, count, get,
+   update, delete), `owner_id` set from the user on create, and no
+   `ownerId` in the `Create` and `Update` types. `lidza check` flags a
+   query that misses it (L018). The snippets `queries` and
+   `resource-handlers` are this case.
 3. Shared rows (a team, a project): keep a membership table
    (`Membership { projectId @ref(Project, cascade), userId @ref(User,
    cascade), role }` with `@@unique(projectId, userId)`) and join on it:
@@ -785,7 +809,9 @@ the page subscribes and refetches.
 2. Name topics by resource, `project:<id>`, in one function both sides
    use.
 3. Mount the socket behind auth and authorize each topic; without
-   `Authorize`, any signed-in user can subscribe to any topic:
+   `Authorize` no topic can be subscribed (`realtime.AllowAll` opens
+   every topic to every connection, for topics that carry nothing
+   private):
 
    ```go
    live := realtime.Handler(realtime.Authorize(func(r *http.Request, topic string) bool {
@@ -935,6 +961,112 @@ pack, with the app deciding who may read them.
    row and check `Stat` returns `storage.ErrNotFound`. The snippet
    `storage-handler` and `routes_test.go` in the reference app show it.
 5. `lidza check`, then `lidza test`.
+
+### Receive a webhook
+
+Take a provider's deliveries (a payment provider's events, a mail
+provider's bounces) on a route that verifies the signature on the raw
+body, refuses replays and handles each delivery once, with
+`pkg/webhook`. Never decode the body or trust a field before it is
+verified.
+
+1. Seal the signing secret for each mode: `lidza credentials set
+   dev.PAYMENTS_WEBHOOK_SECRET=whsec_... production.PAYMENTS_WEBHOOK_SECRET=whsec_...`
+   (the sandbox endpoint's secret for `lidza dev`, the live one for
+   production). Without the setting every delivery is refused with 503
+   and the log names it; an endpoint never runs unverified. A value
+   saved from the admin pages applies within a minute.
+2. Register the endpoint in `routes.go`, on `r` and not in a group
+   behind `auth.Require()` (the provider has no session):
+
+   ```go
+   r.Handle("POST /api/v1/webhooks/payments", webhook.Stripe("PAYMENTS_WEBHOOK_SECRET", handlers.PaymentEvent))
+   r.Handle("POST /api/v1/webhooks/mail", webhook.Mailgun("MAIL_WEBHOOK_SIGNING_KEY", handlers.MailEvent))
+   ```
+
+   Other providers: `webhook.HMAC("NAME", "X-Hub-Signature-256", h,
+   webhook.Prefix("sha256="), webhook.IDHeader("X-GitHub-Delivery"))`
+   for an HMAC-SHA256 of the body in a header (`webhook.Base64()` when
+   it is base64); `webhook.Token("NAME", "Authorization", h,
+   webhook.Prefix("Bearer "))` or `webhook.TokenField("NAME",
+   "auth.token", h)` for a shared token in a header or a JSON field.
+   A token does not cover the body: use it only when the provider
+   offers nothing better. Stripe and Mailgun sign a timestamp, and a
+   delivery more than 5 minutes off is refused (`webhook.Tolerance`);
+   the body is capped at 1 MB (`webhook.MaxBody`, raise it for inbound
+   mail with attachments) and the handler has 10 seconds
+   (`webhook.Timeout`).
+3. Write the handler in `handlers/webhooks.go`:
+
+   ```go
+   func PaymentEvent(ctx context.Context, d *webhook.Delivery) error {
+   	ev, err := d.StripeEvent()
+   	if err != nil {
+   		return err
+   	}
+   	switch ev.Type {
+   	case "checkout.session.completed":
+   		var s struct {
+   			ID        string `json:"id"`
+   			Reference string `json:"client_reference_id"`
+   		}
+   		if err := json.Unmarshal(ev.Data.Object, &s); err != nil {
+   			return err
+   		}
+   		return jobs.From(ctx).Enqueue(ctx, "order.paid", schema.OrderPaid{OrderID: s.Reference})
+   	}
+   	return nil // events the app ignores are acknowledged too
+   }
+   ```
+
+   `d.Body` is the verified body, `d.Decode(&v)` decodes it,
+   `d.MailgunEvent()` reads a mail event (`Event`, `Recipient`,
+   `Severity`), `d.Form` holds a form post's fields. Returning nil
+   replies 200; an error replies 500 and the provider retries. Keep
+   the handler short and put slow work in a job.
+4. Each delivery id (the event id, the mail token, the `IDHeader`) is
+   handled once: a repeat replies 200 without calling the handler, and
+   an id whose handler failed is handled again on the retry. The ids
+   live in the `webhook_delivery` table when the db pack runs, kept
+   for 30 days (`webhook.Retention`); with several nodes the db pack is
+   required. Without it, dev and test keep them in memory and
+   production refuses (503) unless `webhook.WithStore` names a store.
+   The provider may still send two events about the same object, out
+   of order: write with upserts keyed by the object's id.
+5. Test it in `routes_test.go`, signing as the provider does:
+
+   ```go
+   func TestPaymentWebhook(t *testing.T) {
+   	t.Setenv("PAYMENTS_WEBHOOK_SECRET", "whsec_test")
+   	srv := lidzatest.Start(t, app())
+   	body := `{"id":"evt_1","type":"checkout.session.completed","data":{"object":{"id":"cs_1","client_reference_id":"42"}}}`
+   	sig := webhook.StripeSignature("whsec_test", srv.Clock.Now(), []byte(body))
+   	res := srv.JSON(t, "POST", "/api/v1/webhooks/payments", json.RawMessage(body), nil, lidzatest.Header("Stripe-Signature", sig))
+   	if res.StatusCode != http.StatusOK {
+   		t.Fatal(res.StatusCode)
+   	}
+   }
+   ```
+
+   Keep the body compact and free of `<`, `>` and `&`: `srv.JSON`
+   compacts and escapes a `json.RawMessage`, and the signature covers
+   the exact bytes. `srv.Clock.Now()` signs at the app's time, so a
+   test that moves the clock (`srv.Clock.Advance(10*time.Minute)`)
+   sees an old delivery refused. Also check a wrong secret gets 401. `webhook.MailgunSignature(key, t, token)`
+   builds the mail provider's `signature` object, `webhook.HMACSignature`
+   an HMAC header's value.
+6. By hand against `lidza dev`, sign with the dev secret:
+
+   ```sh
+   body='{"id":"evt_local_1","type":"ping"}'; t=$(date +%s)
+   sig=$(printf '%s.%s' "$t" "$body" | openssl dgst -sha256 -hmac "whsec_..." -r | cut -d' ' -f1)
+   curl -si http://127.0.0.1:3000/api/v1/webhooks/payments -H "Stripe-Signature: t=$t,v1=$sig" -d "$body"
+   ```
+
+   A provider's CLI that forwards its sandbox events (`stripe listen
+   --forward-to 127.0.0.1:3000/api/v1/webhooks/payments`) prints the
+   secret to seal as `dev.PAYMENTS_WEBHOOK_SECRET`.
+7. `lidza check`, then `lidza test`.
 
 ### Add the admin pages
 
@@ -1236,8 +1368,9 @@ Official Go packs, configured from `.env` (see `.env.example` after
   "Add a page".
 - `realtime`: `realtime.From(ctx).Publish(ctx, topic, value)` and
   `r.Handle("GET /api/v1/realtime", realtime.Handler(realtime.Authorize(fn)))`
-  behind `auth.Require()`; `fn(r, topic)` decides per topic, and without
-  it every topic is open to every connection. Recipe: "Publish live
+  behind `auth.Require()`; `fn(r, topic)` decides per topic. Without it
+  no topic can be subscribed; `realtime.Authorize(realtime.AllowAll)`
+  opens every topic to every connection. Recipe: "Publish live
   updates".
 - `mail`: `mail.From(ctx).Send(ctx, mail.Message{To, Subject, Template:
   "verify", Data: data})` renders `mail/verify.txt.tmpl` and
@@ -1371,8 +1504,25 @@ Every response carries `X-Content-Type-Options: nosniff`,
 strict-origin-when-cross-origin` and `Permissions-Policy: camera=(),
 microphone=(), geolocation=()`. `lidza.App` in `main.go` sets the rest:
 
-- `CSP`: the Content-Security-Policy. Production builds only; Vite's dev
-  server injects inline scripts.
+- `CSP`: the Content-Security-Policy. Empty sends
+  `middleware.DefaultCSP` everywhere but `lidza dev` (Vite's dev server
+  injects inline scripts, so dev sends none): scripts, styles, fonts,
+  fetches and WebSockets from the app's own origin only, images also from
+  `data:` and `blob:`, no plugins, no framing, forms posting to the app.
+  The built pages hold under it: the binary adds the hash of each inline
+  script and `<style>` a page carries (the router's hydration payload) to
+  the header it serves the page with, and JSON-LD from `Head` is data the
+  policy does not govern. An app that loads from another origin (a
+  script CDN, an image host, a payment form) extends the default rather
+  than appending to it, since a browser keeps only the first of a
+  repeated directive:
+  `CSP: middleware.AddCSP(middleware.DefaultCSP, "script-src", "https://js.example.com")`,
+  one call per directive. `middleware.NoCSP` sends none. Inline
+  `<script>`, `style=` attributes and `on...=` handlers in hand-written
+  HTML are refused; put the code in a file.{{if eq .Template "htmx"}}
+  `hx-on` and `hx-vars` evaluate code and are refused too; the layout
+  turns off htmx's injected indicator styles (the rules are in
+  `static/app.css`).{{end}}
 - `PermissionsPolicy`: replaces the default. A page that asks for the
   visitor's location (`navigator.geolocation`) needs
   `PermissionsPolicy: middleware.AllowGeolocation` (`geolocation=(self)`,
@@ -1397,7 +1547,7 @@ reads the plain values and its section, which wins. The CLI reads as
 `dev` (`lidza test` as `test`), so a production value never reaches a
 development command. In production the key travels as
 `LIDZA_MASTER_KEY` (the file's contents) and the sealed file is deployed
-with the binary. A key pasted into source fails `lidza check` (L010). The admin pages save changes to the database, sealed
+with the binary. A key, a token or a database URL with its password pasted into the Go or frontend source fails `lidza check` (L010). The admin pages save changes to the database, sealed
 with the same key, and the mail, llm and storage packs pick them up
 without a restart; settings a pack refuses are not kept. Saved values
 win over the file: `list` and `show` include them, and `unset NAME`
@@ -1485,7 +1635,14 @@ maps or slices (L001) and goroutines started in handlers (L002), because
 state belongs in Postgres or Valkey and background work in a bounded
 worker or the jobs pack; hand-written `fetch` of `/api` (L003); imports
 of packages that do not exist or are not declared (L004); handler types
-not declared in `schema.lidza` (L005).
+not declared in `schema.lidza` (L005); a call whose error is dropped, as
+a statement or assigned to `_` (L016: handle it or return it; deferred
+calls, a `Close` before a `return`, printing to the terminal and writes
+to a buffer or a hash are exempt); and a run of at least 8 statements
+that repeats another in the app, names and literals aside (L017: reuse
+the first or extract a function both call). `// lidza:ignore L016` on
+the line, or the line before, exempts one call; above a function,
+`// lidza:ignore L017` exempts the function.
 Rate limit a route group with `r.Use(middleware.RateLimit(middleware.RateLimitOptions{RPS: 10, Burst: 20}))`
 (per node; a limit across nodes counts with the cache pack's `Incr`);
 guard an outbound dependency with `resilience.New(...)`.
@@ -1500,7 +1657,7 @@ image that runs as a non-root user on port 3000 (the binary, `db/`,
 needs a volume at `STORAGE_DIR`, so production uses `s3`); `deploy/{{.Name}}.service`
 runs the binary under systemd from `/opt/{{.Name}}` (install commands in
 its header). Migrations ship as files in `db/`: apply them with `lidza db
-migrate` in the deploy step or `DB_MIGRATE=true` at start. `lidza ship
+migrate --production` in the deploy step or `DB_MIGRATE=true` at start. `lidza ship
 --domains app.example.com` records the domain in `lidza.json` and writes
 `deploy/production.env`, the environment of the deployed process
 (plus `DATABASE_URL` and `LIDZA_MASTER_KEY`). TLS: with

@@ -43,6 +43,13 @@ func TestRender(t *testing.T) {
 	if strings.Contains(text, "func writeError") {
 		t.Error("unexported function rendered")
 	}
+	public := strings.Join(AppPackages(dir), ",")
+	if !strings.Contains(public, "pkg/webhook") {
+		t.Errorf("pkg/webhook is not public: %s", public)
+	}
+	if hook, _ := Render(dir, nil, "Stripe"); !strings.Contains(hook, "func Stripe(setting string, h Handler, opts ...Option) *Endpoint") {
+		t.Errorf("webhook API missing:\n%s", hook)
+	}
 	only, _ := Render(dir, []string{"pkg/router"}, "notfound")
 	if !strings.Contains(only, "func NotFound(") || strings.Contains(only, "func Route[") {
 		t.Errorf("filter:\n%s", only)

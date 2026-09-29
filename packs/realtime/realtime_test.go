@@ -17,10 +17,15 @@ import (
 
 func serve(t *testing.T, h *Hub) *httptest.Server {
 	t.Helper()
+	return serveWith(t, h, Handler(Authorize(AllowAll)))
+}
+
+func serveWith(t *testing.T, h *Hub, handler http.Handler) *httptest.Server {
+	t.Helper()
 	s := lidza.NewServices()
 	lidza.Provide(s, h)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		Handler().ServeHTTP(w, r.WithContext(lidza.WithServices(r.Context(), s)))
+		handler.ServeHTTP(w, r.WithContext(lidza.WithServices(r.Context(), s)))
 	}))
 	t.Cleanup(srv.Close)
 	return srv
@@ -202,6 +207,62 @@ func TestAuthorize(t *testing.T) {
 	h.Publish(ctx, "public2", "hello")
 	if m := read(t, conn); m.Topic != "public2" {
 		t.Fatalf("got %+v, want the public2 message first (private must not arrive)", m)
+	}
+}
+
+// TestClosedByDefault: without Authorize, Handler and Hub.ServeHTTP
+// accept the connection but subscribe it to nothing, on the query string
+// or a later subscribe; server-side publishing still works.
+func TestClosedByDefault(t *testing.T) {
+	for name, handler := range map[string]func(*Hub) http.Handler{
+		"Handler":   func(*Hub) http.Handler { return Handler() },
+		"ServeHTTP": func(h *Hub) http.Handler { return h },
+	} {
+		t.Run(name, func(t *testing.T) {
+			h := New(Config{Buffer: 8, WriteTimeout: time.Second}, nil)
+			srv := serveWith(t, h, handler(h))
+			conn := dial(t, srv, "a,b")
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			if err := conn.Write(ctx, websocket.MessageText, []byte(`{"subscribe":["c"]}`)); err != nil {
+				t.Fatal(err)
+			}
+			// Give the reader time to handle the subscribe.
+			time.Sleep(100 * time.Millisecond)
+			for _, topic := range []string{"a", "b", "c"} {
+				if n := h.Subscribers(topic); n != 0 {
+					t.Fatalf("%s: %d subscribers, want 0", topic, n)
+				}
+			}
+			if err := h.Publish(ctx, "a", "x"); err != nil {
+				t.Fatalf("publish: %v", err)
+			}
+			rctx, rcancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+			defer rcancel()
+			if _, data, err := conn.Read(rctx); err == nil {
+				t.Fatalf("received %s on a refused topic", data)
+			}
+		})
+	}
+}
+
+// TestAllowAll opens every topic, on the query string and later.
+func TestAllowAll(t *testing.T) {
+	h := New(Config{Buffer: 8, WriteTimeout: time.Second}, nil)
+	conn := dial(t, serve(t, h), "a")
+	if err := conn.Write(context.Background(), websocket.MessageText, []byte(`{"subscribe":["b"]}`)); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) && (h.Subscribers("a") == 0 || h.Subscribers("b") == 0) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if h.Subscribers("a") != 1 || h.Subscribers("b") != 1 {
+		t.Fatalf("subscribers: a %d b %d", h.Subscribers("a"), h.Subscribers("b"))
+	}
+	h.Publish(context.Background(), "b", 1)
+	if m := read(t, conn); m.Topic != "b" {
+		t.Fatalf("got %+v", m)
 	}
 }
 

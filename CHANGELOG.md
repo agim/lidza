@@ -11,6 +11,79 @@ change. A release without one is additive: an app updates with
 
 ## Unreleased
 
+- Breaking: `lidza verify`, and so the pre-commit hook, refuses a
+  commit whose staged changes weaken the tests: a deleted test file
+  (`*_test.go`, `*.spec.ts`, `*.test.ts(x)`), an added `t.Skip`,
+  `t.Skipf`, `t.SkipNow`, `test.skip`, `it.skip`, `describe.skip`,
+  `.only` or `.fixme`, or a test file that loses more assertions
+  (`t.Error`, `t.Fatal`, `expect(`, `assert.`) than it gains. The new
+  step "tests not weakened" compares the index with `HEAD` (skipped on
+  the first commit) and names each file and line. Confirm a deliberate
+  change with `LIDZA_ALLOW_TEST_CHANGES=1 git commit ...` or
+  `lidza verify --allow-test-changes`; one skip with a stated reason
+  passes with a `// lidza:allow-skip <reason>` comment on its line or
+  the line above. The agent files and the guide say an agent never
+  weakens a test to make it pass, and tells the developer when a test
+  is wrong.
+- Breaking: `lidza db migrate` and `lidza db rollback` refuse a
+  `DATABASE_URL` on another host (not a Unix socket, `localhost` or a
+  loopback address) unless `--production` is given; a deploy step that
+  migrates a remote database adds the flag. `lidza db status`, `lidza
+  test` and `DB_MIGRATE=true` are unchanged. The MCP tools never pass
+  the flag. The command tools now carry MCP annotations:
+  `lidza_db_migrate` and `lidza_db_rollback` are destructive (a client
+  asks first), `lidza_db_status` and `lidza_doctor` read-only, the others
+  additive; before, every tool had mcp-go's default, destructive.
+- Breaking: `realtime.Handler()` without `realtime.Authorize` now refuses
+  every topic (the connection opens, nothing is subscribed), and so does
+  mounting the `Hub` itself. Pass `realtime.Authorize(fn)` deciding per
+  topic, or `realtime.Authorize(realtime.AllowAll)` for the old
+  behaviour. Publishing from the server is unchanged.
+- Breaking: an app that sets no `App.CSP` now sends a strict
+  Content-Security-Policy outside dev mode, `middleware.DefaultCSP`:
+  `default-src 'self'; script-src 'self'; style-src 'self'; img-src
+  'self' data: blob:; font-src 'self'; connect-src 'self'; object-src
+  'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'`.
+  `lidza dev` still sends none. Pages served from the build get the
+  hashes of their own inline scripts and styles (the router's hydration
+  payload) added to it; JSON-LD from `Head` needs none. An app that
+  loads scripts, images, fonts or API calls from another origin extends
+  it: `CSP: middleware.AddCSP(middleware.DefaultCSP, "script-src",
+  "https://js.example.com")`, one call per directive (appending
+  `"; script-src ..."` does not work: browsers keep the first). Inline
+  `<script>` or `style=` in hand-written HTML moves to a file.
+  `middleware.NoCSP` sends no policy.
+- New apps' CI runs govulncheck and, with a frontend,
+  `npm audit --omit=dev --audit-level=high`; new apps get
+  `.github/dependabot.yml` (Go modules, npm with a frontend, the
+  workflow's actions; weekly, minor and patch grouped; the framework
+  left to `lidza update`). An existing app can copy both from a new one
+  (`lidza new demo` in a scratch directory).
+- Verified inbound webhooks: `pkg/webhook`. `webhook.Stripe("NAME",
+  h)`, `webhook.Mailgun("NAME", h)` (JSON events and form posts),
+  `webhook.HMAC("NAME", header, h)` (an HMAC-SHA256 of the body, hex
+  or base64, after a `Prefix` such as `sha256=`), `webhook.Token` and
+  `webhook.TokenField` (a shared token in a header or a JSON field)
+  are http.Handlers for a route. The signature is checked on the raw
+  body in constant time before anything decodes it; a signed timestamp
+  more than 5 minutes off is refused; the body is capped at 1 MB and
+  the handler has 10 seconds. The secret is read by name through the
+  settings and credentials (`dev.NAME` / `production.NAME`); without
+  it every delivery is refused with 503 and a log line naming it. Each
+  delivery id (event id, token, `IDHeader`, or an `ID` func) is
+  handled once: a repeat replies 200 without the handler, a failed
+  handler releases the id for the retry. Ids live in the
+  `webhook_delivery` table when the db pack runs (created on first
+  use, 30 days, cleaned in bounded batches); dev and test fall back to
+  a bounded map, production without the db pack refuses unless
+  `webhook.WithStore` is given. `StripeSignature`, `MailgunSignature`
+  and `HMACSignature` sign deliveries for tests. New recipe "Receive a
+  webhook"; `lidza api` lists the package.
+- The htmx template's time zone script is a file
+  (`static/timezone.js`) and htmx's indicator styles live in
+  `static/app.css`, so its pages hold under the default policy; the
+  astro template writes styles and scripts as files instead of inlining
+  them into the pages.
 - install.sh in containers (cloud agents, CI images): with Go already
   installed, `lidza` landed in Go's bin directory, which nothing put on
   PATH, and the installer failed right after installing it; that
@@ -20,6 +93,51 @@ change. A release without one is additive: an app updates with
   package lists first; a fresh container has none, and Valkey was not
   found. Tested as root in a container without systemd: Postgres and
   Valkey installed and started.
+- Rule L010 reads the frontend source too (`src/`, generated files,
+  `node_modules` and `dist` skipped): a key there ships to every
+  browser. New shapes: Stripe secret and restricted keys (live and
+  test; publishable `pk_` keys are public and pass), Stripe webhook
+  secrets, JSON Web Tokens, and Postgres, MySQL and Redis URLs with a
+  password in them (placeholders such as `user:password@` and
+  `%s`/`${...}` interpolations pass).
+- Rule L016: a call whose error is dropped, as a statement or assigned
+  to `_`, type-checked. Deferred calls, a `Close` before a `return`,
+  `fmt.Print*` and `fmt.Fprint*` to the terminal, and writes to a
+  `bytes.Buffer`, a `strings.Builder` or a hash are exempt. A warning:
+  `--strict` (CI, `lidza verify`) fails on it. The reference app logs a
+  download cut short instead of dropping `io.Copy`'s error, and the
+  `htmx` template checks `fs.Sub`'s.
+- Rule L017: a run of at least 8 statements and 80 tokens that repeats
+  another in the app, the function's own names and every literal
+  aside (field, method and function names count, so resources of the
+  same shape over different queries are not copies). Reported once at
+  the copy, pointing at the first; `// lidza:ignore L017` above a
+  function exempts it.
+- `lidza gen resource` writes signed-in, owned resources by default.
+  The routes are registered on a group behind `auth.Require()`; without
+  the auth pack the generator says to add it or pass `--public`. A
+  model with an owner field (the first of `ownerId`, `userId`, a field
+  with `@ref(User)` or `@ref(AuthUser)`; `uuid` or `string`, required)
+  is scoped to the signed-in user: list, count, get, update and delete
+  filter by the owner column, create sets it from
+  `auth.CurrentUser(ctx).ID`, the `Create` and `Update` types leave it
+  out, and another user's row is a 404. `--public` (MCP: `public`)
+  marks the model with the new schema attribute `@public`: routes open
+  to visitors, rows not scoped. Files generated earlier are untouched;
+  `--force` regenerates them this way, moves a `handlers.<Model>Routes(r)`
+  line behind `auth.Require()` and names Create or Update types that
+  still take the owner.
+- `lidza gen resource` wrote handlers that did not compile for a model
+  whose `@table` differs from its name (the row type is named after the
+  table), for one with a single writable field (sqlc takes the value,
+  not a Params struct), and for one with none (an UPDATE with nothing to
+  set). The row type follows the table, a single field is passed as is,
+  and a model with nothing to change gets no update route and inserts
+  DEFAULT VALUES.
+- Rule L018 (warning): a query in `db/queries/*.sql` on an owned table
+  that neither filters by the owner column in its WHERE nor sets it in
+  an INSERT. A query meant to cross users (an admin page) takes
+  `-- lidza:ignore L018` on the line before its `-- name:`.
 
 ## v0.1.40 (2026-09-29)
 

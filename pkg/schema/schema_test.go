@@ -569,3 +569,55 @@ func TestDiffRef(t *testing.T) {
 		t.Fatal("no change should give no migration")
 	}
 }
+
+func TestOwner(t *testing.T) {
+	s, err := Parse(`model User {
+  id uuid @id
+}
+model Note {
+  id      uuid @id
+  ownerId uuid
+  title   string
+}
+model Post {
+  id       uuid @id
+  editorId uuid? @ref(User, setnull)
+  authorId uuid @ref(User)
+}
+model Membership {
+  id     uuid @id
+  userId string
+}
+model Tag @public {
+  id      uuid @id
+  ownerId uuid
+}
+model Category {
+  id   uuid @id
+  name string
+}
+type CreateNote {
+  ownerId uuid
+}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for model, want := range map[string]string{"Note": "ownerId", "Post": "editorId", "Membership": "userId", "Tag": "", "Category": "", "User": "", "CreateNote": ""} {
+		got := ""
+		if f := s.Owner(s.Model(model)); f != nil {
+			got = f.Name
+		}
+		if got != want {
+			t.Errorf("%s: owner %q, want %q", model, got, want)
+		}
+	}
+	if !s.Model("Tag").Public {
+		t.Error("@public not parsed")
+	}
+	if _, err := Parse("type T @public {\n  a string\n}"); err == nil {
+		t.Error("@public accepted on a type")
+	}
+	if _, err := Parse("model T @public(x) {\n  id uuid @id\n}"); err == nil {
+		t.Error("@public(x) accepted")
+	}
+}

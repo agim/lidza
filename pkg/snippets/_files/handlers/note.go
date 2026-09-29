@@ -1,6 +1,7 @@
-// Generated once by lidza gen resource Note, then scoped to the signed-in
-// user: every query takes the owner id, so one user never sees another's
-// notes. The routes are registered on a group behind auth.Require().
+// Generated once by lidza gen resource Note, scoped to the signed-in user
+// (Note has an ownerId): every query takes the owner id, so one user
+// never sees another's notes. The routes are registered on a group
+// behind auth.Require(). The stats and tags routes were added by hand.
 
 package handlers
 

@@ -1,6 +1,8 @@
 # CI for {{.Name}}: lidza verify --strict (generated files current, every
 # check clean, warnings included, Go tests) and the browser suite, against
 # Postgres and Valkey. The CLI is installed at the version go.mod requires.
+# Dependencies: govulncheck on the Go code{{if .Dist}}, npm audit on the runtime
+# packages{{end}}; .github/dependabot.yml proposes the updates.
 name: ci
 
 on:
@@ -53,11 +55,15 @@ jobs:
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 {{- if .Dist}}
       - run: npm ci --no-fund --no-audit
+      - name: npm audit (runtime dependencies, high and critical)
+        run: npm audit --omit=dev --audit-level=high
 {{- end}}
       - name: lidza verify --strict
         run: |
           git add -A
           lidza verify --strict
+      - name: govulncheck (known vulnerabilities in code the app calls)
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 {{- if .Dist}}
       - name: lidza test --e2e
         run: lidza test --e2e --install

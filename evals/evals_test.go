@@ -226,6 +226,104 @@ var adminPages = []admin.Page{{Name: "Refunds", Path: "refunds", Template: "refu
 	expect(t, check(t), expectation{code: "L014", severity: "warning", file: "adminpages.go", message: "Admin page Refunds"})
 }
 
+// A secret pasted into the frontend ships to every browser (L010); a
+// publishable key is public and passes.
+func TestSecretInFrontend(t *testing.T) {
+	edit(t, map[string]string{"src/pages/Pay.tsx": "const secret = '" + "sk_" + "live_4eC39HqLyjWDarjtT1zdp7dc0123'\nconst publishable = 'pk_live_51H8abcdefghijklmnopqrstuv'\n\nexport function Pay() {\n  return <p>{secret.length + publishable.length}</p>\n}\n"})
+	r := check(t)
+	expect(t, r, expectation{code: "L010", severity: "warning", layer: "frontend", file: "src/pages/Pay.tsx", message: "Stripe secret key"})
+	for _, d := range r.Diagnostics {
+		if d.Code == "L010" && d.Line != 1 {
+			t.Errorf("L010 on the publishable key:\n%s", dump(r))
+		}
+	}
+}
+
+// A query on an owned table (a model with ownerId) that does not filter
+// by the owner reaches every user's rows (L018); one exempted with
+// lidza:ignore is not reported.
+func TestUnscopedOwnedQuery(t *testing.T) {
+	if _, err := os.Stat(filepath.Join(app, "db")); err == nil {
+		t.Fatal("the eval app has a db directory; this case assumes none")
+	}
+	// The check regenerates db/ (DDL, lock, a migration) from the model:
+	// all of it goes when the test ends, and schema/schema.go is restored.
+	t.Cleanup(func() { os.RemoveAll(filepath.Join(app, "db")) })
+	goFile, err := os.ReadFile(filepath.Join(app, "schema", "schema.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	edit(t, map[string]string{
+		"schema/schema.go": string(goFile),
+		"+schema.lidza":    "\nmodel Product {\n  id      uuid   @id @default(uuid())\n  ownerId uuid   @index\n  name    string\n}\n",
+		"db/queries/product.sql": "-- name: ListProducts :many\nSELECT * FROM product ORDER BY name;\n\n" +
+			"-- name: MyProducts :many\nSELECT * FROM product WHERE owner_id = $1;\n\n" +
+			"-- lidza:ignore L018 (the admin page)\n-- name: AllProducts :many\nSELECT * FROM product;\n",
+	})
+	r := check(t)
+	expect(t, r, expectation{code: "L018", severity: "warning", file: "db/queries/product.sql", message: "ListProducts on product"})
+	for _, d := range r.Diagnostics {
+		if d.Code == "L018" && !strings.Contains(d.Message, "ListProducts") {
+			t.Errorf("unexpected: %s:%d %s", d.File, d.Line, d.Message)
+		}
+	}
+}
+
+// A dropped error is a warning (L016); a handled one is not.
+func TestDroppedError(t *testing.T) {
+	edit(t, map[string]string{"cleanup.go": `package main
+
+import "os"
+
+func cleanup(path string) error {
+	os.Remove(path + ".tmp")
+	return os.Remove(path)
+}
+
+var _ = cleanup
+`})
+	r := check(t)
+	expect(t, r, expectation{code: "L016", severity: "warning", layer: "go", file: "cleanup.go", message: "os.Remove"})
+	for _, d := range r.Diagnostics {
+		if d.Code == "L016" && d.Line != 6 {
+			t.Errorf("L016 on a returned error:\n%s", dump(r))
+		}
+	}
+}
+
+// A function copied with its names changed is a warning at the copy,
+// pointing at the first (L017).
+func TestDuplicatedCode(t *testing.T) {
+	body := func(name, v string) string {
+		return `func ` + name + `(items []string) (int, error) {
+	total := 0
+	for _, ` + v + ` := range items {
+		if ` + v + ` == "" {
+			continue
+		}
+		n, err := strconv.Atoi(` + v + `)
+		if err != nil {
+			return 0, fmt.Errorf("` + name + `: %w", err)
+		}
+		if n < 0 {
+			return 0, errors.New("negative")
+		}
+		total += n
+	}
+	if total > 100 {
+		total = 100
+	}
+	return total, nil
+}
+
+var _ = ` + name + `
+`
+	}
+	imports := "package main\n\nimport (\n\t\"errors\"\n\t\"fmt\"\n\t\"strconv\"\n)\n\n"
+	edit(t, map[string]string{"posts.go": imports + body("sumPosts", "p"), "tags.go": imports + body("sumTags", "tag")})
+	expect(t, check(t), expectation{code: "L017", severity: "warning", layer: "go", file: "tags.go", message: "posts.go:10"})
+}
+
 func TestFrontendCallsMissingOperation(t *testing.T) {
 	edit(t, map[string]string{"src/pages/Wrong.tsx": "import { api } from '@lidza/client'\n\nexport function Wrong() {\n  void api.hallo({ name: 'x' })\n  return null\n}\n"})
 	r := check(t)
@@ -257,7 +355,7 @@ func TestInaccessibleElement(t *testing.T) {
 }
 
 func TestGuidanceSurfaces(t *testing.T) {
-	for _, skill := range []string{"start-with-brief", "add-api-route", "add-resource", "scope-query-to-signed-in-user", "add-page", "set-head-of-page", "add-pack-capability", "add-mcp-tool", "send-email", "add-background-job", "publish-live-updates", "add-llm-feature", "store-file", "add-admin-pages", "extend-admin-pages", "add-recipe", "write-test"} {
+	for _, skill := range []string{"start-with-brief", "add-api-route", "add-resource", "scope-query-to-signed-in-user", "add-page", "set-head-of-page", "add-pack-capability", "add-mcp-tool", "send-email", "add-background-job", "publish-live-updates", "add-llm-feature", "store-file", "receive-webhook", "add-admin-pages", "extend-admin-pages", "add-recipe", "write-test"} {
 		for _, p := range []string{filepath.Join(".claude", "skills", skill, "SKILL.md"), filepath.Join(".agents", "skills", skill, "SKILL.md"), filepath.Join(".gemini", "commands", "lidza", skill+".toml")} {
 			if _, err := os.Stat(filepath.Join(app, p)); err != nil {
 				t.Errorf("%s missing", p)
@@ -329,7 +427,7 @@ func TestGuidanceSurfaces(t *testing.T) {
 		t.Fatal(err)
 	}
 	prompts, err := c.ListPrompts(ctx, mcp.ListPromptsRequest{})
-	if err != nil || len(prompts.Prompts) != 18 {
+	if err != nil || len(prompts.Prompts) != 19 {
 		t.Errorf("prompts: %v %d", err, len(prompts.Prompts))
 	}
 	tools, err := c.ListTools(ctx, mcp.ListToolsRequest{})

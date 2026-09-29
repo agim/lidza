@@ -69,9 +69,14 @@ kept and named, `--force` replaces it).
 Apply them either from a deploy step:
 
 ```sh
-lidza db migrate          # or, without the CLI on the host:
-DB_MIGRATE=true ./bin/<name>   # applies pending migrations at start, then serves
+lidza db migrate --production   # or, without the CLI on the host:
+DB_MIGRATE=true ./bin/<name>    # applies pending migrations at start, then serves
 ```
+
+`lidza db migrate` and `lidza db rollback` refuse a `DATABASE_URL` on
+another host (not a Unix socket, `localhost` or a loopback address)
+without `--production`, so a production URL left in a shell does not
+change that database by accident; the MCP tools never pass the flag.
 
 `DB_MIGRATE=true` on every node is safe: migrations are applied in one
 transaction each under a lock, so the second node finds nothing to do.

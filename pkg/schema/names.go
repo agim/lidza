@@ -135,17 +135,26 @@ func sqlcKeys(s *Schema) []sqlcKey {
 		}
 	}
 	for _, m := range s.Models {
-		singular := m.Table
-		if strings.HasSuffix(singular, "s") && !strings.HasSuffix(singular, "ss") {
-			singular = strings.TrimSuffix(singular, "s")
-		}
-		out = append(out, sqlcKey{singular, "table " + m.Table})
+		out = append(out, sqlcKey{singularTable(m.Table), "table " + m.Table})
 		for _, f := range m.Fields {
 			out = append(out, sqlcKey{snake(f.Name), "column " + m.Table + "." + snake(f.Name)})
 		}
 	}
 	return out
 }
+
+// singularTable is the name sqlc makes a table's row type from: the
+// table, a trailing s dropped (posts is Post, class stays Class).
+func singularTable(table string) string {
+	if strings.HasSuffix(table, "s") && !strings.HasSuffix(table, "ss") {
+		return strings.TrimSuffix(table, "s")
+	}
+	return table
+}
+
+// SQLCRowType is the Go type sqlc generates for a table's row: a model
+// with @table("store_products") reads rows of queries.StoreProduct.
+func SQLCRowType(table string) string { return SQLCName(singularTable(table)) }
 
 // Rename is a Go name that changed with a Līdza release.
 type Rename struct {

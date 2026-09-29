@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/agim/lidza/pkg/config"
@@ -46,6 +47,7 @@ func runGenResource(_ context.Context, args []string) error {
 	fs := flags("gen resource")
 	dir := fs.String("dir", ".", "project directory")
 	force := fs.Bool("force", false, "overwrite the handlers file")
+	public := fs.Bool("public", false, "a resource anyone may read and write: marks the model @public, routes not behind sign-in, rows not scoped to a user")
 	var model string
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
 		model, args = args[0], args[1:]
@@ -63,13 +65,24 @@ func runGenResource(_ context.Context, args []string) error {
 	if cfg == nil {
 		return errors.New("gen resource needs a lidza.json project")
 	}
-	res, err := crud.Generate(abs, crud.Options{Model: model, Module: inspect.ModulePath(abs), Force: *force})
+	res, err := crud.Generate(abs, crud.Options{Model: model, Module: inspect.ModulePath(abs), Force: *force, Public: *public, Auth: slices.Contains(cfg.Packs, "lidza/auth")})
 	if err != nil {
 		return err
 	}
 	fmt.Printf("resource %s: wrote %s\n", model, strings.Join(res.Files, ", "))
+	switch {
+	case res.Public:
+		fmt.Printf("resource %s: public (@public): open to visitors, rows not scoped to a user\n", model)
+	case res.Owner != "":
+		fmt.Printf("resource %s: owned by %s, the signed-in user; routes behind auth.Require(); another user's row is a 404\n", model, res.Owner)
+	default:
+		fmt.Printf("resource %s: routes behind auth.Require(); no owner field, so every signed-in user sees every row\n", model)
+	}
+	for _, t := range res.StaleInputs {
+		fmt.Printf("schema.lidza: %s still takes %s, which the handlers ignore: remove it\n", t, res.Owner)
+	}
 	if !res.Registered {
-		fmt.Printf("add to routes.go: %s\n", res.RoutesLine)
+		fmt.Printf("add to routes.go (func routes):\n\t%s\n", strings.ReplaceAll(res.RoutesLine, "\n", "\n\t"))
 	}
 	if err := generateAll(abs, cfg, os.Stdout); err != nil {
 		return err

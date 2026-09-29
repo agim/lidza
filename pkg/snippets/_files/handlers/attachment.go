@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"regexp"
 
@@ -84,7 +85,10 @@ func downloadAttachment(w http.ResponseWriter, r *http.Request) {
 	defer rc.Close()
 	w.Header().Set("Content-Type", obj.ContentType)
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	io.Copy(w, rc)
+	if _, err := io.Copy(w, rc); err != nil {
+		// The headers are sent: the client gets a short body, the log the cause.
+		slog.WarnContext(ctx, "attachment download cut short", "note", note.ID, "err", err)
+	}
 }
 
 // deleteAttachment removes a note's object; called when the note goes.

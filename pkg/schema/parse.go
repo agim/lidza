@@ -118,7 +118,8 @@ func (p *parser) enum(rest string) (*Enum, error) {
 	return e, nil
 }
 
-// block parses a model or type: "Name [@table("x")] {" then fields until "}".
+// block parses a model or type: "Name [@table("x")] [@public] {" then
+// fields until "}".
 func (p *parser) block(rest string, persisted bool) (*Model, error) {
 	name, tail := cut(rest)
 	m := &Model{Name: name, Line: p.i, Persisted: persisted}
@@ -131,10 +132,14 @@ func (p *parser) block(rest string, persisted bool) (*Model, error) {
 	}
 	for _, a := range splitAttrs(tail[:brace]) {
 		an, arg := attr(a)
-		if an != "table" || !persisted {
+		switch {
+		case an == "table" && persisted:
+			m.Table = strings.Trim(arg, `"`)
+		case an == "public" && persisted && arg == "":
+			m.Public = true
+		default:
 			return nil, fmt.Errorf("line %d: %s: unknown attribute @%s", p.i, name, an)
 		}
-		m.Table = strings.Trim(arg, `"`)
 	}
 	if persisted && m.Table == "" {
 		m.Table = snake(name)

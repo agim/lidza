@@ -11,6 +11,11 @@ change. A release without one is additive: an app updates with
 
 ## Unreleased
 
+- New apps get `appMiddleware()` in `start.go`, wired as
+  `App.Middleware` in the generated `main.go`: middleware around the
+  whole app (rate limits, a www redirect) without editing `main.go`. An
+  older app adds `Middleware: appMiddleware(),` to `main.go` and the
+  function to `start.go`. The scaffold writes its Go files through gofmt.
 - `lidza.json`'s `deploy.env` holds the app's production settings that
   are not secrets (`MAIL_PROVIDER`, `STORAGE_BUCKET`): `lidza ship` writes
   them into `deploy/production.env` on every run (it rewrites the file)

@@ -5,6 +5,7 @@ import (
 	"github.com/agim/lidza/packs/db"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -154,7 +155,7 @@ func TestNewEveryTemplate(t *testing.T) {
 				t.Error("htmx: .tmpl suffix not stripped")
 			}
 			main, _ := os.ReadFile(filepath.Join(dir, "main.go"))
-			if !strings.Contains(string(main), "Frontend: pages()") || strings.Contains(string(main), "go:embed") {
+			if !regexp.MustCompile(`Frontend:\s+pages\(\)`).MatchString(string(main)) || strings.Contains(string(main), "go:embed") {
 				t.Errorf("htmx main.go:\n%s", main)
 			}
 			pages, _ := os.ReadFile(filepath.Join(dir, "pages.go"))

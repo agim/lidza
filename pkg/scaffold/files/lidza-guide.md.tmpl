@@ -15,7 +15,7 @@ app is always at one address: http://127.0.0.1:3000.
 ```
 {{.Name}}/
 ├── main.go          entrypoint: lidza.Run(...). Do not edit.
-├── start.go         onStart: register job handlers, provide services; the app's hook.
+├── start.go         onStart: register job handlers, provide services; appMiddleware: middleware around the whole app (rate limits, redirects). The app's hooks.
 ├── routes.go        API handlers. Add routes here (or in packages it calls).
 ├── schema.lidza     data shapes: models (tables), types (API shapes), enums
 ├── schema/          generated Go structs with Validate(). Do not edit.

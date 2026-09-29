@@ -8,6 +8,7 @@ import (
 	"embed"
 	"errors"
 	"fmt"
+	"go/format"
 	"io"
 	"io/fs"
 	"os"
@@ -416,6 +417,15 @@ func renderBytes(src string, data templateData) ([]byte, error) {
 	var buf bytes.Buffer
 	if err := t.Execute(&buf, data); err != nil {
 		return nil, err
+	}
+	// Go files come out as gofmt writes them, whatever the template's
+	// spacing: a field one template adds realigns the others.
+	if strings.HasSuffix(strings.TrimSuffix(src, ".tmpl"), ".go") {
+		formatted, err := format.Source(buf.Bytes())
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", src, err)
+		}
+		return formatted, nil
 	}
 	return buf.Bytes(), nil
 }

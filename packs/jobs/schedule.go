@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -12,8 +13,8 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-// A Schedule says when a recurring job is due. Every, Daily and Weekly
-// build one; an app may implement its own (a cron library, say).
+// A Schedule says when a recurring job is due. Every, Daily, DailyAt and
+// Weekly build one; an app may implement its own (a cron library, say).
 type Schedule interface {
 	// Next returns the first due time strictly after t.
 	Next(t time.Time) time.Time
@@ -53,31 +54,59 @@ func (e every) validate() error {
 // named zone ("Europe/Tirane"; "" is UTC). On the day clocks skip clock
 // (02:30 when they jump from 02:00 to 03:00), the job runs once, moved
 // forward by the jump (03:30); on the day clocks go back over it, it runs
-// once, not twice.
-func Daily(clock, zone string) Schedule { return newCalendar(-1, clock, zone) }
+// once, not twice. For several times a day, use DailyAt.
+func Daily(clock, zone string) Schedule { return newCalendar(-1, []string{clock}, zone) }
+
+// DailyAt is Daily at several times of day in one time zone:
+// DailyAt("Europe/Tirane", "02:00", "10:00", "18:00") runs three times a
+// local day, at those wall-clock times whatever the zone's offset from
+// UTC that day. Each time follows Daily's daylight-saving rules; two
+// times a clock change moves onto one instant run once. The spec lists
+// the times in order: "daily 02:00,10:00,18:00 Europe/Tirane".
+func DailyAt(zone string, clocks ...string) Schedule { return newCalendar(-1, clocks, zone) }
 
 // Weekly is Daily on one weekday: Weekly(time.Monday, "09:00",
 // "Europe/Tirane").
 func Weekly(day time.Weekday, clock, zone string) Schedule {
-	return newCalendar(day, clock, zone)
+	return newCalendar(day, []string{clock}, zone)
 }
 
 type calendar struct {
-	day          time.Weekday // -1 for every day
-	hour, minute int
-	clock, zone  string
-	loc          *time.Location
-	err          error
+	day    time.Weekday // -1 for every day
+	clocks []clockTime  // in order of the day, no repeats
+	zone   string
+	loc    *time.Location
+	err    error
 }
 
-func newCalendar(day time.Weekday, clock, zone string) *calendar {
-	c := &calendar{day: day, clock: clock, zone: zone, loc: time.UTC}
-	t, err := time.Parse("15:04", clock)
-	if err != nil {
-		c.err = fmt.Errorf("jobs: schedule time %q: want 24-hour HH:MM", clock)
+// clockTime is one time of day, as written and as read.
+type clockTime struct {
+	text         string
+	hour, minute int
+}
+
+func newCalendar(day time.Weekday, clocks []string, zone string) *calendar {
+	c := &calendar{day: day, zone: zone, loc: time.UTC}
+	if len(clocks) == 0 {
+		c.err = errors.New("jobs: schedule needs a time of day")
 		return c
 	}
-	c.hour, c.minute = t.Hour(), t.Minute()
+	seen := map[int]bool{}
+	for _, clock := range clocks {
+		t, err := time.Parse("15:04", clock)
+		if err != nil {
+			c.err = fmt.Errorf("jobs: schedule time %q: want 24-hour HH:MM", clock)
+			return c
+		}
+		if m := t.Hour()*60 + t.Minute(); !seen[m] {
+			seen[m] = true
+			c.clocks = append(c.clocks, clockTime{clock, t.Hour(), t.Minute()})
+		}
+	}
+	sort.Slice(c.clocks, func(i, j int) bool {
+		a, b := c.clocks[i], c.clocks[j]
+		return a.hour*60+a.minute < b.hour*60+b.minute
+	})
 	if day < -1 || day > time.Saturday {
 		c.err = fmt.Errorf("jobs: schedule weekday %d", day)
 		return c
@@ -95,6 +124,9 @@ func newCalendar(day time.Weekday, clock, zone string) *calendar {
 
 func (c *calendar) validate() error { return c.err }
 
+// Next is the earliest of a date's times after t, on the first date that
+// has one. time.Date places each time on its date: a skipped wall-clock
+// time moves forward by the jump, a repeated one is taken once.
 func (c *calendar) Next(t time.Time) time.Time {
 	if c.err != nil {
 		return time.Time{}
@@ -107,9 +139,15 @@ func (c *calendar) Next(t time.Time) time.Time {
 		if c.day >= 0 && noon.Weekday() != c.day {
 			continue
 		}
-		at := time.Date(noon.Year(), noon.Month(), noon.Day(), c.hour, c.minute, 0, 0, c.loc)
-		if at.After(t) {
-			return at
+		var best time.Time
+		for _, ct := range c.clocks {
+			at := time.Date(noon.Year(), noon.Month(), noon.Day(), ct.hour, ct.minute, 0, 0, c.loc)
+			if at.After(t) && (best.IsZero() || at.Before(best)) {
+				best = at
+			}
+		}
+		if !best.IsZero() {
+			return best
 		}
 	}
 	return time.Time{} // unreachable: a week always has the day
@@ -120,10 +158,15 @@ func (c *calendar) String() string {
 	if zone == "" {
 		zone = "UTC"
 	}
-	if c.day < 0 {
-		return "daily " + c.clock + " " + zone
+	texts := make([]string, len(c.clocks))
+	for i, ct := range c.clocks {
+		texts[i] = ct.text
 	}
-	return "weekly " + c.day.String()[:3] + " " + c.clock + " " + zone
+	clock := strings.Join(texts, ",")
+	if c.day < 0 {
+		return "daily " + clock + " " + zone
+	}
+	return "weekly " + c.day.String()[:3] + " " + clock + " " + zone
 }
 
 // scheduled is one registered schedule.
@@ -228,7 +271,7 @@ func (q *Queue) Schedules(ctx context.Context) ([]ScheduleInfo, error) {
 }
 
 // zoneOf is the time zone a schedule's times read best in: its own for
-// Daily and Weekly, UTC otherwise.
+// Daily, DailyAt and Weekly, UTC otherwise.
 func zoneOf(s Schedule) *time.Location {
 	if c, ok := s.(*calendar); ok && c.err == nil {
 		return c.loc

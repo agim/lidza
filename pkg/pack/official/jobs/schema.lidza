@@ -1,3 +1,6 @@
+// Background jobs (jobs.Queue). uniqueKey is set by jobs.Unique while the
+// job is pending or running and cleared when it finishes; NULLs do not
+// collide, so the unique index holds one live job per kind and key.
 model Job @table("job") {
   id          uuid   @id @default(uuid())
   kind        string
@@ -10,7 +13,9 @@ model Job @table("job") {
   finishedAt  time?
   lastError   text?
   createdAt   time   @default(now())
+  uniqueKey   string?
   @@index(state, runAt)
+  @@unique(kind, uniqueKey)
 }
 
 // Recurring schedules (jobs.Queue.Schedule): one row per scheduled kind

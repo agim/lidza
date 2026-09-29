@@ -637,11 +637,23 @@ the handler later with retries, on this node or another. Recurring work
    jobs.FromServices(s).Handle("notify.task", handlers.NotifyTask)
    ```
 
+   A kind that must not overlap with itself (a sync against one outside
+   account, a rebuild of one index) takes a cap that holds across every
+   node: `Handle("catalog.sync", handlers.CatalogSync,
+   jobs.Concurrency(1))`. Jobs over the cap wait as pending while the
+   workers run other kinds; no advisory lock in the handler. Every node
+   that handles the kind declares the same cap.
 5. Enqueue from the handler that caused it: `jobs.From(ctx).Enqueue(ctx,
    "notify.task", schema.NotifyTask{...})`, or inside a transaction
    `EnqueueTx(ctx, tx, ...)` so the job is committed with the write and
    never runs for one that rolled back. `jobs.RunAt(t)` delays one run.
-   Never do the work in the request as a fallback.
+   Never do the work in the request as a fallback. When many requests
+   can ask for the same work (every view of a post that lacks its
+   thumbnails), give it a key: `Enqueue(ctx, "post.thumbnails", p,
+   jobs.Unique("post:"+id))` stores one job while one with that kind and
+   key is pending or running, on any node, and returns that job's id;
+   `jobs.Existed(&found)` says whether it was already there. Once the
+   job is done or failed, the key queues new work again.
 6. Work on a timetable (a weekly digest, a sync every 15 minutes) is a
    schedule in `start.go`, not a job that enqueues its next run:
 
@@ -656,11 +668,12 @@ the handler later with retries, on this node or another. Recurring work
    `jobs.Every(15*time.Minute)` runs at :00, :15, :30 and :45;
    `jobs.Daily("06:30", zone)` and `jobs.Weekly(day, "09:00", zone)`
    run at a clock time in a time zone ("" is UTC), once on the days the
-   clocks change. The payload (here `nil`) goes with every run. However
+   clocks change; `jobs.DailyAt(zone, "02:00", "10:00", "18:00")` runs
+   at several clock times a day. The payload (here `nil`) goes with every run. However
    many nodes run, one job is enqueued per due time; after downtime one
    missed run is enqueued, not one per missed time. The `job_schedule`
-   table comes from `schema.lidza`: `lidza gen`, then `lidza db
-   migrate`. The admin Jobs page lists each schedule with its next and
+   table, like the job table's `uniqueKey` column, comes from
+   `schema.lidza`: `lidza gen`, then `lidza db migrate`. The admin Jobs page lists each schedule with its next and
    last run.
 7. Test it: the job runs a moment after the reply. For mail,
    `mail.From(srv.Context()).WaitFor(...)`; otherwise poll

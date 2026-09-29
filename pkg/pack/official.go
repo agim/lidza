@@ -231,6 +231,7 @@ var Officials = []Official{
 		},
 		Notes: []string{
 			"store: obj, err := storage.From(ctx).Put(ctx, \"avatars/\"+id+\".png\", r, storage.PutOptions{}) (content type detected); Get, Stat, List, Delete",
+			"uploads through the API: router.Route(g, \"PUT /api/v1/posts/{id}/image\", uploadImage, router.UploadLimit(10<<20)) with In = router.File; Put(ctx, key, req.Body.Body, storage.PutOptions{ContentType: req.Body.ContentType}); the client has api.uploadImage({ id }, file, { onProgress })",
 			"browsers: PresignGet(ctx, key, ttl) for a private object, PresignPut for a direct upload, URL(key) with STORAGE_PUBLIC_URL; or mount storage.Handler(\"/api/v1/files/\") behind auth.Require()",
 			"tests: STORAGE_PROVIDER=local and STORAGE_DIR under a temporary directory; nothing leaves the machine",
 			"never import a vendor SDK (lidza check L008) and never write files to the local disk (os.WriteFile, L009): the pack keeps them; agents: the MCP tool lidza_storage lists what is stored",

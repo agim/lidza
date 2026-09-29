@@ -7,6 +7,7 @@ What the platform does for an agent, checked end to end on a fresh app:
 | a fresh app | `lidza check` reports nothing |
 | a hand-written `fetch('/api/...')` | L003 warning naming `@lidza/client` |
 | an import `package.json` does not declare | L004 error with the `npm install` line |
+| a JSX attribute `name="from" value={...}`, a declared import across lines | no L004 |
 | an import of a framework package that does not exist | L004 error, and the go tool's `go get` advice is gone |
 | a handler with types outside `schema.lidza` | L005 warning per type |
 | a package-level map, a goroutine in a handler | L001 and L002 warnings |

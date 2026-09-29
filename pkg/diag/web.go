@@ -50,9 +50,21 @@ var webExt = map[string]bool{".ts": true, ".tsx": true, ".js": true, ".jsx": tru
 
 var (
 	fetchAPI = regexp.MustCompile("\\bfetch\\(\\s*[`'\"]/api")
-	// import x from 'y', import 'y', export ... from 'y', import('y'),
-	// require('y').
-	importFrom = regexp.MustCompile(`(?:\bfrom\s*|\bimport\s*\(?\s*|\brequire\(\s*|^\s*import\s+)['"]([^'"\n]+)['"]`)
+	// The module specifiers of real imports only, so a "from" in JSX
+	// (name="from" value={...}) or in text is not one:
+	//
+	//   - import x from 'y', import { a, b } from 'y' (across lines),
+	//     import type { T } from 'y', export { a } from 'y',
+	//     export * as ns from 'y': a statement opening its line whose
+	//     clause holds only names, braces, commas and *;
+	//   - import 'y' opening its line;
+	//   - import('y') and require('y') anywhere.
+	importSpecs = []*regexp.Regexp{
+		regexp.MustCompile(`(?m)^[ \t]*(?:import|export)\s[\w\s{},*$]*?\bfrom\s*['"]([^'"\n]+)['"]`),
+		regexp.MustCompile(`(?m)^[ \t]*import\s*['"]([^'"\n]+)['"]`),
+		regexp.MustCompile(`\bimport\s*\(\s*['"]([^'"\n]+)['"]`),
+		regexp.MustCompile(`\brequire\(\s*['"]([^'"\n]+)['"]`),
+	}
 )
 
 func checkWebFile(rel, content string, declared map[string]bool) []Diagnostic {
@@ -71,19 +83,34 @@ func checkWebFile(rel, content string, declared map[string]bool) []Diagnostic {
 			out = append(out, Diagnostic{Layer: "frontend", Tool: "lidza rules", Severity: "warning", Code: "L003", File: rel, Line: i + 1, Column: loc[0] + 1,
 				Message: "hand-written fetch of /api: call the API through @lidza/client (api.<operation>), generated from the handlers and checked by lidza check"})
 		}
-		if declared == nil {
-			continue
-		}
-		for _, m := range importFrom.FindAllStringSubmatchIndex(l, -1) {
-			spec := l[m[2]:m[3]]
+	}
+	if declared == nil {
+		return out
+	}
+	// Line starts, to place a specifier found in the whole file.
+	starts := make([]int, len(lines))
+	for i, off := 1, 0; i < len(lines); i++ {
+		off += len(lines[i-1]) + 1
+		starts[i] = off
+	}
+	for _, re := range importSpecs {
+		for _, m := range re.FindAllStringSubmatchIndex(content, -1) {
+			spec := content[m[2]:m[3]]
+			i := sort.Search(len(starts), func(k int) bool { return starts[k] > m[2] }) - 1
 			name, bare := packageName(spec)
 			if !bare || declared[name] || ignored(i, "L004") {
 				continue
 			}
-			out = append(out, Diagnostic{Layer: "frontend", Tool: "lidza rules", Severity: "error", Code: "L004", File: rel, Line: i + 1, Column: m[2] + 1,
+			out = append(out, Diagnostic{Layer: "frontend", Tool: "lidza rules", Severity: "error", Code: "L004", File: rel, Line: i + 1, Column: m[2] - starts[i] + 1,
 				Message: "import of " + name + ", which package.json does not declare: add it with `npm install " + name + "` (or `--save-dev`), or use a declared package"})
 		}
 	}
+	sort.SliceStable(out, func(a, b int) bool {
+		if out[a].Line != out[b].Line {
+			return out[a].Line < out[b].Line
+		}
+		return out[a].Column < out[b].Column
+	})
 	return out
 }
 

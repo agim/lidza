@@ -3,6 +3,7 @@ package sdk
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http/httptest"
 	"os"
 	"os/exec"
@@ -144,6 +145,82 @@ configure({ baseUrl: process.argv[2] })
 	case <-closed:
 	case <-time.After(5 * time.Second):
 		t.Fatal("leaving the loop did not close the request")
+	}
+}
+
+// TestTypeScriptUpload runs the generated client in node against a
+// router.File route in a group with a wildcard prefix: the file goes out
+// raw with its type and name, and an over-limit body is an ApiError 413.
+func TestTypeScriptUpload(t *testing.T) {
+	tsc := findTSC(t)
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node not found")
+	}
+	type stored struct {
+		ID          string `json:"id"`
+		Name        string `json:"name"`
+		ContentType string `json:"contentType"`
+		Text        string `json:"text"`
+	}
+	r := router.New()
+	post := r.Group("/api/v1/posts/{id}")
+	router.Route(post, "PUT /api/v1/posts/{id}/image", func(ctx context.Context, req *router.Request[router.File]) (stored, error) {
+		data, err := io.ReadAll(req.Body.Body)
+		if err != nil {
+			return stored{}, err
+		}
+		return stored{ID: req.Param("id"), Name: req.Body.Name, ContentType: req.Body.ContentType, Text: string(data)}, nil
+	}, router.UploadLimit(16))
+	srv := httptest.NewServer(r)
+	defer srv.Close()
+
+	c := &inspect.Context{
+		Operations: []inspect.Operation{
+			{ID: "uploadImage", Method: "PUT", Path: "/api/v1/posts/{id}/image", Params: []string{"id"}, Output: "Stored", Upload: true},
+		},
+		Schemas: map[string]any{
+			"Stored": map[string]any{"type": "object", "properties": map[string]any{"id": map[string]any{"type": "string"}}, "required": []string{"id"}},
+		},
+	}
+	dir := t.TempDir()
+	writeClient(t, filepath.Join(dir, "client"), c)
+	opts := templateOptions(t)
+	opts["noEmit"] = false
+	opts["outDir"] = "js"
+	opts["module"] = "node16"
+	opts["moduleResolution"] = "node16"
+	opts["rootDir"] = "client"
+	opts["verbatimModuleSyntax"] = false
+	runTSC(t, tsc, dir, opts, []string{"client"})
+
+	script := `const { api, configure } = require('./js/index.js')
+configure({ baseUrl: process.argv[2] })
+;(async () => {
+  const file = new File(['hello'], "café (1)'s.txt", { type: 'text/plain' })
+  const out = await api.uploadImage({ id: 'a b' }, file)
+  const blob = await api.uploadImage({ id: '7' }, new Blob([new Uint8Array([1, 2])]))
+  let err = ''
+  try {
+    await api.uploadImage({ id: '7' }, new Blob(['x'.repeat(17)]))
+  } catch (e) {
+    err = e.status + ' ' + e.message
+  }
+  console.log(JSON.stringify({ out, type: blob.contentType, name: blob.name, err }))
+})()
+`
+	if err := os.WriteFile(filepath.Join(dir, "main.js"), []byte(script), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(node, "main.js", srv.URL)
+	cmd.Dir = dir
+	res, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("node: %v\n%s", err, res)
+	}
+	want := `{"out":{"id":"a b","name":"café (1)'s.txt","contentType":"text/plain","text":"hello"},"type":"application/octet-stream","name":"","err":"413 PUT /api/v1/posts/7/image: 413 request body larger than 16 bytes"}`
+	if got := strings.TrimSpace(string(res)); got != want {
+		t.Fatalf("got %s\nwant %s", got, want)
 	}
 }
 

@@ -41,6 +41,9 @@ type StreamHandler[In, Event any] func(ctx context.Context, req *Request[In], se
 // may be called from several goroutines, not after the handler returns.
 func Stream[In, Event any](r *Router, pattern string, h StreamHandler[In, Event], mw ...middleware.Middleware) {
 	_, noBody := any(*new(In)).(None)
+	if _, upload := any(*new(In)).(File); upload {
+		panic(fmt.Sprintf("router: Stream at %q takes a JSON body, not a File; upload with Route", pattern))
+	}
 	var handler http.Handler = http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		typed := &Request[In]{Raw: req}
 		if !noBody && hasBody(req) {

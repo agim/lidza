@@ -351,6 +351,10 @@ class LidzaClient {
     // a cookie session is only accepted with this content type.
     if (method != 'GET' && method != 'HEAD') request.headers['Content-Type'] = 'application/json';
     if (body != null) request.body = jsonEncode(body);
+    return _receive(method, path, request);
+  }
+
+  Future<dynamic> _receive(String method, String path, http.Request request) async {
     final streamed = await _client.send(request);
     final response = await http.Response.fromStream(streamed);
     Object? parsed;
@@ -382,11 +386,33 @@ class LidzaClient {
 		}
 	}
 	for _, op := range c.Operations {
+		if op.Upload {
+			b.WriteString(dartUpload)
+			break
+		}
+	}
+	for _, op := range c.Operations {
 		var params []string
 		for _, p := range op.Params {
 			params = append(params, "required String "+dartIdent(p))
 		}
 		var args []string
+		if op.Upload {
+			// The file's bytes first, the path parameters and the
+			// file's type and name as named arguments.
+			params = append(params, "String contentType = 'application/octet-stream'", "String? filename")
+			args = append(args, "List<int> bytes", "{"+strings.Join(params, ", ")+"}")
+			fmt.Fprintf(&b, "  /// %s %s: uploads bytes as the raw body.\n", op.Method, op.Path)
+			if op.Output == "" {
+				fmt.Fprintf(&b, "  Future<void> %s(%s) async {\n", op.ID, strings.Join(args, ", "))
+				fmt.Fprintf(&b, "    await _upload('%s', %s, bytes, contentType, filename);\n  }\n\n", op.Method, dartPath(op.Path))
+				continue
+			}
+			out := dartOutput(op.Output, c.Schemas)
+			fmt.Fprintf(&b, "  Future<%s> %s(%s) async {\n", out.full(), op.ID, strings.Join(args, ", "))
+			fmt.Fprintf(&b, "    final json = await _upload('%s', %s, bytes, contentType, filename);\n    return %s;\n  }\n\n", op.Method, dartPath(op.Path), out.decode("json", out.nullable))
+			continue
+		}
 		if len(params) > 0 {
 			args = append(args, "{"+strings.Join(params, ", ")+"}")
 		}
@@ -435,6 +461,23 @@ func dartOutput(name string, all map[string]any) dartT {
 // dartEvents reads a router.Stream reply: server-sent events whose data
 // is one JSON value each, closed by an "end" event; an "error" event
 // carries the error body with its status.
+// dartUpload sends a router.File route's body: the bytes, their type as
+// Content-Type and the file name in Content-Disposition.
+const dartUpload = `  /// Sends bytes as the raw body of an upload (a router.File route).
+  Future<dynamic> _upload(String method, String path, List<int> bytes, String contentType, String? filename) async {
+    final request = http.Request(method, Uri.parse('$baseUrl$path'));
+    request.headers.addAll({'Accept': 'application/json', ..._headers, 'Content-Type': contentType});
+    if (filename != null && filename.isNotEmpty) {
+      final encoded = Uri.encodeComponent(filename)
+          .replaceAllMapped(RegExp(r"[!'()*]"), (m) => '%${m[0]!.codeUnitAt(0).toRadixString(16).toUpperCase()}');
+      request.headers['Content-Disposition'] = "attachment; filename*=UTF-8''$encoded";
+    }
+    request.bodyBytes = bytes;
+    return _receive(method, path, request);
+  }
+
+`
+
 const dartEvents = `  Stream<Object?> _events(String method, String path, {Object? body}) async* {
     final request = http.Request(method, Uri.parse('$baseUrl$path'));
     request.headers.addAll({'Accept': 'text/event-stream', ..._headers});

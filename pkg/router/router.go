@@ -4,6 +4,7 @@ package router
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"sync"
@@ -25,6 +26,10 @@ type Router struct {
 	once   sync.Once
 	h      http.Handler
 	mounts []Mount
+	// parent and prefix are set on a group: its routes go to the
+	// parent with the group's middleware around each one.
+	parent *Router
+	prefix string
 }
 
 // Mount is a handler served outside /api, at a path prefix, before the
@@ -60,11 +65,21 @@ func New() *Router {
 	return r
 }
 
-// Handle registers a handler for a ServeMux pattern.
-func (r *Router) Handle(pattern string, h http.Handler) { r.mux.Handle(pattern, h) }
+// Handle registers a handler for a ServeMux pattern. On a group the
+// pattern's path must lie at the group's prefix or below it.
+func (r *Router) Handle(pattern string, h http.Handler) {
+	if r.parent == nil {
+		r.mux.Handle(pattern, h)
+		return
+	}
+	if !under(patternPath(pattern), r.prefix) {
+		panic(fmt.Sprintf("router: pattern %q is outside the group %q", pattern, r.prefix))
+	}
+	r.parent.Handle(pattern, &groupRoute{group: r, h: h})
+}
 
 // HandleFunc registers a handler function for a ServeMux pattern.
-func (r *Router) HandleFunc(pattern string, h http.HandlerFunc) { r.mux.HandleFunc(pattern, h) }
+func (r *Router) HandleFunc(pattern string, h http.HandlerFunc) { r.Handle(pattern, h) }
 
 // Use adds middleware around every route, outermost first. Call it before
 // the router serves its first request; later calls have no effect.
@@ -78,35 +93,100 @@ func (r *Router) Use(mw ...middleware.Middleware) { r.mw = append(r.mw, mw...) }
 //	notes := r.Group("/api/v1/notes", auth.Require())
 //	router.Route(notes, "GET /api/v1/notes", listNotes)
 //
-// A route the parent registers under the same prefix with a method wins
-// over the group, being the more specific pattern.
+// Every route lands on the root router's ServeMux with its full pattern,
+// the group's middleware wrapped around that route alone. ServeMux
+// precedence therefore holds across groups: the more specific pattern
+// wins wherever it was registered ("GET /api/v1/notes/recent" in a group
+// over "GET /api/v1/notes/{id}" on the parent), and two conflicting
+// patterns panic at registration. A path no route matches is a 404 (a
+// 405 with Allow for a wrong method) without the group's middleware.
+//
+// The prefix may hold wildcards; the group's patterns repeat them and the
+// handlers read their values:
+//
+//	post := r.Group("/api/v1/posts/{id}", auth.Require())
+//	router.Route(post, "GET /api/v1/posts/{id}/tags", listTags) // req.Param("id")
+//
+// A pattern outside the prefix panics.
 func (r *Router) Group(prefix string, mw ...middleware.Middleware) *Router {
-	g := &Router{mux: http.NewServeMux()}
-	g.Use(mw...)
 	prefix = strings.TrimSuffix(prefix, "/")
 	if prefix == "" {
 		prefix = "/"
 	}
-	r.mux.Handle(prefix, g)
-	if prefix != "/" {
-		r.mux.Handle(prefix+"/", g)
+	if !strings.HasPrefix(prefix, "/") {
+		panic(fmt.Sprintf("router: group prefix %q does not start with /", prefix))
 	}
+	if r.parent != nil && !under(prefix, r.prefix) {
+		panic(fmt.Sprintf("router: group %q is outside the group %q", prefix, r.prefix))
+	}
+	g := &Router{parent: r, prefix: prefix}
+	g.Use(mw...)
 	return g
+}
+
+// groupRoute is one route of a group: the group's middleware around the
+// handler, chained on the first request so a Use on the group before
+// serving still counts.
+type groupRoute struct {
+	group *Router
+	h     http.Handler
+	once  sync.Once
+	chain http.Handler
+}
+
+func (g *groupRoute) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	g.once.Do(func() { g.chain = middleware.Chain(g.h, g.group.mw...) })
+	g.chain.ServeHTTP(w, req)
+}
+
+// patternPath is the path of a ServeMux pattern, without the method and
+// the host: "GET example.com/api/x" is "/api/x".
+func patternPath(pattern string) string {
+	p := strings.TrimSpace(pattern)
+	if i := strings.IndexAny(p, " \t"); i >= 0 {
+		p = strings.TrimSpace(p[i+1:])
+	}
+	if i := strings.IndexByte(p, '/'); i > 0 {
+		p = p[i:]
+	}
+	return p
+}
+
+// under reports whether path lies at prefix or below it, whole segments
+// only; a wildcard is compared as written ("{id}" is not "{slug}").
+func under(path, prefix string) bool {
+	if prefix == "/" {
+		return strings.HasPrefix(path, "/")
+	}
+	return path == prefix || strings.HasPrefix(path, prefix+"/")
+}
+
+// root is the router that owns the ServeMux.
+func (r *Router) root() *Router {
+	for r.parent != nil {
+		r = r.parent
+	}
+	return r
 }
 
 // Mount serves h at prefix and below it, outside /api, ahead of the
 // frontend ("/admin/" for the admin pages). The app's middleware and
-// services apply; the router's own do not.
+// services apply; the router's own do not, nor a group's.
 func (r *Router) Mount(prefix string, h http.Handler) {
+	root := r.root()
 	prefix = strings.TrimSuffix(prefix, "/") + "/"
-	r.mounts = append(r.mounts, Mount{Prefix: prefix, Handler: h})
+	root.mounts = append(root.mounts, Mount{Prefix: prefix, Handler: h})
 }
 
 // Mounts lists what Mount registered.
-func (r *Router) Mounts() []Mount { return r.mounts }
+func (r *Router) Mounts() []Mount { return r.root().mounts }
 
-// Handler returns the router with its middleware applied.
+// Handler returns the router with its middleware applied. A group serves
+// through the root router: its Handler is the root's.
 func (r *Router) Handler() http.Handler {
+	if r.parent != nil {
+		return r.root().Handler()
+	}
 	r.once.Do(func() { r.h = middleware.Chain(r.mux, r.mw...) })
 	return r.h
 }

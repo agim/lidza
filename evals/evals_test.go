@@ -152,6 +152,31 @@ func TestUndeclaredNpmImport(t *testing.T) {
 	expect(t, r, expectation{code: "L004", severity: "error", layer: "frontend", file: "src/pages/Dates.tsx", message: "npm install dayjs"})
 }
 
+// A "from" that is not an import (a JSX attribute) is no L004; a declared
+// import written across lines is read as one.
+func TestJSXFromIsNotAnImport(t *testing.T) {
+	edit(t, map[string]string{"src/pages/Range.tsx": `import {
+  useState,
+} from 'react'
+
+export function Range() {
+  const [v, setV] = useState('start')
+  return (
+    <label>
+      <input type="radio" name="from" value={v} onChange={(e) => setV(e.target.value)} />
+      Start
+    </label>
+  )
+}
+`})
+	r := check(t)
+	for _, d := range r.Diagnostics {
+		if d.Code == "L004" {
+			t.Errorf("L004 on a JSX attribute or a declared import:\n%s", dump(r))
+		}
+	}
+}
+
 func TestInventedFrameworkPackage(t *testing.T) {
 	edit(t, map[string]string{"orm.go": "package main\n\nimport _ \"github.com/agim/lidza/pkg/orm\"\n"})
 	r := check(t)

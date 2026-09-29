@@ -37,7 +37,10 @@ is validated on the server and callable from the client by name.
    handler runs. Return `router.NotFound("thing")` or
    `router.Errorf(status, ...)` for client-visible errors; any other error
    is a 500 whose text stays on the server. The handler name becomes the
-   client method (`createThing` gives `api.createThing`).
+   client method (`createThing` gives `api.createThing`). A list that
+   takes filters reads them with `req.Query("q")`; the client sends them
+   as `{ query: { q, limit } }`. A file upload takes `router.File` as
+   `In` (recipe "Store a file").
 
    A reply that arrives in pieces (a model's text, progress) is a
    stream: `router.Stream(r, "POST /api/v1/things/draft", draftThing)`
@@ -51,6 +54,19 @@ is validated on the server and callable from the client by name.
    `App.StreamTimeout` (10 minutes by default; the generated clients ask
    with `Accept: text/event-stream`), not the 30 seconds of other
    requests.
+
+   Routes that share middleware go on a group:
+   `g := r.Group("/api/v1/things", auth.Require())`, then
+   `router.Route(g, "GET /api/v1/things/recent", recentThings)` with
+   the full pattern. The prefix may hold wildcards
+   (`r.Group("/api/v1/things/{id}")`, read with `req.Param("id")`), and
+   every pattern of the group lies under it (another panics). Groups
+   do not hide routes: all patterns share one ServeMux, so the most
+   specific wins wherever it was registered (`GET
+   /api/v1/things/recent` in a group over `GET /api/v1/things/{slug}`
+   on `r`), two that conflict panic at start, and the group's
+   middleware runs for its own routes only (a path no route matches is
+   a 404 before it).
 
 3. Save. `lidza dev` regenerates `schema/`, rebuilds, and rewrites the
    client (without it: `lidza gen`, MCP `lidza_gen`). Check with

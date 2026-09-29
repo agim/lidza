@@ -17,6 +17,7 @@ func TestDart(t *testing.T) {
 			{ID: "summarize", Method: "POST", Path: "/api/v1/summarize", Params: []string{}, Input: "CreatePost", Output: "SummarizeEvent", Stream: true},
 			{ID: "feed", Method: "GET", Path: "/api/v1/posts/{id}/feed", Params: []string{"id"}, Output: "Post", Stream: true},
 			{ID: "listPosts", Method: "GET", Path: "/api/v1/posts", Params: []string{}, Output: "Anonymous9"},
+			{ID: "uploadImage", Method: "PUT", Path: "/api/v1/posts/{id}/image", Params: []string{"id"}, Output: "Post", Upload: true},
 		},
 		Schemas: map[string]any{
 			"Status": map[string]any{"type": "string", "enum": []string{"draft", "in-review"}},
@@ -77,6 +78,9 @@ func TestDart(t *testing.T) {
 		"Stream<String> summarize(CreatePost body) =>\n      _events('POST', '/api/v1/summarize', body: body.toJson()).map((e) => e as String);",
 		"Stream<Post> feed({required String id}) =>\n      _events('GET', '/api/v1/posts/${Uri.encodeComponent(id)}/feed').map((e) => Post.fromJson(e as Map<String, dynamic>));",
 		"Stream<Object?> _events(String method, String path, {Object? body}) async* {",
+		"Future<Post> uploadImage(List<int> bytes, {required String id, String contentType = 'application/octet-stream', String? filename}) async {",
+		"final json = await _upload('PUT', '/api/v1/posts/${Uri.encodeComponent(id)}/image', bytes, contentType, filename);",
+		"Future<dynamic> _upload(String method, String path, List<int> bytes, String contentType, String? filename) async {",
 		// An unnamed output is its shape, not a class that does not exist.
 		"Future<List<Post>?> listPosts() async {",
 		"return json == null ? null : (json as List<dynamic>).map((e) => Post.fromJson(e as Map<String, dynamic>)).toList();",

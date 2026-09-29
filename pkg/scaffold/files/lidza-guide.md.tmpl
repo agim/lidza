@@ -304,7 +304,10 @@ is validated on the server and callable from the client by name.
    handler runs. Return `router.NotFound("thing")` or
    `router.Errorf(status, ...)` for client-visible errors; any other error
    is a 500 whose text stays on the server. The handler name becomes the
-   client method (`createThing` gives `api.createThing`).
+   client method (`createThing` gives `api.createThing`). A list that
+   takes filters reads them with `req.Query("q")`; the client sends them
+   as `{ query: { q, limit } }`. A file upload takes `router.File` as
+   `In` (recipe "Store a file").
 
    A reply that arrives in pieces (a model's text, progress) is a
    stream: `router.Stream(r, "POST /api/v1/things/draft", draftThing)`
@@ -318,6 +321,19 @@ is validated on the server and callable from the client by name.
    `App.StreamTimeout` (10 minutes by default; the generated clients ask
    with `Accept: text/event-stream`), not the 30 seconds of other
    requests.
+
+   Routes that share middleware go on a group:
+   `g := r.Group("/api/v1/things", auth.Require())`, then
+   `router.Route(g, "GET /api/v1/things/recent", recentThings)` with
+   the full pattern. The prefix may hold wildcards
+   (`r.Group("/api/v1/things/{id}")`, read with `req.Param("id")`), and
+   every pattern of the group lies under it (another panics). Groups
+   do not hide routes: all patterns share one ServeMux, so the most
+   specific wins wherever it was registered (`GET
+   /api/v1/things/recent` in a group over `GET /api/v1/things/{slug}`
+   on `r`), two that conflict panic at start, and the group's
+   middleware runs for its own routes only (a path no route matches is
+   a 404 before it).
 
 3. Save. `lidza dev` regenerates `schema/`, rebuilds, and rewrites the
    client (without it: `lidza gen`, MCP `lidza_gen`). Check with
@@ -844,16 +860,32 @@ pack, with the app deciding who may read them.
    production sets `s3` with `STORAGE_BUCKET`, `STORAGE_ENDPOINT` and
    the keys in the credentials (`lidza credentials set
    STORAGE_ACCESS_KEY=... STORAGE_SECRET_KEY=...`).
-2. Accept the upload in a raw handler (a body is not JSON, so not
-   `router.Route`): `r.HandleFunc("PUT /api/v1/notes/{id}/attachment",
-   ...)` behind the same access check as the note, read the body up to
-   a limit (`http.MaxBytesReader`), and store it under a key that names
-   the owner and the row: `notes/<id>/attachment`. Keep the key in a
-   column of the row. The generated client calls it with the file as
-   the raw body: `api.uploadAttachment({ id }, { body: file })` (the
-   File's type becomes the Content-Type; `contentType` overrides it);
-   no hand-written `fetch`. A list that takes filters reads them with
-   `req.Query("q")` and the client sends them as `{ query: { q, limit } }`.
+2. Accept the upload with a typed route whose input is `router.File`
+   (the body is the file itself, not JSON):
+
+   ```go
+   router.Route(g, "PUT /api/v1/posts/{id}/image", uploadImage, router.UploadLimit(10<<20))
+
+   func uploadImage(ctx context.Context, req *router.Request[router.File]) (router.None, error) {
+   	// the same access check as the post first
+   	_, err := storage.From(ctx).Put(ctx, "posts/"+req.Param("id")+"/image", req.Body.Body,
+   		storage.PutOptions{ContentType: req.Body.ContentType})
+   	return router.None{}, err
+   }
+   ```
+
+   `req.Body.Body` reads the bytes, bounded by `router.UploadLimit`
+   (32 MB, `router.MaxUploadBytes`, without it): a larger body replies
+   413. `req.Body.ContentType` and `req.Body.Name` are what the client
+   sent; the name is never a key or a path. Store under a key that
+   names the owner and the row (`posts/<id>/image`) and keep it in a
+   column of the row when it does not follow from the id. The
+   generated client takes the File or Blob after the path parameters:
+   `await api.uploadImage({ id }, file, { onProgress: (sent, total) =>
+   setShare(sent / total) })` (the File's type becomes the
+   Content-Type, `contentType` overrides it; `onProgress` is optional
+   and browser-only); the Dart client takes the bytes, `contentType`
+   and `filename`. No hand-written `fetch`.
 3. Read it back through the app (`storage.Handler` or a handler that
    checks access and streams `Get`), or hand the browser a
    `PresignGet` URL for a minute; never a permanent public URL for a

@@ -650,7 +650,8 @@ func contractType(e ast.Expr, routerPkg, schemaPkg string) bool {
 		return basicTypes[x.Name]
 	case *ast.SelectorExpr:
 		pkg := exprText(x.X)
-		return pkg == schemaPkg || (pkg == routerPkg && x.Sel.Name == "None")
+		// router.File is an upload's body: the file, not a JSON shape.
+		return pkg == schemaPkg || (pkg == routerPkg && (x.Sel.Name == "None" || x.Sel.Name == "File"))
 	case *ast.StarExpr:
 		return contractType(x.X, routerPkg, schemaPkg)
 	case *ast.ArrayType:

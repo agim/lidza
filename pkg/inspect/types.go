@@ -38,7 +38,10 @@ type Operation struct {
 	Output string `json:"output,omitempty"`
 	// Stream marks a router.Stream operation: the reply is server-sent
 	// events, each one Output as JSON.
-	Stream  bool    `json:"stream,omitempty"`
+	Stream bool `json:"stream,omitempty"`
+	// Upload marks a router.Route whose In is router.File: the request
+	// body is a file sent raw, not JSON, and Input is empty.
+	Upload  bool    `json:"upload,omitempty"`
 	Handler Handler `json:"handler"`
 	// Builtin marks operations the framework registers in every app.
 	Builtin bool `json:"builtin,omitempty"`
@@ -155,13 +158,24 @@ func typedRegistration(name string) bool { return name == "Route" || name == "St
 // types sets the operation's Input and Output from the registration's
 // type arguments. A stream's event of an unnamed type (string, []Item)
 // gets a component named after the operation: summarize streams SummarizeEvent.
+// An In of router.File marks an upload: no input schema.
 func (b *schemaBuilder) types(op *Operation, args *types.TypeList) {
-	op.Input = b.component(args.At(0))
+	if isRouterType(args.At(0), "File") && !op.Stream {
+		op.Upload = true
+	} else {
+		op.Input = b.component(args.At(0))
+	}
 	if op.Stream {
 		op.Output = b.componentNamed(args.At(1), strings.ToUpper(op.ID[:1])+op.ID[1:]+"Event")
 		return
 	}
 	op.Output = b.component(args.At(1))
+}
+
+// isRouterType reports whether t is the router package's type name.
+func isRouterType(t types.Type, name string) bool {
+	n, ok := types.Unalias(t).(*types.Named)
+	return ok && n.Obj().Pkg() != nil && n.Obj().Pkg().Path() == routerPath && n.Obj().Name() == name
 }
 
 type builtinOp struct{ id, method, path, output string }

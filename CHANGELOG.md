@@ -11,6 +11,9 @@ change. A release without one is additive: an app updates with
 
 ## Unreleased
 
+- `lidza test --e2e` loads `e2e/seed.sql` into the test database before
+  the app starts, when the app has one: rows the browser suite needs that
+  no page creates. It runs on every run, so it is written to be rerun.
 - `lidza dev`: the framework's agent files are always at
   `/_lidza/llms.txt`, `/_lidza/llms-full.txt` and `/_lidza/openapi.json`,
   and at the root only until the app serves its own there: a product's

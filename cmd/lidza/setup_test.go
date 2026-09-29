@@ -2,12 +2,14 @@ package main
 
 import (
 	"bufio"
+	"context"
 
 	"github.com/agim/lidza/pkg/brief"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/agim/lidza/packs/db"
 )
@@ -135,5 +137,37 @@ func TestAdminList(t *testing.T) {
 	}
 	if list = editList(list, []string{"a@X.io"}, false); strings.Join(list, ",") != "B@x.io" {
 		t.Fatalf("remove: %v", list)
+	}
+}
+
+// lidza test --e2e loads e2e/seed.sql into the test database, several
+// statements at once, and a rerun leaves the same rows.
+func TestE2ESeed(t *testing.T) {
+	url := os.Getenv("LIDZA_TEST_DATABASE_URL")
+	if url == "" {
+		url = "postgres:///lidza_test?host=/var/run/postgresql"
+	}
+	ctx := context.Background()
+	pool, err := db.Open(ctx, db.Config{URL: url, MaxConns: 2, ConnectTimeout: 2 * time.Second})
+	if err != nil {
+		t.Skipf("no test database: %v", err)
+	}
+	defer pool.Close()
+	dir := t.TempDir()
+	t.Setenv("DATABASE_URL", url)
+	if err := seedTestDB(ctx, dir); err != nil {
+		t.Fatalf("no seed file: %v", err)
+	}
+	os.MkdirAll(filepath.Join(dir, "e2e"), 0o755)
+	os.WriteFile(filepath.Join(dir, E2ESeed), []byte("CREATE TABLE IF NOT EXISTS e2e_seed_probe (id int PRIMARY KEY);\nINSERT INTO e2e_seed_probe VALUES (1), (2) ON CONFLICT DO NOTHING;\n"), 0o644)
+	t.Cleanup(func() { pool.Exec(ctx, "DROP TABLE IF EXISTS e2e_seed_probe") })
+	for i := 0; i < 2; i++ {
+		if err := seedTestDB(ctx, dir); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var n int
+	if err := pool.QueryRow(ctx, "SELECT count(*) FROM e2e_seed_probe").Scan(&n); err != nil || n != 2 {
+		t.Fatalf("rows: %d %v", n, err)
 	}
 }

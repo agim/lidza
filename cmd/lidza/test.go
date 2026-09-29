@@ -127,6 +127,9 @@ func runE2E(ctx context.Context, dir string, cfg *config.Config, install bool, e
 			if err := prepareTestDB(ctx, dir); err != nil {
 				return err
 			}
+			if err := seedTestDB(ctx, dir); err != nil {
+				return err
+			}
 		}
 	}
 	bin := filepath.Join(dir, devserver.BuildDir, "e2e-app")
@@ -187,5 +190,37 @@ func runE2E(ctx context.Context, dir string, cfg *config.Config, install bool, e
 	if err := pw.Run(); err != nil {
 		return errors.New("e2e tests failed")
 	}
+	return nil
+}
+
+// E2ESeed is the SQL lidza test --e2e loads into the test database before
+// the app starts: rows the browser suite needs that no page creates
+// (listings a sync job would fetch, reference data). It runs on every
+// run, so it is written to be rerun (ON CONFLICT DO NOTHING, or a
+// DELETE first).
+const E2ESeed = "e2e/seed.sql"
+
+// seedTestDB runs E2ESeed against the test database when the app has one.
+func seedTestDB(ctx context.Context, dir string) error {
+	sql, err := os.ReadFile(filepath.Join(dir, E2ESeed))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	var cfg db.Config
+	if err := env.Load(dir, &cfg); err != nil {
+		return fmt.Errorf("e2e seed: %w", err)
+	}
+	pool, err := db.Open(ctx, cfg)
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+	if _, err := pool.Exec(ctx, string(sql)); err != nil {
+		return fmt.Errorf("e2e seed: %s: %w", E2ESeed, err)
+	}
+	fmt.Printf("[lidza] test database: %s loaded\n", E2ESeed)
 	return nil
 }

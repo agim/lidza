@@ -58,6 +58,11 @@ type App struct {
 	// sends none; Vite's dev server needs inline scripts, so set it for
 	// production builds only.
 	CSP string
+	// PermissionsPolicy is the Permissions-Policy sent with every
+	// response. Empty sends middleware.DefaultPermissionsPolicy (camera,
+	// microphone and location off); an app that asks for the visitor's
+	// location sets middleware.AllowGeolocation.
+	PermissionsPolicy string
 	// Logger receives request and error logs. Default: NewLogger from
 	// LIDZA_LOG and LIDZA_LOG_LEVEL, also installed as slog's default so
 	// packs log the same way. Handlers use lidza.Log(ctx).
@@ -336,7 +341,7 @@ func handler(app App, services *Services) (http.Handler, *devserver.Sidecar, err
 	}
 	all := devserver.Split(router.APIPrefix, api, opsThenFrontend(ops, mounted(r.Mounts(), frontend), os.Getenv(devserver.EnvMode) == "dev"))
 	mw := append([]middleware.Middleware{
-		middleware.SecureHeaders(middleware.SecureHeadersOptions{CSP: app.CSP}),
+		middleware.SecureHeaders(middleware.SecureHeadersOptions{CSP: app.CSP, PermissionsPolicy: app.PermissionsPolicy}),
 		servicesMiddleware(services),
 	}, app.Middleware...)
 	return middleware.Chain(all, mw...), sidecar, nil

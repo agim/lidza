@@ -261,7 +261,24 @@ type SecureHeadersOptions struct {
 	CSP string
 	// HSTS enables Strict-Transport-Security for a year; only behind TLS.
 	HSTS bool
+	// PermissionsPolicy is the Permissions-Policy value; empty sends
+	// DefaultPermissionsPolicy, which turns off the camera, the
+	// microphone and location. An app that asks for one of them names it
+	// for its own origin: AllowGeolocation for location.
+	PermissionsPolicy string
 }
+
+// Permissions-Policy values for SecureHeadersOptions.PermissionsPolicy
+// and lidza.App.PermissionsPolicy.
+const (
+	// DefaultPermissionsPolicy turns off the camera, the microphone and
+	// location for the page and every frame in it.
+	DefaultPermissionsPolicy = "camera=(), microphone=(), geolocation=()"
+	// AllowGeolocation lets the app's own pages ask for the visitor's
+	// location (navigator.geolocation); frames from other origins still
+	// cannot. Camera and microphone stay off.
+	AllowGeolocation = "camera=(), microphone=(), geolocation=(self)"
+)
 
 // SecureHeaders sets the response headers every app should send.
 func SecureHeaders(o SecureHeadersOptions) Middleware {
@@ -271,7 +288,11 @@ func SecureHeaders(o SecureHeadersOptions) Middleware {
 			h.Set("X-Content-Type-Options", "nosniff")
 			h.Set("X-Frame-Options", "DENY")
 			h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
-			h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+			if o.PermissionsPolicy != "" {
+				h.Set("Permissions-Policy", o.PermissionsPolicy)
+			} else {
+				h.Set("Permissions-Policy", DefaultPermissionsPolicy)
+			}
 			if o.CSP != "" {
 				h.Set("Content-Security-Policy", o.CSP)
 			}

@@ -110,6 +110,24 @@ func TestHandlerPipeline(t *testing.T) {
 	}
 }
 
+func TestHandlerPermissionsPolicy(t *testing.T) {
+	t.Setenv(devserver.EnvMode, "")
+	for _, c := range []struct{ policy, want string }{
+		{"", middleware.DefaultPermissionsPolicy},
+		{middleware.AllowGeolocation, middleware.AllowGeolocation},
+	} {
+		h, err := Handler(App{PermissionsPolicy: c.policy, Dist: fstest.MapFS{"index.html": {Data: []byte("app")}}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+		if got := rec.Header().Get("Permissions-Policy"); got != c.want {
+			t.Errorf("policy %q: sent %q", c.policy, got)
+		}
+	}
+}
+
 func TestHandlerCustomFrontend(t *testing.T) {
 	t.Setenv(devserver.EnvMode, "")
 	h, err := Handler(App{Frontend: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { io.WriteString(w, "page") })})

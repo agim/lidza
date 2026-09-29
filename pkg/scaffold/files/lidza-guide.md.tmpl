@@ -1199,6 +1199,22 @@ names this machine's Postgres socket; `lidza gen`, `dev`, `test` and
 `update` repair it on a machine that keeps the socket elsewhere, and
 CI sets its own `DATABASE_URL`.
 
+## Security headers
+
+Every response carries `X-Content-Type-Options: nosniff`,
+`X-Frame-Options: DENY`, `Referrer-Policy:
+strict-origin-when-cross-origin` and `Permissions-Policy: camera=(),
+microphone=(), geolocation=()`. `lidza.App` in `main.go` sets the rest:
+
+- `CSP`: the Content-Security-Policy. Production builds only; Vite's dev
+  server injects inline scripts.
+- `PermissionsPolicy`: replaces the default. A page that asks for the
+  visitor's location (`navigator.geolocation`) needs
+  `PermissionsPolicy: middleware.AllowGeolocation` (`geolocation=(self)`,
+  camera and microphone still off); with the default the browser refuses
+  without showing the prompt. Name any other feature the same way
+  (`camera=(self)`) and keep the rest off.
+
 ## Secrets
 
 Anything secret (API keys, SMTP URLs, storage keys, `AUTH_SECRET` in

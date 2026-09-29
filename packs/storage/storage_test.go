@@ -300,3 +300,30 @@ func TestPrefix(t *testing.T) {
 		t.Fatal("not deleted")
 	}
 }
+
+// A prefix or key that would leave the storage directory is refused, by
+// New for the prefix and by the local provider for any key.
+func TestPrefixOutsideDir(t *testing.T) {
+	dir := t.TempDir()
+	for _, prefix := range []string{"../outside", "myapp/../..", "a/./b"} {
+		if _, err := New(Config{Provider: "local", Dir: dir, Prefix: prefix}); err == nil || !strings.Contains(err.Error(), "STORAGE_PREFIX") {
+			t.Errorf("prefix %q: %v", prefix, err)
+		}
+	}
+	p, err := newLocal(filepath.Join(dir, "files"), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	for _, key := range []string{"../escape.txt", "a/../../escape.txt", ".meta/x.json"} {
+		if _, err := p.Put(ctx, key, []byte("x"), PutOptions{}); err == nil {
+			t.Errorf("put %q: accepted", key)
+		}
+		if _, _, err := p.Get(ctx, key); err == nil {
+			t.Errorf("get %q: accepted", key)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dir, "escape.txt")); err == nil {
+		t.Fatal("written outside the directory")
+	}
+}

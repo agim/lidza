@@ -173,6 +173,11 @@ func Pack() lidza.Pack { return &Storage{log: slog.Default()} }
 func New(cfg Config) (*Storage, error) {
 	s := &Storage{cfg: cfg, log: slog.Default()}
 	s.defaults()
+	if s.cfg.Prefix != "" {
+		if err := checkKey(strings.TrimSuffix(s.cfg.Prefix, "/")); err != nil {
+			return nil, fmt.Errorf("storage: STORAGE_PREFIX %q is not a folder name like \"myapp\" or \"myapp/uploads\" (no . or .. segments)", cfg.Prefix)
+		}
+	}
 	p, err := newProvider(s.cfg)
 	if err != nil {
 		return nil, err

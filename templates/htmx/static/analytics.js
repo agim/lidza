@@ -20,7 +20,9 @@
     try {
       var id = sessionStorage.getItem('lidza.session')
       if (!id) {
-        id = Math.random().toString(36).slice(2) + Date.now().toString(36)
+        var bytes = crypto.getRandomValues(new Uint8Array(16))
+        id = ''
+        for (var i = 0; i < bytes.length; i++) id += ('0' + bytes[i].toString(16)).slice(-2)
         sessionStorage.setItem('lidza.session', id)
       }
       return id

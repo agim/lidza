@@ -125,7 +125,7 @@ func (s *sseWriter) event(name string, data []byte, apply func(http.ResponseWrit
 
 // writeLocked writes one event and flushes it; data is one line of JSON.
 func (s *sseWriter) writeLocked(name string, data []byte) error {
-	buf := make([]byte, 0, len(data)+32)
+	var buf []byte
 	if name != "" {
 		buf = append(buf, "event: "+name+"\n"...)
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"mime"
 	"os"
@@ -27,8 +28,15 @@ func newLocal(dir, public string) (*local, error) {
 
 func (l *local) Name() string { return "local" }
 
-func (l *local) paths(key string) (file, meta string) {
-	return filepath.Join(l.dir, filepath.FromSlash(key)), filepath.Join(l.dir, ".meta", filepath.FromSlash(key)+".json")
+// paths returns the object's file and its metadata file, refusing a key
+// that would land outside the directory (Storage checks keys first; this
+// holds for any caller).
+func (l *local) paths(key string) (file, meta string, err error) {
+	rel := filepath.Clean(filepath.FromSlash(key))
+	if !filepath.IsLocal(rel) || rel == ".meta" || strings.HasPrefix(rel, ".meta"+string(filepath.Separator)) {
+		return "", "", fmt.Errorf("storage: invalid key %q", key)
+	}
+	return filepath.Join(l.dir, rel), filepath.Join(l.dir, ".meta", rel+".json"), nil
 }
 
 type localMeta struct {
@@ -37,7 +45,10 @@ type localMeta struct {
 }
 
 func (l *local) Put(ctx context.Context, key string, data []byte, opt PutOptions) (Object, error) {
-	file, meta := l.paths(key)
+	file, meta, err := l.paths(key)
+	if err != nil {
+		return Object{}, err
+	}
 	for _, p := range []string{file, meta} {
 		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 			return Object{}, err
@@ -58,7 +69,10 @@ func (l *local) Get(ctx context.Context, key string) (io.ReadCloser, Object, err
 	if err != nil {
 		return nil, Object{}, err
 	}
-	file, _ := l.paths(key)
+	file, _, err := l.paths(key)
+	if err != nil {
+		return nil, Object{}, err
+	}
 	f, err := os.Open(file)
 	if err != nil {
 		return nil, Object{}, err
@@ -67,7 +81,10 @@ func (l *local) Get(ctx context.Context, key string) (io.ReadCloser, Object, err
 }
 
 func (l *local) Stat(ctx context.Context, key string) (Object, error) {
-	file, meta := l.paths(key)
+	file, meta, err := l.paths(key)
+	if err != nil {
+		return Object{}, err
+	}
 	info, err := os.Stat(file)
 	if errors.Is(err, os.ErrNotExist) || (err == nil && info.IsDir()) {
 		return Object{}, ErrNotFound
@@ -86,7 +103,10 @@ func (l *local) Stat(ctx context.Context, key string) (Object, error) {
 }
 
 func (l *local) Delete(ctx context.Context, key string) error {
-	file, meta := l.paths(key)
+	file, meta, err := l.paths(key)
+	if err != nil {
+		return err
+	}
 	if err := os.Remove(file); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}

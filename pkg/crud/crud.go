@@ -313,10 +313,13 @@ import (
 // cap on the limit.
 func PageParams[In any](req *router.Request[In], def, max int) (limit, offset int32) {
 	limit = int32(def)
-	if v, err := strconv.Atoi(req.Query("limit")); err == nil && v > 0 {
-		limit = int32(min(v, max))
+	if v, err := strconv.ParseInt(req.Query("limit"), 10, 32); err == nil && v > 0 {
+		limit = int32(v)
+		if int(limit) > max {
+			limit = int32(max)
+		}
 	}
-	if v, err := strconv.Atoi(req.Query("offset")); err == nil && v >= 0 {
+	if v, err := strconv.ParseInt(req.Query("offset"), 10, 32); err == nil && v >= 0 {
 		offset = int32(v)
 	}
 	return limit, offset

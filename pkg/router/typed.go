@@ -42,7 +42,8 @@ func (r *Request[In]) Header() http.Header {
 	return r.header
 }
 
-// SetCookie adds a cookie to the reply.
+// SetCookie adds a cookie to the reply. On a request that came over
+// HTTPS it is sent Secure even when c.Secure is false.
 func (r *Request[In]) SetCookie(c *http.Cookie) { r.cookies = append(r.cookies, c) }
 
 func (r *Request[In]) apply(w http.ResponseWriter) {
@@ -50,6 +51,11 @@ func (r *Request[In]) apply(w http.ResponseWriter) {
 		w.Header()[k] = v
 	}
 	for _, c := range r.cookies {
+		if r.Raw != nil && r.Raw.TLS != nil && !c.Secure {
+			sc := *c
+			sc.Secure = true
+			c = &sc
+		}
 		http.SetCookie(w, c)
 	}
 }

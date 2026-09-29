@@ -641,7 +641,7 @@ func (s *signin) callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a := From(r.Context())
-	clear := &http.Cookie{Name: StateCookie, Value: "", Path: Prefix + "/", HttpOnly: true, MaxAge: -1}
+	clear := &http.Cookie{Name: StateCookie, Value: "", Path: Prefix + "/", HttpOnly: true, Secure: a.cfg.CookieSecure, SameSite: http.SameSiteLaxMode, MaxAge: -1}
 	http.SetCookie(w, clear)
 	c, err := r.Cookie(StateCookie)
 	if err != nil {

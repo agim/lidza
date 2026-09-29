@@ -38,7 +38,7 @@ function sessionId(): string {
   try {
     let id = sessionStorage.getItem('lidza.session')
     if (!id) {
-      id = Math.random().toString(36).slice(2) + Date.now().toString(36)
+      id = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('')
       sessionStorage.setItem('lidza.session', id)
     }
     return id

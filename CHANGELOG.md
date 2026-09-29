@@ -15,6 +15,23 @@ change. A release without one is additive: an app updates with
   The tsconfigs drop `baseUrl`, which TypeScript 6 deprecates and 7
   removes; `paths` resolve from the tsconfig without it. Existing apps:
   delete the `"baseUrl": "."` line when moving to TypeScript 6.
+- storage: `STORAGE_PREFIX` must be a plain folder name; one with `.` or
+  `..` segments is refused at start instead of letting the local
+  provider write outside `STORAGE_DIR`. The local provider also refuses
+  any key outside its directory, whatever the caller.
+- The paging helper `PageParams` (`handlers/convert.go`, written once by
+  `lidza gen resource`) parsed `limit` and `offset` as `int` and
+  converted them to `int32`: `?offset=2147483648` wrapped negative and
+  the query failed with a 500. It now reads them as 32-bit numbers and
+  ignores larger ones. Existing apps: copy the new `PageParams` from a
+  fresh `lidza gen resource`, or change `strconv.Atoi` to
+  `strconv.ParseInt(..., 10, 32)` as the template does.
+- router: a cookie set with `Request.SetCookie` on a request that came
+  over HTTPS is sent `Secure`. auth: the OAuth state cookie is cleared
+  with the same `Secure` and `SameSite` it was set with.
+- Templates: the analytics session id comes from
+  `crypto.getRandomValues` instead of `Math.random`.
+- CI runs with a read-only `GITHUB_TOKEN`.
 - The official media pack pins its crates with a `Cargo.lock`, as geo does.
 
 ## v0.1.35 (2026-09-29)

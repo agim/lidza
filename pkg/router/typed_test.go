@@ -161,3 +161,20 @@ func TestUpload(t *testing.T) {
 		t.Fatalf("over the limit while reading: %d %s", rec.Code, rec.Body)
 	}
 }
+
+// A cookie set over HTTPS is sent Secure; over plain HTTP it is as set.
+func TestSetCookieSecureOverTLS(t *testing.T) {
+	r := typedRouter()
+	for _, tc := range []struct {
+		url    string
+		secure bool
+	}{{"https://example.test/api/v1/posts", true}, {"http://example.test/api/v1/posts", false}} {
+		req := httptest.NewRequest("POST", tc.url, strings.NewReader(`{"title":"hello"}`))
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+		cs := rec.Result().Cookies()
+		if len(cs) != 1 || cs[0].Secure != tc.secure {
+			t.Errorf("%s: cookies %+v, want Secure=%v", tc.url, cs, tc.secure)
+		}
+	}
+}

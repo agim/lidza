@@ -6,7 +6,7 @@ CLAUDE.local.md
 # build output
 /bin/lidza
 /lidza
-/core/target/
+target/
 *.wasm
 
 # generated

@@ -101,6 +101,9 @@ type overviewData struct {
 	Credentials int
 	HasKey      bool
 	Store       string
+	// TLS is this node's certificates and refusals while the binary
+	// serves TLS itself, nil otherwise.
+	TLS *lidza.TLSSnapshot
 }
 
 func (h *Handler) overview(w http.ResponseWriter, r *http.Request) {
@@ -134,6 +137,13 @@ func (h *Handler) overview(w http.ResponseWriter, r *http.Request) {
 		d.Store = "database"
 	}
 	d.Credentials = len(credentials.Names(h.opt.CredentialsDir))
+	if st, ok := lidza.Optional[lidza.TLSReporter](ctx); ok {
+		snap := st.Snapshot()
+		if len(snap.Refused) > 10 {
+			snap.Refused = snap.Refused[:10]
+		}
+		d.TLS = &snap
+	}
 	if a, ok := lidza.Optional[*auth.Auth](ctx); ok {
 		_, d.Users, _ = a.Accounts(ctx, "", 1, 0)
 	}

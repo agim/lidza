@@ -330,3 +330,33 @@ func TestAdminListLayers(t *testing.T) {
 		}
 	}
 }
+
+type tlsReport lidza.TLSSnapshot
+
+func (r tlsReport) Snapshot() lidza.TLSSnapshot { return lidza.TLSSnapshot(r) }
+
+// While the binary serves TLS, the overview lists the certificates: the
+// listed domains, the hosts the app approved with their expiry, and the
+// latest refusals.
+func TestOverviewCertificates(t *testing.T) {
+	dir := t.TempDir()
+	s := lidza.NewServices()
+	now := time.Now()
+	lidza.Provide[lidza.TLSReporter](s, tlsReport{
+		Domains:  []lidza.TLSHost{{Host: "app.example.com", Expires: now.Add(60 * 24 * time.Hour)}},
+		Approved: []lidza.TLSHost{{Host: "mta-sts.customer.example", Approved: now.Add(-time.Hour)}},
+		Refused:  []lidza.TLSRefusal{{Host: "random.example", Reason: "not a customer domain", At: now}},
+	})
+	srv := serve(t, Options{Auth: noAuth, Allow: func(context.Context) bool { return true }, CredentialsDir: dir, Dir: dir}, s)
+	_, body := get(t, srv, "/admin/")
+	for _, want := range []string{"Certificates", "app.example.com", "mta-sts.customer.example", "approved by the app", "not served yet", "Refused lately", "random.example", "not a customer domain"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("missing %q", want)
+		}
+	}
+	// Without TLS served by the binary, no card.
+	plain := serve(t, Options{Auth: noAuth, Allow: func(context.Context) bool { return true }, CredentialsDir: dir, Dir: dir}, lidza.NewServices())
+	if _, body := get(t, plain, "/admin/"); strings.Contains(body, "Refused lately") || strings.Contains(body, ">Certificates<") {
+		t.Error("certificates card without TLS")
+	}
+}

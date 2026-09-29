@@ -1673,7 +1673,15 @@ itself with Let's Encrypt certificates, renewed on its own and stored
 in Postgres through the db pack so every node shares them, and
 redirects 80; `APP_URL` and `AUTH_COOKIE_SECURE` follow from it. Needs
 a DNS record for the domain and ports 80 and 443 open (`lidza doctor`
-checks both). Or put a TLS-terminating proxy in front and forward
+checks both). Hostnames the app learns while it runs (a customer's own
+domain) are approved by `App.TLSHosts` (`func(ctx, host) error`, nil
+approves): asked in the handshake, the ACME challenges and before every
+certificate order, cached per node (an approval 5 minutes, a refusal 1
+minute), so a host it stops approving is refused and never renewed. An
+approved host reaches the whole app: serve its paths with `r.Mount`
+(outside `/api`) and keep the rest to the app's domains with a
+middleware on `r.Host`. The admin overview lists the certificates and
+the latest refusals. Or put a TLS-terminating proxy in front and forward
 `X-Forwarded-For`. Point the orchestrator at `/healthz` and `/readyz`,
 scrape `/metrics`. Production settings: `LIDZA_MODE` unset,
 `LIDZA_LOG=json`, `AUTH_SECRET` the same on every node. The framework's

@@ -9,6 +9,22 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- `App.TLSHosts`: approve hostnames beyond `LIDZA_TLS_DOMAINS` while the
+  app runs (a customer's own domain), `func(ctx, host) error`, nil
+  approves, with the services in `ctx`. One policy decides in the TLS
+  handshake, the ACME challenges (HTTP-01 on :80 and TLS-ALPN, whose
+  challenge certificates autocert served without its policy) and before
+  every certificate order: the ACME client's transport refuses an order
+  naming a host the policy refuses, so a host the app stops approving is
+  not renewed (autocert renews without asking its policy again). The
+  verdict is cached per node, an approval 5 minutes and a refusal 1
+  minute, at most 10,000 hosts. Approvals and refusals are logged
+  (refusals at most 20 a minute); the admin overview gets a
+  Certificates card for the node: the domains, the approved hosts with
+  their expiry, the latest refusals (`lidza.TLSReporter`).
+
 ## v0.1.42 (2026-09-29)
 
 - `lidza gen resource` and rule L018: a field named `userId` makes a

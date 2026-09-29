@@ -135,6 +135,19 @@ What the server needs, and what `lidza doctor` checks in the project:
   `CAP_NET_BIND_SERVICE` to the unprivileged user; by hand, `sudo setcap
   'cap_net_bind_service=+ep' bin/<name>`. In a container, publish 80 and
   443.
+- **Hostnames added while the app runs**: `App.TLSHosts` approves a
+  host outside `LIDZA_TLS_DOMAINS` (a customer's own domain, which
+  points its DNS record at this server): `func(ctx, host) error`, nil
+  approves, with the services in `ctx`. It is asked in the TLS
+  handshake, the ACME challenges and before every certificate order,
+  renewals included; the verdict is cached per node, an approval 5
+  minutes and a refusal 1 minute (at most 10,000 hosts), so a host the
+  app stops approving is refused within 5 minutes and its certificate
+  is not renewed. Its certificate is kept with the others. Requests on
+  it reach the whole app: serve its paths with `r.Mount` and keep the
+  rest to the app's own domains with a middleware on `r.Host`.
+  Approvals and refusals are logged (refusals at most 20 a minute) and
+  the admin overview lists them for the node.
 - **Rate limits**: Let's Encrypt issues a bounded number of certificates
   per domain per week; rehearse against its staging directory with
   `LIDZA_TLS_DIRECTORY=https://acme-staging-v02.api.letsencrypt.org/directory`

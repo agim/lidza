@@ -43,6 +43,8 @@ const (
 )
 
 type tlsSettings struct {
+	// hosts is App.TLSHosts.
+	hosts     func(ctx context.Context, host string) error
 	domains   []string
 	email     string
 	addr      string
@@ -113,18 +115,28 @@ func (t *tlsSettings) cache(s *Services) (autocert.Cache, error) {
 	return nil, fmt.Errorf("%s needs somewhere to keep the certificates: the db pack (`lidza pack add db`; stored in Postgres, shared by every node) or %s for a single node", EnvTLSDomains, EnvTLSCacheDir)
 }
 
-// manager builds the ACME manager.
-func (t *tlsSettings) manager(cache autocert.Cache) *autocert.Manager {
-	m := &autocert.Manager{
+// manager builds the ACME manager: the policy decides which hosts get a
+// certificate, and guards every new order in the client's transport.
+func (t *tlsSettings) manager(cache autocert.Cache, p *tlsPolicy) *autocert.Manager {
+	directory := t.directory
+	if directory == "" {
+		directory = autocert.DefaultACMEDirectory
+	}
+	client := &http.Client{Transport: http.DefaultTransport}
+	if acmeHTTPClient != nil {
+		*client = *acmeHTTPClient
+		if client.Transport == nil {
+			client.Transport = http.DefaultTransport
+		}
+	}
+	client.Transport = orderGuard{next: client.Transport, allow: p.allow}
+	return &autocert.Manager{
 		Prompt:     autocert.AcceptTOS,
-		HostPolicy: autocert.HostWhitelist(t.domains...),
+		HostPolicy: p.allow,
 		Cache:      cache,
 		Email:      t.email,
+		Client:     &acme.Client{DirectoryURL: directory, HTTPClient: client},
 	}
-	if t.directory != "" {
-		m.Client = &acme.Client{DirectoryURL: t.directory, HTTPClient: acmeHTTPClient}
-	}
-	return m
 }
 
 // tlsListening, when set by a test, receives the bound HTTPS and HTTP
@@ -158,7 +170,9 @@ func serveTLS(ctx context.Context, booted *Booted, t *tlsSettings, appName strin
 		booted.Close(ctx)
 		return err
 	}
-	m := t.manager(cache)
+	policy := newTLSPolicy(t.domains, t.hosts, booted.Services, log)
+	Provide[TLSReporter](booted.Services, policy.status)
+	m := t.manager(cache, policy)
 	tlsLn, err := net.Listen("tcp", t.addr)
 	if err != nil {
 		booted.Close(ctx)
@@ -191,7 +205,9 @@ func serveTLS(ctx context.Context, booted *Booted, t *tlsSettings, appName strin
 		onReady()
 	}
 	errc := make(chan error, 2)
-	go func() { errc <- srv.Serve(tls.NewListener(tlsLn, m.TLSConfig())) }()
+	tlsConfig := m.TLSConfig()
+	tlsConfig.GetCertificate = policy.getCertificate(m)
+	go func() { errc <- srv.Serve(tls.NewListener(tlsLn, tlsConfig)) }()
 	go func() { errc <- redirect.Serve(httpLn) }()
 	select {
 	case err := <-errc:

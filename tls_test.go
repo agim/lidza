@@ -3,6 +3,7 @@ package lidza
 import (
 	"context"
 	"crypto/tls"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -67,7 +68,7 @@ func TestTLSSettings(t *testing.T) {
 	}
 	t.Setenv(EnvTLSDirectory, "https://acme-staging-v02.api.letsencrypt.org/directory")
 	s, _ = tlsFromEnv()
-	if m := s.manager(autocert.DirCache(dir)); m.Client == nil || m.Client.DirectoryURL == "" || m.Email != "ops@example.com" {
+	if m := s.manager(autocert.DirCache(dir), newTLSPolicy(s.domains, nil, NewServices(), slog.New(slog.DiscardHandler))); m.Client == nil || m.Client.DirectoryURL == "" || m.Email != "ops@example.com" {
 		t.Fatalf("manager: %+v", m)
 	}
 }

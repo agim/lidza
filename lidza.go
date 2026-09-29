@@ -96,6 +96,20 @@ type App struct {
 	// close pools, flush queues.
 	OnShutdown func(ctx context.Context) error
 
+	// TLSHosts approves a hostname beyond LIDZA_TLS_DOMAINS for a
+	// certificate (a customer's own domain the app serves): nil approves
+	// it, an error refuses it; a nil TLSHosts approves none. It is asked
+	// during TLS handshakes, ACME challenges and before every certificate
+	// order, renewals included, with the services in ctx (db.From works);
+	// the verdict is cached per node, an approval 5 minutes and a refusal
+	// 1 minute, so a host the app stops approving is refused within 5
+	// minutes and never renewed. Certificates live in the same shared
+	// cache as the listed domains'. Requests on an approved host reach the
+	// whole app, as on a listed domain: a path outside /api is served
+	// with r.Mount, and a middleware that checks r.Host keeps the rest
+	// (the frontend, /api) to the app's own domains.
+	TLSHosts func(ctx context.Context, host string) error
+
 	// ReadyTimeout bounds the checks behind /readyz; default 3s.
 	ReadyTimeout time.Duration
 }
@@ -253,6 +267,7 @@ func Serve(ctx context.Context, app App) error {
 		return err
 	}
 	if tlsCfg != nil {
+		tlsCfg.hosts = app.TLSHosts
 		return serveTLS(ctx, booted, tlsCfg, name(app), app.OnReady, log)
 	}
 	h := booted.Handler

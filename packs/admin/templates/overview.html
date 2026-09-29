@@ -95,6 +95,40 @@
     </div>
   </div>
 
+  {{with $d.TLS}}
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Certificates</h2>
+        <div class="card-actions text-secondary small">this node</div>
+      </div>
+      <div class="table-responsive">
+        <table class="table card-table table-vcenter">
+          <thead><tr><th>Host</th><th>Why</th><th>Certificate</th></tr></thead>
+          <tbody>
+            {{range .Domains}}
+            <tr><td class="font-monospace small">{{.Host}}</td><td>listed</td><td>{{if .Expires.IsZero}}<span class="text-secondary">not served yet</span>{{else}}expires {{until .Expires}}{{end}}</td></tr>
+            {{end}}
+            {{range .Approved}}
+            <tr><td class="font-monospace small">{{.Host}}</td><td>approved by the app {{since .Approved}}</td><td>{{if .Expires.IsZero}}<span class="text-secondary">not served yet</span>{{else}}expires {{until .Expires}}{{end}}</td></tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+      {{if .Refused}}
+      <div class="card-body border-top">
+        <h3 class="card-title mb-2">Refused lately</h3>
+        <div class="list-group list-group-flush">
+          {{range .Refused}}
+          <div class="list-group-item px-0"><span class="font-monospace small">{{.Host}}</span> <span class="text-secondary small">{{.Reason}}, {{since .At}}</span></div>
+          {{end}}
+        </div>
+      </div>
+      {{end}}
+    </div>
+  </div>
+  {{end}}
+
   <div class="col-12">
     <div class="card">
       <div class="card-header"><h2 class="card-title">Serving</h2></div>

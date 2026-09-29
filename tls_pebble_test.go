@@ -3,10 +3,13 @@ package lidza
 import (
 	"context"
 	"crypto/tls"
+	"errors"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -123,4 +126,108 @@ func (p pebbleTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		res.Header.Set("Location", req.URL.Scheme+"://"+req.URL.Host+"/my-order/"+id)
 	}
 	return res, nil
+}
+
+// TestServeTLSHosts: a host App.TLSHosts approves gets a certificate from
+// the local ACME authority and reaches the app's routes; a host it does
+// not approve is refused the handshake; a host it stops approving is
+// refused once the cached approval lapses. Skipped when no Pebble
+// answers.
+func TestServeTLSHosts(t *testing.T) {
+	directory := envOr("LIDZA_PEBBLE_URL", "https://localhost:14000/dir")
+	insecure := &http.Client{Timeout: 10 * time.Second, Transport: pebbleTransport{&http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}} //nolint:gosec // a local test CA
+	if res, err := insecure.Get(directory); err != nil {
+		t.Skipf("no Pebble at %s: %v", directory, err)
+	} else {
+		res.Body.Close()
+	}
+	var httpsAddr string
+	bound := make(chan struct{})
+	tlsListening = func(https, _ string) { httpsAddr = https; close(bound) }
+	t.Cleanup(func() { tlsListening = nil })
+	prevTTL := tlsApproveTTL
+	tlsApproveTTL = time.Second
+	t.Cleanup(func() { tlsApproveTTL = prevTTL })
+	t.Setenv(EnvTLSDomains, "app.example.com")
+	t.Setenv(EnvTLSAddr, "127.0.0.1:0")
+	t.Setenv(EnvTLSHTTPAddr, "127.0.0.1:0")
+	t.Setenv(EnvTLSCacheDir, t.TempDir())
+	t.Setenv(EnvTLSDirectory, directory)
+	acmeHTTPClient = insecure
+	t.Cleanup(func() { acmeHTTPClient = nil })
+
+	var approved atomic.Bool
+	approved.Store(true)
+	const customer = "mta-sts.customer.example"
+	ready := make(chan struct{})
+	app := App{Name: "tlshosts", Routes: func(r *router.Router) {
+		r.Mount("/.well-known/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte("version: STSv1 for " + r.Host))
+		}))
+	}, TLSHosts: func(_ context.Context, host string) error {
+		if host == customer && approved.Load() {
+			return nil
+		}
+		return errors.New("not a customer domain")
+	}, OnReady: func() { close(ready) }}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- Serve(ctx, app) }()
+	select {
+	case <-ready:
+		<-bound
+	case err := <-done:
+		t.Fatalf("serve: %v", err)
+	case <-time.After(30 * time.Second):
+		t.Fatal("not ready")
+	}
+	dial := func(host string) (*tls.Conn, error) {
+		return tls.Dial("tcp", httpsAddr, &tls.Config{ServerName: host, InsecureSkipVerify: true}) //nolint:gosec // the test CA's chain
+	}
+
+	// Approved: a certificate for it, and the request reaches the routes.
+	var conn *tls.Conn
+	var err error
+	for deadline := time.Now().Add(60 * time.Second); time.Now().Before(deadline); time.Sleep(500 * time.Millisecond) {
+		if conn, err = dial(customer); err == nil {
+			break
+		}
+	}
+	if err != nil {
+		t.Fatalf("approved host: no certificate within a minute: %v", err)
+	}
+	if names := conn.ConnectionState().PeerCertificates[0].DNSNames; len(names) != 1 || names[0] != customer {
+		t.Fatalf("certificate for %v", names)
+	}
+	conn.Close()
+	client := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{ServerName: customer, InsecureSkipVerify: true}}} //nolint:gosec // as above
+	req, _ := http.NewRequest(http.MethodGet, "https://"+httpsAddr+"/.well-known/mta-sts.txt", nil)
+	req.Host = customer
+	res, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if res.StatusCode != http.StatusOK || !strings.Contains(string(body), customer) {
+		t.Fatalf("request on the approved host: %d %q", res.StatusCode, body)
+	}
+
+	// Not approved: no handshake.
+	if c, err := dial("unknown.customer.example"); err == nil {
+		c.Close()
+		t.Fatal("an unknown host got a certificate")
+	}
+
+	// Revoked: refused once the cached approval lapses.
+	approved.Store(false)
+	time.Sleep(tlsApproveTTL + 200*time.Millisecond)
+	if c, err := dial(customer); err == nil {
+		c.Close()
+		t.Fatal("a revoked host still gets a handshake")
+	}
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatalf("shutdown: %v", err)
+	}
 }

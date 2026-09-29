@@ -11,6 +11,10 @@ change. A release without one is additive: an app updates with
 
 ## Unreleased
 
+- `lidza dev`: the framework's agent files are always at
+  `/_lidza/llms.txt`, `/_lidza/llms-full.txt` and `/_lidza/openapi.json`,
+  and at the root only until the app serves its own there: a product's
+  `/llms.txt` for crawlers wins.
 - `lidza mcp`: once the CLI on disk changes (`lidza update`), every tool
   of the running server refuses with the reconnect instruction instead
   of answering from the old release and regenerating files with its

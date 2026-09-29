@@ -1,8 +1,11 @@
 package devserver
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -115,5 +118,42 @@ func TestRunningDev(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, PIDFile), []byte("999999999 v0.1.1\n"), 0o644)
 	if _, _, ok := RunningDev(dir); ok {
 		t.Fatal("a dead pid counts as running")
+	}
+}
+
+// The framework's agent files sit under /_lidza/ always and at the root
+// only when the app has no file of its own there.
+func TestAgentFiles(t *testing.T) {
+	t.Chdir(t.TempDir())
+	os.MkdirAll(BuildDir, 0o755)
+	os.WriteFile(filepath.Join(BuildDir, "llms.txt"), []byte("framework guide"), 0o644)
+	appHas := false
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if appHas && r.URL.Path == "/llms.txt" {
+			w.Header().Set("Content-Type", "text/plain")
+			w.Write([]byte("the product's llms.txt"))
+			return
+		}
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte("<!doctype html><div id=root></div>"))
+	})
+	h := AgentFiles(next)
+	get := func(path string) string {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest("GET", path, nil))
+		return rec.Body.String()
+	}
+	if got := get("/llms.txt"); got != "framework guide" {
+		t.Fatalf("no app file: %q", got)
+	}
+	appHas = true
+	if got := get("/llms.txt"); got != "the product's llms.txt" {
+		t.Fatalf("the app's own: %q", got)
+	}
+	if got := get("/_lidza/llms.txt"); got != "framework guide" {
+		t.Fatalf("under /_lidza/: %q", got)
+	}
+	if got := get("/about"); !strings.Contains(got, "doctype") {
+		t.Fatalf("other paths: %q", got)
 	}
 }

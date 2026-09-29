@@ -112,9 +112,11 @@ its packs) and, when the binary runs with `LIDZA_MCP_TOKEN`, at `/mcp`
 for other agents. Give a tool a `schema.lidza` type as `In` and its rules
 are enforced.
 
-While `lidza dev` runs, http://127.0.0.1:3000/llms.txt summarizes the app
-and http://127.0.0.1:3000/llms-full.txt has this guide plus every handler
-signature. Both are regenerated after each Go rebuild.
+While `lidza dev` runs, http://127.0.0.1:3000/_lidza/llms.txt summarizes
+the app and http://127.0.0.1:3000/_lidza/llms-full.txt has this guide plus
+every handler signature. Both are regenerated after each Go rebuild. They
+are also at /llms.txt and /llms-full.txt until the app serves its own
+there (a product's llms.txt for crawlers), which then wins.
 
 The lists are live: a pack added to `lidza.json`, a recipe recorded in
 the guide or a tool added to `tools.go` appears in this server's tools

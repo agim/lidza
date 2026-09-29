@@ -1,5 +1,5 @@
 import astro from 'eslint-plugin-astro'
-import jsxA11y from 'eslint-plugin-jsx-a11y'
+import jsxA11y from 'eslint-plugin-jsx-a11y-x'
 import tseslint from 'typescript-eslint'
 
 // `lidza check` runs this. The a11y rules are errors: a page a screen

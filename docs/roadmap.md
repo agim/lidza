@@ -237,8 +237,8 @@ Done 2026-09-25.
   state at build time and fetch from `/api` after hydration, so there is
   no server-side data and no dehydrate/hydrate step. `astro` prerenders
   by itself; `svelte` and `htmx` are unchanged.
-- Accessibility: ESLint 9 with `eslint-plugin-jsx-a11y` (recommended,
-  errors) and `typescript-eslint` in the `react` template; `lidza check`
+- Accessibility: ESLint with `eslint-plugin-jsx-a11y-x`, the maintained
+  fork of `eslint-plugin-jsx-a11y` (recommended, errors) and `typescript-eslint` in the `react` template; `lidza check`
   runs `eslint --format json` and reports the findings with file and line.
 - `useLive(topics)` in the template: a WebSocket to the `realtime` pack
   that invalidates the TanStack queries keyed by the topic; reconnects

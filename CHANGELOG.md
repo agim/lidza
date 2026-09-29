@@ -9,6 +9,15 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- Templates: ESLint 10 in the `react` and `astro` templates. The a11y rules
+  come from `eslint-plugin-jsx-a11y-x`, the maintained fork of
+  `eslint-plugin-jsx-a11y` (which stops at ESLint 9), registered under the
+  original name: rule ids stay `jsx-a11y/*`. `astro` moves to
+  `eslint-plugin-astro` 3. Existing apps: swap the dependency and the
+  import in `eslint.config.js` as the templates do.
+
 ## v0.1.34 (2026-09-29)
 
 - `App.Head` (`devserver.WithHead`) sets each page's head per request

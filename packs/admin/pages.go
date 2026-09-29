@@ -46,10 +46,20 @@ func (f fileStore) Save(ctx context.Context, name, value string) error {
 			return err
 		}
 	}
-	return credentials.Set(f.dir, map[string]string{name: value})
+	if err := credentials.Set(f.dir, map[string]string{name: value}); err != nil {
+		return err
+	}
+	// A value saved while the app runs counts as a runtime value, like the
+	// db pack's store: tests, which never read the sealed file, see it too.
+	credentials.SetOverride(name, value)
+	return nil
 }
 func (f fileStore) Delete(ctx context.Context, name string) error {
-	return credentials.Unset(f.dir, name)
+	if err := credentials.Unset(f.dir, name); err != nil {
+		return err
+	}
+	credentials.SetOverride(name, "")
+	return nil
 }
 func (f fileStore) Names(ctx context.Context) ([]string, error) {
 	return credentials.Names(f.dir), nil

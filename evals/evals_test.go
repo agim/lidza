@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -277,7 +278,7 @@ func TestGuidanceSurfaces(t *testing.T) {
 	// The app owns its start hook; main.go stays generated.
 	start, _ := os.ReadFile(filepath.Join(app, "start.go"))
 	mainGo, _ := os.ReadFile(filepath.Join(app, "main.go"))
-	if !strings.Contains(string(start), "func onStart(") || !strings.Contains(string(mainGo), "OnStart: onStart") {
+	if !strings.Contains(string(start), "func onStart(") || !regexp.MustCompile(`OnStart:\s+onStart`).MatchString(string(mainGo)) {
 		t.Error("start.go with onStart, wired in main.go, missing")
 	}
 	out, err := command(app, lidza, "api", "pkg/router", "--filter", "Route")
@@ -328,7 +329,7 @@ func TestGuidanceSurfaces(t *testing.T) {
 		t.Fatal(err)
 	}
 	prompts, err := c.ListPrompts(ctx, mcp.ListPromptsRequest{})
-	if err != nil || len(prompts.Prompts) != 17 {
+	if err != nil || len(prompts.Prompts) != 18 {
 		t.Errorf("prompts: %v %d", err, len(prompts.Prompts))
 	}
 	tools, err := c.ListTools(ctx, mcp.ListToolsRequest{})

@@ -2,7 +2,6 @@ package devserver
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -170,6 +169,6 @@ func TestProxyHead(t *testing.T) {
 	body, _ = io.ReadAll(res.Body)
 	res.Body.Close()
 	if string(body) != "js" {
-		t.Fatal(fmt.Sprintf("asset changed: %s", body))
+		t.Fatalf("asset changed: %s", body)
 	}
 }

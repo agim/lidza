@@ -91,7 +91,7 @@ func runShip(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	for _, line := range productionNeeds(cfg, deployValues(cfg, credentials.Values(abs))) {
+	for _, line := range productionNeeds(cfg, deployValues(cfg, productionCredentials(abs))) {
 		fmt.Println("[ship] set before deploying: " + line)
 	}
 	fmt.Printf("[ship] ready: %s (%.1f MB); %s carries the deployment settings\n", bin, float64(info.Size())/(1<<20), envFile)
@@ -145,7 +145,7 @@ func writeProductionEnv(dir string, cfg *config.Config) (string, error) {
 			fmt.Fprintf(&b, "%s=%s\n", k, cfg.Deploy.Env[k])
 		}
 	}
-	if needs := productionNeeds(cfg, deployValues(cfg, credentials.Values(dir))); len(needs) > 0 {
+	if needs := productionNeeds(cfg, deployValues(cfg, productionCredentials(dir))); len(needs) > 0 {
 		b.WriteString("\n# The enabled packs need these, and neither the credentials nor lidza.json's\n# deploy.env hold them (lidza credentials set NAME=value for a secret,\n# deploy.env for a setting, or the environment where the process runs):\n")
 		for _, line := range needs {
 			b.WriteString("# " + line + "\n")
@@ -221,4 +221,15 @@ func secretNames(env map[string]string) []string {
 	}
 	slices.Sort(out)
 	return out
+}
+
+// productionCredentials is what production reads from the sealed file:
+// the plain values and the production: section, whatever mode the CLI
+// runs in.
+func productionCredentials(dir string) map[string]string {
+	raw, err := credentials.Read(dir)
+	if err != nil {
+		return map[string]string{}
+	}
+	return credentials.Resolve(raw, "production")
 }

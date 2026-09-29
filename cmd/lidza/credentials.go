@@ -91,7 +91,12 @@ func runCredentials(ctx context.Context, args []string) error {
 	case "list":
 		_, saved, done := savedSettings(ctx, abs)
 		defer done()
-		for _, n := range credentials.Names(abs) {
+		raw, err := credentials.Read(abs)
+		if err != nil {
+			return err
+		}
+		// As written: dev.NAME and production.NAME are one mode's.
+		for _, n := range slices.Sorted(maps.Keys(raw)) {
 			if _, ok := saved[n]; !ok {
 				fmt.Println(n)
 			}
@@ -123,7 +128,12 @@ func runCredentials(ctx context.Context, args []string) error {
 			fmt.Println(v)
 			return nil
 		}
+		// NAME is what this mode reads (dev: its section over the plain
+		// value); dev.NAME is that entry as written.
 		v, ok := vals[rest[0]]
+		if !strings.Contains(rest[0], ".") {
+			v, ok = credentials.Resolve(vals, credentials.Mode())[rest[0]]
+		}
 		if !ok {
 			return fmt.Errorf("credentials: no %s", rest[0])
 		}

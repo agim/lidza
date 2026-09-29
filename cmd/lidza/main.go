@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/agim/lidza/pkg/devserver"
 	"github.com/agim/lidza/pkg/version"
 )
 
@@ -58,7 +59,7 @@ Commands:
   context  write .lidza/context.json: routes, handler signatures, Rust exports
   api      print the framework's public Go API as the project resolves it: the package list, one package, a --filter search, or all
   recipe   add one of this app's conventions to docs/lidza-guide.md as a recipe (prompt, skills, command), or list the recipes
-  credentials the app's secrets, sealed in config/credentials.yml.enc with config/master.key; every pack reads them like .env
+  credentials the app's secrets, sealed in config/credentials.yml.enc with config/master.key; every pack reads them like .env; dev.NAME and production.NAME are for one mode
   admin    who may open the admin pages besides the first account: ADMIN_USERS in the credentials, read within seconds
   update   the CLI to the newest release and, in a project, the module to the same version: go get, tidy, Dockerfile pin, lidza gen, a note on pending migrations
   decision record why the app is built a way (a pack, Rust, a dependency, a schema tradeoff) in docs/decisions.md, or list the decisions
@@ -76,6 +77,13 @@ func main() {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	// The CLI works on a development checkout: it reads .env.dev and the
+	// credentials' dev: section, never production's (a sealed production
+	// DATABASE_URL). lidza test and verify set test; ship resolves
+	// production itself.
+	if os.Getenv(devserver.EnvMode) == "" {
+		os.Setenv(devserver.EnvMode, "dev")
+	}
 
 	var err error
 	switch cmd, args := os.Args[1], os.Args[2:]; cmd {

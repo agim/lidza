@@ -200,13 +200,13 @@ func setup(ctx context.Context, dir string, cfg *config.Config, opt setupOptions
 				step("%s: DATABASE_URL pointed at %s, where Postgres has no socket; now %s", name, from, to)
 			}
 		}
-		for _, m := range []string{"", "test"} {
+		for _, m := range []string{"dev", "test"} {
 			applied, err := migrate(ctx, dir, m)
 			if err != nil {
-				problem("database (%s): %v; is Postgres running (lidza doctor)? Then lidza setup again", map[bool]string{true: "dev", false: m}[m == ""], err)
+				problem("database (%s): %v; is Postgres running (lidza doctor)? Then lidza setup again", m, err)
 				continue
 			}
-			step("database %s: created if missing, %d migration(s) applied", dbName(cfg.Name, map[bool]string{true: "dev", false: m}[m == ""]), applied)
+			step("database %s: created if missing, %d migration(s) applied", dbName(cfg.Name, m), applied)
 		}
 	}
 
@@ -411,15 +411,11 @@ func needsKey(dir, key string) bool {
 	return false
 }
 
-// migrate creates the database of a mode ("" for development, "test")
-// when missing and applies the migrations; it returns how many.
+// migrate creates the database of a mode ("dev", "test") when missing
+// and applies the migrations; it returns how many.
 func migrate(ctx context.Context, dir, mode string) (int, error) {
 	prev, had := os.LookupEnv(devserver.EnvMode)
-	if mode == "" {
-		os.Unsetenv(devserver.EnvMode)
-	} else {
-		os.Setenv(devserver.EnvMode, mode)
-	}
+	os.Setenv(devserver.EnvMode, mode)
 	defer func() {
 		if had {
 			os.Setenv(devserver.EnvMode, prev)

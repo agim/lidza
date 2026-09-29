@@ -96,3 +96,84 @@ func TestParseFormat(t *testing.T) {
 		}
 	}
 }
+
+// One sealed file for every mode: a mode reads the plain values and its
+// own section, which wins; production needs only the master key.
+func TestModeSections(t *testing.T) {
+	text := `# comment
+SAAS_EMAIL: team@example.com
+STRIPE_SECRET_KEY: sk_plain
+
+dev:
+  STRIPE_SECRET_KEY: sk_test_1
+  MULTI: "line one\nline two"
+production:
+  STRIPE_SECRET_KEY: sk_live_1
+AFTER: x
+`
+	raw, err := Parse(text)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{"SAAS_EMAIL": "team@example.com", "STRIPE_SECRET_KEY": "sk_plain", "dev.STRIPE_SECRET_KEY": "sk_test_1", "dev.MULTI": "line one\nline two", "production.STRIPE_SECRET_KEY": "sk_live_1", "AFTER": "x"}
+	if len(raw) != len(want) {
+		t.Fatalf("parsed %v", raw)
+	}
+	for k, v := range want {
+		if raw[k] != v {
+			t.Errorf("%s = %q, want %q", k, raw[k], v)
+		}
+	}
+	// Format writes the sections back; Parse reads the same.
+	again, err := Parse(Format(raw))
+	if err != nil || len(again) != len(raw) || again["dev.MULTI"] != "line one\nline two" {
+		t.Fatalf("round trip: %v %v\n%s", again, err, Format(raw))
+	}
+	if !strings.Contains(Format(raw), "\ndev:\n  MULTI: ") {
+		t.Errorf("format:\n%s", Format(raw))
+	}
+	for mode, key := range map[string]string{"dev": "sk_test_1", "production": "sk_live_1", "staging": "sk_plain"} {
+		got := Resolve(raw, mode)
+		if got["STRIPE_SECRET_KEY"] != key || got["SAAS_EMAIL"] != "team@example.com" {
+			t.Errorf("%s: %v", mode, got)
+		}
+		for k := range got {
+			if strings.Contains(k, ".") {
+				t.Errorf("%s: section name %s leaked", mode, k)
+			}
+		}
+	}
+	if _, ok := Resolve(raw, "production")["MULTI"]; ok {
+		t.Error("dev's value in production")
+	}
+
+	// Set and Values through the sealed file, by mode.
+	dir := t.TempDir()
+	t.Setenv(EnvMasterKey, "")
+	if _, err := Generate(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := Set(dir, map[string]string{"STRIPE_SECRET_KEY": "sk_plain", "dev.STRIPE_SECRET_KEY": "sk_test_2", "production.STRIPE_SECRET_KEY": "sk_live_2"}); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("LIDZA_MODE", "dev")
+	if v := Values(dir)["STRIPE_SECRET_KEY"]; v != "sk_test_2" {
+		t.Errorf("dev reads %q", v)
+	}
+	t.Setenv("LIDZA_MODE", "")
+	if v := Values(dir)["STRIPE_SECRET_KEY"]; v != "sk_live_2" {
+		t.Errorf("production reads %q", v)
+	}
+
+	for _, bad := range []string{"development.STRIPE_KEY", "Dev.STRIPE_KEY", ".STRIPE_KEY", "dev.lower", "dev.prod.X"} {
+		if err := Set(dir, map[string]string{bad: "x"}); err == nil {
+			t.Errorf("%s accepted", bad)
+		}
+	}
+	if _, err := Parse("development:\n  X: 1\n"); err == nil || !strings.Contains(err.Error(), `"dev"`) {
+		t.Errorf("development section: %v", err)
+	}
+	if _, err := Parse("  X: 1\n"); err == nil {
+		t.Error("indented outside a section accepted")
+	}
+}

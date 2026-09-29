@@ -116,7 +116,7 @@ func Origins(dir string) (map[string]string, error) {
 		}
 	}
 	if file, err := credentials.Read(dir); err == nil && Mode() != "test" {
-		for k := range file {
+		for k := range credentials.Resolve(file, Mode()) {
 			out[k] = OriginCredentials
 		}
 	}

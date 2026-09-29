@@ -46,7 +46,15 @@ func (f fileStore) Save(ctx context.Context, name, value string) error {
 			return err
 		}
 	}
-	if err := credentials.Set(f.dir, map[string]string{name: value}); err != nil {
+	// A value the file holds for this mode only (dev.NAME) is the one
+	// this mode reads: the save replaces it there.
+	key := name
+	if raw, err := credentials.Read(f.dir); err == nil {
+		if _, ok := raw[credentials.Mode()+"."+name]; ok {
+			key = credentials.Mode() + "." + name
+		}
+	}
+	if err := credentials.Set(f.dir, map[string]string{key: value}); err != nil {
 		return err
 	}
 	// A value saved while the app runs counts as a runtime value, like the
@@ -55,7 +63,7 @@ func (f fileStore) Save(ctx context.Context, name, value string) error {
 	return nil
 }
 func (f fileStore) Delete(ctx context.Context, name string) error {
-	if err := credentials.Unset(f.dir, name); err != nil {
+	if err := credentials.Unset(f.dir, name, credentials.Mode()+"."+name); err != nil {
 		return err
 	}
 	credentials.SetOverride(name, "")

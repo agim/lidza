@@ -1389,7 +1389,13 @@ credentials set MAIL_API_KEY=...` (MCP: `lidza_credentials_set`) seals a
 value; `list` shows the names, `show` every value (`show NAME` one),
 `edit` the whole file in `$EDITOR`. Every pack reads the credentials by the same names as
 `.env`, between the `.env` files and the process environment, so nothing
-in the code changes. In production the key travels as
+in the code changes. A value for one mode only goes in that mode's
+section: `lidza credentials set dev.STRIPE_SECRET_KEY=sk_test_...
+production.STRIPE_SECRET_KEY=sk_live_...` keeps the sandbox key for
+`lidza dev` and the live one for production in the same file; a mode
+reads the plain values and its section, which wins. The CLI reads as
+`dev` (`lidza test` as `test`), so a production value never reaches a
+development command. In production the key travels as
 `LIDZA_MASTER_KEY` (the file's contents) and the sealed file is deployed
 with the binary. A key pasted into source fails `lidza check` (L010). The admin pages save changes to the database, sealed
 with the same key, and the mail, llm and storage packs pick them up

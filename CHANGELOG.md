@@ -9,6 +9,22 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- Credentials per mode: one sealed file holds values for every mode.
+  `lidza credentials set dev.STRIPE_SECRET_KEY=sk_test_...
+  production.STRIPE_SECRET_KEY=sk_live_...` writes them to the file's
+  `dev:` and `production:` sections; a mode reads the plain values and
+  its own section, which wins. Development keeps sandbox keys and
+  production the live ones, and a deploy needs only `LIDZA_MASTER_KEY`.
+  `list` shows the names as written; `show NAME` what the mode reads.
+- The CLI reads the app's settings as `dev` when `LIDZA_MODE` is unset
+  (`.env.dev`, the credentials' `dev:` section), so `lidza setup`,
+  `db`, `doctor` and the MCP server's database tools never pick up a
+  production value; `lidza ship` reads production's. `lidza setup`
+  migrated the development database with no mode, which read
+  `.env.production`; it now uses `dev`.
+
 ## v0.1.37 (2026-09-29)
 
 - admin: settings a pack refuses are no longer kept. The Settings page

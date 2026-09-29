@@ -7,6 +7,12 @@
 // MAIL_API_KEY to the mail pack. Values saved at runtime (the admin
 // pages) are held in the database by the db pack, encrypted with the
 // same key, and override the file.
+//
+// A value can be for one mode only: under a section named after the
+// mode (dev:, production:) in the file, "dev.STRIPE_SECRET_KEY" to Set
+// and Read. A mode reads the plain values and its own section, which
+// wins; one sealed file holds a sandbox key for dev and the live key for
+// production, and production needs only the master key.
 package credentials
 
 import (
@@ -112,7 +118,9 @@ func ignore(dir, path string) error {
 	return os.WriteFile(p, []byte(text+path+"\n"), 0o644)
 }
 
-// Read decrypts the credentials file; no file is no credentials.
+// Read decrypts the credentials file, names as written: NAME, or
+// mode.NAME for a value in a mode's section (Resolve picks a mode's).
+// No file is no credentials.
 func Read(dir string) (map[string]string, error) {
 	key, err := Key(dir)
 	if err != nil {
@@ -149,6 +157,33 @@ func Write(dir string, values map[string]string) error {
 	return os.WriteFile(p, []byte(sealed+"\n"), 0o644)
 }
 
+// Mode is the run mode the values resolve for: LIDZA_MODE, else
+// "production" (pkg/env.Mode, which imports this package).
+func Mode() string {
+	if m := os.Getenv("LIDZA_MODE"); m != "" {
+		return m
+	}
+	return "production"
+}
+
+// Resolve returns what mode reads from raw (Read's names): the plain
+// names, with mode's "mode.NAME" entries over them; other modes'
+// entries are left out.
+func Resolve(raw map[string]string, mode string) map[string]string {
+	out := map[string]string{}
+	for k, v := range raw {
+		if !strings.Contains(k, ".") {
+			out[k] = v
+		}
+	}
+	for k, v := range raw {
+		if m, name, ok := strings.Cut(k, "."); ok && m == mode {
+			out[name] = v
+		}
+	}
+	return out
+}
+
 // Set stores one or more values in the file.
 func Set(dir string, values map[string]string) error {
 	cur, err := Read(dir)
@@ -176,13 +211,35 @@ func Unset(dir string, names ...string) error {
 	return Write(dir, cur)
 }
 
+// checkName accepts NAME, or mode.NAME for one mode only.
 func checkName(k string) error {
+	if mode, name, ok := strings.Cut(k, "."); ok {
+		if err := checkMode(mode); err != nil {
+			return err
+		}
+		k = name
+	}
 	if k == "" {
 		return errors.New("credentials: empty name")
 	}
 	for _, r := range k {
 		if !(r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_') {
 			return fmt.Errorf("credentials: %q: names are environment variable names (MAIL_API_KEY)", k)
+		}
+	}
+	return nil
+}
+
+func checkMode(mode string) error {
+	if mode == "development" {
+		return errors.New(`credentials: the development mode is "dev" (dev.NAME, a dev: section)`)
+	}
+	if mode == "" {
+		return errors.New("credentials: empty mode before the dot")
+	}
+	for i, r := range mode {
+		if !(r >= 'a' && r <= 'z' || i > 0 && (r >= '0' && r <= '9' || r == '-' || r == '_')) {
+			return fmt.Errorf("credentials: mode %q: lowercase, like dev or production", mode)
 		}
 	}
 	return nil
@@ -232,9 +289,11 @@ func Parse(text string) (map[string]string, error) {
 	out := map[string]string{}
 	sc := bufio.NewScanner(strings.NewReader(text))
 	n := 0
+	section := ""
 	for sc.Scan() {
 		n++
-		line := strings.TrimSpace(sc.Text())
+		raw := sc.Text()
+		line := strings.TrimSpace(raw)
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
@@ -243,6 +302,25 @@ func Parse(text string) (map[string]string, error) {
 			return nil, fmt.Errorf("credentials: line %d: expected KEY: value", n)
 		}
 		k, v = strings.TrimSpace(k), strings.TrimSpace(v)
+		indented := raw[0] == ' ' || raw[0] == '\t'
+		switch {
+		case !indented && v == "" && k != "" && k == strings.ToLower(k):
+			// A mode's section: "dev:", its values indented below.
+			if err := checkMode(k); err != nil {
+				return nil, fmt.Errorf("line %d: %w", n, err)
+			}
+			section = k
+			continue
+		case indented && section != "":
+			if strings.Contains(k, ".") {
+				return nil, fmt.Errorf("credentials: line %d: %s inside the %s: section", n, k, section)
+			}
+			k = section + "." + k
+		case indented:
+			return nil, fmt.Errorf("credentials: line %d: indented outside a mode's section", n)
+		default:
+			section = ""
+		}
 		if err := checkName(k); err != nil {
 			return nil, fmt.Errorf("line %d: %w", n, err)
 		}
@@ -266,13 +344,31 @@ func Format(values map[string]string) string {
 	}
 	sort.Strings(names)
 	var b strings.Builder
-	b.WriteString("# Secrets of this app, sealed with config/master.key. Edit with\n# lidza credentials set NAME=value; every pack reads them like .env.\n")
-	for _, k := range names {
-		v := values[k]
+	b.WriteString("# Secrets of this app, sealed with config/master.key. Edit with\n# lidza credentials set NAME=value; every pack reads them like .env.\n# A mode's section (dev:, production:) holds values for that mode\n# only, over the plain ones: lidza credentials set dev.NAME=value.\n")
+	quote := func(v string) string {
 		if v == "" || strings.ContainsAny(v, "#:\"\n\\") || v != strings.TrimSpace(v) {
-			v = strconv.Quote(v)
+			return strconv.Quote(v)
 		}
-		fmt.Fprintf(&b, "%s: %s\n", k, v)
+		return v
+	}
+	sections := map[string][]string{}
+	var modes []string
+	for _, k := range names {
+		if mode, name, ok := strings.Cut(k, "."); ok {
+			if sections[mode] == nil {
+				modes = append(modes, mode)
+			}
+			sections[mode] = append(sections[mode], name)
+			continue
+		}
+		fmt.Fprintf(&b, "%s: %s\n", k, quote(values[k]))
+	}
+	sort.Strings(modes)
+	for _, mode := range modes {
+		fmt.Fprintf(&b, "\n%s:\n", mode)
+		for _, name := range sections[mode] {
+			fmt.Fprintf(&b, "  %s: %s\n", name, quote(values[mode+"."+name]))
+		}
 	}
 	return b.String()
 }
@@ -326,15 +422,13 @@ func Overrides() map[string]string {
 	return out
 }
 
-// Values returns the file's values with the runtime overrides applied;
-// without a master key or a file, the overrides alone. This is what
-// pkg/env merges.
+// Values returns the file's values for the run mode (Resolve) with the
+// runtime overrides applied; without a master key or a file, the
+// overrides alone. This is what pkg/env merges.
 func Values(dir string) map[string]string {
 	out := map[string]string{}
 	if file, err := Read(dir); err == nil {
-		for k, v := range file {
-			out[k] = v
-		}
+		out = Resolve(file, Mode())
 	}
 	for k, v := range Overrides() {
 		out[k] = v

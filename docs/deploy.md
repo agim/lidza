@@ -48,8 +48,12 @@ verified at the provider).
 not. Set `LIDZA_MASTER_KEY` to the contents of `config/master.key` in the
 environment of the process (the unit's `.env`, the container's
 `--env-file`), and every pack reads the sealed values as if they were
-in `.env`. Values saved from the admin pages live in the database,
-sealed with the same key, and every node reads them.
+in `.env`. Production reads the plain values and the file's
+`production:` section (`lidza credentials set production.NAME=...`),
+so one file holds the sandbox keys for development and the live ones,
+and the master key is all a deploy adds. Values saved from the admin
+pages live in the database, sealed with the same key, and every node
+reads them.
 
 ## Database
 

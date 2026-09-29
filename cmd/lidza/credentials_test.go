@@ -99,3 +99,31 @@ func TestCredentialsSavedSettings(t *testing.T) {
 		t.Fatalf("still saved: %d %v", n, err)
 	}
 }
+
+// show NAME prints what the CLI's mode (dev) reads; ship reads
+// production's section whatever the CLI's mode is.
+func TestCredentialsModes(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv(credentials.EnvMasterKey, "")
+	os.WriteFile(filepath.Join(dir, "lidza.json"), []byte(`{"name":"demo","frontend":{"template":"htmx"}}`), 0o644)
+	if _, err := credentials.Generate(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := credentials.Set(dir, map[string]string{"PAY_KEY": "plain", "dev.PAY_KEY": "sandbox", "production.PAY_KEY": "live"}); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("LIDZA_MODE", "dev")
+	ctx := context.Background()
+	if out := stdout(t, func() error { return runCredentials(ctx, []string{"show", "--dir", dir, "PAY_KEY"}) }); out != "sandbox\n" {
+		t.Errorf("show in dev: %q", out)
+	}
+	if out := stdout(t, func() error { return runCredentials(ctx, []string{"show", "--dir", dir, "production.PAY_KEY"}) }); out != "live\n" {
+		t.Errorf("show production.PAY_KEY: %q", out)
+	}
+	if out := stdout(t, func() error { return runCredentials(ctx, []string{"list", "--dir", dir}) }); out != "PAY_KEY\ndev.PAY_KEY\nproduction.PAY_KEY\n" {
+		t.Errorf("list: %q", out)
+	}
+	if v := productionCredentials(dir)["PAY_KEY"]; v != "live" {
+		t.Errorf("ship reads %q", v)
+	}
+}

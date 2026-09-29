@@ -281,3 +281,35 @@ func TestRefresh(t *testing.T) {
 		t.Fatalf("prompt listed %d times", n)
 	}
 }
+
+// Once the CLI on disk changes (lidza update), every tool refuses with
+// the reconnect instruction instead of answering from the old release.
+func TestStaleServer(t *testing.T) {
+	exe := filepath.Join(t.TempDir(), "lidza")
+	os.WriteFile(exe, []byte("v1"), 0o755)
+	old := executable
+	executable = func() (string, error) { return exe, nil }
+	t.Cleanup(func() { executable = old })
+	c, err := client.NewInProcessClient(New(t.TempDir(), nil).MCPServer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	if err := c.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	if _, err := c.Initialize(ctx, mcp.InitializeRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	req := mcp.CallToolRequest{}
+	req.Params.Name = "lidza_snippet"
+	if res, err := c.CallTool(ctx, req); err != nil || res.IsError {
+		t.Fatalf("before the update: %v %+v", err, res)
+	}
+	os.WriteFile(exe, []byte("v2, a longer binary"), 0o755)
+	res, err := c.CallTool(ctx, req)
+	if err != nil || !res.IsError || !strings.Contains(mcp.GetTextFromContent(res.Content[0]), "reconnect") {
+		t.Fatalf("after the update: %v %+v", err, res)
+	}
+}

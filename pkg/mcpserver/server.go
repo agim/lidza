@@ -63,6 +63,7 @@ func New(dir string, cfg *config.Config) *Server {
 		server.WithResourceCapabilities(false, true),
 		server.WithPromptCapabilities(true),
 		server.WithInstructions(instructions),
+		server.WithToolHandlerMiddleware(staleGuard()),
 	)
 	srv := &Server{MCPServer: s, dir: dir, cfg: cfg, packs: newGroup(s), app: newGroup(s), recipes: newGroup(s), stamps: map[string]time.Time{}}
 
@@ -258,4 +259,34 @@ func tail(path string, n int, filter string) (string, error) {
 		return fmt.Sprintf("(empty: %s)", path), nil
 	}
 	return strings.Join(lines, "\n"), nil
+}
+
+// executable is the running CLI's path; a test points it elsewhere.
+var executable = os.Executable
+
+// staleGuard refuses every tool once the CLI on disk is no longer the
+// one this server runs (lidza update replaced it): the old server would
+// answer from the old release and regenerate files with its templates,
+// which the new CLI then rewrites. The agent reconnects the server, or
+// uses the CLI in a shell until then.
+func staleGuard() server.ToolHandlerMiddleware {
+	exe, err := executable()
+	stamp := exeStamp(exe)
+	return func(next server.ToolHandlerFunc) server.ToolHandlerFunc {
+		return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			if err == nil && stamp != "" && exeStamp(exe) != stamp {
+				return mcp.NewToolResultError("the lidza CLI was updated on disk since this MCP server started (it runs " + version.String() + "): reconnect the lidza MCP server (Claude Code: /mcp, then lidza, Reconnect) before using its tools; until then run the lidza CLI in a shell"), nil
+			}
+			return next(ctx, req)
+		}
+	}
+}
+
+// exeStamp identifies a file's version by size and modification time.
+func exeStamp(p string) string {
+	info, err := os.Stat(p)
+	if err != nil {
+		return ""
+	}
+	return fmt.Sprintf("%d %d", info.Size(), info.ModTime().UnixNano())
 }

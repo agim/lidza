@@ -11,6 +11,10 @@ change. A release without one is additive: an app updates with
 
 ## Unreleased
 
+- `lidza mcp`: once the CLI on disk changes (`lidza update`), every tool
+  of the running server refuses with the reconnect instruction instead
+  of answering from the old release and regenerating files with its
+  templates, which the new CLI then rewrote.
 - Tests never read the sealed credentials file (`LIDZA_MODE=test`): it
   holds the deployment's real keys, which overrode `.env.test` and
   reached real services from tests. Values saved at runtime still count;

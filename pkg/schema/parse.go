@@ -118,7 +118,7 @@ func (p *parser) enum(rest string) (*Enum, error) {
 	return e, nil
 }
 
-// block parses a model or type: "Name [@table("x")] [@public] {" then
+// block parses a model or type: "Name [@table("x")] [@public|@shared] {" then
 // fields until "}".
 func (p *parser) block(rest string, persisted bool) (*Model, error) {
 	name, tail := cut(rest)
@@ -137,9 +137,14 @@ func (p *parser) block(rest string, persisted bool) (*Model, error) {
 			m.Table = strings.Trim(arg, `"`)
 		case an == "public" && persisted && arg == "":
 			m.Public = true
+		case an == "shared" && persisted && arg == "":
+			m.Shared = true
 		default:
 			return nil, fmt.Errorf("line %d: %s: unknown attribute @%s", p.i, name, an)
 		}
+	}
+	if m.Public && m.Shared {
+		return nil, fmt.Errorf("line %d: %s: @public and @shared exclude each other (@public: open to visitors; @shared: every signed-in user's)", p.i, name)
 	}
 	if persisted && m.Table == "" {
 		m.Table = snake(name)

@@ -21,8 +21,10 @@ confirm it exists).
    query that misses it (L018). The snippets `queries` and
    `resource-handlers` are this case.
 3. Shared rows (a team, a project): keep a membership table
-   (`Membership { projectId @ref(Project, cascade), userId @ref(User,
-   cascade), role }` with `@@unique(projectId, userId)`) and join on it:
+   (`Membership @shared { projectId @ref(Project, cascade), userId
+   @ref(User, cascade), role }` with `@@unique(projectId, userId)`;
+   `@shared` because its rows belong to the project, not to the user
+   the `userId` names) and join on it:
 
    ```sql
    -- name: GetTask :one

@@ -245,10 +245,12 @@ model into a working resource: SQL queries, `CreatePost`/`UpdatePost`/`PostList`
 carrying the model's validation rules, `handlers/posts.go` with list, get,
 create, patch and delete under `/api/v1/posts`, and a group behind
 `auth.Require()` in `routes.go`. A model with an owner field (`ownerId`,
-`userId`, or a field with `@ref(User)` or `@ref(AuthUser)`) is scoped to
-the signed-in user: every query filters by the owner, create sets it,
-and another user's row is a 404. `--public` marks the model `@public`
-for a resource visitors may change: open routes, no owner. The client
+or a field with `@ref(User)` or `@ref(AuthUser)`) is scoped to the
+signed-in user: every query filters by the owner, create sets it, and
+another user's row is a 404. `--shared` marks the model `@shared` for
+rows every signed-in user shares (a team's projects): behind sign-in,
+not scoped. `--public` marks it `@public` for a resource visitors may
+change: open routes, no owner. The client
 gets `api.listPosts()`, `api.createPost(body)` and the rest on the next
 `lidza gen`. The handlers are yours after that; `lidza check` flags a
 query on an owned table that does not filter by the owner (L018).

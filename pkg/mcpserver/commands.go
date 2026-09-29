@@ -126,6 +126,7 @@ func addCommandTools(s *server.MCPServer, dir string, cfg *config.Config, after 
 			mcp.WithString("model", mcp.Required(), mcp.Description("The model name in schema.lidza, e.g. Post.")),
 			mcp.WithBoolean("force", mcp.Description("Overwrite an existing handlers file.")),
 			mcp.WithBoolean("public", mcp.Description("A resource anyone may read and write: marks the model @public; routes not behind sign-in, rows not scoped.")),
+			mcp.WithBoolean("shared", mcp.Description("A resource every signed-in user shares: marks the model @shared; routes behind sign-in, rows not scoped to one user.")),
 		}, 10 * time.Minute, false, true, func(req mcp.CallToolRequest) ([]string, error) {
 			model := req.GetString("model", "")
 			if model == "" {
@@ -134,6 +135,9 @@ func addCommandTools(s *server.MCPServer, dir string, cfg *config.Config, after 
 			args := []string{"gen", "resource", model}
 			if req.GetBool("force", false) {
 				args = append(args, "--force")
+			}
+			if req.GetBool("shared", false) {
+				args = append(args, "--shared")
 			}
 			if req.GetBool("public", false) {
 				args = append(args, "--public")

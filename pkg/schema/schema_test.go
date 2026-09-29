@@ -585,8 +585,17 @@ model Post {
   authorId uuid @ref(User)
 }
 model Membership {
+  id        uuid @id
+  userId    string
+  projectId uuid
+}
+model Follow {
   id     uuid @id
-  userId string
+  userId uuid @ref(User)
+}
+model Project @shared {
+  id      uuid @id
+  ownerId uuid
 }
 model Tag @public {
   id      uuid @id
@@ -602,7 +611,7 @@ type CreateNote {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for model, want := range map[string]string{"Note": "ownerId", "Post": "editorId", "Membership": "userId", "Tag": "", "Category": "", "User": "", "CreateNote": ""} {
+	for model, want := range map[string]string{"Note": "ownerId", "Post": "editorId", "Membership": "", "Follow": "userId", "Project": "", "Tag": "", "Category": "", "User": "", "CreateNote": ""} {
 		got := ""
 		if f := s.Owner(s.Model(model)); f != nil {
 			got = f.Name
@@ -619,5 +628,12 @@ type CreateNote {
 	}
 	if _, err := Parse("model T @public(x) {\n  id uuid @id\n}"); err == nil {
 		t.Error("@public(x) accepted")
+	}
+}
+
+// @public and @shared exclude each other.
+func TestPublicSharedExclusive(t *testing.T) {
+	if _, err := Parse("model Tag @public @shared {\n  id uuid @id\n}\n"); err == nil || !strings.Contains(err.Error(), "exclude each other") {
+		t.Fatalf("both: %v", err)
 	}
 }

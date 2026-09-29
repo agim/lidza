@@ -34,6 +34,9 @@ type Options struct {
 	// Public marks the model @public in schema.lidza: its routes are open
 	// to visitors and its rows are not scoped to a user.
 	Public bool
+	// Shared marks the model @shared: routes behind sign-in, rows every
+	// signed-in user shares, not scoped to one.
+	Shared bool
 	// Auth is true when the app enables the auth pack, which a resource
 	// that is not public needs.
 	Auth bool
@@ -46,10 +49,10 @@ type Result struct {
 	// routes.go the generator could not edit.
 	RoutesLine string
 	Registered bool
-	// Owner is the owner field of an owned model, "" otherwise; Public is
-	// true for a @public model.
-	Owner  string
-	Public bool
+	// Owner is the owner field of an owned model, "" otherwise; Public and
+	// Shared are true for a @public or @shared model.
+	Owner          string
+	Public, Shared bool
 	// StaleInputs are the Create and Update types in schema.lidza that
 	// still take the owner field (written before the model was scoped);
 	// the handlers ignore it, and the field should go.
@@ -72,17 +75,20 @@ func Generate(root string, opt Options) (*Result, error) {
 	if _, err := os.Stat(filepath.Join(root, pack.SQLCFile)); err != nil {
 		return nil, errors.New("the resource generator needs the db pack: run `lidza pack add db` first")
 	}
+	if opt.Public && opt.Shared {
+		return nil, errors.New("--public and --shared exclude each other")
+	}
 	if !m.Public && !opt.Public && !opt.Auth {
 		return nil, fmt.Errorf("resource %s: its routes go behind sign-in (auth.Require()) and the app has no auth pack: run `lidza pack add auth` first, or pass --public for a resource anyone may read and write", m.Name)
 	}
 	r := &Resource{Schema: s, Model: m, Module: opt.Module, Owner: s.Owner(m)}
-	if opt.Public {
+	if opt.Public || opt.Shared {
 		r.Owner = nil
 	}
 	if err := r.check(); err != nil {
 		return nil, err
 	}
-	res := &Result{Public: m.Public || opt.Public}
+	res := &Result{Public: m.Public || opt.Public, Shared: m.Shared || opt.Shared}
 	if r.Owner != nil {
 		res.Owner = r.Owner.Name
 	}
@@ -90,11 +96,18 @@ func Generate(root string, opt Options) (*Result, error) {
 	if _, err := os.Stat(filepath.Join(root, handlersFile)); err == nil && !opt.Force {
 		return nil, fmt.Errorf("%s exists; pass --force to overwrite", filepath.ToSlash(handlersFile))
 	}
-	if opt.Public && !m.Public {
-		if err := markPublic(root, m); err != nil {
+	if opt.Public && !m.Public || opt.Shared && !m.Shared {
+		if (opt.Public && m.Shared) || (opt.Shared && m.Public) {
+			return nil, fmt.Errorf("model %s is marked @%s in %s; change the attribute there", m.Name, map[bool]string{true: "shared", false: "public"}[m.Shared], schema.FileName)
+		}
+		attr := "public"
+		if opt.Shared {
+			attr = "shared"
+		}
+		if err := markModel(root, m, attr); err != nil {
 			return nil, err
 		}
-		m.Public = true
+		m.Public, m.Shared = m.Public || opt.Public, m.Shared || opt.Shared
 		res.Files = append(res.Files, schema.FileName)
 	}
 	write := func(rel, content string, overwrite bool) error {
@@ -642,8 +655,8 @@ func registerRoutes(root, module string, reg registration, force bool) (bool, er
 	return true, os.WriteFile(p, []byte(schema.Gofmt(src)), 0o644)
 }
 
-// markPublic adds @public to the model's line in schema.lidza.
-func markPublic(root string, m *schema.Model) error {
+// markModel adds @attr (public or shared) to the model's line in schema.lidza.
+func markModel(root string, m *schema.Model, attr string) error {
 	p := filepath.Join(root, schema.FileName)
 	data, err := os.ReadFile(p)
 	if err != nil {
@@ -658,7 +671,7 @@ func markPublic(root string, m *schema.Model) error {
 	if brace < 0 || !strings.Contains(line[:brace], m.Name) {
 		return fmt.Errorf("%s: model %s not found on line %d", schema.FileName, m.Name, m.Line)
 	}
-	lines[m.Line-1] = strings.TrimRight(line[:brace], " \t") + " @public " + line[brace:]
+	lines[m.Line-1] = strings.TrimRight(line[:brace], " \t") + " @" + attr + " " + line[brace:]
 	return os.WriteFile(p, []byte(strings.Join(lines, "\n")), 0o644)
 }
 

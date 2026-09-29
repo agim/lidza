@@ -196,7 +196,7 @@ func TestGeneratePublic(t *testing.T) {
 // TestGenerateOwnerType: the owner holds the user's id, a string.
 func TestGenerateOwnerType(t *testing.T) {
 	root := ownedApp(t)
-	os.WriteFile(filepath.Join(root, schema.FileName), []byte("model Product {\n  id int @id @default(autoincrement())\n  userId int\n  name string\n}\n"), 0o644)
+	os.WriteFile(filepath.Join(root, schema.FileName), []byte("model Product {\n  id int @id @default(autoincrement())\n  ownerId int\n  name string\n}\n"), 0o644)
 	if _, err := Generate(root, Options{Model: "Product", Module: "app", Auth: true}); err == nil || !strings.Contains(err.Error(), "@public") {
 		t.Fatalf("int owner: %v", err)
 	}
@@ -311,3 +311,28 @@ func TestOwnedRows(t *testing.T) {
 	}
 }
 `
+
+// TestGenerateShared: --shared marks the model @shared; its routes are
+// behind sign-in and its queries are not scoped, owner-like field or not.
+func TestGenerateShared(t *testing.T) {
+	root := ownedApp(t)
+	res, err := Generate(root, Options{Model: "Product", Module: "app", Auth: true, Shared: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Shared || res.Owner != "" {
+		t.Fatalf("result: %+v", res)
+	}
+	if src := read(t, root, schema.FileName); !strings.Contains(src, "model Product @shared {") {
+		t.Fatalf("not marked:\n%s", src)
+	}
+	if q := read(t, root, "db/queries/product.sql"); strings.Contains(q, "owner_id = $") {
+		t.Errorf("shared queries are scoped:\n%s", q)
+	}
+	if routes := read(t, root, "routes.go"); !strings.Contains(routes, "auth.Require()") {
+		t.Errorf("shared routes not behind sign-in:\n%s", routes)
+	}
+	if _, err := Generate(ownedApp(t), Options{Model: "Product", Module: "app", Auth: true, Shared: true, Public: true}); err == nil {
+		t.Error("--public with --shared accepted")
+	}
+}

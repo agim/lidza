@@ -12,23 +12,22 @@ func (f *Field) Column() string { return snake(f.Name) }
 // m is not owned. The first match wins:
 //
 //  1. a field named ownerId;
-//  2. a field named userId;
-//  3. the first field with @ref(User) or @ref(AuthUser), such as
-//     authorId uuid @ref(User).
+//  2. the first field with @ref(User) or @ref(AuthUser), such as
+//     userId uuid @ref(User) or authorId uuid @ref(User).
 //
-// The id and arrays are never the owner. A model marked @public, and a
-// type, have none. The owner's value is the signed-in user's id,
+// A userId without the @ref is not the owner: in a join table
+// (memberships: userId, projectId) the rows belong to the project. The
+// id and arrays are never the owner. A model marked @public or @shared,
+// and a type, have none. The owner's value is the signed-in user's id,
 // auth.CurrentUser(ctx).ID.
 func (s *Schema) Owner(m *Model) *Field {
-	if m == nil || !m.Persisted || m.Public {
+	if m == nil || !m.Persisted || m.Public || m.Shared {
 		return nil
 	}
 	candidate := func(f *Field) bool { return !f.ID && !f.Array }
-	for _, name := range []string{"ownerId", "userId"} {
-		for _, f := range m.Fields {
-			if f.Name == name && candidate(f) {
-				return f
-			}
+	for _, f := range m.Fields {
+		if f.Name == "ownerId" && candidate(f) {
+			return f
 		}
 	}
 	for _, f := range m.Fields {

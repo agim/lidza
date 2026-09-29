@@ -23,7 +23,7 @@ Usage:
   lidza dev   [--dir .] [--addr 127.0.0.1:3000]
   lidza build [--dir .] [--out bin/<name>]
   lidza check [--dir .] [--json]
-  lidza gen [--dir .] | lidza gen resource <Model> [--force] [--public]
+  lidza gen [--dir .] | lidza gen resource <Model> [--force] [--public | --shared]
   lidza pack add|scaffold|build|list [name]
   lidza db migrate|rollback|status
   lidza benchmark [scenario] [--vus 500] [--duration 1m]

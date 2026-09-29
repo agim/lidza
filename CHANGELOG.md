@@ -9,6 +9,17 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- `lidza gen resource` and rule L018: a field named `userId` makes a
+  model owned only with `@ref(User)` or `@ref(AuthUser)`; a bare
+  `userId` (a membership table's) no longer does. `ownerId` still does.
+- A new model attribute `@shared` (`lidza gen resource --shared`, MCP
+  `shared`): rows every signed-in user shares, such as a team's
+  projects or a membership table. Routes behind sign-in, queries not
+  scoped, L018 silent, even with an owner-like field. `@public` stays
+  "open to visitors"; the two exclude each other.
+
 ## v0.1.41 (2026-09-29)
 
 - Breaking: `lidza verify`, and so the pre-commit hook, refuses a

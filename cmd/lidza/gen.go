@@ -48,6 +48,7 @@ func runGenResource(_ context.Context, args []string) error {
 	dir := fs.String("dir", ".", "project directory")
 	force := fs.Bool("force", false, "overwrite the handlers file")
 	public := fs.Bool("public", false, "a resource anyone may read and write: marks the model @public, routes not behind sign-in, rows not scoped to a user")
+	shared := fs.Bool("shared", false, "a resource every signed-in user shares: marks the model @shared, routes behind sign-in, rows not scoped to one user")
 	var model string
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
 		model, args = args[0], args[1:]
@@ -65,7 +66,7 @@ func runGenResource(_ context.Context, args []string) error {
 	if cfg == nil {
 		return errors.New("gen resource needs a lidza.json project")
 	}
-	res, err := crud.Generate(abs, crud.Options{Model: model, Module: inspect.ModulePath(abs), Force: *force, Public: *public, Auth: slices.Contains(cfg.Packs, "lidza/auth")})
+	res, err := crud.Generate(abs, crud.Options{Model: model, Module: inspect.ModulePath(abs), Force: *force, Public: *public, Shared: *shared, Auth: slices.Contains(cfg.Packs, "lidza/auth")})
 	if err != nil {
 		return err
 	}
@@ -73,6 +74,8 @@ func runGenResource(_ context.Context, args []string) error {
 	switch {
 	case res.Public:
 		fmt.Printf("resource %s: public (@public): open to visitors, rows not scoped to a user\n", model)
+	case res.Shared:
+		fmt.Printf("resource %s: shared (@shared): routes behind auth.Require(), every signed-in user sees every row\n", model)
 	case res.Owner != "":
 		fmt.Printf("resource %s: owned by %s, the signed-in user; routes behind auth.Require(); another user's row is a 404\n", model, res.Owner)
 	default:

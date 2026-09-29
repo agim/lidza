@@ -305,11 +305,14 @@ backed by Postgres. Needs the `db` and `auth` packs (`lidza pack add db`,
    ```
 
    The model is owned when it has an owner field, the first of: a field
-   `ownerId`, a field `userId`, a field with `@ref(User)` or
-   `@ref(AuthUser)`. The owner is `uuid` or `string` and required: it
-   holds the signed-in user's id. A model whose rows belong to no one
-   and that visitors may change (rare) is marked `@public`
-   (`model Tag @public {`).
+   `ownerId`, a field with `@ref(User)` or `@ref(AuthUser)` (such as
+   `userId uuid @ref(User)`; a `userId` without the reference is not
+   the owner). The owner is `uuid` or `string` and required: it holds
+   the signed-in user's id. A model whose rows every signed-in user
+   shares (a team's projects, a membership table) is marked `@shared`
+   (`model Project @shared {`): behind sign-in, not scoped. One whose
+   rows belong to no one and that visitors may change (rare) is marked
+   `@public` (`model Tag @public {`).
 2. Run `lidza gen resource Post` (MCP: `lidza_gen_resource` with
    `model: "Post"`): it writes `db/queries/post.sql`, the
    `CreatePost`, `UpdatePost` and `PostList` types in `schema.lidza`,
@@ -326,6 +329,8 @@ backed by Postgres. Needs the `db` and `auth` packs (`lidza pack add db`,
    `auth.CurrentUser(ctx).ID`, the `Create` and `Update` types leave it
    out, and another user's row is a 404. `--public` (MCP: `public: true`)
    marks the model `@public`: no owner, routes open to visitors.
+   `--shared` (MCP: `shared: true`) marks it `@shared`: behind sign-in,
+   rows not scoped to one user.
 3. Run `lidza db migrate` (MCP: `lidza_db_migrate`) to apply the new
    migration in `db/migrations/`.
 4. The generated files are ordinary code: add filters or routes there.
@@ -478,8 +483,10 @@ confirm it exists).
    query that misses it (L018). The snippets `queries` and
    `resource-handlers` are this case.
 3. Shared rows (a team, a project): keep a membership table
-   (`Membership { projectId @ref(Project, cascade), userId @ref(User,
-   cascade), role }` with `@@unique(projectId, userId)`) and join on it:
+   (`Membership @shared { projectId @ref(Project, cascade), userId
+   @ref(User, cascade), role }` with `@@unique(projectId, userId)`;
+   `@shared` because its rows belong to the project, not to the user
+   the `userId` names) and join on it:
 
    ```sql
    -- name: GetTask :one

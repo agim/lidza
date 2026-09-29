@@ -32,7 +32,7 @@
 // now(), autoincrement() on an int or bigint, or a literal),
 // @ref(Model), @min(n), @max(n), @email, @url, @pattern("re"). Block
 // attributes: @@index(a, b),
-// @@unique(a, b); model attributes @table("name") and @public. A @ref
+// @@unique(a, b); model attributes @table("name"), @public and @shared. A @ref
 // field has the type of the referenced model's id: uuid, int, bigint or
 // string.
 //
@@ -40,7 +40,9 @@
 // `lidza gen resource` scopes its queries to the signed-in user and
 // `lidza check` (L018) flags a query that does not. @public marks a model
 // whose rows anyone may read and write: not owned, and its generated
-// routes are not behind sign-in.
+// routes are not behind sign-in. @shared marks one whose rows every
+// signed-in user shares: routes behind sign-in, queries not scoped, even
+// with an owner-like field (a team's projects with a createdBy user).
 package schema
 
 import (
@@ -79,6 +81,9 @@ type Model struct {
 	// Public is the model attribute @public: the rows are not owned and
 	// the generated routes are open to visitors.
 	Public bool `json:",omitempty"`
+	// Shared is the model attribute @shared: the rows are not owned and
+	// the generated routes are behind sign-in.
+	Shared bool `json:",omitempty"`
 }
 
 // Field is one line of a block.

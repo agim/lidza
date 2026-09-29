@@ -8,7 +8,7 @@ does not reimplement).
 | Capability | Status | Where |
 |---|---|---|
 | CLI tools | done | `lidza new` (with `--packs` and `--agent`), `setup`, `dev`, `build`, `check`, `gen`, `gen resource`, `pack`, `db`, `test`, `verify`, `ship`, `update`, `benchmark`, `doctor`, `api`, `snippet`, `recipe`, `decision`, `credentials`, `mcp` |
-| CRUD | done | `lidza gen resource <Model>`: queries, Create/Update/List types with the model's rules, five typed routes, row mapping, registration behind `auth.Require()`; an owned model (`ownerId`, `userId`, `@ref(User)`) scoped to the signed-in user with 404 for another's rows, `@public` (`--public`) for open ones; edited freely after; rule L018 |
+| CRUD | done | `lidza gen resource <Model>`: queries, Create/Update/List types with the model's rules, five typed routes, row mapping, registration behind `auth.Require()`; an owned model (`ownerId`, `@ref(User)`) scoped to the signed-in user with 404 for another's rows, `@shared` (`--shared`) for rows signed-in users share, `@public` (`--public`) for open ones; edited freely after; rule L018 |
 | Hot module replacement | done | Vite HMR through the `lidza dev` proxy; Go handlers rebuild and restart, frontend state is kept |
 | API route parameter parsing | done | `net/http` patterns, `req.Param("id")` in typed handlers; the client takes them as a typed object; a group's prefix may hold them too (`r.Group("/api/v1/posts/{id}")`) |
 | Automated asset bundling | done | Vite: minify, hash, code split, `dist/` embedded in the binary. Image optimization: phase 3 template build |

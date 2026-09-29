@@ -23,7 +23,7 @@ does not reimplement).
 | Environment configuration injection | done | `pkg/env`: typed struct from `.env`, `.env.<mode>` and the environment; secrets never in `lidza.json` |
 | Form validation | done | rules in `schema.lidza`; generated `Validate()` runs before every typed handler (422 with field errors, `ApiError.fields` on the client); `validators.ts` in `@lidza/client` applies the same rules in the browser |
 | Automatic error boundaries | done | React error boundary in the template; Go panic recovery returning a JSON error |
-| Database schema migrations | done | `lidza gen` diffs `schema.lidza` against `db/schema.lock.json` into numbered up/down scripts; `lidza db migrate`, `rollback`, `status` apply them under an advisory lock |
+| Database schema migrations | done | `lidza gen` diffs `schema.lidza` against `db/schema.lock.json` into numbered up/down scripts; `lidza db migrate`, `rollback`, `status` apply them under an advisory lock. Identity ids (`@default(autoincrement())`) and exact decimals (`decimal(p, s)`: numeric in Postgres, `decimal.Decimal` in Go and sqlc, a string in the clients) |
 | Database connection pooling | done | `pgxpool` in the `db` pack, bounded by `DB_MAX_CONNS`; `/readyz` pings it, `/metrics` reports it |
 | Client SDKs | done | `@lidza/client` (TypeScript) always; `lidza_client` (Dart) when `lidza.json` names a directory under `sdk.dart`; a `router.Stream` route (server-sent events) is an async iterable in TypeScript and a `Stream` in Dart; a `router.File` route (upload) takes a File or Blob with upload progress in TypeScript, bytes in Dart |
 | Object-relational mapping | done | `sqlc` via the `db` pack: SQL in `db/queries/*.sql`, `lidza gen` writes typed Go; see "Decisions" |

@@ -350,6 +350,8 @@ func (b *schemaBuilder) named(n *types.Named) map[string]any {
 		return map[string]any{"type": "string", "format": "date-time"}
 	case "encoding/json.RawMessage":
 		return map[string]any{}
+	case "github.com/agim/lidza/pkg/decimal.Decimal":
+		return map[string]any{"type": "string", "format": "decimal"}
 	case routerPath + ".None":
 		return nil
 	}

@@ -10,9 +10,10 @@ import (
 // `mod schema;` in lib.rs.
 const RustFile = "src/schema.rs"
 
-// GenerateRust renders serde structs and enums. Time, date and uuid fields
-// are strings, so the crate needs no chrono or uuid dependency; packs that
-// want typed values convert at the boundary. Bytes fields are Vec<u8>
+// GenerateRust renders serde structs and enums. Time, date, uuid and
+// decimal fields are strings (a decimal as "12.50", exact), so the crate
+// needs no chrono, uuid or decimal dependency; packs that want typed
+// values convert at the boundary. Bytes fields are Vec<u8>
 // carried as base64 (the JSON form Go uses), through the b64 helpers the
 // file defines when it needs them (crate dependency: base64).
 func GenerateRust(s *Schema) string {
@@ -55,7 +56,7 @@ func GenerateRust(s *Schema) string {
 func rustType(f *Field) string {
 	var t string
 	switch f.Type {
-	case "string", "text", "uuid", "time", "date":
+	case "string", "text", "uuid", "time", "date", "decimal":
 		t = "String"
 	case "int":
 		t = "i32"

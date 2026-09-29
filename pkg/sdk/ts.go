@@ -114,7 +114,16 @@ func objectBody(def map[string]any, depth int) string {
 		if !required[n] {
 			opt = "?"
 		}
-		fmt.Fprintf(&b, "%s%s%s: %s\n", pad, tsKey(n), opt, tsType(props[n].(map[string]any), depth+1))
+		p := props[n].(map[string]any)
+		if p["format"] == "decimal" {
+			// A decimal stays a string end to end: Number() only to display.
+			digits := ""
+			if prec, ok := p["x-precision"]; ok {
+				digits = fmt.Sprintf(" (%v digits, %v after the point)", prec, p["x-scale"])
+			}
+			fmt.Fprintf(&b, "%s/** Exact decimal as a string, \"12.50\"%s. */\n", pad, digits)
+		}
+		fmt.Fprintf(&b, "%s%s%s: %s\n", pad, tsKey(n), opt, tsType(p, depth+1))
 	}
 	b.WriteString(strings.Repeat("  ", depth) + "}")
 	return b.String()

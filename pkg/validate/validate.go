@@ -16,7 +16,7 @@ type FieldError struct {
 	// Field is the JSON name of the field.
 	Field string `json:"field"`
 	// Rule is the rule that failed: required, min, max, email, url,
-	// pattern, enum.
+	// pattern, enum, decimal (not a number that fits decimal(p, s)).
 	Rule    string `json:"rule"`
 	Message string `json:"message"`
 }

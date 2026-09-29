@@ -1,7 +1,8 @@
 // Package jsonschema derives a JSON Schema from a Go type at runtime, for
 // app-defined MCP tools whose input is a Go struct. It follows the same
 // conventions as the build-time generator in pkg/inspect: json tags,
-// omitempty as optional, pointers as nullable, time.Time as date-time.
+// omitempty as optional, pointers as nullable, time.Time as date-time,
+// decimal.Decimal as a string of format decimal.
 package jsonschema
 
 import (
@@ -33,6 +34,9 @@ func of(t reflect.Type, depth int) map[string]any {
 		return map[string]any{"type": "string", "format": "date-time"}
 	case rawType:
 		return map[string]any{}
+	}
+	if t.PkgPath() == "github.com/agim/lidza/pkg/decimal" && t.Name() == "Decimal" {
+		return map[string]any{"type": "string", "format": "decimal"}
 	}
 	switch t.Kind() {
 	case reflect.Pointer:

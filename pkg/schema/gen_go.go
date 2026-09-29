@@ -27,6 +27,9 @@ func GenerateGo(s *Schema) string {
 	if usesGo(s, "json") {
 		imports = append(imports, `"encoding/json"`)
 	}
+	if usesGo(s, "decimal") {
+		imports = append(imports, `"github.com/agim/lidza/pkg/decimal"`)
+	}
 	b.WriteString("import (\n")
 	for _, imp := range imports {
 		b.WriteString("\t" + imp + "\n")
@@ -98,6 +101,8 @@ func goType(s *Schema, f *Field) string {
 		t = "int64"
 	case "float":
 		t = "float64"
+	case "decimal":
+		t = "decimal.Decimal"
 	case "bool":
 		t = "bool"
 	case "time", "date":
@@ -120,8 +125,9 @@ func goType(s *Schema, f *Field) string {
 
 // writeGoValidate emits Validate for the struct. Rules: required (a non-
 // optional string, text, uuid or enum must not be empty), min and max
-// (length for strings and arrays, value for numbers), email, url, pattern,
-// enum membership, and nested Validate for type-valued fields.
+// (length for strings and arrays, value for numbers, compared exactly for
+// decimals), decimal (a number that fits decimal(p, s)), email, url,
+// pattern, enum membership, and nested Validate for type-valued fields.
 func writeGoValidate(b *strings.Builder, s *Schema, m *Model) {
 	fmt.Fprintf(b, "// Validate applies the rules of %s from %s.\nfunc (v %s) Validate() error {\n\tvar errs validate.Errors\n", m.Name, FileName, m.Name)
 	for _, f := range m.Fields {
@@ -146,6 +152,9 @@ func writeGoValidate(b *strings.Builder, s *Schema, m *Model) {
 			}
 			if isEnum {
 				rules = append(rules, fmt.Sprintf("for _, x := range %s {\n\tif !x.Valid() {\n\t\terrs.Add(%q, \"enum\", \"unknown %s value\")\n\t\tbreak\n\t}\n}", field, f.Name, f.Type))
+			}
+			if f.Type == "decimal" {
+				rules = append(rules, fmt.Sprintf("for _, x := range %s {\n\tif !x.Fits(%d, %d) {\n\t\terrs.Add(%q, \"decimal\", %q)\n\t\tbreak\n\t}\n}", field, f.Precision, f.Scale, f.Name, decimalMsg(f)))
 			}
 			if isType {
 				rules = append(rules, fmt.Sprintf("for _, x := range %s {\n\tif err := x.Validate(); err != nil {\n\t\terrs.Add(%q, \"nested\", err.Error())\n\t\tbreak\n\t}\n}", field, f.Name))
@@ -189,6 +198,15 @@ func writeGoValidate(b *strings.Builder, s *Schema, m *Model) {
 			if f.Max != nil {
 				rule(fmt.Sprintf("%s > %s", val, fnum(*f.Max)), "max", "at most "+fnum(*f.Max))
 			}
+		case f.Type == "decimal":
+			// Exact: the bounds as written, compared as decimals.
+			rule(fmt.Sprintf("!%s.Fits(%d, %d)", val, f.Precision, f.Scale), "decimal", decimalMsg(f))
+			if f.MinText != "" {
+				rule(fmt.Sprintf("%s.Valid() && %s.Cmp(%q) < 0", val, val, f.MinText), "min", "at least "+f.MinText)
+			}
+			if f.MaxText != "" {
+				rule(fmt.Sprintf("%s.Valid() && %s.Cmp(%q) > 0", val, val, f.MaxText), "max", "at most "+f.MaxText)
+			}
 		case isEnum:
 			if !f.Optional {
 				rule(val+` == ""`, "required", "required")
@@ -213,6 +231,15 @@ func writeGoValidate(b *strings.Builder, s *Schema, m *Model) {
 		}
 	}
 	b.WriteString("\treturn errs.Result()\n}\n\n")
+}
+
+// decimalMsg is the message of a decimal(p, s) value that is not a
+// number or does not fit the column.
+func decimalMsg(f *Field) string {
+	if f.Scale == 0 {
+		return fmt.Sprintf("not a whole number of at most %d digit(s)", f.Precision)
+	}
+	return fmt.Sprintf("not a number with at most %d digit(s) before the point and %d after", f.Precision-f.Scale, f.Scale)
 }
 
 // indent prefixes every line of s with n tabs and ends it with a newline.

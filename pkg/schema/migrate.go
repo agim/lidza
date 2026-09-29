@@ -133,9 +133,23 @@ func Diff(prev, cur *Schema, seq int) *Migration {
 				m.Down = append(down, m.Down...)
 				changed = true
 			}
+			// An identity replaces the default: the old default goes first
+			// on the way in, the identity first on the way out.
+			addIdentity := []string{fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s ADD %s;", table, col, identity), restartIdentity(t.Table, f)}
+			dropIdentity := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s DROP IDENTITY;", table, col)
+			if of.Autoincrement() && !f.Autoincrement() {
+				m.Up = append(m.Up, dropIdentity)
+				m.Down = append(addIdentity, m.Down...)
+				changed = true
+			}
 			if od, nd := defaultOf(prev, of), defaultOf(cur, f); od != nd {
 				m.Up = append(m.Up, alterDefault(table, col, nd))
 				m.Down = append([]string{alterDefault(table, col, od)}, m.Down...)
+				changed = true
+			}
+			if !of.Autoincrement() && f.Autoincrement() {
+				m.Up = append(m.Up, addIdentity...)
+				m.Down = append([]string{dropIdentity}, m.Down...)
 				changed = true
 			}
 			if of.Unique != f.Unique && !f.ID {
@@ -211,11 +225,19 @@ func Diff(prev, cur *Schema, seq int) *Migration {
 	return m
 }
 
+// defaultOf is the column's DEFAULT: "" without one, and for an
+// identity, which is not a default.
 func defaultOf(s *Schema, f *Field) string {
-	if f.Default == "" {
+	if f.Default == "" || f.Autoincrement() {
 		return ""
 	}
 	return sqlDefault(s, f)
+}
+
+// restartIdentity moves the identity of a column that already holds
+// values past the largest, so the next insert does not collide.
+func restartIdentity(table string, f *Field) string {
+	return fmt.Sprintf("SELECT setval(pg_get_serial_sequence(%s, %s), coalesce(max(%s), 0) + 1, false) FROM %s;", quoteLit(qid(table)), quoteLit(snake(f.Name)), col(f), qid(table))
 }
 
 func alterDefault(table, col, def string) string {

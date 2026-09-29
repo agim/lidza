@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"testing"
 	"time"
+
+	"github.com/agim/lidza/pkg/decimal"
 )
 
 type inner struct {
@@ -62,5 +64,16 @@ func TestOf(t *testing.T) {
 	}
 	if Of(nil)["type"] != "object" {
 		t.Error("nil")
+	}
+}
+
+func TestDecimal(t *testing.T) {
+	s := Of(struct {
+		Price decimal.Decimal  `json:"price"`
+		Tax   *decimal.Decimal `json:"tax"`
+	}{})
+	got, _ := json.Marshal(s["properties"])
+	if string(got) != `{"price":{"format":"decimal","type":"string"},"tax":{"format":"decimal","type":["string","null"]}}` {
+		t.Fatalf("%s", got)
 	}
 }

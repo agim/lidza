@@ -462,6 +462,46 @@ Add a client-side route rendered by React, prerendered at build time.
 10. Add a browser test in `e2e/things.spec.ts` (see "Write a test"), then
    `lidza check` and `lidza test --e2e`.
 
+### Set the head of a page
+
+Give each address its own title, description, canonical address, social
+cards and structured data. Search engines and link previews read the
+HTML the server sends, not what the browser renders later, and a route
+with a parameter (`/products/$id`) is one shell for every address until
+the server names it. The binary sets the head per request, without the
+SSR sidecar.
+
+1. In `main.go`, set `Head: head` on `lidza.App`, and write `head` in
+   `head.go` (package main): `func head(r *http.Request) (lidza.Head,
+   bool)`. It returns false for the pages it does not know; they keep the
+   head they were built with.
+2. Match the path (`id, ok := strings.CutPrefix(r.URL.Path,
+   "/products/")`), load the record with one query
+   (`queries.New(db.From(r.Context()))`: the packs are in the request's
+   context), and fill `Title`, `Description`, `Canonical` (the absolute
+   address), `Image` (absolute), `Type` (`article`, `product`; `website`
+   when empty), `SiteName`, further tags in `Meta`
+   (`lidza.HeadMeta{Property: "article:published_time", Content: ...}`)
+   and `JSONLD` (maps or structs, each written as its own `<script
+   type="application/ld+json">`).
+3. A missing record: `lidza.Head{Title: "Not found", NoIndex: true,
+   Status: http.StatusNotFound}`, so the address answers 404 and is not
+   indexed. A draft or private page: `NoIndex: true`.
+4. Pass plain text: every value is escaped where it is written, JSON-LD
+   included. The title, the description, the canonical link and each tag
+   replace the page's own of the same name; the rest of the page's head
+   (stylesheets, scripts) stays. og:title, og:description, og:url,
+   og:image and the twitter tags follow from the fields.
+5. It applies to the shell, the prerendered pages, the pages the SSR
+   sidecar renders and, under `lidza dev`, the dev server's. Setting
+   `document.title` in the browser on navigation stays the client's job;
+   the server's head is for the first load and for crawlers.
+6. Test it in `routes_test.go`: call `head` with
+   `httptest.NewRequest("GET", "/products/"+id,
+   nil).WithContext(srv.Context())` (`srv` from `lidzatest.Start`) and
+   check `Title`, `Canonical` and the 404 `Status`. `lidza check`, then
+   `lidza test`.
+
 ### Add a pack capability
 
 Run work in Rust, compiled to WASM and called from a handler with a
@@ -753,7 +793,11 @@ without writing a page.
 1. `lidza pack add auth` if the app has no accounts yet; the pages are
    behind `auth.Require()`.
 2. In `routes.go`: `admin.Mount(r, admin.Options{Title: "notes"})`
-   (import `github.com/agim/lidza/packs/admin`).
+   (import `github.com/agim/lidza/packs/admin`). Once `admin/` holds a
+   file (the theme of step 5, a page template), embed it so the binary
+   carries it and needs no `admin/` folder beside it: `//go:embed admin`
+   above `var adminFiles embed.FS`, and `Templates:
+   lidza.Sub(adminFiles, "admin")` in the options.
 3. Sign in first: the first account is an admin. More are added on the
    Overview page, or from the project with `lidza admin add
    you@example.com` (`ADMIN_USERS` in the credentials, read within
@@ -771,7 +815,9 @@ without writing a page.
    `--admin-font` and `--admin-radius`, per theme under
    `[data-bs-theme=light]` and `[data-bs-theme=dark]`, or any Tabler
    variable. The default is Līdza's palette (a mulberry accent on warm
-   neutrals); match the app's own tokens instead of a stock blue.
+   neutrals); match the app's own tokens instead of a stock blue. The
+   file is read from `Options.Templates` (embedded, step 2), else from
+   `admin/` on disk.
 6. Test it: an admin gets 200 on `/admin/`, another user 403, a visitor
    401; the reference app's `routes_test.go` shows it.
 7. `lidza check`, then `lidza test`.
@@ -802,8 +848,9 @@ instead of a separate admin screen.
    `badge`, `btn`), the functions `icon`, `since`, `num`, `bytes`,
    `dict`, and `{{template "admin-empty" (dict "Icon" "inbox"
    "Title" "..." "Text" "...")}}` for an empty list. Embed it so it
-   ships in the binary: `//go:embed admin/*.html` in `routes.go` and
-   `Templates: lidza.Sub(adminFiles, "admin")`. No inline `<script>` or
+   ships in the binary: `//go:embed admin` in `routes.go` and
+   `Templates: lidza.Sub(adminFiles, "admin")` (the folder, so the
+   theme ships too). No inline `<script>` or
    `style=`: the pages hold under a strict Content-Security-Policy; a
    destructive form takes `data-admin-confirm="..."`.
 4. Record it in the same commit: `lidza decision add "Admin page

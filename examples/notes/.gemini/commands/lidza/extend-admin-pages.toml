@@ -27,8 +27,9 @@ instead of a separate admin screen.
    `badge`, `btn`), the functions `icon`, `since`, `num`, `bytes`,
    `dict`, and `{{template "admin-empty" (dict "Icon" "inbox"
    "Title" "..." "Text" "...")}}` for an empty list. Embed it so it
-   ships in the binary: `//go:embed admin/*.html` in `routes.go` and
-   `Templates: lidza.Sub(adminFiles, "admin")`. No inline `<script>` or
+   ships in the binary: `//go:embed admin` in `routes.go` and
+   `Templates: lidza.Sub(adminFiles, "admin")` (the folder, so the
+   theme ships too). No inline `<script>` or
    `style=`: the pages hold under a strict Content-Security-Policy; a
    destructive form takes `data-admin-confirm="..."`.
 4. Record it in the same commit: `lidza decision add "Admin page

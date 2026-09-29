@@ -1002,6 +1002,23 @@ out, err := geo.From(ctx).GeoDistance(ctx, req.Body)
 To add one, follow the recipe "Add a pack capability". `lidza dev`
 rebuilds the module when the crate changes.
 
+The official `media` pack (`lidza pack add media`) reads an image's size
+and format (`ImageInfo`) and resizes it (`ImageResize`) to jpeg, png or
+webp. `Fit` picks how: `contain` (the default) scales it inside
+`Width` by `Height`, never enlarged; `cover` fills exactly that size and
+crops the overflow around the centre, for square avatars and thumbnails.
+It decodes jpeg, png, webp, gif and bmp. HEIC (what phones take), AVIF
+and TIFF fail with the code `unsupported_format`: there is no mature
+pure-Rust HEIC decoder and the pack takes no C library, so the app keeps
+the original file:
+
+```go
+out, err := media.From(ctx).ImageResize(ctx, schema.ImageResizeInput{Data: data, Width: &size, Height: &size, Fit: &cover})
+if engine.ErrorCode(err) == "unsupported_format" {
+	// store the original as it is; no thumbnail
+}
+```
+
 ## Rust: when and how
 
 Go first. Handlers, queries, jobs, anything that talks to the database,
@@ -1055,6 +1072,10 @@ snippets `pack-capability` and `pack-manifest` are working code):
   an instance until it returns.
 - Errors: return `Err("message")` for input problems (the caller sees a
   400 with that text); panics are contained and reported as an error.
+  To let the caller branch on the kind of failure, return
+  `Result<Out, abi::Error>` and `Err(abi::Error::code("too_large",
+  "..."))`; Go reads it with `engine.ErrorCode(err)`. A `String` error
+  converts into one without a code, so `?` works on either.
 - Never do I/O in Rust: the sandbox has no network and no file system,
   by design.
 

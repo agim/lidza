@@ -9,7 +9,7 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
-## Unreleased
+## v0.1.42 (2026-09-29)
 
 - `lidza gen resource` and rule L018: a field named `userId` makes a
   model owned only with `@ref(User)` or `@ref(AuthUser)`; a bare

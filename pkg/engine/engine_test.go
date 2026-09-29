@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -34,6 +35,12 @@ use serde::{Deserialize, Serialize};
 struct In { text: String }
 #[derive(Serialize)]
 struct Out { reversed: String, len: usize }
+
+lidza_export!(coded, |i: In| -> Result<Out, abi::Error> {
+    if i.text == "heic" { return Err(abi::Error::code("unsupported_format", "HEIC is not supported")); }
+    let n: i32 = i.text.parse().map_err(|_| "not a number".to_string())?;
+    Ok(Out { reversed: n.to_string(), len: 0 })
+});
 
 lidza_export!(reverse, |i: In| -> Result<Out, String> {
     if i.text.is_empty() { return Err("empty text".into()); }
@@ -134,6 +141,23 @@ func TestPool(t *testing.T) {
 	var ce *CallError
 	if err == nil || !errorAs(err, &ce) || ce.Message != "empty text" {
 		t.Fatalf("capability error: %v", err)
+	}
+	if ce.Code != "" || ErrorCode(err) != "" {
+		t.Fatalf("plain error has a code: %+v", ce)
+	}
+	// A coded error: the code reaches Go; a plain one through ? has none.
+	err = CallJSON(ctx, pool, "coded", map[string]string{"text": "heic"}, &out)
+	if ErrorCode(err) != "unsupported_format" || !strings.Contains(err.Error(), "coded: HEIC is not supported") {
+		t.Fatalf("coded error: %v (%q)", err, ErrorCode(err))
+	}
+	if err = CallJSON(ctx, pool, "coded", map[string]string{"text": "x"}, &out); err == nil || ErrorCode(err) != "" || !strings.Contains(err.Error(), "not a number") {
+		t.Fatalf("uncoded error through ?: %v", err)
+	}
+	if err := CallJSON(ctx, pool, "coded", map[string]string{"text": "12"}, &out); err != nil || out.Reversed != "12" {
+		t.Fatalf("coded ok: %v %+v", err, out)
+	}
+	if ErrorCode(nil) != "" || ErrorCode(errors.New("x")) != "" {
+		t.Fatal("ErrorCode of a non-capability error")
 	}
 	if err := CallJSON(ctx, pool, "reverse", map[string]int{"text": 1}, &out); err == nil || !strings.Contains(err.Error(), "invalid input") {
 		t.Fatalf("bad input: %v", err)

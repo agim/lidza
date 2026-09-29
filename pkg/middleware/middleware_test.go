@@ -178,6 +178,20 @@ func TestSecureHeaders(t *testing.T) {
 	}
 }
 
+func TestSecureHeadersPermissionsPolicy(t *testing.T) {
+	for _, c := range []struct{ policy, want string }{
+		{"", DefaultPermissionsPolicy},
+		{AllowGeolocation, "camera=(), microphone=(), geolocation=(self)"},
+	} {
+		h := SecureHeaders(SecureHeadersOptions{PermissionsPolicy: c.policy})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest("GET", "/", nil))
+		if got := rec.Header().Get("Permissions-Policy"); got != c.want {
+			t.Errorf("policy %q: got %q", c.policy, got)
+		}
+	}
+}
+
 func TestStatusWriterFlush(t *testing.T) {
 	rec := httptest.NewRecorder()
 	sw := &statusWriter{ResponseWriter: rec}

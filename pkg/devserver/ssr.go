@@ -40,6 +40,7 @@ type Sidecar struct {
 	client   *http.Client
 	timeout  time.Duration
 	locales  *locales
+	head     HeadFunc
 }
 
 // HasSidecar reports whether dist carries the sidecar files.
@@ -67,7 +68,8 @@ func NewSidecar(dist fs.FS, apiBase string, log *slog.Logger, opts ...Option) (*
 	if err != nil {
 		return nil, err
 	}
-	return &Sidecar{dist: dist, log: log, apiBase: apiBase, template: tpl, timeout: 3 * time.Second, locales: loadLocales(dist, collect(opts).locale)}, nil
+	o := collect(opts)
+	return &Sidecar{dist: dist, log: log, apiBase: apiBase, template: tpl, timeout: 3 * time.Second, locales: loadLocales(dist, o.locale), head: o.head}, nil
 }
 
 // Start extracts the bundle to a temporary directory and starts node.
@@ -150,9 +152,11 @@ func (s *Sidecar) Handler(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
+		html, status := withHead(s.head, r, html)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Vary", "Cookie, Accept-Language")
+		w.WriteHeader(status)
 		_, _ = w.Write(html)
 	})
 }

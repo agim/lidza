@@ -14,6 +14,7 @@ type ImageResizeInput {
   height  int?    @min(1) @max(16384)
   format  string? @pattern("jpeg|png|webp")
   quality int?    @min(1) @max(100)
+  fit     string? @pattern("contain|cover")
 }
 
 type ImageResult {

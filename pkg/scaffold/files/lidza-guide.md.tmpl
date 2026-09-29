@@ -577,6 +577,46 @@ Add a client-side route rendered by React, prerendered at build time.
    with `Intl` and `locale()`; a language switch calls `setLocale('sq')`.
 10. Add a browser test in `e2e/things.spec.ts` (see "Write a test"), then
    `lidza check` and `lidza test --e2e`.
+
+### Set the head of a page
+
+Give each address its own title, description, canonical address, social
+cards and structured data. Search engines and link previews read the
+HTML the server sends, not what the browser renders later, and a route
+with a parameter (`/products/$id`) is one shell for every address until
+the server names it. The binary sets the head per request, without the
+SSR sidecar.
+
+1. In `main.go`, set `Head: head` on `lidza.App`, and write `head` in
+   `head.go` (package main): `func head(r *http.Request) (lidza.Head,
+   bool)`. It returns false for the pages it does not know; they keep the
+   head they were built with.
+2. Match the path (`id, ok := strings.CutPrefix(r.URL.Path,
+   "/products/")`), load the record with one query
+   (`queries.New(db.From(r.Context()))`: the packs are in the request's
+   context), and fill `Title`, `Description`, `Canonical` (the absolute
+   address), `Image` (absolute), `Type` (`article`, `product`; `website`
+   when empty), `SiteName`, further tags in `Meta`
+   (`lidza.HeadMeta{Property: "article:published_time", Content: ...}`)
+   and `JSONLD` (maps or structs, each written as its own `<script
+   type="application/ld+json">`).
+3. A missing record: `lidza.Head{Title: "Not found", NoIndex: true,
+   Status: http.StatusNotFound}`, so the address answers 404 and is not
+   indexed. A draft or private page: `NoIndex: true`.
+4. Pass plain text: every value is escaped where it is written, JSON-LD
+   included. The title, the description, the canonical link and each tag
+   replace the page's own of the same name; the rest of the page's head
+   (stylesheets, scripts) stays. og:title, og:description, og:url,
+   og:image and the twitter tags follow from the fields.
+5. It applies to the shell, the prerendered pages, the pages the SSR
+   sidecar renders and, under `lidza dev`, the dev server's. Setting
+   `document.title` in the browser on navigation stays the client's job;
+   the server's head is for the first load and for crawlers.
+6. Test it in `routes_test.go`: call `head` with
+   `httptest.NewRequest("GET", "/products/"+id,
+   nil).WithContext(srv.Context())` (`srv` from `lidzatest.Start`) and
+   check `Title`, `Canonical` and the 404 `Status`. `lidza check`, then
+   `lidza test`.
 {{- end}}
 
 ### Add a pack capability
@@ -904,7 +944,11 @@ without writing a page.
 1. `lidza pack add auth` if the app has no accounts yet; the pages are
    behind `auth.Require()`.
 2. In `routes.go`: `admin.Mount(r, admin.Options{Title: "{{.Name}}"})`
-   (import `github.com/agim/lidza/packs/admin`).
+   (import `github.com/agim/lidza/packs/admin`). Once `admin/` holds a
+   file (the theme of step 5, a page template), embed it so the binary
+   carries it and needs no `admin/` folder beside it: `//go:embed admin`
+   above `var adminFiles embed.FS`, and `Templates:
+   lidza.Sub(adminFiles, "admin")` in the options.
 3. Sign in first: the first account is an admin. More are added on the
    Overview page, or from the project with `lidza admin add
    you@example.com` (`ADMIN_USERS` in the credentials, read within
@@ -922,7 +966,9 @@ without writing a page.
    `--admin-font` and `--admin-radius`, per theme under
    `[data-bs-theme=light]` and `[data-bs-theme=dark]`, or any Tabler
    variable. The default is Līdza's palette (a mulberry accent on warm
-   neutrals); match the app's own tokens instead of a stock blue.
+   neutrals); match the app's own tokens instead of a stock blue. The
+   file is read from `Options.Templates` (embedded, step 2), else from
+   `admin/` on disk.
 6. Test it: an admin gets 200 on `/admin/`, another user 403, a visitor
    401; the reference app's `routes_test.go` shows it.
 7. `lidza check`, then `lidza test`.
@@ -953,8 +999,9 @@ instead of a separate admin screen.
    `badge`, `btn`), the functions `icon`, `since`, `num`, `bytes`,
    `dict`, and `{{"{{"}}template "admin-empty" (dict "Icon" "inbox"
    "Title" "..." "Text" "..."){{"}}"}}` for an empty list. Embed it so it
-   ships in the binary: `//go:embed admin/*.html` in `routes.go` and
-   `Templates: lidza.Sub(adminFiles, "admin")`. No inline `<script>` or
+   ships in the binary: `//go:embed admin` in `routes.go` and
+   `Templates: lidza.Sub(adminFiles, "admin")` (the folder, so the
+   theme ships too). No inline `<script>` or
    `style=`: the pages hold under a strict Content-Security-Policy; a
    destructive form takes `data-admin-confirm="..."`.
 4. Record it in the same commit: `lidza decision add "Admin page
@@ -1036,6 +1083,23 @@ out, err := geo.From(ctx).GeoDistance(ctx, req.Body)
 To add one, follow the recipe "Add a pack capability". `lidza dev`
 rebuilds the module when the crate changes.
 
+The official `media` pack (`lidza pack add media`) reads an image's size
+and format (`ImageInfo`) and resizes it (`ImageResize`) to jpeg, png or
+webp. `Fit` picks how: `contain` (the default) scales it inside
+`Width` by `Height`, never enlarged; `cover` fills exactly that size and
+crops the overflow around the centre, for square avatars and thumbnails.
+It decodes jpeg, png, webp, gif and bmp. HEIC (what phones take), AVIF
+and TIFF fail with the code `unsupported_format`: there is no mature
+pure-Rust HEIC decoder and the pack takes no C library, so the app keeps
+the original file:
+
+```go
+out, err := media.From(ctx).ImageResize(ctx, schema.ImageResizeInput{Data: data, Width: &size, Height: &size, Fit: &cover})
+if engine.ErrorCode(err) == "unsupported_format" {
+	// store the original as it is; no thumbnail
+}
+```
+
 ## Rust: when and how
 
 Go first. Handlers, queries, jobs, anything that talks to the database,
@@ -1089,6 +1153,10 @@ snippets `pack-capability` and `pack-manifest` are working code):
   an instance until it returns.
 - Errors: return `Err("message")` for input problems (the caller sees a
   400 with that text); panics are contained and reported as an error.
+  To let the caller branch on the kind of failure, return
+  `Result<Out, abi::Error>` and `Err(abi::Error::code("too_large",
+  "..."))`; Go reads it with `engine.ErrorCode(err)`. A `String` error
+  converts into one without a code, so `?` works on either.
 - Never do I/O in Rust: the sandbox has no network and no file system,
   by design.
 
@@ -1139,7 +1207,11 @@ Official Go packs, configured from `.env` (see `.env.example` after
   and is cancelled at shutdown after `JOBS_DRAIN`, the job going back to
   pending. Recipe: "Add a background job".
 - `cache`: `cache.Remember(ctx, cache.From(ctx), "key", ttl, load)`;
-  `cache.From(ctx).Invalidate(ctx, "prefix:")` after writes.
+  `cache.From(ctx).Invalidate(ctx, "prefix:")` after writes. Counters
+  every node shares (a rate limit, a quota): `n, err :=
+  cache.From(ctx).Incr(ctx, "rate:"+ip+":"+minute, 1, time.Minute)` adds
+  atomically (a Lua script on Valkey) and returns the new value; the
+  increment that creates the key sets the ttl, later ones keep it.
 - `i18n`: `i18n.From(ctx).T(ctx, "key", args...)`, `Number`, `Currency`,
   `Date`, `Time`, `DateTime` (in the visitor's zone: the template sets a
   `tz` cookie, API clients send `X-Timezone`; `I18N_TIMEZONE` is the
@@ -1258,7 +1330,8 @@ stylesheet, script and icons served from the binary:
   on a Settings page); recipe "Extend the admin pages".
 
 Values saved there are sealed with the master key and applied without a
-restart. Theme: `admin/theme.css` sets the `--admin-*` variables (accent,
+restart. Theme (read from `Options.Templates` when the app embeds
+`admin/`, else from disk): `admin/theme.css` sets the `--admin-*` variables (accent,
 background, surface, line, text, sidebar, font, radius; per theme) or any
 Tabler variable; `admin/layout.html` replaces the frame (define `layout`,
 call `{{"{{"}}template "admin-head" .{{"}}"}}` in `<head>`,
@@ -1290,6 +1363,22 @@ holds no secrets, and the tests and CI need it. Its `DATABASE_URL`
 names this machine's Postgres socket; `lidza gen`, `dev`, `test` and
 `update` repair it on a machine that keeps the socket elsewhere, and
 CI sets its own `DATABASE_URL`.
+
+## Security headers
+
+Every response carries `X-Content-Type-Options: nosniff`,
+`X-Frame-Options: DENY`, `Referrer-Policy:
+strict-origin-when-cross-origin` and `Permissions-Policy: camera=(),
+microphone=(), geolocation=()`. `lidza.App` in `main.go` sets the rest:
+
+- `CSP`: the Content-Security-Policy. Production builds only; Vite's dev
+  server injects inline scripts.
+- `PermissionsPolicy`: replaces the default. A page that asks for the
+  visitor's location (`navigator.geolocation`) needs
+  `PermissionsPolicy: middleware.AllowGeolocation` (`geolocation=(self)`,
+  camera and microphone still off); with the default the browser refuses
+  without showing the prompt. Name any other feature the same way
+  (`camera=(self)`) and keep the rest off.
 
 ## Secrets
 
@@ -1388,7 +1477,8 @@ state belongs in Postgres or Valkey and background work in a bounded
 worker or the jobs pack; hand-written `fetch` of `/api` (L003); imports
 of packages that do not exist or are not declared (L004); handler types
 not declared in `schema.lidza` (L005).
-Rate limit a route group with `r.Use(middleware.RateLimit(middleware.RateLimitOptions{RPS: 10, Burst: 20}))`;
+Rate limit a route group with `r.Use(middleware.RateLimit(middleware.RateLimitOptions{RPS: 10, Burst: 20}))`
+(per node; a limit across nodes counts with the cache pack's `Incr`);
 guard an outbound dependency with `resilience.New(...)`.
 
 ## Deployment

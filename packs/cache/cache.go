@@ -1,5 +1,6 @@
 // Package cache is the official cache pack: string keys with TTL on Valkey
-// (or Redis), and Remember for the read-through pattern. CACHE_URL=memory
+// (or Redis), Remember for the read-through pattern and Incr for counters
+// every node shares (a rate limit, a quota). CACHE_URL=memory
 // gives a bounded in-process cache for tests and single-node development;
 // production uses the server so every node sees the same entries.
 package cache
@@ -9,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -43,6 +45,19 @@ type Store interface {
 	Ping(ctx context.Context) error
 	Close() error
 }
+
+// Counter is the backend contract of Incr, apart from Store so a backend
+// written for an older version still satisfies Store. Memory and Valkey
+// implement it.
+type Counter interface {
+	// Incr adds by to the integer under key atomically and returns the
+	// new value. A missing key starts at 0 and gets ttl (0: none); an
+	// existing key keeps its expiry.
+	Incr(ctx context.Context, key string, by int64, ttl time.Duration) (int64, error)
+}
+
+// ErrNotCounter is returned by Incr when the store cannot count.
+var ErrNotCounter = errors.New("cache: the store does not implement Counter")
 
 // Cache is the running pack.
 type Cache struct {
@@ -115,6 +130,25 @@ func (c *Cache) Delete(ctx context.Context, keys ...string) error {
 	return c.store.Delete(ctx, full...)
 }
 
+// Incr adds by (negative to subtract) to the counter under key and
+// returns the new value, atomically across every node sharing the
+// server. The increment that creates the key sets its ttl, so a counter
+// per window resets on its own:
+//
+//	n, err := cache.From(ctx).Incr(ctx, "rate:"+clientIP+":"+minute, 1, time.Minute)
+//	if n > 100 { ... refuse ... }
+//
+// Later increments keep that expiry (a fixed window, not a sliding one).
+// Get reads the counter into an int64. A key holding a non-integer value
+// is an error.
+func (c *Cache) Incr(ctx context.Context, key string, by int64, ttl time.Duration) (int64, error) {
+	counter, ok := c.store.(Counter)
+	if !ok {
+		return 0, ErrNotCounter
+	}
+	return counter.Incr(ctx, c.key(key), by, ttl)
+}
+
 // Invalidate removes every key under prefix.
 func (c *Cache) Invalidate(ctx context.Context, prefix string) error {
 	return c.store.DeletePrefix(ctx, c.key(prefix))
@@ -173,6 +207,17 @@ func (m *Memory) Get(_ context.Context, key string) ([]byte, error) {
 func (m *Memory) Set(_ context.Context, key string, value []byte, ttl time.Duration) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	it := memItem{value: value}
+	if ttl > 0 {
+		it.expires = time.Now().Add(ttl)
+	}
+	m.put(key, it)
+	return nil
+}
+
+// put stores it under key, evicting the oldest entries at the bound.
+// The caller holds mu.
+func (m *Memory) put(key string, it memItem) {
 	if _, exists := m.items[key]; !exists {
 		for len(m.items) >= m.max && len(m.order) > 0 {
 			oldest := m.order[0]
@@ -181,12 +226,28 @@ func (m *Memory) Set(_ context.Context, key string, value []byte, ttl time.Durat
 		}
 		m.order = append(m.order, key)
 	}
-	it := memItem{value: value}
-	if ttl > 0 {
-		it.expires = time.Now().Add(ttl)
-	}
 	m.items[key] = it
-	return nil
+}
+
+// Incr implements Counter under the store's lock.
+func (m *Memory) Incr(_ context.Context, key string, by int64, ttl time.Duration) (int64, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	it, ok := m.items[key]
+	if !ok || (!it.expires.IsZero() && time.Now().After(it.expires)) {
+		it = memItem{value: []byte("0")}
+		if ttl > 0 {
+			it.expires = time.Now().Add(ttl)
+		}
+	}
+	n, err := strconv.ParseInt(string(it.value), 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("cache: %s does not hold an integer", key)
+	}
+	n += by
+	it.value = []byte(strconv.FormatInt(n, 10))
+	m.put(key, it)
+	return n, nil
 }
 
 func (m *Memory) Delete(_ context.Context, keys ...string) error {
@@ -252,6 +313,26 @@ func (v *Valkey) Set(ctx context.Context, key string, value []byte, ttl time.Dur
 		return v.client.Do(ctx, v.client.B().Set().Key(key).Value(string(value)).Px(ttl).Build()).Error()
 	}
 	return v.client.Do(ctx, v.client.B().Set().Key(key).Value(string(value)).Build()).Error()
+}
+
+// incrScript increments and, when the increment created the key, sets its
+// expiry, in one step on the server.
+var incrScript = valkey.NewLuaScript(`
+local existed = redis.call('EXISTS', KEYS[1])
+local n = redis.call('INCRBY', KEYS[1], ARGV[1])
+if existed == 0 and tonumber(ARGV[2]) > 0 then
+  redis.call('PEXPIRE', KEYS[1], ARGV[2])
+end
+return n
+`)
+
+// Incr implements Counter with INCRBY and PEXPIRE in one Lua script.
+func (v *Valkey) Incr(ctx context.Context, key string, by int64, ttl time.Duration) (int64, error) {
+	ms := int64(0)
+	if ttl > 0 {
+		ms = max(ttl.Milliseconds(), 1)
+	}
+	return incrScript.Exec(ctx, v.client, []string{key}, []string{strconv.FormatInt(by, 10), strconv.FormatInt(ms, 10)}).AsInt64()
 }
 
 func (v *Valkey) Delete(ctx context.Context, keys ...string) error {

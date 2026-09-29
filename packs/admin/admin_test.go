@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/agim/lidza"
@@ -129,6 +130,30 @@ func TestGateAndPages(t *testing.T) {
 	}
 	if code, body := get(t, allowed, "/admin/"); code != 200 || !strings.Contains(body, `class="themed"`) || !strings.Contains(body, "Before production") {
 		t.Fatalf("layout override: %d %s", code, body)
+	}
+
+	// Embedded: Options.Templates carries the theme and the layout, so a
+	// binary run without admin/ beside it keeps them; they win over the
+	// files on disk.
+	embedded := serve(t, Options{Auth: noAuth, Allow: func(context.Context) bool { return true }, CredentialsDir: dir, Dir: filepath.Join(dir, "admin"),
+		Templates: fstest.MapFS{
+			"theme.css":   {Data: []byte(":root{--admin-accent:#00aa00}")},
+			"layout.html": {Data: []byte(`{{define "layout"}}<html><body class="embedded">{{template "content" .}}</body></html>{{end}}`)},
+		}}, s)
+	if code, body := get(t, embedded, "/admin/theme.css"); code != 200 || !strings.Contains(body, "#00aa00") {
+		t.Fatalf("embedded theme: %d %s", code, body)
+	}
+	if code, body := get(t, embedded, "/admin/"); code != 200 || !strings.Contains(body, `class="embedded"`) {
+		t.Fatalf("embedded layout: %d %s", code, body)
+	}
+	// Templates without a theme: the one on disk, then the pack's.
+	partial := serve(t, Options{Auth: noAuth, CredentialsDir: dir, Dir: filepath.Join(dir, "admin"), Templates: fstest.MapFS{"page.html": {Data: []byte("x")}}}, s)
+	if code, body := get(t, partial, "/admin/theme.css"); code != 200 || !strings.Contains(body, "#ff0000") {
+		t.Fatalf("disk fallback: %d %s", code, body)
+	}
+	bare := serve(t, Options{Auth: noAuth, CredentialsDir: dir, Dir: filepath.Join(dir, "none"), Templates: fstest.MapFS{"page.html": {Data: []byte("x")}}}, s)
+	if code, body := get(t, bare, "/admin/theme.css"); code != 200 || !strings.Contains(body, "--admin-accent") || strings.Contains(body, "#ff0000") {
+		t.Fatalf("pack fallback: %d %s", code, body)
 	}
 }
 

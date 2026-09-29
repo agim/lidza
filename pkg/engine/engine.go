@@ -134,10 +134,11 @@ func (in *instance) call(ctx context.Context, fn string, input []byte) ([]byte, 
 	out := append([]byte(nil), data...)
 	_, _ = in.free.Call(ctx, uint64(outPtr), uint64(outLen))
 	var probe struct {
-		Err *string `json:"$error"`
+		Err  *string `json:"$error"`
+		Code string  `json:"$code"`
 	}
 	if json.Unmarshal(out, &probe) == nil && probe.Err != nil {
-		return nil, &CallError{Capability: fn, Message: *probe.Err}
+		return nil, &CallError{Capability: fn, Message: *probe.Err, Code: probe.Code}
 	}
 	return out, nil
 }
@@ -146,9 +147,26 @@ func (in *instance) call(ctx context.Context, fn string, input []byte) ([]byte, 
 type CallError struct {
 	Capability string
 	Message    string
+	// Code names the kind of failure when the capability gave one
+	// (abi::Error::code in Rust), such as "unsupported_format"; empty
+	// otherwise.
+	Code string
 }
 
 func (e *CallError) Error() string { return e.Capability + ": " + e.Message }
+
+// ErrorCode returns the code of the capability error in err's chain, or
+// "" when there is none:
+//
+//	out, err := media.From(ctx).ImageResize(ctx, in)
+//	if engine.ErrorCode(err) == "unsupported_format" { /* keep the original */ }
+func ErrorCode(err error) string {
+	var ce *CallError
+	if errors.As(err, &ce) {
+		return ce.Code
+	}
+	return ""
+}
 
 // ErrPoolBusy is returned when no instance frees up before the deadline.
 var ErrPoolBusy = errors.New("engine: every instance is busy")

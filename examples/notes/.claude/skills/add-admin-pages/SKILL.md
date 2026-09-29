@@ -12,7 +12,11 @@ without writing a page.
 1. `lidza pack add auth` if the app has no accounts yet; the pages are
    behind `auth.Require()`.
 2. In `routes.go`: `admin.Mount(r, admin.Options{Title: "notes"})`
-   (import `github.com/agim/lidza/packs/admin`).
+   (import `github.com/agim/lidza/packs/admin`). Once `admin/` holds a
+   file (the theme of step 5, a page template), embed it so the binary
+   carries it and needs no `admin/` folder beside it: `//go:embed admin`
+   above `var adminFiles embed.FS`, and `Templates:
+   lidza.Sub(adminFiles, "admin")` in the options.
 3. Sign in first: the first account is an admin. More are added on the
    Overview page, or from the project with `lidza admin add
    you@example.com` (`ADMIN_USERS` in the credentials, read within
@@ -30,7 +34,9 @@ without writing a page.
    `--admin-font` and `--admin-radius`, per theme under
    `[data-bs-theme=light]` and `[data-bs-theme=dark]`, or any Tabler
    variable. The default is Līdza's palette (a mulberry accent on warm
-   neutrals); match the app's own tokens instead of a stock blue.
+   neutrals); match the app's own tokens instead of a stock blue. The
+   file is read from `Options.Templates` (embedded, step 2), else from
+   `admin/` on disk.
 6. Test it: an admin gets 200 on `/admin/`, another user 403, a visitor
    401; the reference app's `routes_test.go` shows it.
 7. `lidza check`, then `lidza test`.

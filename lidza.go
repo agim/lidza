@@ -58,6 +58,18 @@ type App struct {
 	// sends none; Vite's dev server needs inline scripts, so set it for
 	// production builds only.
 	CSP string
+	// PermissionsPolicy is the Permissions-Policy sent with every
+	// response. Empty sends middleware.DefaultPermissionsPolicy (camera,
+	// microphone and location off); an app that asks for the visitor's
+	// location sets middleware.AllowGeolocation.
+	PermissionsPolicy string
+	// Head sets the <head> of each page served from Dist (the shell and
+	// the prerendered pages, the SSR sidecar's and, under lidza dev, the
+	// dev server's): title, description, canonical address, social tags
+	// and JSON-LD, per request. A route with a parameter is one shell for
+	// every address until Head names it. Return false to leave a page as
+	// built. See Head.
+	Head func(r *http.Request) (Head, bool)
 	// Logger receives request and error logs. Default: NewLogger from
 	// LIDZA_LOG and LIDZA_LOG_LEVEL, also installed as slog's default so
 	// packs log the same way. Handlers use lidza.Log(ctx).
@@ -81,6 +93,26 @@ type App struct {
 	// ReadyTimeout bounds the checks behind /readyz; default 3s.
 	ReadyTimeout time.Duration
 }
+
+// Head is a page's head as the App.Head hook sets it: Title,
+// Description, Canonical, Image, Type, SiteName, NoIndex, Meta, JSONLD
+// and Status (devserver.Head documents each).
+//
+//	Head: func(r *http.Request) (lidza.Head, bool) {
+//		id, ok := strings.CutPrefix(r.URL.Path, "/products/")
+//		if !ok {
+//			return lidza.Head{}, false
+//		}
+//		p, err := queries.New(db.From(r.Context())).GetProduct(r.Context(), id)
+//		if err != nil {
+//			return lidza.Head{Title: "Not found", NoIndex: true, Status: http.StatusNotFound}, true
+//		}
+//		return lidza.Head{Title: p.Name, Description: p.Summary, Canonical: "https://example.com/products/" + id}, true
+//	},
+type Head = devserver.Head
+
+// HeadMeta is one further <meta> tag of a Head.
+type HeadMeta = devserver.Meta
 
 // Paths every app serves besides /api and the frontend.
 const (
@@ -305,13 +337,20 @@ func handler(app App, services *Services) (http.Handler, *devserver.Sidecar, err
 	var sidecar *devserver.Sidecar
 	switch {
 	case os.Getenv(devserver.EnvMode) == "dev" && os.Getenv(devserver.EnvFrontendURL) != "":
-		p, err := devserver.NewProxy(os.Getenv(devserver.EnvFrontendURL))
+		var opts []devserver.Option
+		if app.Head != nil {
+			opts = append(opts, devserver.WithHead(app.Head))
+		}
+		p, err := devserver.NewProxy(os.Getenv(devserver.EnvFrontendURL), opts...)
 		if err != nil {
 			return nil, nil, err
 		}
 		frontend = devserver.AgentFiles(p)
 	case app.Dist != nil:
 		var opts []devserver.Option
+		if app.Head != nil {
+			opts = append(opts, devserver.WithHead(app.Head))
+		}
 		for _, p := range app.Packs {
 			if n, ok := p.(LocaleNegotiator); ok {
 				opts = append(opts, devserver.WithLocale(n.NegotiateLocale))
@@ -336,7 +375,7 @@ func handler(app App, services *Services) (http.Handler, *devserver.Sidecar, err
 	}
 	all := devserver.Split(router.APIPrefix, api, opsThenFrontend(ops, mounted(r.Mounts(), frontend), os.Getenv(devserver.EnvMode) == "dev"))
 	mw := append([]middleware.Middleware{
-		middleware.SecureHeaders(middleware.SecureHeadersOptions{CSP: app.CSP}),
+		middleware.SecureHeaders(middleware.SecureHeadersOptions{CSP: app.CSP, PermissionsPolicy: app.PermissionsPolicy}),
 		servicesMiddleware(services),
 	}, app.Middleware...)
 	return middleware.Chain(all, mw...), sidecar, nil

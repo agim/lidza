@@ -90,6 +90,7 @@ var Officials = []Official{
 		Notes: []string{
 			"cache.Remember(ctx, cache.From(ctx), \"key\", ttl, load) caches a computed value",
 			"cache.From(ctx).Invalidate(ctx, \"prefix:\") after writes",
+			"shared counters (a rate limit across nodes): n, err := cache.From(ctx).Incr(ctx, \"rate:\"+ip, 1, time.Minute)",
 		},
 		Production: []Setting{{Name: "CACHE_URL", Why: "a Valkey or Redis address (memory holds one node's cache only)", Dev: []string{"memory"}}},
 	},
@@ -240,9 +241,13 @@ var Officials = []Official{
 	},
 	{
 		Name:        "media",
-		Description: "Image processing in Rust: dimensions and format, resize with format conversion.",
+		Description: "Image processing in Rust: dimensions and format, resize (fit inside or cover and crop) with format conversion.",
 		Rust:        true,
-		Notes:       []string{"capabilities take image bytes as base64 (schema type bytes)"},
+		Notes: []string{
+			"capabilities take image bytes as base64 (schema type bytes)",
+			"a square avatar: media.From(ctx).ImageResize(ctx, schema.ImageResizeInput{Data: b, Width: &n, Height: &n, Fit: &cover})",
+			"HEIC, AVIF and TIFF fail with engine.ErrorCode(err) == \"unsupported_format\": keep the original file",
+		},
 	},
 	{
 		Name:        "geo",

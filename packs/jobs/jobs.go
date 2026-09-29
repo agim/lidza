@@ -69,6 +69,7 @@ type Queue struct {
 	mu        sync.RWMutex
 	handlers  map[string]Handler
 	kinds     []string
+	limits    map[string]int // Concurrency per kind; absent is unlimited
 	schedules []*scheduled
 
 	// stopClaim ends polling and scheduling; stopRun cancels the running
@@ -276,12 +277,40 @@ func (q *Queue) release(ctx context.Context, id string, lockedAt time.Time) (boo
 // jobs.FromServices(s).Handle(kind, fn)); jobs of kinds without a handler
 // stay pending for a node that has one. The handler's context carries
 // the packs, so db.From(ctx) and mail.From(ctx) work inside it.
-func (q *Queue) Handle(kind string, h Handler) {
+// Concurrency caps the kind's running jobs across nodes.
+func (q *Queue) Handle(kind string, h Handler, opts ...HandleOption) {
+	var o handling
+	for _, fn := range opts {
+		fn(&o)
+	}
 	q.mu.Lock()
 	defer q.mu.Unlock()
+	if _, ok := q.handlers[kind]; !ok {
+		q.kinds = append(q.kinds, kind)
+	}
 	q.handlers[kind] = h
-	q.kinds = append(q.kinds, kind)
+	if q.limits == nil {
+		q.limits = map[string]int{}
+	}
+	delete(q.limits, kind)
+	if o.concurrency > 0 {
+		q.limits[kind] = o.concurrency
+	}
 }
+
+// HandleOption adjusts how a kind runs.
+type HandleOption func(*handling)
+
+type handling struct{ concurrency int }
+
+// Concurrency caps how many jobs of the kind run at once across all
+// nodes: Concurrency(1) runs one at a time, for work that must not
+// overlap (a sync against one external account, a rebuild of one
+// index). Jobs over the cap stay pending and workers take other kinds
+// meanwhile. Every node that handles the kind declares the same cap. A
+// job whose node died counts against the cap until JOBS_STALE hands it
+// to another worker. n <= 0 is unlimited, the default.
+func Concurrency(n int) HandleOption { return func(h *handling) { h.concurrency = n } }
 
 // Option adjusts an enqueued job.
 type Option func(*enqueue)
@@ -289,6 +318,8 @@ type Option func(*enqueue)
 type enqueue struct {
 	runAt       time.Time
 	maxAttempts int
+	unique      *string
+	existed     *bool
 }
 
 // RunAt schedules the job for later.
@@ -296,6 +327,23 @@ func RunAt(t time.Time) Option { return func(e *enqueue) { e.runAt = t } }
 
 // MaxAttempts overrides the retry budget.
 func MaxAttempts(n int) Option { return func(e *enqueue) { e.maxAttempts = n } }
+
+// Unique makes key the job's idempotency key within its kind: while a
+// job of the kind with that key is pending (retries included) or
+// running, Enqueue stores nothing and returns that job's id. Once it is
+// done or failed, the next Enqueue queues a new one. It holds across
+// nodes (a unique index on kind and key), so a page that notices missing
+// derived data on every view queues the work once:
+//
+//	q.Enqueue(ctx, "rebuild-thumbnails", p, jobs.Unique("post:"+p.ID))
+//
+// The key needs the uniqueKey column of the job table (`lidza gen`,
+// `lidza db migrate`).
+func Unique(key string) Option { return func(e *enqueue) { e.unique = &key } }
+
+// Existed reports whether Unique found a live job with the key, so that
+// Enqueue returned its id and stored nothing.
+func Existed(found *bool) Option { return func(e *enqueue) { e.existed = found } }
 
 // Enqueue stores a job and returns its id. payload is encoded as JSON.
 func (q *Queue) Enqueue(ctx context.Context, kind string, payload any, opts ...Option) (string, error) {
@@ -319,17 +367,49 @@ func (q *Queue) enqueue(ctx context.Context, db rowQuerier, kind string, payload
 	for _, o := range opts {
 		o(&e)
 	}
+	if e.existed != nil {
+		*e.existed = false
+	}
 	data, err := json.Marshal(payload)
 	if err != nil {
 		return "", err
 	}
 	var id string
-	err = db.QueryRow(ctx, `INSERT INTO job (kind, payload, run_at, max_attempts) VALUES ($1, $2, $3, $4) RETURNING id`,
-		kind, data, e.runAt, e.maxAttempts).Scan(&id)
-	if err != nil {
-		return "", fmt.Errorf("jobs: enqueue: %w", err)
+	if e.unique == nil {
+		err = db.QueryRow(ctx, `INSERT INTO job (kind, payload, run_at, max_attempts) VALUES ($1, $2, $3, $4) RETURNING id`,
+			kind, data, e.runAt, e.maxAttempts).Scan(&id)
+		if err != nil {
+			return "", fmt.Errorf("jobs: enqueue: %w", err)
+		}
+		return id, nil
 	}
-	return id, nil
+	if *e.unique == "" {
+		return "", errors.New("jobs: enqueue: Unique needs a key")
+	}
+	// The insert waits on a racing insert of the same key until it
+	// commits or rolls back, then stores nothing or the job. The live job
+	// it met may finish before the lookup; then try again.
+	for range 3 {
+		err = db.QueryRow(ctx, `INSERT INTO job (kind, payload, run_at, max_attempts, unique_key) VALUES ($1, $2, $3, $4, $5)
+			ON CONFLICT (kind, unique_key) DO NOTHING RETURNING id`, kind, data, e.runAt, e.maxAttempts, *e.unique).Scan(&id)
+		if err == nil {
+			return id, nil
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return "", fmt.Errorf("jobs: enqueue: %w", err)
+		}
+		err = db.QueryRow(ctx, `SELECT id FROM job WHERE kind = $1 AND unique_key = $2`, kind, *e.unique).Scan(&id)
+		if err == nil {
+			if e.existed != nil {
+				*e.existed = true
+			}
+			return id, nil
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return "", fmt.Errorf("jobs: enqueue: %w", err)
+		}
+	}
+	return "", fmt.Errorf("jobs: enqueue %s: key %q kept changing hands", kind, *e.unique)
 }
 
 // Recent returns the newest jobs by run time, every state. The admin
@@ -422,6 +502,15 @@ func (q *Queue) runOne(ctx context.Context) (bool, error) {
 	q.mu.RLock()
 	kinds := append([]string(nil), q.kinds...)
 	handlers := q.handlers
+	var free, limited []string
+	var caps []int32
+	for _, k := range kinds {
+		if n, ok := q.limits[k]; ok {
+			limited, caps = append(limited, k), append(caps, int32(n))
+		} else {
+			free = append(free, k)
+		}
+	}
 	q.mu.RUnlock()
 	if len(kinds) == 0 || ctx.Err() != nil {
 		return false, nil
@@ -434,16 +523,17 @@ func (q *Queue) runOne(ctx context.Context) (bool, error) {
 		fmt.Sprintf("%d seconds", int(q.cfg.Stale.Seconds()))); err != nil {
 		return false, err
 	}
-	var j Job
-	var lockedAt time.Time
-	err := q.pool.QueryRow(dctx, `UPDATE job SET state = 'running', locked_at = clock_timestamp(), attempts = attempts + 1
-		WHERE id = (SELECT id FROM job WHERE state = 'pending' AND run_at <= now() AND kind = ANY($1) ORDER BY run_at LIMIT 1 FOR UPDATE SKIP LOCKED)
-		RETURNING id, kind, payload, attempts, max_attempts, locked_at`, kinds).Scan(&j.ID, &j.Kind, &j.Payload, &j.Attempts, &j.MaxAttempts, &lockedAt)
+	j, lockedAt, keyed, err := q.claim(dctx, free, limited, caps)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
 	}
 	if err != nil {
 		return false, err
+	}
+	// A finished job gives its Unique key up for the next one.
+	clearKey := ""
+	if keyed {
+		clearKey = ", unique_key = NULL"
 	}
 	q.track(j.ID, lockedAt)
 	defer q.untrack(j.ID)
@@ -462,7 +552,7 @@ func (q *Queue) runOne(ctx context.Context) (bool, error) {
 	defer fcancel()
 	if runErr == nil {
 		q.done.Add(1)
-		_, err = q.pool.Exec(fctx, `UPDATE job SET state = 'done', finished_at = now(), locked_at = NULL WHERE id = $1 AND locked_at = $2`, j.ID, lockedAt)
+		_, err = q.pool.Exec(fctx, `UPDATE job SET state = 'done', finished_at = now(), locked_at = NULL`+clearKey+` WHERE id = $1 AND locked_at = $2`, j.ID, lockedAt)
 		return true, err
 	}
 	if q.runCtx.Err() != nil {
@@ -477,7 +567,7 @@ func (q *Queue) runOne(ctx context.Context) (bool, error) {
 	if j.Attempts >= j.MaxAttempts {
 		q.failed.Add(1)
 		q.log.Error("jobs: failed", "kind", j.Kind, "id", j.ID, "attempts", j.Attempts, "error", msg)
-		_, err = q.pool.Exec(fctx, `UPDATE job SET state = 'failed', finished_at = now(), locked_at = NULL, last_error = $3 WHERE id = $1 AND locked_at = $2`, j.ID, lockedAt, msg)
+		_, err = q.pool.Exec(fctx, `UPDATE job SET state = 'failed', finished_at = now(), locked_at = NULL, last_error = $3`+clearKey+` WHERE id = $1 AND locked_at = $2`, j.ID, lockedAt, msg)
 		return true, err
 	}
 	delay := time.Duration(math.Min(math.Pow(2, float64(j.Attempts)), 3600)) * time.Second
@@ -485,6 +575,73 @@ func (q *Queue) runOne(ctx context.Context) (bool, error) {
 	_, err = q.pool.Exec(fctx, `UPDATE job SET state = 'pending', locked_at = NULL, last_error = $3, run_at = now() + $4::interval WHERE id = $1 AND locked_at = $2`,
 		j.ID, lockedAt, msg, fmt.Sprintf("%d seconds", int(delay.Seconds())))
 	return true, err
+}
+
+// claimSet is what a claim sets and returns. keyed reads the Unique key
+// through the row's JSON, so a job table without the column (an app that
+// has not migrated yet) still claims.
+const claimSet = `SET state = 'running', locked_at = clock_timestamp(), attempts = attempts + 1`
+const claimReturning = ` RETURNING id, kind, payload, attempts, max_attempts, locked_at, (to_jsonb(job) ->> 'unique_key') IS NOT NULL`
+
+// claim takes the oldest due job of the free kinds or of the limited
+// kinds under their cap, marks it running and returns it (pgx.ErrNoRows
+// when there is none). Without limited kinds it is one statement. With
+// them, a transaction first takes a per-kind advisory lock on each
+// limited kind with due work, without waiting (a kind another worker is
+// claiming is skipped this round), then counts that kind's running jobs
+// in a new statement, which sees every claim committed before the lock
+// was granted, and claims. The lock is held to the commit, so no two
+// claims of a kind see the same count on any node.
+func (q *Queue) claim(ctx context.Context, free, limited []string, caps []int32) (j Job, lockedAt time.Time, keyed bool, err error) {
+	scan := func(row pgx.Row) error {
+		return row.Scan(&j.ID, &j.Kind, &j.Payload, &j.Attempts, &j.MaxAttempts, &lockedAt, &keyed)
+	}
+	if len(limited) == 0 {
+		err = scan(q.pool.QueryRow(ctx, `UPDATE job `+claimSet+`
+			WHERE id = (SELECT id FROM job WHERE state = 'pending' AND run_at <= now() AND kind = ANY($1) ORDER BY run_at LIMIT 1 FOR UPDATE SKIP LOCKED)`+claimReturning, free))
+		return
+	}
+	tx, err := q.pool.Begin(ctx)
+	if err != nil {
+		return
+	}
+	defer tx.Rollback(context.WithoutCancel(ctx))
+	rows, err := tx.Query(ctx, `SELECT l.k, l.n FROM unnest($1::text[], $2::int[]) AS l(k, n)
+		WHERE CASE WHEN EXISTS (SELECT 1 FROM job WHERE kind = l.k AND state = 'pending' AND run_at <= now())
+			THEN pg_try_advisory_xact_lock(hashtext('lidza/jobs'), hashtext(l.k)) ELSE false END`, limited, caps)
+	if err != nil {
+		return
+	}
+	var held []string
+	var heldCaps []int32
+	for rows.Next() {
+		var k string
+		var n int32
+		if err = rows.Scan(&k, &n); err != nil {
+			rows.Close()
+			return
+		}
+		held, heldCaps = append(held, k), append(heldCaps, n)
+	}
+	rows.Close()
+	if err = rows.Err(); err != nil {
+		return
+	}
+	if len(free) == 0 && len(held) == 0 {
+		err = pgx.ErrNoRows
+		return
+	}
+	err = scan(tx.QueryRow(ctx, `WITH open AS (
+			SELECT l.k FROM unnest($2::text[], $3::int[]) AS l(k, n)
+			WHERE (SELECT count(*) FROM job WHERE kind = l.k AND state = 'running') < l.n)
+		UPDATE job `+claimSet+`
+		WHERE id = (SELECT id FROM job WHERE state = 'pending' AND run_at <= now() AND (kind = ANY($1) OR kind IN (SELECT k FROM open))
+			ORDER BY run_at LIMIT 1 FOR UPDATE SKIP LOCKED)`+claimReturning, free, held, heldCaps))
+	if err != nil {
+		return
+	}
+	err = tx.Commit(ctx)
+	return
 }
 
 // dbTimeout bounds the pack's own bookkeeping queries.

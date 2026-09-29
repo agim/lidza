@@ -18,9 +18,11 @@ const JobTable = `CREATE TABLE IF NOT EXISTS job (
   locked_at timestamptz,
   finished_at timestamptz,
   last_error text,
-  created_at timestamptz NOT NULL DEFAULT now()
+  created_at timestamptz NOT NULL DEFAULT now(),
+  unique_key text
 );
-CREATE INDEX IF NOT EXISTS job_state_run_at_idx ON job (state, run_at);`
+CREATE INDEX IF NOT EXISTS job_state_run_at_idx ON job (state, run_at);
+CREATE UNIQUE INDEX IF NOT EXISTS job_kind_unique_key_key ON job (kind, unique_key);`
 
 // ScheduleTable is the DDL of the job_schedule table (model JobSchedule
 // in the same fragment), which Schedule needs. Tests create it directly.

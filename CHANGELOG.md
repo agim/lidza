@@ -9,7 +9,7 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
-## Unreleased
+## v0.1.35 (2026-09-29)
 
 - Templates: ESLint 10 in the `react` and `astro` templates. The a11y rules
   come from `eslint-plugin-jsx-a11y-x`, the maintained fork of

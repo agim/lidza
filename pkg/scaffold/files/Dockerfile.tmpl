@@ -27,9 +27,9 @@ RUN mkdir -p db mail admin config && lidza build --out /out/{{.Name}}
 
 # Runtime: the binary and what it reads from disk: the migrations (applied
 # with DB_MIGRATE=true or `lidza db migrate`), the mail templates (mail/),
-# the admin theme (admin/) and the sealed credentials (config/
-# credentials.yml.enc; the master key comes from LIDZA_MASTER_KEY in the
-# environment, never from the image). Per-request SSR (LIDZA_SSR=1) needs
+# the admin theme (admin/, unless routes.go embeds it) and the sealed
+# credentials (config/credentials.yml.enc; the master key comes from
+# LIDZA_MASTER_KEY in the environment, never from the image). Per-request SSR (LIDZA_SSR=1) needs
 # Node at runtime: use node:22-bookworm-slim here instead and copy dist/.server.
 # The local storage provider writes to STORAGE_DIR, which this read-only
 # image has no room for: use STORAGE_PROVIDER=s3, or mount a volume there.

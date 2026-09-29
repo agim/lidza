@@ -11,9 +11,10 @@ import (
 	"notes/handlers"
 )
 
-// adminFiles holds the templates of the app's admin pages.
+// adminFiles holds the app's admin pages' templates and theme, so the
+// binary carries them.
 //
-//go:embed admin/*.html
+//go:embed admin
 var adminFiles embed.FS
 
 // routes registers the API. Every route lives under /api; the frontend
@@ -48,7 +49,8 @@ func routes(r *router.Router) {
 
 	// The admin pages at /admin, for the first account and the users
 	// ADMIN_USERS names: users and sign-in providers, mail, the model and
-	// storage with their settings, jobs. Themed by admin/theme.css.
+	// storage with their settings, jobs. Themed by admin/theme.css, read
+	// from the embedded files.
 	// handlers.AdminNotes adds the app's own page to them, rendered from
 	// admin/notes.html, embedded so it ships in the binary.
 	admin.Mount(r, admin.Options{Title: "notes", Templates: lidza.Sub(adminFiles, "admin"), Pages: []admin.Page{handlers.AdminNotes()}})

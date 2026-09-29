@@ -48,8 +48,10 @@ var files embed.FS
 type Options struct {
 	// Path is where the pages live; "/admin" by default.
 	Path string
-	// Dir holds the app's theme: Dir/theme.css replaces the variables,
-	// Dir/layout.html the frame. "admin" by default.
+	// Dir holds the app's theme on disk: Dir/theme.css replaces the
+	// variables, Dir/layout.html the frame. "admin" by default. Both are
+	// read from Templates first, so an app that embeds them runs from the
+	// binary alone.
 	Dir string
 	// Title heads every page; the app's name is a good one. "Admin" by
 	// default.
@@ -81,9 +83,11 @@ type Options struct {
 	// moderation queues) to the sidebar, rendered in the same frame. See
 	// Page.
 	Pages []Page
-	// Templates holds the app's page templates, usually embedded
-	// (//go:embed admin/*.html) so they ship in the binary; nil reads
-	// them from Dir on disk.
+	// Templates holds the app's page templates, theme.css and
+	// layout.html, usually the app's admin/ folder embedded
+	// (//go:embed admin, then lidza.Sub(files, "admin")) so they ship in
+	// the binary. A file it lacks is read from Dir on disk; the theme and
+	// the frame then fall back to the pack's own.
 	Templates fs.FS
 }
 
@@ -251,11 +255,23 @@ func allowListed(u *auth.User, listed []string) bool {
 	return false
 }
 
-// theme serves the app's admin/theme.css, else the pack's.
+// appFile reads one of the app's theme files: from Options.Templates,
+// else from Options.Dir on disk.
+func (h *Handler) appFile(name string) ([]byte, error) {
+	if h.opt.Templates != nil {
+		if data, err := fs.ReadFile(h.opt.Templates, name); err == nil {
+			return data, nil
+		}
+	}
+	return os.ReadFile(filepath.Join(h.opt.Dir, name))
+}
+
+// theme serves the app's theme.css (Templates, then Dir), else the
+// pack's.
 func (h *Handler) theme(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/css; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
-	if data, err := os.ReadFile(filepath.Join(h.opt.Dir, "theme.css")); err == nil {
+	if data, err := h.appFile("theme.css"); err == nil {
 		w.Write(data)
 		return
 	}
@@ -448,15 +464,15 @@ func (h *Handler) funcs() template.FuncMap {
 	}
 }
 
-// frame builds the shared partials and the frame (the app's
-// admin/layout.html when there is one, else the pack's); the page's
+// frame builds the shared partials and the frame (the app's layout.html
+// from Templates or Dir when there is one, else the pack's); the page's
 // content is added to it.
 func (h *Handler) frame(name string) (*template.Template, error) {
 	t, err := template.New("").Funcs(h.funcs()).ParseFS(files, "templates/partials.html")
 	if err != nil {
 		return nil, err
 	}
-	if custom, rerr := os.ReadFile(filepath.Join(h.opt.Dir, "layout.html")); rerr == nil && name != "denied" {
+	if custom, rerr := h.appFile("layout.html"); rerr == nil && name != "denied" {
 		t, err = t.Parse(string(custom))
 	} else {
 		t, err = t.ParseFS(files, "templates/layout.html")

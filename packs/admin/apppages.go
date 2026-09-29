@@ -18,7 +18,7 @@ import (
 // the built-in pages.
 //
 //	admin.Mount(r, admin.Options{
-//		Templates: adminFS, // //go:embed admin/*.html
+//		Templates: lidza.Sub(adminFS, "admin"), // //go:embed admin
 //		Pages: []admin.Page{{
 //			Name: "Orders", Path: "orders", Icon: "inbox", Template: "orders.html",
 //			Data: func(r *http.Request) (any, error) { return queries.New(db.From(r.Context())).RecentOrders(r.Context()) },

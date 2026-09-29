@@ -21,9 +21,9 @@ updates:
         update-types: [minor, patch]
 
   # The app templates new apps start from, and the reference app that
-  # mirrors the react one: one group, so they never drift apart. Majors
-  # (a new TypeScript, ESLint or React) come one per package, to be
-  # taken for all of them in one deliberate change. @types/node follows
+  # mirrors the react one: one group, so they never drift apart; majors
+  # (a new TypeScript, ESLint or React) in a group of their own, taken
+  # for all of them in one deliberate change. @types/node follows
   # the Node the apps run (22), never ahead of it.
   - package-ecosystem: npm
     directories: [/examples/notes, /templates/react, /templates/svelte, /templates/astro]
@@ -34,6 +34,8 @@ updates:
     groups:
       npm:
         update-types: [minor, patch]
+      npm-major:
+        update-types: [major]
 
   # The Rust core and the official Rust packs.
   - package-ecosystem: cargo

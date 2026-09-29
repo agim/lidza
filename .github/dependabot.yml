@@ -1,0 +1,55 @@
+# Dependency updates, weekly, grouped: one pull request per ecosystem
+# and directory for minor and patch versions, a separate one per major.
+# Security updates come as they are published, whatever the schedule.
+version: 2
+updates:
+  # The framework, the CLI and the packs.
+  - package-ecosystem: gomod
+    directory: /
+    schedule: { interval: weekly, day: monday }
+    groups:
+      go:
+        update-types: [minor, patch]
+
+  # The reference app (its snippets are regenerated from it:
+  # go generate ./pkg/snippets after merging).
+  - package-ecosystem: gomod
+    directory: /examples/notes
+    schedule: { interval: weekly, day: monday }
+    groups:
+      notes-go:
+        update-types: [minor, patch]
+  - package-ecosystem: npm
+    directory: /examples/notes
+    schedule: { interval: weekly, day: monday }
+    groups:
+      notes-npm:
+        update-types: [minor, patch]
+
+  # The app templates new apps start from.
+  - package-ecosystem: npm
+    directories: [/templates/react, /templates/svelte, /templates/astro]
+    schedule: { interval: weekly, day: monday }
+    groups:
+      templates-npm:
+        update-types: [minor, patch]
+
+  # The Rust core and the official Rust packs.
+  - package-ecosystem: cargo
+    directories:
+      - /core
+      - /pkg/pack/official/media/rust
+      - /pkg/pack/official/geo/rust
+      - /examples/notes/packs/stats/rust
+    schedule: { interval: weekly, day: monday }
+    groups:
+      rust:
+        update-types: [minor, patch]
+
+  # The CI workflow's actions.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly, day: monday }
+    groups:
+      actions:
+        update-types: [minor, patch]

@@ -9,7 +9,7 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
-## Unreleased
+## v0.1.34 (2026-09-29)
 
 - `App.Head` (`devserver.WithHead`) sets each page's head per request
   without the SSR sidecar: title, description, canonical, Open Graph and

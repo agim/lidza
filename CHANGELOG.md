@@ -11,6 +11,18 @@ change. A release without one is additive: an app updates with
 
 ## Unreleased
 
+- jobs: `jobs.Unique(key)` makes an enqueue idempotent: while a job of
+  the kind with that key is pending or running, on any node, Enqueue
+  stores nothing and returns that job's id (`jobs.Existed(&found)` says
+  so). The job table gets a `uniqueKey` column with a unique index on
+  kind and key, cleared when the job finishes: run `lidza gen` and
+  `lidza db migrate`; tables not yet migrated keep running jobs.
+- jobs: `Handle(kind, fn, jobs.Concurrency(n))` caps how many jobs of a
+  kind run at once across all nodes; jobs over the cap stay pending
+  while workers take other kinds.
+- jobs: `jobs.DailyAt(zone, "02:00", "10:00", "18:00")` runs at several
+  clock times a day in a time zone, correct across daylight-saving
+  changes.
 - New apps get `appMiddleware()` in `start.go`, wired as
   `App.Middleware` in the generated `main.go`: middleware around the
   whole app (rate limits, a www redirect) without editing `main.go`. An

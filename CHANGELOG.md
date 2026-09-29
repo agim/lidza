@@ -9,7 +9,7 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
-## Unreleased
+## v0.1.38 (2026-09-29)
 
 - Credentials per mode: one sealed file holds values for every mode.
   `lidza credentials set dev.STRIPE_SECRET_KEY=sk_test_...

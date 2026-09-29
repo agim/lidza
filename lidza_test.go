@@ -128,6 +128,29 @@ func TestHandlerPermissionsPolicy(t *testing.T) {
 	}
 }
 
+func TestHandlerHead(t *testing.T) {
+	t.Setenv(devserver.EnvMode, "")
+	h, err := Handler(App{
+		Dist: fstest.MapFS{"index.html": {Data: []byte("<html><head><title>App</title></head><body></body></html>")}},
+		Head: func(r *http.Request) (Head, bool) {
+			id, ok := strings.CutPrefix(r.URL.Path, "/posts/")
+			if !ok {
+				return Head{}, false
+			}
+			return Head{Title: "Post " + id, Meta: []HeadMeta{{Property: "og:locale", Content: "en_GB"}}}, true
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if code, body := get(t, h, "/posts/9"); code != 200 || !strings.Contains(body, "<title>Post 9</title>") || !strings.Contains(body, `<meta property="og:locale" content="en_GB">`) {
+		t.Fatalf("post: %d %s", code, body)
+	}
+	if code, body := get(t, h, "/about"); code != 200 || !strings.Contains(body, "<title>App</title>") {
+		t.Fatalf("untouched: %d %s", code, body)
+	}
+}
+
 func TestHandlerCustomFrontend(t *testing.T) {
 	t.Setenv(devserver.EnvMode, "")
 	h, err := Handler(App{Frontend: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { io.WriteString(w, "page") })})

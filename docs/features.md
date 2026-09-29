@@ -58,6 +58,7 @@ does not reimplement).
 | Rate limiting and circuit breakers | done | `middleware.RateLimit` (token bucket per key, bounded table), `resilience.Breaker` |
 | Load testing | done | `lidza benchmark` on k6 with heap and goroutine comparison; `benchmarks/scale_test.js` in every app |
 | Server-side rendering | done | build-time prerendering for `react` and `astro`; per-request rendering with `LIDZA_SSR=1` through the Node sidecar (loaders run on the server with the visitor's cookies), falling back to the static page; see "Decisions" |
+| Per-page head (SEO, link previews) | done | `App.Head` sets title, description, canonical, Open Graph and Twitter tags, JSON-LD, noindex and the status per request, in Go, for the shell and prerendered pages alike (and the sidecar's and the dev server's pages); every value escaped; recipe "Set a page's head" |
 
 ## Decisions
 

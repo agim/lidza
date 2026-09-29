@@ -21,11 +21,12 @@ const LocalesDir = ".locales"
 // negotiation. An empty result leaves the choice to the built-in one.
 type LocaleFunc func(r *http.Request) string
 
-// Option configures Static and NewSidecar.
+// Option configures Static, NewSidecar and NewProxy.
 type Option func(*options)
 
 type options struct {
 	locale LocaleFunc
+	head   HeadFunc
 }
 
 // WithLocale picks the page variant with f instead of the built-in

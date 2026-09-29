@@ -11,6 +11,7 @@ const SessionTable = `CREATE TABLE IF NOT EXISTS auth_session (
   rotated_at timestamptz,
   expires_at timestamptz NOT NULL,
   revoked_at timestamptz,
+  remember boolean NOT NULL DEFAULT true,
   created_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS auth_session_subject_idx ON auth_session (subject);`

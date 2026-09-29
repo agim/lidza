@@ -18,6 +18,7 @@ pub struct AuthSession {
     pub expires_at: String,
     #[serde(rename = "revokedAt")]
     pub revoked_at: Option<String>,
+    pub remember: bool,
     #[serde(rename = "createdAt")]
     pub created_at: String,
 }

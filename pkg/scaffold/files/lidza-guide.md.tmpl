@@ -384,9 +384,14 @@ OAuth flow.
 2. Pages: the sign-in page calls `api.authLogin({ email, password })`
    and shows a 401 as "wrong email or password" and `err.fields` from a
    422; registration calls `api.authRegister`; the app shell reads
-   `api.authSession()` once (`user` is null for a visitor). Render one
+   `api.authSession()` once (`user` is null for a visitor). A "remember
+   me" box sends `remember` to `authLogin` or `authRegister`: `false`
+   makes the auth cookies session cookies (no expiry, on this reply and
+   every renewal), so the session ends when the browser closes; absent
+   or `true` keeps them for `AUTH_REFRESH_TTL`. Render one
    button per entry of `api.authProviders()` as a plain link to its
-   `url` (add `?redirect=/path` to land elsewhere than `/`); the callback
+   `url` (add `?redirect=/path` to land elsewhere than `/`, and
+   `remember=false` for a session that ends with the browser); the callback
    sets the cookies and redirects, or lands on `/login?error=...`. The
    pages `/verify` and `/reset` read `?token=` and call `authVerify` or
    `authReset`.
@@ -400,8 +405,12 @@ OAuth flow.
    email the provider vouches for joins the local account of that
    address; the admin Users page shows how each account signs in.
    Options: `NoRegister` (invite-only; `auth.From(ctx).CreateUser` adds
-   accounts), `NoLocal` (providers only), `RequireVerified`, `Claims`
-   (roles into the token), `AfterSignIn`.
+   accounts), `NoLocal` (providers only), `RequireVerified`,
+   `NoVerifyEmail` (registration sends no verification link), `Claims`
+   (roles into the token), `AfterSignIn`. The login route has a
+   throttle of its own: `AUTH_SIGNIN_RPS` and `AUTH_SIGNIN_BURST`,
+   else `AUTH_LOGIN_RPS` and `AUTH_LOGIN_BURST` as for register, verify,
+   forgot and reset.
 4. New accounts: `OnSignUp` runs once per account the routes create (a
    registration, or a provider's first sign-in that makes a new
    account; not a later sign-in, not an identity joining an existing
@@ -424,12 +433,32 @@ OAuth flow.
    with it (`router.Errorf(403, ...)` as is), a provider sign-in lands on
    `/login?error=signup`. Do not detect sign-ups in `Claims`.
    Every sign-in (a password, a provider, and the one after a sign-up)
-   runs `OnSignIn(ctx, auth.SignIn{Profile, Method})` before the session
-   opens: claim invitations sent to the user's email there, or finish a
-   join they started signed out. An error refuses the sign-in
-   (`?error=signin` for a provider). Token refreshes do not run it, and
-   neither does `Claims`, which runs for every token and is for claims
-   only.
+   runs `OnSignIn(ctx, auth.SignIn{Profile, Method, Request, Remember})`
+   before the session opens: claim invitations sent to the user's email
+   there, or finish a join they started signed out. `s.Request` is the
+   login, register or provider callback request (its address, the app's
+   own cookies); `s.SetCookie` adds a cookie to the reply, sent only when
+   the sign-in succeeds:
+
+   ```go
+   OnSignIn: func(ctx context.Context, s auth.SignIn) error {
+   	c, err := s.Request.Cookie("pending_join")
+   	if err != nil {
+   		return nil
+   	}
+   	n, err := queries.New(db.From(ctx)).JoinTeam(ctx, queries.JoinTeamParams{Code: c.Value, UserID: s.Profile.Subject})
+   	if err != nil {
+   		return err
+   	}
+   	s.SetCookie(&http.Cookie{Name: "pending_join", Path: "/", MaxAge: -1})
+   	s.SetCookie(&http.Cookie{Name: "notice", Value: fmt.Sprintf("joined-%d", n), Path: "/", MaxAge: 60})
+   	return nil
+   },
+   ```
+
+   An error refuses the sign-in (`?error=signin` for a provider). Token
+   refreshes do not run it, and neither does `Claims`, which runs for
+   every token and is for claims only.
 5. Deleting an account: set `OnDeleteUser` (it deletes or anonymizes
    the app's rows of the subject; a no-op when the app keeps none), which
    also serves the route. The account page links to a form that calls
@@ -450,6 +479,11 @@ OAuth flow.
    language's copy is `mail/auth_verify.<lang>.txt.tmpl` (`de`, `pt-BR`),
    chosen by the request's language (recipe "Send an email"); it names
    its subject with `{{"{{"}}define "subject"{{"}}"}}...{{"{{"}}end{{"}}"}}`.
+   `NoVerifyEmail: true` sends no verification link at registration: an
+   app that sends its own welcome email does so from `OnSignUp` (with
+   `RequireVerified`, it must then send a link itself:
+   `IssueToken(ctx, auth.PurposeVerifyEmail, s.Profile.Subject, 0)` and
+   `VerifyPath?token=`, which the verify route redeems).
 7. Test: `lidzatest.Start`, `POST /api/v1/auth/register`, then a scoped
    route with the cookies the reply set. The providers are tested by the
    framework (against an OIDC issuer in a test server), not by the app.
@@ -1046,11 +1080,16 @@ Official Go packs, configured from `.env` (see `.env.example` after
   it from the refresh cookie on that request and set both cookies again,
   so a tab stays signed in for `AUTH_REFRESH_TTL` without a refresh
   route or client code; a bearer client refreshes through a route of the
-  app that calls `auth.From(ctx).Refresh`. Read what changes after login
+  app that calls `auth.From(ctx).Refresh`. Without "remember me":
+  `auth.From(ctx).LoginWith(ctx, userID, claims,
+  auth.SessionOptions{SessionOnly: true})`; its cookies and every
+  renewal's are session cookies, gone when the browser closes. Read what changes after login
   (a verified flag, a role) from the database, not from the token's
   claims, which are what they were at login. Hardening: wrap the
   credential routes with `auth.Throttle()` (per-client rate limit,
-  `AUTH_LOGIN_RPS`), refuse weak passwords with
+  `AUTH_LOGIN_RPS`) and the sign-in route with `auth.ThrottleSignIn()`
+  (its own limit, `AUTH_SIGNIN_RPS`, else `AUTH_LOGIN_RPS`), refuse weak
+  passwords with
   `auth.From(ctx).ValidatePassword(password, email)` (length, common
   passwords, the email itself), and run email verification and password
   reset on one-time tokens: `IssueToken(ctx, auth.PurposeVerifyEmail,

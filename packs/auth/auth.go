@@ -45,10 +45,16 @@ type Config struct {
 	// Issuer is the JWT iss claim.
 	Issuer string `env:"AUTH_ISSUER" default:"lidza"`
 	// LoginRPS and LoginBurst bound credential attempts per client
-	// address on the routes wrapped with Throttle (login, register,
-	// password reset).
+	// address on the routes wrapped with Throttle (register, verify,
+	// forgot, reset) and, unless SignInRPS is set, ThrottleSignIn.
 	LoginRPS   float64 `env:"AUTH_LOGIN_RPS" default:"1"`
 	LoginBurst int     `env:"AUTH_LOGIN_BURST" default:"5"`
+	// SignInRPS and SignInBurst bound password sign-ins per client
+	// address on the routes wrapped with ThrottleSignIn (Mount's login),
+	// apart from the other credential routes; zero uses LoginRPS and
+	// LoginBurst.
+	SignInRPS   float64 `env:"AUTH_SIGNIN_RPS"`
+	SignInBurst int     `env:"AUTH_SIGNIN_BURST"`
 	// MinPasswordLength is the floor ValidatePassword applies.
 	MinPasswordLength int `env:"AUTH_MIN_PASSWORD" default:"10"`
 	// TokenTTL bounds the one-time tokens IssueToken creates (email
@@ -138,23 +144,58 @@ type Tokens struct {
 	Access    string    `json:"accessToken"`
 	Refresh   string    `json:"refreshToken"`
 	ExpiresAt time.Time `json:"expiresAt"`
+	// SessionOnly marks the tokens of a session opened without "remember
+	// me" (SessionOptions.SessionOnly): Cookies makes session cookies,
+	// which the browser drops when it closes. Refresh carries it on.
+	SessionOnly bool `json:"-"`
+}
+
+// SessionOptions shape the session LoginWith opens.
+type SessionOptions struct {
+	// SessionOnly opens a session without "remember me": its cookies
+	// carry no Max-Age or Expires, when it opens and on every renewal,
+	// so the browser ends it when it closes. The session record still
+	// expires after AUTH_REFRESH_TTL. False (as Login) keeps the cookies
+	// for AUTH_REFRESH_TTL.
+	SessionOnly bool
 }
 
 // Login opens a session for subject with claims and returns its tokens.
-// The app verifies the credentials first (CheckPassword).
+// The app verifies the credentials first (CheckPassword). The browser
+// is remembered for AUTH_REFRESH_TTL; LoginWith opens a session that
+// ends with the browser.
 func (a *Auth) Login(ctx context.Context, subject string, claims map[string]any) (Tokens, error) {
+	return a.LoginWith(ctx, subject, claims, SessionOptions{})
+}
+
+// LoginWith is Login with options: SessionOptions{SessionOnly: true}
+// for a sign-in without "remember me".
+func (a *Auth) LoginWith(ctx context.Context, subject string, claims map[string]any, o SessionOptions) (Tokens, error) {
 	if err := a.seen(ctx, subject, claims); err != nil {
 		return Tokens{}, err
 	}
 	sessionID := randomID()
 	refresh := randomID()
 	expires := time.Now().Add(a.cfg.RefreshTTL)
-	_, err := a.pool.Exec(ctx, `INSERT INTO auth_session (id, subject, refresh_hash, expires_at) VALUES ($1, $2, $3, $4)`,
-		sessionID, subject, hashToken(refresh), expires)
+	_, err := a.pool.Exec(ctx, `INSERT INTO auth_session (id, subject, refresh_hash, expires_at, remember) VALUES ($1, $2, $3, $4, $5)`,
+		sessionID, subject, hashToken(refresh), expires, !o.SessionOnly)
 	if err != nil {
 		return Tokens{}, fmt.Errorf("auth: create session: %w", err)
 	}
-	return a.tokens(subject, claims, sessionID, refresh)
+	t, err := a.tokens(subject, claims, sessionID, refresh)
+	t.SessionOnly = o.SessionOnly
+	return t, err
+}
+
+// SessionRemembered reports whether a session was opened with "remember
+// me" (Login, the default); false for a SessionOnly session or an
+// unknown id.
+func (a *Auth) SessionRemembered(ctx context.Context, sessionID string) bool {
+	var remember bool
+	if err := a.pool.QueryRow(ctx, `SELECT remember FROM auth_session WHERE id = $1`, sessionID).Scan(&remember); err != nil {
+		return false
+	}
+	return remember
 }
 
 // RefreshGrace is how long the refresh token a Refresh just replaced
@@ -169,25 +210,27 @@ const RefreshGrace = time.Minute
 // replaced stays valid for RefreshGrace, for an access token only.
 func (a *Auth) Refresh(ctx context.Context, refreshToken string, claims map[string]any) (Tokens, error) {
 	var sessionID, subject string
-	var current bool
-	err := a.pool.QueryRow(ctx, `SELECT id, subject, refresh_hash = $1 FROM auth_session
+	var current, remember bool
+	err := a.pool.QueryRow(ctx, `SELECT id, subject, refresh_hash = $1, remember FROM auth_session
 		WHERE (refresh_hash = $1 OR (prev_refresh_hash = $1 AND rotated_at > now() - $2::interval))
 		AND revoked_at IS NULL AND expires_at > now()`,
-		hashToken(refreshToken), fmt.Sprintf("%d seconds", int(RefreshGrace.Seconds()))).Scan(&sessionID, &subject, &current)
+		hashToken(refreshToken), fmt.Sprintf("%d seconds", int(RefreshGrace.Seconds()))).Scan(&sessionID, &subject, &current, &remember)
 	if err != nil {
 		return Tokens{}, router.Errorf(http.StatusUnauthorized, "session expired")
 	}
 	if err := a.seen(ctx, subject, claims); err != nil {
 		return Tokens{}, err
 	}
-	if !current {
-		return a.tokens(subject, claims, sessionID, "")
+	refresh := ""
+	if current {
+		refresh = randomID()
+		if _, err := a.pool.Exec(ctx, `UPDATE auth_session SET prev_refresh_hash = refresh_hash, rotated_at = now(), refresh_hash = $1 WHERE id = $2`, hashToken(refresh), sessionID); err != nil {
+			return Tokens{}, err
+		}
 	}
-	refresh := randomID()
-	if _, err := a.pool.Exec(ctx, `UPDATE auth_session SET prev_refresh_hash = refresh_hash, rotated_at = now(), refresh_hash = $1 WHERE id = $2`, hashToken(refresh), sessionID); err != nil {
-		return Tokens{}, err
-	}
-	return a.tokens(subject, claims, sessionID, refresh)
+	t, err := a.tokens(subject, claims, sessionID, refresh)
+	t.SessionOnly = !remember
+	return t, err
 }
 
 // Logout revokes the session of the current user.
@@ -245,21 +288,49 @@ func (a *Auth) ConsumeToken(ctx context.Context, purpose, token string) (string,
 // Throttle is middleware for the routes that take credentials (login,
 // register, password reset): a token bucket per client address with
 // AUTH_LOGIN_RPS and AUTH_LOGIN_BURST, replying 429 beyond it. Wrap the
-// route: router.Route(r, "POST /api/v1/auth/login", login, auth.Throttle()).
-// Behind a proxy that sets X-Forwarded-For, key on it with ThrottleBy.
+// route: router.Route(r, "POST /api/v1/auth/register", register, auth.Throttle()).
+// Each wrapped route counts on its own. The sign-in route takes
+// ThrottleSignIn, for a limit of its own. Behind a proxy that sets
+// X-Forwarded-For, key on it with ThrottleBy.
 func Throttle() middleware.Middleware {
 	return ThrottleBy(nil)
 }
 
 // ThrottleBy is Throttle with a key function (nil: the client address).
 func ThrottleBy(key func(r *http.Request) string) middleware.Middleware {
+	return throttle(key, false)
+}
+
+// ThrottleSignIn is Throttle for the sign-in route, with a limit of its
+// own: AUTH_SIGNIN_RPS and AUTH_SIGNIN_BURST, each falling back to
+// AUTH_LOGIN_RPS and AUTH_LOGIN_BURST when unset. Mount's login uses it;
+// an app with its own login route wraps it the same way:
+// router.Route(r, "POST /api/v1/auth/login", login, auth.ThrottleSignIn()).
+func ThrottleSignIn() middleware.Middleware {
+	return ThrottleSignInBy(nil)
+}
+
+// ThrottleSignInBy is ThrottleSignIn with a key function (nil: the
+// client address).
+func ThrottleSignInBy(key func(r *http.Request) string) middleware.Middleware {
+	return throttle(key, true)
+}
+
+func throttle(key func(r *http.Request) string, signIn bool) middleware.Middleware {
 	var once sync.Once
 	var limited http.Handler
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			once.Do(func() {
 				cfg := From(r.Context()).cfg
-				limited = middleware.RateLimit(middleware.RateLimitOptions{RPS: cfg.LoginRPS, Burst: cfg.LoginBurst, Key: key})(next)
+				rps, burst := cfg.LoginRPS, cfg.LoginBurst
+				if signIn && cfg.SignInRPS > 0 {
+					rps = cfg.SignInRPS
+				}
+				if signIn && cfg.SignInBurst > 0 {
+					burst = cfg.SignInBurst
+				}
+				limited = middleware.RateLimit(middleware.RateLimitOptions{RPS: rps, Burst: burst, Key: key})(next)
 			})
 			limited.ServeHTTP(w, r)
 		})
@@ -345,13 +416,18 @@ func (a *Auth) Verify(token string) (*User, error) {
 // Require and Optional renew it from the refresh cookie and set both
 // again (sessions slide; no refresh route or client code is needed).
 // A Tokens without Refresh (a Refresh inside RefreshGrace) sets the
-// access cookie only.
+// access cookie only. The tokens of a SessionOnly session make session
+// cookies (no Max-Age), which the browser drops when it closes.
 func (a *Auth) Cookies(t Tokens) []*http.Cookie {
+	maxAge := int(a.cfg.RefreshTTL.Seconds())
+	if t.SessionOnly {
+		maxAge = 0
+	}
 	cookies := []*http.Cookie{
-		{Name: AccessCookie, Value: t.Access, Path: "/", HttpOnly: true, Secure: a.cfg.CookieSecure, SameSite: http.SameSiteLaxMode, MaxAge: int(a.cfg.RefreshTTL.Seconds())},
+		{Name: AccessCookie, Value: t.Access, Path: "/", HttpOnly: true, Secure: a.cfg.CookieSecure, SameSite: http.SameSiteLaxMode, MaxAge: maxAge},
 	}
 	if t.Refresh != "" {
-		cookies = append(cookies, &http.Cookie{Name: RefreshCookie, Value: t.Refresh, Path: "/", HttpOnly: true, Secure: a.cfg.CookieSecure, SameSite: http.SameSiteStrictMode, MaxAge: int(a.cfg.RefreshTTL.Seconds())})
+		cookies = append(cookies, &http.Cookie{Name: RefreshCookie, Value: t.Refresh, Path: "/", HttpOnly: true, Secure: a.cfg.CookieSecure, SameSite: http.SameSiteStrictMode, MaxAge: maxAge})
 	}
 	return cookies
 }

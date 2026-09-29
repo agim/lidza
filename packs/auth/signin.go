@@ -42,6 +42,13 @@ type Options struct {
 	// verified through the link; a provider that vouches for the address
 	// verifies it too.
 	RequireVerified bool
+	// NoVerifyEmail skips the "Verify your email" message registration
+	// sends, for an app that sends its own (a welcome email from
+	// OnSignUp) or does not verify addresses. The verify route stays: an
+	// app that verifies later mails its own link with
+	// IssueToken(ctx, PurposeVerifyEmail, profile.Subject, 0). With
+	// RequireVerified and no link sent, password sign-in stays refused.
+	NoVerifyEmail bool
 	// VerifyPath and ResetPath are the frontend pages the emailed links
 	// open, with ?token=...: "/verify" and "/reset".
 	VerifyPath, ResetPath string
@@ -74,7 +81,9 @@ type Options struct {
 	// password sign-in and registration reply with it (a router.Errorf
 	// status as is, else 500), a provider sign-in lands on FailurePath
 	// with ?error=signin. Token refreshes are not sign-ins and do not run
-	// it.
+	// it. SignIn carries the request (the client address, the app's own
+	// cookies) and sets cookies on the reply (s.SetCookie), which go out
+	// only when the sign-in succeeds.
 	OnSignIn func(ctx context.Context, s SignIn) error
 	// OnDeleteUser runs inside DeleteUser's transaction (the delete route
 	// and the app's own calls), before the pack's rows go: delete or
@@ -108,6 +117,24 @@ type SignIn struct {
 	Profile Profile
 	// Method is "password", or the provider's name ("google").
 	Method string
+	// Request is the request signing in: the login or register call, or
+	// the provider's callback. Read the client address or the app's own
+	// cookies from it (a pending action a visitor started signed out).
+	Request *http.Request
+	// Remember reports whether the session outlives the browser: false
+	// for a sign-in with "remember": false (session cookies only).
+	Remember bool
+	// cookies collects what SetCookie adds; nil outside the routes.
+	cookies *[]*http.Cookie
+}
+
+// SetCookie adds a cookie to the reply that signs the user in (a notice
+// for the next page, clearing a cookie the app read from Request). The
+// cookies go out only when the sign-in succeeds.
+func (s SignIn) SetCookie(c *http.Cookie) {
+	if s.cookies != nil {
+		*s.cookies = append(*s.cookies, c)
+	}
 }
 
 // MethodPassword is SignUp.Method for a registration with email and
@@ -132,7 +159,7 @@ func Mount(r *router.Router, opt Options) {
 		if !opt.NoRegister {
 			router.Route(r, "POST /api/v1/auth/register", s.authRegister, Throttle())
 		}
-		router.Route(r, "POST /api/v1/auth/login", s.authLogin, Throttle())
+		router.Route(r, "POST /api/v1/auth/login", s.authLogin, ThrottleSignIn())
 		router.Route(r, "POST /api/v1/auth/verify", s.authVerify, Throttle())
 		router.Route(r, "POST /api/v1/auth/forgot", s.authForgot, Throttle())
 		router.Route(r, "POST /api/v1/auth/reset", s.authReset, Throttle())
@@ -259,7 +286,14 @@ func ProviderNames() []string {
 type Credentials struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
+	// Remember is the "remember me" box: false opens a session whose
+	// cookies end with the browser, on this reply and every renewal.
+	// Absent (null) remembers, as true does.
+	Remember *bool `json:"remember,omitempty"`
 }
+
+// remembered reads a "remember me" field: absent means yes.
+func remembered(b *bool) bool { return b == nil || *b }
 
 // Validate implements validate.Validator.
 func (c Credentials) Validate() error {
@@ -278,6 +312,9 @@ type Registration struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
 	Name     string `json:"name,omitempty"`
+	// Remember is Credentials.Remember for the session registration
+	// opens: false ends it with the browser; absent remembers.
+	Remember *bool `json:"remember,omitempty"`
 }
 
 // Validate implements validate.Validator.
@@ -386,7 +423,8 @@ type AccountDeletion struct {
 }
 
 // ProviderLink is one sign-in button: its name, label and the URL to
-// send the browser to (append ?redirect=/path to land elsewhere).
+// send the browser to (append ?redirect=/path to land elsewhere, and
+// remember=false for a session that ends with the browser).
 type ProviderLink struct {
 	Name  string `json:"name"`
 	Label string `json:"label"`
@@ -678,7 +716,10 @@ func (s *signin) signUp(ctx context.Context, create func(tx pgx.Tx) (Profile, er
 
 // Handlers.
 
-func (s *signin) session(ctx context.Context, req interface{ SetCookie(*http.Cookie) }, p Profile, provider string, withToken bool) (SignedIn, error) {
+// session opens a session for p after OnSignIn, and sets its cookies and
+// the ones OnSignIn added on req. r is the request signing in; remember
+// is false for a session that ends with the browser.
+func (s *signin) session(ctx context.Context, req interface{ SetCookie(*http.Cookie) }, r *http.Request, p Profile, provider string, withToken, remember bool) (SignedIn, error) {
 	a := From(ctx)
 	claims := map[string]any{}
 	if p.Email != "" {
@@ -699,18 +740,22 @@ func (s *signin) session(ctx context.Context, req interface{ SetCookie(*http.Coo
 			claims[k] = v
 		}
 	}
+	var appCookies []*http.Cookie
 	if s.opt.OnSignIn != nil {
 		method := provider
 		if method == "" {
 			method = MethodPassword
 		}
-		if err := s.opt.OnSignIn(ctx, SignIn{Profile: p, Method: method}); err != nil {
+		if err := s.opt.OnSignIn(ctx, SignIn{Profile: p, Method: method, Request: r, Remember: remember, cookies: &appCookies}); err != nil {
 			return SignedIn{}, &signInError{err}
 		}
 	}
-	tokens, err := a.Login(ctx, p.Subject, claims)
+	tokens, err := a.LoginWith(ctx, p.Subject, claims, SessionOptions{SessionOnly: !remember})
 	if err != nil {
 		return SignedIn{}, err
+	}
+	for _, c := range appCookies {
+		req.SetCookie(c)
 	}
 	for _, c := range a.Cookies(tokens) {
 		req.SetCookie(c)
@@ -753,11 +798,13 @@ func (s *signin) authRegister(ctx context.Context, req *router.Request[Registrat
 	if err != nil {
 		return SignedIn{}, err
 	}
-	if err := s.sendLink(ctx, p, PurposeVerifyEmail); err != nil {
-		return SignedIn{}, err
+	if !s.opt.NoVerifyEmail {
+		if err := s.sendLink(ctx, p, PurposeVerifyEmail); err != nil {
+			return SignedIn{}, err
+		}
 	}
 	req.Status(http.StatusCreated)
-	return s.session(ctx, req, p, "", true)
+	return s.session(ctx, req, req.Raw, p, "", true, remembered(req.Body.Remember))
 }
 
 // ErrBadCredentials is the 401 of a wrong email or password; the reply
@@ -784,7 +831,7 @@ func (s *signin) authLogin(ctx context.Context, req *router.Request[Credentials]
 	if err != nil {
 		return SignedIn{}, err
 	}
-	return s.session(ctx, req, p, "", true)
+	return s.session(ctx, req, req.Raw, p, "", true, remembered(req.Body.Remember))
 }
 
 func (s *signin) authLogout(ctx context.Context, req *router.Request[router.None]) (router.None, error) {
@@ -884,11 +931,13 @@ func (s *signin) authPassword(ctx context.Context, req *router.Request[PasswordC
 	if err := a.ValidatePassword(req.Body.Password, p.Email); err != nil {
 		return router.None{}, err
 	}
+	// Keep this session, and its "remember me": SetPassword ended them
+	// all.
+	remember := a.SessionRemembered(ctx, CurrentUser(ctx).SessionID)
 	if err := a.SetPassword(ctx, p.Subject, req.Body.Password); err != nil {
 		return router.None{}, err
 	}
-	// Keep this session: SetPassword ended them all.
-	tokens, err := a.Login(ctx, p.Subject, CurrentUser(ctx).Claims)
+	tokens, err := a.LoginWith(ctx, p.Subject, CurrentUser(ctx).Claims, SessionOptions{SessionOnly: !remember})
 	if err != nil {
 		return router.None{}, err
 	}

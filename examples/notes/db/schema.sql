@@ -9,6 +9,7 @@ CREATE TABLE auth_session (
   rotated_at timestamptz,
   expires_at timestamptz NOT NULL,
   revoked_at timestamptz,
+  remember boolean NOT NULL DEFAULT true,
   created_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX auth_session_subject_idx ON auth_session (subject);

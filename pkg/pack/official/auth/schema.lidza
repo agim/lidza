@@ -6,6 +6,7 @@ model AuthSession @table("auth_session") {
   rotatedAt   time?
   expiresAt   time
   revokedAt   time?
+  remember    bool   @default(true)
   createdAt   time   @default(now())
 }
 

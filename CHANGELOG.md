@@ -9,6 +9,13 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- `lidza update` on an app without the db pack checked its migrations
+  and reported "DATABASE_URL is required"; it skips them now. `lidza
+  setup` said it wrote DATABASE_URL, AUTH_SECRET and MAIL_FROM into
+  `.env` whatever the packs; it names only the values it wrote.
+
 ## v0.1.38 (2026-09-29)
 
 - Credentials per mode: one sealed file holds values for every mode.

@@ -160,10 +160,15 @@ func setup(ctx context.Context, dir string, cfg *config.Config, opt setupOptions
 			"AUTH_SECRET":  randomHex(32),
 			"MAIL_FROM":    fmt.Sprintf("%q", cfg.Name+" <"+cfg.Name+"@example.com>"),
 		}
-		if err := writeEnvFromExample(dir, values); err != nil {
+		written, err := writeEnvFromExample(dir, values)
+		if err != nil {
 			return err
 		}
-		step(".env written from .env.example: DATABASE_URL, a random AUTH_SECRET, MAIL_FROM")
+		if len(written) == 0 {
+			step(".env written from .env.example")
+		} else {
+			step(".env written from .env.example with %s", strings.Join(written, ", "))
+		}
 	} else {
 		step(".env exists, left alone")
 	}
@@ -365,11 +370,13 @@ func randomHex(n int) string {
 // writeEnvFromExample copies .env.example to .env, setting the keys in
 // values on their lines (commented or not) and appending the ones the
 // example lacks.
-func writeEnvFromExample(dir string, values map[string]string) error {
+// It returns the names it filled in, in the example's order.
+func writeEnvFromExample(dir string, values map[string]string) ([]string, error) {
 	example, err := os.ReadFile(filepath.Join(dir, ".env.example"))
 	if err != nil {
-		return err
+		return nil, err
 	}
+	var written []string
 	seen := map[string]bool{}
 	var lines []string
 	for _, line := range strings.Split(strings.TrimRight(string(example), "\n"), "\n") {
@@ -380,6 +387,7 @@ func writeEnvFromExample(dir string, values map[string]string) error {
 			if v, want := values[key]; want && !seen[key] {
 				lines = append(lines, key+"="+v)
 				seen[key] = true
+				written = append(written, key)
 				continue
 			}
 		}
@@ -388,9 +396,10 @@ func writeEnvFromExample(dir string, values map[string]string) error {
 	for _, key := range []string{"DATABASE_URL", "AUTH_SECRET", "MAIL_FROM"} {
 		if v, want := values[key]; want && !seen[key] && needsKey(dir, key) {
 			lines = append(lines, key+"="+v)
+			written = append(written, key)
 		}
 	}
-	return os.WriteFile(filepath.Join(dir, ".env"), []byte(strings.Join(lines, "\n")+"\n"), 0o600)
+	return written, os.WriteFile(filepath.Join(dir, ".env"), []byte(strings.Join(lines, "\n")+"\n"), 0o600)
 }
 
 // needsKey says whether a key belongs in .env when the example lacks it:

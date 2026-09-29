@@ -9,10 +9,12 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/agim/lidza/pkg/devserver"
+	"github.com/agim/lidza/pkg/pack"
 	"github.com/agim/lidza/pkg/version"
 )
 
@@ -112,7 +114,12 @@ func runUpdate(ctx context.Context, args []string) error {
 		if err := run(ctx, abs, exe, "gen", "deploy", "--dir", abs); err != nil {
 			fmt.Println("[update] deployment files not refreshed:", err)
 		}
-		pending, err := pendingMigrations(ctx, abs, exe)
+		// An app without the db pack has no database to migrate.
+		hasDB := cfg != nil && slices.Contains(cfg.Packs, pack.OfficialPrefix+"db")
+		pending, err := 0, error(nil)
+		if hasDB {
+			pending, err = pendingMigrations(ctx, abs, exe)
+		}
 		switch {
 		case err != nil:
 			fmt.Printf("[update] migrations: %v\n", err)

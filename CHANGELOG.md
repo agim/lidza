@@ -9,7 +9,7 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
-## Unreleased
+## v0.1.43 (2026-09-29)
 
 - `App.TLSHosts`: approve hostnames beyond `LIDZA_TLS_DOMAINS` while the
   app runs (a customer's own domain), `func(ctx, host) error`, nil

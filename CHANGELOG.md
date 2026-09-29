@@ -11,6 +11,29 @@ change. A release without one is additive: an app updates with
 
 ## Unreleased
 
+- Breaking: `Router.Group` registers its routes on the root ServeMux
+  with their full patterns and wraps the group's middleware around each
+  route, so the most specific pattern wins across groups: a group's
+  `GET /api/v1/things/prefill` is no longer answered by the parent's
+  `GET /api/v1/things/{slug}`. What changes for an app: a path under a
+  group's prefix that matches no route is a 404 (405 with `Allow`)
+  without the group's middleware (it was a 401 behind `auth.Require()`),
+  and a group pattern outside its prefix, or one that conflicts with
+  another route, panics at start instead of being silently shadowed.
+- `Router.Group` prefixes take wildcards: `r.Group("/api/v1/posts/{id}")`,
+  with `req.Param("id")` in its handlers; groups nest.
+- Typed uploads: `router.Route` with In = `router.File` passes the raw
+  body to the handler (`Body`, `ContentType`, `Name`, `Size`), bounded by
+  `router.UploadLimit(n)` (32 MB by default), 413 over it. The TypeScript
+  client gets `api.uploadImage({ id }, file, { onProgress })`, the Dart
+  client `uploadImage(bytes, id:, contentType:, filename:)`; OpenAPI
+  documents the binary body. The "Store a file" recipe and the reference
+  app use it. A handler error that is an `*http.MaxBytesError` replies
+  413 instead of 500.
+- `lidza check` L004 reads only real import and export statements,
+  `import()` and `require()`: a JSX attribute such as
+  `name="from" value={...}` is no longer reported as an undeclared
+  package, and an import across several lines is read.
 - auth: `OnSignIn` gets the request (`SignIn.Request`) and sets cookies
   on the reply (`s.SetCookie`), sent only when the sign-in succeeds.
 - auth: "remember me": `remember: false` on `authLogin` or `authRegister`

@@ -572,7 +572,7 @@ func TestEnv(packs []string) []string {
 func E2EEnv(packs []string) []string {
 	var out []string
 	if slices.Contains(packs, "lidza/auth") {
-		out = append(out, "AUTH_LOGIN_RPS=100", "AUTH_LOGIN_BURST=1000")
+		out = append(out, "AUTH_LOGIN_RPS=100", "AUTH_LOGIN_BURST=1000", "AUTH_SIGNIN_RPS=100", "AUTH_SIGNIN_BURST=1000")
 	}
 	if slices.Contains(packs, "lidza/analytics") {
 		out = append(out, "ANALYTICS_CLIENT_RPS=1000")

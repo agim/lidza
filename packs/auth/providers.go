@@ -530,6 +530,9 @@ type roundTrip struct {
 	Verifier string `json:"v"`
 	Redirect string `json:"r"`
 	Expires  int64  `json:"e"`
+	// Forget is ?remember=false on start: a session that ends with the
+	// browser.
+	Forget bool `json:"f,omitempty"`
 }
 
 func (a *Auth) sealTrip(t roundTrip) (string, error) {
@@ -613,7 +616,8 @@ func (s *signin) start(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a := From(r.Context())
-	trip := roundTrip{Provider: name, State: randomID(), Nonce: randomID(), Verifier: randomID() + randomID(), Redirect: localPath(r.URL.Query().Get("redirect"), s.opt.AfterSignIn), Expires: time.Now().Add(10 * time.Minute).Unix()}
+	trip := roundTrip{Provider: name, State: randomID(), Nonce: randomID(), Verifier: randomID() + randomID(), Redirect: localPath(r.URL.Query().Get("redirect"), s.opt.AfterSignIn), Expires: time.Now().Add(10 * time.Minute).Unix(),
+		Forget: r.URL.Query().Get("remember") == "false" || r.URL.Query().Get("remember") == "0"}
 	sealed, err := a.sealTrip(trip)
 	if err != nil {
 		s.fail(w, r, "provider", err)
@@ -682,7 +686,7 @@ func (s *signin) callback(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, "provider", err)
 		return
 	}
-	if _, err := s.session(ctx, cookieSetter{w}, prof, name, false); err != nil {
+	if _, err := s.session(ctx, cookieSetter{w}, r, prof, name, false, !trip.Forget); err != nil {
 		if errors.Is(err, ErrDisabled) {
 			s.fail(w, r, "disabled", nil)
 			return

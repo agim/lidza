@@ -22,9 +22,10 @@ var adminFiles embed.FS
 // from these types, so the frontend cannot drift from the API.
 func routes(r *router.Router) {
 	// Public, and throttled per client address (AUTH_LOGIN_RPS): the
-	// routes that take credentials or send emails.
+	// routes that take credentials or send emails. Sign-in has a limit of
+	// its own (AUTH_SIGNIN_RPS, else AUTH_LOGIN_RPS).
 	router.Route(r, "POST /api/v1/auth/register", handlers.Register, auth.Throttle())
-	router.Route(r, "POST /api/v1/auth/login", handlers.Login, auth.Throttle())
+	router.Route(r, "POST /api/v1/auth/login", handlers.Login, auth.ThrottleSignIn())
 	router.Route(r, "POST /api/v1/auth/verify", handlers.VerifyEmail, auth.Throttle())
 	router.Route(r, "POST /api/v1/auth/forgot", handlers.ForgotPassword, auth.Throttle())
 	router.Route(r, "POST /api/v1/auth/reset", handlers.ResetPassword, auth.Throttle())

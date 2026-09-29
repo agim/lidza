@@ -16,6 +16,7 @@ type AuthSession struct {
 	RotatedAt       *time.Time `json:"rotatedAt" db:"rotated_at"`
 	ExpiresAt       time.Time  `json:"expiresAt" db:"expires_at"`
 	RevokedAt       *time.Time `json:"revokedAt" db:"revoked_at"`
+	Remember        bool       `json:"remember" db:"remember"`
 	CreatedAt       time.Time  `json:"createdAt" db:"created_at"`
 }
 

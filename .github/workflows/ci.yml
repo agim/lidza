@@ -37,7 +37,7 @@ jobs:
           --health-cmd "valkey-cli ping"
           --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -79,7 +79,7 @@ jobs:
           --health-cmd "pg_isready -U postgres"
           --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -118,7 +118,7 @@ jobs:
     env:
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/notes_test?sslmode=disable
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -169,6 +169,6 @@ jobs:
           got=$("$(go env GOPATH)/bin/lidza" version)
           echo "$got"
           [ "$got" = "lidza ${GITHUB_REF_NAME}" ]
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: installer pin
         run: grep -q "LIDZA_VERSION:-${GITHUB_REF_NAME}}" install.sh

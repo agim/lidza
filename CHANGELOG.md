@@ -9,6 +9,18 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- admin: settings a pack refuses are no longer kept. The Settings page
+  said "saved, but a pack refused the new settings" and left the values
+  in place, so the next start failed with the admin pages out of reach;
+  the previous values are now put back and the page says "not saved".
+- `lidza credentials list`, `show` and `unset` include the settings saved
+  from the admin pages, which the db pack keeps in the app's database
+  over the file: `unset NAME` clears a saved setting that stops the app
+  from starting. A pack that fails to start names the saved settings in
+  its error.
+
 ## v0.1.36 (2026-09-29)
 
 - Templates: TypeScript 6.0, the newest that `typescript-eslint` supports.

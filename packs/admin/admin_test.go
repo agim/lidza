@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -215,14 +216,27 @@ func TestUsers(t *testing.T) {
 		url = "postgres:///lidza_test?host=/var/run/postgresql"
 	}
 	ctx := context.Background()
-	pool, err := db.Open(ctx, db.Config{URL: url, MaxConns: 2, ConnectTimeout: 2 * time.Second})
+	shared, err := db.Open(ctx, db.Config{URL: url, MaxConns: 1, ConnectTimeout: 2 * time.Second})
 	if err != nil {
 		t.Skipf("no test database: %v", err)
 	}
-	t.Cleanup(pool.Close)
-	for _, tbl := range []string{"auth_session", "auth_token", "auth_account", "auth_user", "auth_identity"} {
-		pool.Exec(ctx, "DROP TABLE IF EXISTS "+tbl)
+	t.Cleanup(shared.Close)
+	// Tables of its own: the auth pack's tests, run in parallel with
+	// these, drop and recreate the same ones in the shared database.
+	schema := fmt.Sprintf("admin_users_%d", os.Getpid())
+	if _, err := shared.Exec(ctx, "DROP SCHEMA IF EXISTS "+schema+" CASCADE; CREATE SCHEMA "+schema); err != nil {
+		t.Fatal(err)
 	}
+	t.Cleanup(func() { shared.Exec(ctx, "DROP SCHEMA IF EXISTS "+schema+" CASCADE") })
+	sep := "?"
+	if strings.Contains(url, "?") {
+		sep = "&"
+	}
+	pool, err := db.Open(ctx, db.Config{URL: url + sep + "search_path=" + schema, MaxConns: 2, ConnectTimeout: 2 * time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(pool.Close)
 	if _, err := pool.Exec(ctx, auth.SessionTable+auth.TokenTable+auth.AccountTable+auth.UserTable+auth.IdentityTable); err != nil {
 		t.Fatal(err)
 	}

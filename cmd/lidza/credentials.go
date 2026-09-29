@@ -4,18 +4,25 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
+	"time"
 
+	"github.com/agim/lidza/packs/db"
 	"github.com/agim/lidza/pkg/credentials"
+	"github.com/agim/lidza/pkg/env"
 )
 
 // runCredentials is `lidza credentials init | set NAME=value ... | unset
 // NAME ... | list | show [NAME] | edit`: the app's secrets, sealed in
-// config/credentials.yml.enc with config/master.key.
-func runCredentials(_ context.Context, args []string) error {
+// config/credentials.yml.enc with config/master.key. list, show and unset
+// also cover the settings saved from the admin pages, which the db pack
+// keeps in the app's database over the file.
+func runCredentials(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return errors.New("credentials: init, set NAME=value ..., unset NAME ..., list, show [NAME], or edit")
 	}
@@ -69,10 +76,28 @@ func runCredentials(_ context.Context, args []string) error {
 			return err
 		}
 		fmt.Printf("removed %s from %s\n", strings.Join(rest, ", "), credentials.File)
+		store, saved, done := savedSettings(ctx, abs)
+		defer done()
+		for _, n := range rest {
+			if _, ok := saved[n]; !ok {
+				continue
+			}
+			if err := store.Delete(ctx, n); err != nil {
+				return err
+			}
+			fmt.Printf("removed %s from the settings saved from the admin pages\n", n)
+		}
 		return nil
 	case "list":
+		_, saved, done := savedSettings(ctx, abs)
+		defer done()
 		for _, n := range credentials.Names(abs) {
-			fmt.Println(n)
+			if _, ok := saved[n]; !ok {
+				fmt.Println(n)
+			}
+		}
+		for _, n := range slices.Sorted(maps.Keys(saved)) {
+			fmt.Printf("%s (saved from the admin pages)\n", n)
 		}
 		return nil
 	case "show":
@@ -83,9 +108,19 @@ func runCredentials(_ context.Context, args []string) error {
 		if err != nil {
 			return err
 		}
+		_, saved, done := savedSettings(ctx, abs)
+		defer done()
 		if len(rest) == 0 {
 			// Every value, decrypted, as edit shows the file.
 			fmt.Print(credentials.Format(vals))
+			if len(saved) > 0 {
+				fmt.Print("\n# Saved from the admin pages, in the app's database; these win over the file.\n")
+				fmt.Print(credentials.Format(saved))
+			}
+			return nil
+		}
+		if v, ok := saved[rest[0]]; ok {
+			fmt.Println(v)
 			return nil
 		}
 		v, ok := vals[rest[0]]
@@ -133,6 +168,36 @@ func runCredentials(_ context.Context, args []string) error {
 		return nil
 	}
 	return fmt.Errorf("credentials: unknown subcommand %q", args[0])
+}
+
+// savedSettings reads the settings saved from the admin pages: with the
+// db pack they live, sealed, in the app database's credential table and
+// win over the file. Empty when the app has no database, it is not
+// reachable, or nothing was saved; done closes the connection.
+func savedSettings(ctx context.Context, dir string) (store *db.CredentialStore, saved map[string]string, done func()) {
+	done = func() {}
+	values, err := env.Values(dir)
+	if err != nil || values["DATABASE_URL"] == "" {
+		return nil, nil, done
+	}
+	cctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	pool, err := db.Open(cctx, db.Config{URL: values["DATABASE_URL"], MaxConns: 1, ConnectTimeout: 2 * time.Second})
+	if err != nil {
+		return nil, nil, done
+	}
+	var exists bool
+	if err := pool.QueryRow(cctx, `SELECT to_regclass('credential') IS NOT NULL`).Scan(&exists); err != nil || !exists {
+		pool.Close()
+		return nil, nil, done
+	}
+	store = db.NewCredentialStore(pool, dir)
+	if err := store.Load(cctx); err != nil {
+		fmt.Fprintf(os.Stderr, "note: the settings saved from the admin pages could not be read: %v\n", err)
+		pool.Close()
+		return nil, nil, done
+	}
+	return store, credentials.Overrides(), pool.Close
 }
 
 // ensureKey makes a master key when the app has none yet.

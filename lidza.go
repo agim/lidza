@@ -9,15 +9,18 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"maps"
 	"net"
 	"net/http"
 	"net/http/pprof"
 	"os"
 	"os/signal"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
 
+	"github.com/agim/lidza/pkg/credentials"
 	"github.com/agim/lidza/pkg/devserver"
 	"github.com/agim/lidza/pkg/middleware"
 	"github.com/agim/lidza/pkg/router"
@@ -176,7 +179,7 @@ func Boot(ctx context.Context, app App) (*Booted, error) {
 	for _, p := range app.Packs {
 		if err := p.Start(ctx, services); err != nil {
 			b.Close(ctx)
-			return nil, fmt.Errorf("pack %s: %w", p.Name(), err)
+			return nil, fmt.Errorf("pack %s: %w%s", p.Name(), err, savedHint())
 		}
 		b.started = append(b.started, p)
 	}
@@ -187,6 +190,17 @@ func Boot(ctx context.Context, app App) (*Booted, error) {
 		}
 	}
 	return b, nil
+}
+
+// savedHint names the settings saved from the admin pages when a pack
+// fails to start: one of them may be the cause, and with the app down
+// the pages cannot clear it.
+func savedHint() string {
+	names := slices.Sorted(maps.Keys(credentials.Overrides()))
+	if len(names) == 0 {
+		return ""
+	}
+	return fmt.Sprintf(" (saved from the admin pages: %s; `lidza credentials show` lists them, `lidza credentials unset NAME` clears one)", strings.Join(names, ", "))
 }
 
 // Close runs OnShutdown, then stops the packs in reverse order. Every

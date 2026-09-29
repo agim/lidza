@@ -558,8 +558,19 @@ func (h *Handler) saveSettings(w http.ResponseWriter, r *http.Request) {
 		return origins[name] == env.OriginSaved || origins[name] == env.OriginCredentials
 	}
 	saved := 0
+	// What each changed setting held before, to put back when a pack
+	// refuses the new values: a refused value kept would stop the app at
+	// its next start, with these pages out of reach.
+	type prior struct {
+		value string
+		had   bool
+	}
+	before := map[string]prior{}
 	save := func(name, value string) error {
 		saved++
+		if _, ok := before[name]; !ok {
+			before[name] = prior{current[name], stored(name)}
+		}
 		if value == "" {
 			return store.Delete(ctx, name)
 		}
@@ -629,7 +640,15 @@ func (h *Handler) saveSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if s := lidza.ServicesFrom(ctx); s != nil {
 		if err := lidza.Reconfigure(ctx, s); err != nil {
-			h.redirect(w, r, back, "", "saved, but a pack refused the new settings: "+err.Error())
+			for name, p := range before {
+				if p.had {
+					store.Save(ctx, name, p.value)
+				} else {
+					store.Delete(ctx, name)
+				}
+			}
+			lidza.Reconfigure(ctx, s)
+			h.redirect(w, r, back, "", "not saved: "+err.Error())
 			return
 		}
 	}

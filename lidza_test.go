@@ -14,6 +14,7 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"github.com/agim/lidza/pkg/credentials"
 	"github.com/agim/lidza/pkg/devserver"
 	"github.com/agim/lidza/pkg/middleware"
 	"github.com/agim/lidza/pkg/router"
@@ -350,5 +351,26 @@ func TestHandlerNoFrontend(t *testing.T) {
 	}
 	if code, _ := get(t, h, "/"); code != 404 {
 		t.Fatalf("no dist: %d", code)
+	}
+}
+
+type failingPack struct{}
+
+func (failingPack) Name() string                           { return "failing" }
+func (failingPack) Start(context.Context, *Services) error { return errors.New("needs a region") }
+func (failingPack) Stop(context.Context) error             { return nil }
+
+// A pack that fails to start names the settings saved from the admin
+// pages, which cannot clear them while the app is down.
+func TestStartErrorNamesSavedSettings(t *testing.T) {
+	t.Cleanup(func() { credentials.SetOverrides(nil) })
+	credentials.SetOverrides(nil)
+	if _, err := Boot(context.Background(), App{Packs: []Pack{failingPack{}}}); err == nil || strings.Contains(err.Error(), "admin pages") {
+		t.Fatalf("nothing saved: %v", err)
+	}
+	credentials.SetOverrides(map[string]string{"STORAGE_PROVIDER": "spaces", "MAIL_PROVIDER": "log"})
+	_, err := Boot(context.Background(), App{Packs: []Pack{failingPack{}}})
+	if err == nil || !strings.Contains(err.Error(), "needs a region (saved from the admin pages: MAIL_PROVIDER, STORAGE_PROVIDER;") || !strings.Contains(err.Error(), "lidza credentials unset NAME") {
+		t.Fatalf("start error: %v", err)
 	}
 }

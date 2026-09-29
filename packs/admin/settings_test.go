@@ -277,6 +277,18 @@ func TestEmbedSettings(t *testing.T) {
 	if loc := post(url.Values{"section": {"embed"}, "EMBED_PROVIDER": {"anthropic"}}); !strings.Contains(loc, "error=") {
 		t.Fatalf("anthropic embeddings accepted: %s", loc)
 	}
+	// Settings the pack refuses (compatible without its address) are not
+	// kept: the values before them are back, so the next start is not
+	// stopped by them.
+	if loc := post(url.Values{"section": {"embed"}, "EMBED_PROVIDER": {"compatible"}, "EMBED_BASE_URL": {""}}); !strings.Contains(loc, "error=not+saved") || !strings.Contains(loc, "EMBED_BASE_URL") {
+		t.Fatalf("compatible without an address accepted: %s", loc)
+	}
+	if vals := credentials.Values(dir); vals["EMBED_PROVIDER"] != "none" {
+		t.Fatalf("the refused value was kept: %q", vals["EMBED_PROVIDER"])
+	}
+	if l.EmbedProvider() != "none" {
+		t.Fatalf("not applied back: %s", l.EmbedProvider())
+	}
 }
 
 // A multi selector (the sign-in providers) saves the checked options and

@@ -1386,14 +1386,17 @@ Anything secret (API keys, SMTP URLs, storage keys, `AUTH_SECRET` in
 production) lives in `config/credentials.yml.enc`, sealed with
 AES-256-GCM under `config/master.key`, which git ignores. `lidza
 credentials set MAIL_API_KEY=...` (MCP: `lidza_credentials_set`) seals a
-value; `list` shows the names, `show NAME` one value, `edit` the whole
-file in `$EDITOR`. Every pack reads the credentials by the same names as
+value; `list` shows the names, `show` every value (`show NAME` one),
+`edit` the whole file in `$EDITOR`. Every pack reads the credentials by the same names as
 `.env`, between the `.env` files and the process environment, so nothing
 in the code changes. In production the key travels as
 `LIDZA_MASTER_KEY` (the file's contents) and the sealed file is deployed
 with the binary. A key pasted into source fails `lidza check` (L010). The admin pages save changes to the database, sealed
 with the same key, and the mail, llm and storage packs pick them up
-without a restart.
+without a restart; settings a pack refuses are not kept. Saved values
+win over the file: `list` and `show` include them, and `unset NAME`
+clears one there too, the way out when a saved setting stops the app
+from starting (the start error names them).
 
 ## Models and migrations
 

@@ -9,7 +9,7 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
-## Unreleased
+## v0.1.39 (2026-09-29)
 
 - `lidza update` on an app without the db pack checked its migrations
   and reported "DATABASE_URL is required"; it skips them now. `lidza

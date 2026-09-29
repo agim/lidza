@@ -87,3 +87,96 @@ func TestGroup(t *testing.T) {
 		t.Fatalf("unknown path in group: %d", code)
 	}
 }
+
+// A group's specific route beats the parent's wildcard route for the same
+// prefix: every route is on one ServeMux, so its precedence applies.
+func TestGroupRouteNotShadowed(t *testing.T) {
+	r := New()
+	var guarded bool
+	require := func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			guarded = true
+			next.ServeHTTP(w, req)
+		})
+	}
+	Route(r, "GET /api/v1/things/{slug}", func(ctx context.Context, req *Request[None]) (string, error) { return "slug " + req.Param("slug"), nil })
+	g := r.Group("/api/v1/things", require)
+	Route(g, "GET /api/v1/things/prefill", func(ctx context.Context, req *Request[None]) (string, error) { return "prefill", nil })
+
+	get := func(path string) (int, string) {
+		guarded = false
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		return rec.Code, strings.TrimSpace(rec.Body.String())
+	}
+	if code, body := get("/api/v1/things/prefill"); code != 200 || body != `"prefill"` || !guarded {
+		t.Fatalf("prefill: %d %s guarded=%v", code, body, guarded)
+	}
+	if code, body := get("/api/v1/things/lamp"); code != 200 || body != `"slug lamp"` || guarded {
+		t.Fatalf("slug: %d %s guarded=%v", code, body, guarded)
+	}
+	// A wrong method is a 405 with Allow, an unknown path a 404; the
+	// group's middleware runs for neither.
+	rec := httptest.NewRecorder()
+	guarded = false
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/things/prefill", nil))
+	if rec.Code != http.StatusMethodNotAllowed || !strings.Contains(rec.Header().Get("Allow"), "GET") || guarded {
+		t.Fatalf("POST: %d allow=%q guarded=%v", rec.Code, rec.Header().Get("Allow"), guarded)
+	}
+	if code, _ := get("/api/v1/things/prefill/x"); code != 404 || guarded {
+		t.Fatalf("unknown: %d guarded=%v", code, guarded)
+	}
+}
+
+// A group prefix may hold wildcards; the handlers read their values, and
+// a nested group runs its middleware after its parent's.
+func TestGroupPatternPrefix(t *testing.T) {
+	r := New()
+	var seen []string
+	tag := func(name string) func(http.Handler) http.Handler {
+		return func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				seen = append(seen, name)
+				next.ServeHTTP(w, req)
+			})
+		}
+	}
+	r.Use(tag("root"))
+	post := r.Group("/api/v1/posts/{id}", tag("post"))
+	Route(post, "GET /api/v1/posts/{id}", func(ctx context.Context, req *Request[None]) (string, error) { return "post " + req.Param("id"), nil })
+	tags := post.Group("/api/v1/posts/{id}/tags", tag("tags"))
+	Route(tags, "GET /api/v1/posts/{id}/tags/{tag}", func(ctx context.Context, req *Request[None]) (string, error) {
+		return req.Param("id") + "/" + req.Param("tag"), nil
+	})
+
+	get := func(path string) (int, string) {
+		seen = nil
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		return rec.Code, strings.TrimSpace(rec.Body.String())
+	}
+	if code, body := get("/api/v1/posts/7"); code != 200 || body != `"post 7"` || strings.Join(seen, ",") != "root,post" {
+		t.Fatalf("post: %d %s %v", code, body, seen)
+	}
+	if code, body := get("/api/v1/posts/7/tags/go"); code != 200 || body != `"7/go"` || strings.Join(seen, ",") != "root,post,tags" {
+		t.Fatalf("tag: %d %s %v", code, body, seen)
+	}
+}
+
+// A group's pattern must lie under its prefix, wildcards written alike.
+func TestGroupPatternOutsidePrefix(t *testing.T) {
+	r := New()
+	g := r.Group("/api/v1/posts/{id}")
+	for _, pattern := range []string{"GET /api/v1/other", "GET /api/v1/posts/{slug}/tags", "GET /api/v1/postsx"} {
+		func() {
+			defer func() {
+				if recover() == nil {
+					t.Errorf("%s: no panic", pattern)
+				}
+			}()
+			g.HandleFunc(pattern, func(http.ResponseWriter, *http.Request) {})
+		}()
+	}
+	g.HandleFunc("DELETE /api/v1/posts/{id}", func(http.ResponseWriter, *http.Request) {})
+	g.HandleFunc("/api/v1/posts/{id}/files/", func(http.ResponseWriter, *http.Request) {})
+}

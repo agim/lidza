@@ -1053,7 +1053,11 @@ Official Go packs, configured from `.env` (see `.env.example` after
   and is cancelled at shutdown after `JOBS_DRAIN`, the job going back to
   pending. Recipe: "Add a background job".
 - `cache`: `cache.Remember(ctx, cache.From(ctx), "key", ttl, load)`;
-  `cache.From(ctx).Invalidate(ctx, "prefix:")` after writes.
+  `cache.From(ctx).Invalidate(ctx, "prefix:")` after writes. Counters
+  every node shares (a rate limit, a quota): `n, err :=
+  cache.From(ctx).Incr(ctx, "rate:"+ip+":"+minute, 1, time.Minute)` adds
+  atomically (a Lua script on Valkey) and returns the new value; the
+  increment that creates the key sets the ttl, later ones keep it.
 - `i18n`: `i18n.From(ctx).T(ctx, "key", args...)`, `Number`, `Currency`,
   `Date`, `Time`, `DateTime` (in the visitor's zone: the template sets a
   `tz` cookie, API clients send `X-Timezone`; `I18N_TIMEZONE` is the
@@ -1269,7 +1273,8 @@ state belongs in Postgres or Valkey and background work in a bounded
 worker or the jobs pack; hand-written `fetch` of `/api` (L003); imports
 of packages that do not exist or are not declared (L004); handler types
 not declared in `schema.lidza` (L005).
-Rate limit a route group with `r.Use(middleware.RateLimit(middleware.RateLimitOptions{RPS: 10, Burst: 20}))`;
+Rate limit a route group with `r.Use(middleware.RateLimit(middleware.RateLimitOptions{RPS: 10, Burst: 20}))`
+(per node; a limit across nodes counts with the cache pack's `Incr`);
 guard an outbound dependency with `resilience.New(...)`.
 
 ## Deployment

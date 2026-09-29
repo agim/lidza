@@ -90,6 +90,7 @@ var Officials = []Official{
 		Notes: []string{
 			"cache.Remember(ctx, cache.From(ctx), \"key\", ttl, load) caches a computed value",
 			"cache.From(ctx).Invalidate(ctx, \"prefix:\") after writes",
+			"shared counters (a rate limit across nodes): n, err := cache.From(ctx).Incr(ctx, \"rate:\"+ip, 1, time.Minute)",
 		},
 		Production: []Setting{{Name: "CACHE_URL", Why: "a Valkey or Redis address (memory holds one node's cache only)", Dev: []string{"memory"}}},
 	},

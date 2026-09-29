@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"sync"
 	"testing"
 	"time"
 )
@@ -89,5 +90,77 @@ func TestMemoryBound(t *testing.T) {
 	}
 	if _, err := m.Get(ctx, "a"); !errors.Is(err, ErrMiss) {
 		t.Fatal("oldest not evicted")
+	}
+}
+
+func TestIncr(t *testing.T) {
+	for _, name := range []string{"memory", "valkey"} {
+		t.Run(name, func(t *testing.T) {
+			st := testStore(t, name)
+			defer st.Close()
+			if name == "memory" {
+				st = NewMemory(100)
+			}
+			c := New(st, "lidzatest:incr:"+name+":")
+			ctx := context.Background()
+			c.Invalidate(ctx, "")
+
+			// Concurrent increments lose nothing.
+			var wg sync.WaitGroup
+			for i := 0; i < 40; i++ {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					if _, err := c.Incr(ctx, "hits", 1, time.Minute); err != nil {
+						t.Error(err)
+					}
+				}()
+			}
+			wg.Wait()
+			if n, err := c.Incr(ctx, "hits", 2, time.Minute); err != nil || n != 42 {
+				t.Fatalf("after 40 concurrent: %d %v", n, err)
+			}
+			if n, err := c.Incr(ctx, "hits", -2, 0); err != nil || n != 40 {
+				t.Fatalf("decrement: %d %v", n, err)
+			}
+			var got int64
+			if err := c.Get(ctx, "hits", &got); err != nil || got != 40 {
+				t.Fatalf("get: %d %v", got, err)
+			}
+
+			// The first increment sets the ttl; later ones keep it.
+			if n, _ := c.Incr(ctx, "window", 1, 100*time.Millisecond); n != 1 {
+				t.Fatalf("first: %d", n)
+			}
+			time.Sleep(60 * time.Millisecond)
+			if n, _ := c.Incr(ctx, "window", 1, 100*time.Millisecond); n != 2 {
+				t.Fatalf("second: %d", n)
+			}
+			time.Sleep(60 * time.Millisecond)
+			if n, err := c.Incr(ctx, "window", 1, 100*time.Millisecond); err != nil || n != 1 {
+				t.Fatalf("after the window: %d %v (the second increment extended it?)", n, err)
+			}
+
+			// No ttl: the counter stays.
+			c.Incr(ctx, "total", 5, 0)
+			time.Sleep(20 * time.Millisecond)
+			if n, _ := c.Incr(ctx, "total", 0, 0); n != 5 {
+				t.Fatalf("total: %d", n)
+			}
+
+			c.Set(ctx, "word", "hello", time.Minute)
+			if _, err := c.Incr(ctx, "word", 1, 0); err == nil {
+				t.Fatal("incremented a string")
+			}
+		})
+	}
+}
+
+type plainStore struct{ Store }
+
+func TestIncrWithoutCounter(t *testing.T) {
+	c := New(plainStore{NewMemory(2)}, "")
+	if _, err := c.Incr(context.Background(), "k", 1, 0); !errors.Is(err, ErrNotCounter) {
+		t.Fatalf("got %v", err)
 	}
 }

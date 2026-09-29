@@ -12,7 +12,7 @@ does not reimplement).
 | Hot module replacement | done | Vite HMR through the `lidza dev` proxy; Go handlers rebuild and restart, frontend state is kept |
 | API route parameter parsing | done | `net/http` patterns, `req.Param("id")` in typed handlers; the client takes them as a typed object |
 | Automated asset bundling | done | Vite: minify, hash, code split, `dist/` embedded in the binary. Image optimization: phase 3 template build |
-| Query caching | done | TanStack Query in the template; `cache` pack (Valkey, `Remember`, prefix invalidation) on the server |
+| Query caching | done | TanStack Query in the template; `cache` pack (Valkey, `Remember`, prefix invalidation, atomic `Incr` counters shared across nodes) on the server |
 | Styling | done | Tailwind v4 in the `react` template with a CSS-variable theme; no component library |
 | Virtual DOM / efficient diffing | template | React 19 (`react`), compiled updates (`svelte`) |
 | Component lifecycle hooks (frontend) | template | React effects; Svelte lifecycle |

@@ -9,7 +9,7 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
-## Unreleased
+## v0.1.41 (2026-09-29)
 
 - Breaking: `lidza verify`, and so the pre-commit hook, refuses a
   commit whose staged changes weaken the tests: a deleted test file

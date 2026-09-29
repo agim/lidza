@@ -11,6 +11,25 @@ change. A release without one is additive: an app updates with
 
 ## Unreleased
 
+- `App.Head` (`devserver.WithHead`) sets each page's head per request
+  without the SSR sidecar: title, description, canonical, Open Graph and
+  Twitter tags, JSON-LD, noindex and the status, for the shell,
+  prerendered, sidecar and dev pages, every value escaped. New recipe
+  "Set the head of a page".
+- The Permissions-Policy is set per app with `App.PermissionsPolicy`;
+  `middleware.AllowGeolocation` lets the app's own pages ask for
+  location. The default still turns camera, microphone and location off.
+- cache: `Incr(ctx, key, by, ttl)` adds to a counter atomically (Valkey,
+  Redis or memory) for rate limits and quotas shared across nodes.
+- admin: `theme.css` and `layout.html` come from `Options.Templates`
+  first, then `admin/` on disk, so an app that embeds `admin/` keeps its
+  theme when the binary runs alone; the recipe embeds the folder.
+- media: `fit: "cover"` fills the requested size and crops around the
+  centre. HEIC, AVIF and TIFF fail with the code `unsupported_format`
+  (keep the original). An app created before copies the pack's new
+  source to use cover.
+- packs: a Rust capability can return `abi::Error::code("kind", "msg")`;
+  Go reads the code with `engine.ErrorCode(err)`.
 - schema: `decimal(p, s)` fields are Postgres `numeric(p,s)` and
   `decimal.Decimal` in Go (`pkg/decimal`: string-backed, JSON as a
   string, no float rounding, exact `Cmp`, `Rat`/`FromRat` for

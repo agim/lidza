@@ -1193,6 +1193,12 @@ so:
 - a test setting goes in `.env.test`, which overrides `.env` (the fake
   model, local storage, the mail outbox, `CACHE_URL=memory`).
 
+Tests never read the sealed credentials file: it holds the deployment's
+real keys, and a test must not reach a real service with them. A test
+that needs a key sets it with `t.Setenv` (against a stub) or in
+`.env.test`; values the app saves at runtime (the admin pages) still
+count.
+
 `.env` and `.env.dev` stay out of git. `.env.test` is committed: it
 holds no secrets, and the tests and CI need it. Its `DATABASE_URL`
 names this machine's Postgres socket; `lidza gen`, `dev`, `test` and

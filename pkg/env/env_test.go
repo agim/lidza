@@ -70,10 +70,10 @@ func TestErrors(t *testing.T) {
 
 func TestOrigins(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("LIDZA_MODE", "test")
+	t.Setenv("LIDZA_MODE", "dev")
 	t.Setenv(credentials.EnvMasterKey, "")
 	os.WriteFile(filepath.Join(dir, ".env"), []byte("A=1\nB=1\nC=1\nD=1\n"), 0o644)
-	os.WriteFile(filepath.Join(dir, ".env.test"), []byte("B=2\n"), 0o644)
+	os.WriteFile(filepath.Join(dir, ".env.dev"), []byte("B=2\n"), 0o644)
 	if _, err := credentials.Generate(dir); err != nil {
 		t.Fatal(err)
 	}
@@ -87,10 +87,40 @@ func TestOrigins(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := map[string]string{"A": ".env", "B": ".env.test", "C": OriginCredentials, "D": OriginSaved, "LIDZA_ORIGIN_TEST": OriginProcess}
+	want := map[string]string{"A": ".env", "B": ".env.dev", "C": OriginCredentials, "D": OriginSaved, "LIDZA_ORIGIN_TEST": OriginProcess}
 	for k, v := range want {
 		if got[k] != v {
 			t.Errorf("%s: %q, want %q", k, got[k], v)
 		}
+	}
+}
+
+// Under test the sealed file's values (the deployment's real keys) are
+// not loaded; values saved at runtime still are.
+func TestTestModeSkipsSealedFile(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv(credentials.EnvMasterKey, "")
+	if _, err := credentials.Generate(dir); err != nil {
+		t.Fatal(err)
+	}
+	credentials.Set(dir, map[string]string{"T_URL": "postgres://sealed"})
+	t.Cleanup(func() { credentials.SetOverrides(nil) })
+	os.WriteFile(filepath.Join(dir, ".env.test"), []byte("T_URL=postgres://test\n"), 0o644)
+	t.Setenv("LIDZA_MODE", "test")
+	var c cfg
+	if err := Load(dir, &c); err != nil || c.URL != "postgres://test" {
+		t.Fatalf("test mode read the sealed file: %+v %v", c, err)
+	}
+	if o, _ := Origins(dir); o["T_URL"] != ".env.test" {
+		t.Fatalf("origins: %v", o)
+	}
+	credentials.SetOverrides(map[string]string{"T_URL": "postgres://saved"})
+	if v, _ := Values(dir); v["T_URL"] != "postgres://saved" {
+		t.Fatalf("a runtime value: %v", v["T_URL"])
+	}
+	t.Setenv("LIDZA_MODE", "dev")
+	credentials.SetOverrides(nil)
+	if v, _ := Values(dir); v["T_URL"] != "postgres://sealed" {
+		t.Fatalf("dev reads the sealed file: %v", v["T_URL"])
 	}
 }

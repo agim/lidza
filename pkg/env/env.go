@@ -13,7 +13,8 @@
 // app's credentials (config/credentials.yml.enc, decrypted with the
 // master key, plus the values saved at runtime), the process
 // environment. Mode is LIDZA_MODE ("dev" under lidza dev, "test" under
-// lidza test), else "production".
+// lidza test), else "production". Under test the sealed credentials file
+// is not read: tests never get the deployment's keys.
 package env
 
 import (
@@ -38,6 +39,18 @@ func Mode() string {
 	return "production"
 }
 
+// sealed is the credentials layer: the sealed file and the values saved
+// at runtime. Under test the file is left out: it holds the real keys of
+// the deployment, and a test must not reach a real service with them
+// (.env.test and t.Setenv decide); values a test saves at runtime still
+// count.
+func sealed(dir string) map[string]string {
+	if Mode() == "test" {
+		return credentials.Overrides()
+	}
+	return credentials.Values(dir)
+}
+
 // Load fills dst (a pointer to a struct) from .env files in dir and the
 // process environment. Missing required variables and unparsable values
 // are reported together in one error.
@@ -48,7 +61,7 @@ func Load(dir string, dst any) error {
 			return err
 		}
 	}
-	for k, v := range credentials.Values(dir) {
+	for k, v := range sealed(dir) {
 		values[k] = v
 	}
 	for _, kv := range os.Environ() {
@@ -68,7 +81,7 @@ func Values(dir string) (map[string]string, error) {
 			return nil, err
 		}
 	}
-	for k, v := range credentials.Values(dir) {
+	for k, v := range sealed(dir) {
 		values[k] = v
 	}
 	for _, kv := range os.Environ() {
@@ -102,7 +115,7 @@ func Origins(dir string) (map[string]string, error) {
 			out[k] = name
 		}
 	}
-	if file, err := credentials.Read(dir); err == nil {
+	if file, err := credentials.Read(dir); err == nil && Mode() != "test" {
 		for k := range file {
 			out[k] = OriginCredentials
 		}

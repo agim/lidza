@@ -9,6 +9,13 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- Tests never read the sealed credentials file (`LIDZA_MODE=test`): it
+  holds the deployment's real keys, which overrode `.env.test` and
+  reached real services from tests. Values saved at runtime still count;
+  a test that needs a key sets it with `t.Setenv` or in `.env.test`.
+
 ## v0.1.33 (2026-09-28)
 
 - storage: `STORAGE_PREFIX` puts every key under a folder, for a bucket

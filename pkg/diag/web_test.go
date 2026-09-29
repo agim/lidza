@@ -49,3 +49,37 @@ export function Things() {
 		t.Error("no src")
 	}
 }
+
+// L004 reads import and export statements and dynamic imports only: a
+// "from" in JSX or text is not an import, a statement across lines is.
+func TestWebRulesImportsOnly(t *testing.T) {
+	declared := map[string]bool{"react": true}
+	src := `import {
+  useState,
+  useEffect,
+} from 'missing-multi'
+import type { Row } from "react"
+
+export function Filter() {
+  const [v, setV] = useState('')
+  return (
+    <form>
+      <input type="radio" name="from" value={v} onChange={(e) => setV(e.target.value)} />
+      <label htmlFor="from">from "the start"</label>
+      <p>Copied from 'elsewhere' today</p>
+      <option value='from'>{'from'}</option>
+    </form>
+  )
+}
+export * as helpers from 'missing-export'
+const lazy = () => import('missing-dynamic')
+`
+	var got []string
+	for _, d := range checkWebFile("src/Filter.tsx", src, declared) {
+		got = append(got, d.Code+" "+itoa(d.Line)+":"+itoa(d.Column)+" "+strings.TrimSuffix(strings.Fields(d.Message)[2], ","))
+	}
+	want := "L004 4:9 missing-multi,L004 18:27 missing-export,L004 19:28 missing-dynamic"
+	if strings.Join(got, ",") != want {
+		t.Fatalf("got %v\nwant %s", got, want)
+	}
+}

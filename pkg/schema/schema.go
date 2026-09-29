@@ -15,6 +15,7 @@
 //	  authorId  uuid     @ref(User)
 //	  topicId   int?     @ref(Topic, setnull)
 //	  tags      string[]
+//	  price     decimal(12, 2)? @min(0)
 //	  createdAt time     @default(now())
 //	  @@index(status, createdAt)
 //	}
@@ -26,9 +27,11 @@
 //
 // A model becomes a table and a struct; a type becomes a struct only. "?"
 // marks an optional (nullable) field, "[]" an array. Scalar types: string,
-// text, int, bigint, float, bool, time, date, uuid, json, bytes. Field
-// attributes: @id, @unique, @index, @default(v), @ref(Model), @min(n),
-// @max(n), @email, @url, @pattern("re"). Block attributes: @@index(a, b),
+// text, int, bigint, float, decimal(p, s), bool, time, date, uuid, json,
+// bytes. Field attributes: @id, @unique, @index, @default(v) (uuid(),
+// now(), autoincrement() on an int or bigint, or a literal),
+// @ref(Model), @min(n), @max(n), @email, @url, @pattern("re"). Block
+// attributes: @@index(a, b),
 // @@unique(a, b); model attribute @table("name"). A @ref field has the
 // type of the referenced model's id: uuid, int, bigint or string.
 package schema
@@ -78,7 +81,8 @@ type Field struct {
 	ID       bool
 	Unique   bool
 	Index    bool
-	// Default is the literal as written: 42, true, "x", draft, uuid(), now().
+	// Default is the literal as written: 42, true, "x", draft, uuid(),
+	// now(), autoincrement().
 	Default string
 	// Ref is the model the field references (the field has the type of
 	// that model's id); OnDelete is what happens
@@ -89,10 +93,17 @@ type Field struct {
 	OnDelete string
 	Min      *float64
 	Max      *float64
-	Email    bool
-	URL      bool
-	Pattern  string
-	Line     int
+	// MinText and MaxText are @min and @max as written, for a decimal
+	// field, whose rules compare exactly.
+	MinText string `json:",omitempty"`
+	MaxText string `json:",omitempty"`
+	// Precision and Scale are the arguments of decimal(p, s).
+	Precision int `json:",omitempty"`
+	Scale     int `json:",omitempty"`
+	Email     bool
+	URL       bool
+	Pattern   string
+	Line      int
 }
 
 // Index is a block-level @@index or @@unique.
@@ -104,7 +115,7 @@ type Index struct {
 // Scalars are the built-in types.
 var Scalars = map[string]bool{
 	"string": true, "text": true, "int": true, "bigint": true, "float": true,
-	"bool": true, "time": true, "date": true, "uuid": true, "json": true, "bytes": true,
+	"decimal": true, "bool": true, "time": true, "date": true, "uuid": true, "json": true, "bytes": true,
 }
 
 // Enum returns the enum called name, or nil.
@@ -140,6 +151,20 @@ func (m *Model) IDField() *Field {
 		}
 	}
 	return nil
+}
+
+// Autoincrement reports whether the field is an identity column,
+// @default(autoincrement()): the database numbers the rows and inserts
+// leave it out.
+func (f *Field) Autoincrement() bool { return f.Default == "autoincrement()" }
+
+// TypeText is the field's type as written, without ? and []:
+// "decimal(12, 2)" for a decimal, else Type.
+func (f *Field) TypeText() string {
+	if f.Type == "decimal" {
+		return fmt.Sprintf("decimal(%d, %d)", f.Precision, f.Scale)
+	}
+	return f.Type
 }
 
 // validate checks references and rules after parsing.
@@ -206,6 +231,18 @@ func (s *Schema) validate() error {
 					return fmt.Errorf("line %d: %s.%s: default %s is not a value of %s", f.Line, m.Name, f.Name, f.Default, f.Type)
 				}
 			}
+			if f.Autoincrement() {
+				if f.Type != "int" && f.Type != "bigint" || f.Optional || f.Array || !m.Persisted {
+					return fmt.Errorf("line %d: %s.%s: @default(autoincrement()) needs an int or bigint field of a model, neither optional nor an array", f.Line, m.Name, f.Name)
+				}
+			}
+			if f.Type == "decimal" {
+				for _, lit := range []string{f.MinText, f.MaxText, strings.Trim(f.Default, `"`)} {
+					if lit != "" && !decimalLit(lit) {
+						return fmt.Errorf("line %d: %s.%s: %s is not a decimal number", f.Line, m.Name, f.Name, lit)
+					}
+				}
+			}
 			if (f.Email || f.URL || f.Pattern != "") && f.Type != "string" && f.Type != "text" {
 				return fmt.Errorf("line %d: %s.%s: @email, @url and @pattern need a string field", f.Line, m.Name, f.Name)
 			}
@@ -225,6 +262,21 @@ func (s *Schema) validate() error {
 		}
 	}
 	return nil
+}
+
+// decimalLit reports whether s is a plain decimal literal: 12, -0.5.
+func decimalLit(s string) bool {
+	s = strings.TrimPrefix(s, "-")
+	whole, frac, point := strings.Cut(s, ".")
+	digits := func(t string) bool {
+		for _, r := range t {
+			if r < '0' || r > '9' {
+				return false
+			}
+		}
+		return true
+	}
+	return whole != "" && digits(whole) && digits(frac) && (!point || frac != "")
 }
 
 // sameKey reports whether a foreign key of type field can reference an

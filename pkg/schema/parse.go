@@ -178,11 +178,12 @@ func (p *parser) block(rest string, persisted bool) (*Model, error) {
 
 // field parses "name type[?|[]] @attr @attr(arg) ...".
 func (p *parser) field(line string) (*Field, error) {
-	parts := strings.Fields(line)
-	if len(parts) < 2 {
+	name, rest := cut(line)
+	typ, attrs := typeToken(rest)
+	if name == "" || typ == "" {
 		return nil, fmt.Errorf("line %d: expected \"name type\", got %q", p.i, line)
 	}
-	f := &Field{Name: parts[0], Type: parts[1], Line: p.i}
+	f := &Field{Name: name, Type: typ, Line: p.i}
 	if !ident(f.Name) || f.Name[0] < 'a' || f.Name[0] > 'z' {
 		return nil, fmt.Errorf("line %d: field name must start with a lowercase letter, got %q", p.i, f.Name)
 	}
@@ -194,10 +195,37 @@ func (p *parser) field(line string) (*Field, error) {
 		f.Array = true
 		f.Type = strings.TrimSuffix(f.Type, "[]")
 	}
-	if !ident(f.Type) {
-		return nil, fmt.Errorf("line %d: %s: bad type %q", p.i, f.Name, parts[1])
+	// decimal(p, s): the precision and scale of a numeric column.
+	if k := strings.Index(f.Type, "("); k >= 0 && strings.HasSuffix(f.Type, ")") {
+		args := fields(f.Type[k+1 : len(f.Type)-1])
+		f.Type = f.Type[:k]
+		if f.Type != "decimal" {
+			return nil, fmt.Errorf("line %d: %s: only decimal takes arguments, got %q", p.i, f.Name, typ)
+		}
+		if len(args) < 1 || len(args) > 2 {
+			return nil, fmt.Errorf("line %d: %s: expected decimal(precision, scale), got %q", p.i, f.Name, typ)
+		}
+		for i, a := range args {
+			n, err := strconv.Atoi(a)
+			if err != nil {
+				return nil, fmt.Errorf("line %d: %s: decimal(precision, scale) takes whole numbers, got %q", p.i, f.Name, typ)
+			}
+			if i == 0 {
+				f.Precision = n
+			} else {
+				f.Scale = n
+			}
+		}
+		if f.Precision < 1 || f.Precision > 1000 || f.Scale < 0 || f.Scale > f.Precision {
+			return nil, fmt.Errorf("line %d: %s: decimal(%d, %d): precision is 1 to 1000 and scale 0 to the precision", p.i, f.Name, f.Precision, f.Scale)
+		}
+	} else if f.Type == "decimal" {
+		return nil, fmt.Errorf("line %d: %s: decimal needs a precision and a scale, as in decimal(12, 2)", p.i, f.Name)
 	}
-	for _, a := range splitAttrs(strings.Join(parts[2:], " ")) {
+	if !ident(f.Type) {
+		return nil, fmt.Errorf("line %d: %s: bad type %q", p.i, f.Name, typ)
+	}
+	for _, a := range splitAttrs(attrs) {
 		name, arg := attr(a)
 		var err error
 		switch name {
@@ -227,8 +255,14 @@ func (p *parser) field(line string) (*Field, error) {
 			}
 		case "min":
 			f.Min, err = num(arg)
+			if f.Type == "decimal" {
+				f.MinText = arg
+			}
 		case "max":
 			f.Max, err = num(arg)
+			if f.Type == "decimal" {
+				f.MaxText = arg
+			}
 		case "email":
 			f.Email = true
 		case "url":
@@ -249,6 +283,24 @@ func (p *parser) field(line string) (*Field, error) {
 		return nil, fmt.Errorf("line %d: %s: @id cannot be optional or an array", p.i, f.Name)
 	}
 	return f, nil
+}
+
+// typeToken splits the type off the rest of a field line: the type runs
+// to the first space outside parentheses, so decimal(12, 2)? is one
+// token.
+func typeToken(s string) (string, string) {
+	depth := 0
+	for i, r := range s {
+		switch {
+		case r == '(':
+			depth++
+		case r == ')':
+			depth--
+		case (r == ' ' || r == '\t') && depth == 0:
+			return strings.ReplaceAll(s[:i], " ", ""), strings.TrimSpace(s[i:])
+		}
+	}
+	return strings.ReplaceAll(s, " ", ""), ""
 }
 
 // splitAttrs splits "@a @b(x, y) @c" into ["a", "b(x, y)", "c"], honoring

@@ -115,7 +115,7 @@ func (r *Resource) check() error {
 	for _, f := range r.Model.Fields {
 		if f.Array {
 			switch f.Type {
-			case "string", "text", "uuid", "int", "bigint", "float", "bool":
+			case "string", "text", "uuid", "int", "bigint", "float", "decimal", "bool":
 			default:
 				return fmt.Errorf("model %s: %s: arrays of %s are not supported by the resource generator; write that handler by hand", r.Model.Name, f.Name, f.Type)
 			}
@@ -124,12 +124,12 @@ func (r *Resource) check() error {
 	return nil
 }
 
-// creatable fields: everything but the id and timestamps the database
-// fills.
+// creatable fields: everything but the id, identity columns and
+// timestamps the database fills.
 func (r *Resource) creatable() []*schema.Field {
 	var out []*schema.Field
 	for _, f := range r.Model.Fields {
-		if f.ID || ((f.Type == "time" || f.Type == "date") && f.Default == "now()") {
+		if f.ID || f.Autoincrement() || ((f.Type == "time" || f.Type == "date") && f.Default == "now()") {
 			continue
 		}
 		out = append(out, f)
@@ -396,7 +396,7 @@ func appendTypes(root string, s *schema.Schema, r *Resource) (bool, error) {
 // fieldLine renders a field for a type block, keeping its validation
 // rules and, for updates, making it optional.
 func fieldLine(f *schema.Field, optional bool) string {
-	t := f.Type
+	t := f.TypeText()
 	if f.Array {
 		t += "[]"
 	}
@@ -404,10 +404,16 @@ func fieldLine(f *schema.Field, optional bool) string {
 		t += "?"
 	}
 	parts := []string{f.Name, t}
-	if f.Min != nil {
+	switch {
+	case f.MinText != "":
+		parts = append(parts, "@min("+f.MinText+")")
+	case f.Min != nil:
 		parts = append(parts, "@min("+fnum(*f.Min)+")")
 	}
-	if f.Max != nil {
+	switch {
+	case f.MaxText != "":
+		parts = append(parts, "@max("+f.MaxText+")")
+	case f.Max != nil:
 		parts = append(parts, "@max("+fnum(*f.Max)+")")
 	}
 	if f.Email {

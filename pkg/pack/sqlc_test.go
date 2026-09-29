@@ -139,3 +139,87 @@ func TestSQLCParamNames(t *testing.T) {
 		t.Fatalf("params:\n%s", queries)
 	}
 }
+
+const orderSchema = `model Customer {
+  id   bigint @id @default(autoincrement())
+  name string
+}
+model Order {
+  id         int            @id @default(autoincrement())
+  customerId bigint         @ref(Customer)
+  total      decimal(12, 2) @min(0)
+  discount   decimal(5, 4)?
+  rates      decimal(8,3)[]
+}
+`
+
+// TestSQLCDecimal: while a model has a decimal field, sqlc.yaml maps
+// numeric to decimal.Decimal between markers, in the override list the
+// file already has or a new one, and drops the block when the field goes.
+// With sqlc installed, rows and parameters carry the schema's types, and
+// identity ids are left out of inserts.
+func TestSQLCDecimal(t *testing.T) {
+	root := t.TempDir()
+	os.WriteFile(filepath.Join(root, schema.FileName), []byte(orderSchema), 0o644)
+	if _, _, err := Add(root, "db"); err != nil {
+		t.Fatal(err)
+	}
+	s, err := schema.Load(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := filepath.Join(root, SQLCFile)
+	if _, err := SyncSQLCNames(root, s); err != nil {
+		t.Fatal(err)
+	}
+	cfg, _ := os.ReadFile(p)
+	want := "        overrides:\n          " + sqlcTypesStart + "\n          - db_type: \"pg_catalog.numeric\"\n            go_type: \"github.com/agim/lidza/pkg/decimal.Decimal\"\n"
+	if !strings.Contains(string(cfg), want) || strings.Count(string(cfg), "overrides:") != 1 {
+		t.Fatalf("sqlc.yaml:\n%s", cfg)
+	}
+	if res, _ := SyncSQLCNames(root, s); res.Changed {
+		t.Fatal("second sync changed the file")
+	}
+	noDecimal, _ := schema.Parse("model Customer {\n  id bigint @id @default(autoincrement())\n}\n")
+	SyncSQLCNames(root, noDecimal)
+	if now, _ := os.ReadFile(p); strings.Contains(string(now), sqlcTypesStart) || !strings.Contains(string(now), "        overrides:\n          - db_type: \"uuid\"") {
+		t.Fatalf("block kept without a decimal:\n%s", now)
+	}
+	// A file without an override list gets one.
+	bare := filepath.Join(t.TempDir(), SQLCFile)
+	os.WriteFile(bare, []byte("version: \"2\"\nsql:\n  - gen:\n      go:\n        package: \"queries\"\n"), 0o644)
+	SyncSQLCNames(filepath.Dir(bare), s)
+	if got, _ := os.ReadFile(bare); !strings.Contains(string(got), "      go:\n        overrides:\n          "+sqlcTypesStart+"\n          - db_type") || !strings.Contains(string(got), "\n        "+sqlcNamesStart) {
+		t.Fatalf("bare file:\n%s", got)
+	}
+
+	if _, err := exec.LookPath("sqlc"); err != nil {
+		t.Skip("sqlc not installed")
+	}
+	SyncSQLCNames(root, s)
+	os.WriteFile(filepath.Join(root, schema.SQLFile), []byte(schema.GenerateSQL(s)), 0o644)
+	os.WriteFile(filepath.Join(root, QueriesDir, "queries.sql"), []byte(`-- name: CreateOrder :one
+INSERT INTO "order" (customer_id, total, discount, rates) VALUES ($1, $2, $3, $4) RETURNING *;
+
+-- name: SetDiscount :exec
+UPDATE "order" SET discount = COALESCE(sqlc.narg('discount'), discount) WHERE id = $1;
+`), 0o644)
+	cmd := exec.Command("sqlc", "generate")
+	cmd.Dir = root
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("sqlc: %v\n%s", err, out)
+	}
+	models, _ := os.ReadFile(filepath.Join(root, "db", "queries", "gen", "models.go"))
+	queries, _ := os.ReadFile(filepath.Join(root, "db", "queries", "gen", "queries.sql.go"))
+	for _, want := range []string{
+		"\tID         int32 ", "\tCustomerID int64 ", "\tTotal      decimal.Decimal ", "\tDiscount   *decimal.Decimal ", "\tRates      []decimal.Decimal ",
+		"\"github.com/agim/lidza/pkg/decimal\"",
+	} {
+		if !strings.Contains(string(models), want) {
+			t.Errorf("models.go lacks %q:\n%s", want, models)
+		}
+	}
+	if !strings.Contains(string(queries), "Discount *decimal.Decimal") {
+		t.Errorf("queries:\n%s", queries)
+	}
+}

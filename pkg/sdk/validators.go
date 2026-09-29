@@ -3,6 +3,7 @@ package sdk
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/agim/lidza/pkg/inspect"
@@ -47,6 +48,15 @@ func tsValidators(c *inspect.Context) string {
 	}
 	if strings.Contains(funcs.String(), "isURL(") {
 		b.WriteString("function isURL(s: string): boolean {\n  try {\n    const u = new URL(s)\n    return (u.protocol === 'http:' || u.protocol === 'https:') && u.host !== ''\n  } catch {\n    return false\n  }\n}\n\n")
+	}
+	if strings.Contains(funcs.String(), "DECIMAL.test(") || strings.Contains(funcs.String(), "decimalFits(") {
+		b.WriteString(tsDecimalRe)
+	}
+	if strings.Contains(funcs.String(), "decimalCmp(") {
+		b.WriteString(tsDecimalCmp)
+	}
+	if strings.Contains(funcs.String(), "decimalFits(") {
+		b.WriteString(tsDecimalFits)
 	}
 	b.WriteString(funcs.String())
 	b.WriteString("export const validators = {\n")
@@ -112,6 +122,24 @@ func validatorBody(def map[string]any, all map[string]any) string {
 				add(fmt.Sprintf("(%s as string) === ''", acc), "required", "required")
 			}
 			add(fmt.Sprintf("(%s as string) !== '' && ![%s].includes(%s as string)", acc, strings.Join(quoted, ", "), acc), "enum", "unknown value")
+		case typ == "string" && p["format"] == "decimal":
+			// Exact: digits compared as BigInt, never through a float.
+			if prec, ok := num(p["x-precision"]); ok {
+				scale, _ := num(p["x-scale"])
+				msg := "not a number with at most " + minus(prec, scale) + " digit(s) before the point and " + scale + " after"
+				if scale == "0" {
+					msg = "not a whole number of at most " + prec + " digit(s)"
+				}
+				add(fmt.Sprintf("!decimalFits(%s, %s, %s)", acc, prec, scale), "decimal", msg)
+			} else {
+				add(fmt.Sprintf("!DECIMAL.test(%s)", acc), "decimal", "not a decimal number")
+			}
+			if n, ok := p["x-minimum"].(string); ok {
+				add(fmt.Sprintf("DECIMAL.test(%s) && decimalCmp(%s, %q) < 0", acc, acc, n), "min", "at least "+n)
+			}
+			if n, ok := p["x-maximum"].(string); ok {
+				add(fmt.Sprintf("DECIMAL.test(%s) && decimalCmp(%s, %q) > 0", acc, acc, n), "max", "at most "+n)
+			}
 		case typ == "string":
 			if required[field] && !nullable && p["format"] != "uuid" {
 				add(acc+" === ''", "required", "required")
@@ -193,6 +221,41 @@ func enumOf(p map[string]any, all map[string]any) []string {
 		return out
 	}
 	return nil
+}
+
+// The decimal helpers of validators.ts: a decimal is a string, compared
+// digit for digit as BigInt at a common scale.
+const tsDecimalRe = "const DECIMAL = /^[+-]?[0-9]+(\\.[0-9]+)?$/\n\n"
+
+const tsDecimalCmp = `function decimalScaled(s: string, scale: number): bigint {
+  const neg = s.startsWith('-')
+  const [whole, frac = ''] = s.replace(/^[+-]/, '').split('.')
+  const v = BigInt(whole + frac.padEnd(scale, '0'))
+  return neg ? -v : v
+}
+
+function decimalCmp(a: string, b: string): number {
+  const scale = Math.max((a.split('.')[1] ?? '').length, (b.split('.')[1] ?? '').length)
+  const x = decimalScaled(a, scale)
+  const y = decimalScaled(b, scale)
+  return x < y ? -1 : x > y ? 1 : 0
+}
+
+`
+
+const tsDecimalFits = `function decimalFits(s: string, precision: number, scale: number): boolean {
+  if (!DECIMAL.test(s)) return false
+  const [whole, frac = ''] = s.replace(/^[+-]/, '').split('.')
+  return frac.replace(/0+$/, '').length <= scale && whole.replace(/^0+/, '').length <= precision - scale
+}
+
+`
+
+// minus renders a - b for two whole numbers printed by num.
+func minus(a, b string) string {
+	x, _ := strconv.Atoi(a)
+	y, _ := strconv.Atoi(b)
+	return strconv.Itoa(x - y)
 }
 
 func num(v any) (string, bool) {

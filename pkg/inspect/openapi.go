@@ -35,6 +35,14 @@ func OpenAPI(c *Context) map[string]any {
 		if op.Input != "" {
 			o["requestBody"] = map[string]any{"required": true, "content": jsonContent(op.Input)}
 		}
+		if op.Upload {
+			// router.File: the body is the file itself; Content-Type is
+			// its type, Content-Disposition may carry its name.
+			o["x-lidza-upload"] = true
+			o["requestBody"] = map[string]any{"required": true, "content": map[string]any{
+				"application/octet-stream": map[string]any{"schema": map[string]any{"type": "string", "format": "binary"}},
+			}}
+		}
 		responses := map[string]any{}
 		switch {
 		case op.Stream:
@@ -54,6 +62,9 @@ func OpenAPI(c *Context) map[string]any {
 		if op.Input != "" {
 			responses["400"] = map[string]any{"description": "Malformed body", "content": errorContent()}
 			responses["422"] = map[string]any{"description": "Validation failed", "content": map[string]any{"application/json": map[string]any{"schema": ref("ValidationError")}}}
+		}
+		if op.Upload {
+			responses["413"] = map[string]any{"description": "Body over the route's upload limit", "content": errorContent()}
 		}
 		responses["default"] = map[string]any{"description": "Error", "content": errorContent()}
 		o["responses"] = responses

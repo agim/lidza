@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"mime"
 	"net/http"
 
 	"github.com/agim/lidza/pkg/middleware"
@@ -103,12 +104,23 @@ func NotFound(what string) error {
 // status 200 (or the status set on the request); None replies 204.
 // Errors: *HTTPError sends its status, *validate.Errors sends 422, anything
 // else sends 500 and is logged, its text never reaching the client.
+//
+// With In = File the route is an upload: the body is the file itself,
+// not JSON, handed to the handler unread (see File).
 func Route[In, Out any](r *Router, pattern string, h Handler[In, Out], mw ...middleware.Middleware) {
 	_, noBody := any(*new(In)).(None)
+	_, upload := any(*new(In)).(File)
 	_, noReply := any(*new(Out)).(None)
 	var handler http.Handler = http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		typed := &Request[In]{Raw: req}
-		if !noBody && hasBody(req) {
+		if upload {
+			f, err := readFile(w, req)
+			if err != nil {
+				writeError(w, req, err)
+				return
+			}
+			typed.Body = any(f).(In)
+		} else if !noBody && hasBody(req) {
 			if err := decodeBody(req, &typed.Body); err != nil {
 				Error(w, http.StatusBadRequest, err.Error())
 				return
@@ -139,6 +151,71 @@ func Route[In, Out any](r *Router, pattern string, h Handler[In, Out], mw ...mid
 		JSON(w, typed.status, out)
 	})
 	r.Handle(pattern, middleware.Chain(handler, mw...))
+}
+
+// MaxUploadBytes is the largest body an upload route (In = File) accepts
+// unless UploadLimit sets another.
+const MaxUploadBytes = 32 << 20
+
+// File is the In type of an upload route: the request body is the file
+// itself, sent raw (not JSON, not multipart form data). The generated
+// client takes a File or Blob for it, with the path parameters:
+//
+//	router.Route(r, "PUT /api/v1/posts/{id}/image", uploadImage, router.UploadLimit(10<<20))
+//
+//	func uploadImage(ctx context.Context, req *router.Request[router.File]) (storage.Object, error) {
+//		return storage.From(ctx).Put(ctx, "posts/"+req.Param("id")+"/image", req.Body.Body,
+//			storage.PutOptions{ContentType: req.Body.ContentType})
+//	}
+//
+//	await api.uploadImage({ id }, file, { onProgress: (sent, total) => ... })
+//
+// A body over the limit replies 413: at once when Content-Length says
+// so, or when the handler returns the read error.
+type File struct {
+	// Body reads the uploaded bytes, bounded by the route's limit.
+	Body io.Reader
+	// ContentType is the request's Content-Type, application/octet-stream
+	// when it has none.
+	ContentType string
+	// Name is the file name the client sent in Content-Disposition (the
+	// generated client sends a File's name); empty otherwise. It is the
+	// client's word: never use it as a path or a storage key.
+	Name string
+	// Size is the Content-Length, or -1 when the client did not send one.
+	Size int64
+}
+
+type uploadLimitKey struct{}
+
+// UploadLimit sets the largest body, in bytes, the upload routes it wraps
+// accept; MaxUploadBytes otherwise.
+func UploadLimit(n int64) middleware.Middleware {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			next.ServeHTTP(w, req.WithContext(context.WithValue(req.Context(), uploadLimitKey{}, n)))
+		})
+	}
+}
+
+func readFile(w http.ResponseWriter, req *http.Request) (File, error) {
+	limit := int64(MaxUploadBytes)
+	if n, ok := req.Context().Value(uploadLimitKey{}).(int64); ok && n > 0 {
+		limit = n
+	}
+	if req.ContentLength > limit {
+		return File{}, &http.MaxBytesError{Limit: limit}
+	}
+	f := File{Body: http.MaxBytesReader(w, req.Body, limit), ContentType: req.Header.Get("Content-Type"), Size: req.ContentLength}
+	if f.ContentType == "" {
+		f.ContentType = "application/octet-stream"
+	}
+	if cd := req.Header.Get("Content-Disposition"); cd != "" {
+		if _, params, err := mime.ParseMediaType(cd); err == nil {
+			f.Name = params["filename"]
+		}
+	}
+	return f, nil
 }
 
 func hasBody(req *http.Request) bool {
@@ -183,7 +260,10 @@ func writeError(w http.ResponseWriter, req *http.Request, err error) {
 func errorReply(req *http.Request, err error) (int, any) {
 	var httpErr *HTTPError
 	var valErr *validate.Errors
+	var tooLarge *http.MaxBytesError
 	switch {
+	case errors.As(err, &tooLarge):
+		return http.StatusRequestEntityTooLarge, map[string]string{"error": fmt.Sprintf("request body larger than %d bytes", tooLarge.Limit)}
 	case errors.As(err, &httpErr):
 		if httpErr.Code != "" {
 			return httpErr.Status, map[string]string{"error": httpErr.Message, "code": httpErr.Code}

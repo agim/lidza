@@ -1,5 +1,6 @@
-// One attachment per note through the storage pack. The upload is a raw
-// handler (the body is the file, not JSON), behind the same rule as the
+// One attachment per note through the storage pack. The upload is typed
+// with router.File (the body is the file, not JSON), so the client has
+// api.uploadAttachment({ id }, file); it sits behind the same rule as the
 // note: the signed-in user's own. The object key follows from the note
 // id, so no column is needed; reading streams the object through the
 // app after the same check, and deleting the note deletes the object.
@@ -10,7 +11,6 @@ import (
 	"errors"
 	"io"
 	"net/http"
-
 	"regexp"
 
 	"github.com/jackc/pgx/v5"
@@ -34,7 +34,7 @@ func attachmentKey(noteID string) string { return "notes/" + noteID + "/attachme
 // AttachmentRoutes registers the upload and the download on the notes
 // group (behind auth.Require()).
 func AttachmentRoutes(r *router.Router) {
-	r.HandleFunc("PUT /api/v1/notes/{id}/attachment", uploadAttachment)
+	router.Route(r, "PUT /api/v1/notes/{id}/attachment", uploadAttachment, router.UploadLimit(maxAttachment))
 	r.HandleFunc("GET /api/v1/notes/{id}/attachment", downloadAttachment)
 }
 
@@ -50,20 +50,19 @@ func ownNote(ctx context.Context, id string) (queries.Note, error) {
 	return row, err
 }
 
-func uploadAttachment(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	note, err := ownNote(ctx, r.PathValue("id"))
+// uploadAttachment stores the body as the note's attachment, replacing
+// one already there. A body over maxAttachment replies 413.
+func uploadAttachment(ctx context.Context, req *router.Request[router.File]) (router.None, error) {
+	note, err := ownNote(ctx, req.Param("id"))
 	if err != nil {
-		router.WriteError(w, r, err)
-		return
+		return router.None{}, err
 	}
-	body := http.MaxBytesReader(w, r.Body, maxAttachment)
-	obj, err := storage.From(ctx).Put(ctx, attachmentKey(note.ID), body, storage.PutOptions{ContentType: r.Header.Get("Content-Type")})
-	if err != nil {
-		router.WriteError(w, r, router.Errorf(http.StatusBadRequest, "upload failed: %v", err))
-		return
+	_, err = storage.From(ctx).Put(ctx, attachmentKey(note.ID), req.Body.Body, storage.PutOptions{ContentType: req.Body.ContentType})
+	var tooLarge *http.MaxBytesError
+	if err != nil && !errors.As(err, &tooLarge) {
+		return router.None{}, router.Errorf(http.StatusBadRequest, "upload failed: %v", err)
 	}
-	router.JSON(w, http.StatusCreated, obj)
+	return router.None{}, err
 }
 
 func downloadAttachment(w http.ResponseWriter, r *http.Request) {

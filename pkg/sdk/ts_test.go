@@ -40,6 +40,9 @@ func TestTypeScript(t *testing.T) {
 		"return stream<T.SummarizeEvent>(\"POST\", `/api/v1/summarize`, body, options)",
 		"feed(params: { id: string }, options?: RequestOptions): AsyncGenerator<T.Post, void, undefined> {",
 		"async function* stream<E>(",
+		"uploadImage(params: { id: string }, file: Blob, options?: UploadOptions): Promise<T.Post> {",
+		"return upload<T.Post>(\"PUT\", `/api/v1/posts/${p(params.id)}/image`, file, options)",
+		"async function upload<R>(",
 	} {
 		if !strings.Contains(client, want) {
 			t.Errorf("client.ts missing %q\n%s", want, client)
@@ -100,6 +103,7 @@ func sampleContext() *inspect.Context {
 			{ID: "getFiles", Method: "GET", Path: "/api/v1/files/{path...}", Params: []string{"path"}, Output: "Post"},
 			{ID: "summarize", Method: "POST", Path: "/api/v1/summarize", Params: []string{}, Input: "CreatePost", Output: "SummarizeEvent", Stream: true},
 			{ID: "feed", Method: "GET", Path: "/api/v1/posts/{id}/feed", Params: []string{"id"}, Output: "Post", Stream: true},
+			{ID: "uploadImage", Method: "PUT", Path: "/api/v1/posts/{id}/image", Params: []string{"id"}, Output: "Post", Upload: true},
 		},
 		Schemas: map[string]any{
 			"Health": map[string]any{"type": "object", "properties": map[string]any{

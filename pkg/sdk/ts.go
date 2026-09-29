@@ -248,6 +248,14 @@ export interface RequestOptions {
   contentType?: string
 }
 
+/** Options of an upload operation (a router.File route): the file is the
+ * body, sent as contentType or the File's own type. */
+export interface UploadOptions extends Omit<RequestOptions, 'body'> {
+  /** Called as the body goes out with the bytes sent and the total. The
+   * request then goes through XMLHttpRequest, so this is for the browser. */
+  onProgress?: (sent: number, total: number) => void
+}
+
 let baseUrl = ''
 let defaultHeaders: Record<string, string> = {}
 
@@ -261,15 +269,18 @@ export function configure(options: { baseUrl?: string; headers?: Record<string, 
 `)
 	// Only what the operations use: the template compiles with
 	// noUnusedLocals.
-	streams, calls := 0, 0
+	streams, calls, uploads := 0, 0, 0
 	for _, op := range c.Operations {
-		if op.Stream {
+		switch {
+		case op.Stream:
 			streams++
-		} else {
+		case op.Upload:
+			uploads++
+		default:
 			calls++
 		}
 	}
-	if streams+calls > 0 {
+	if streams+calls+uploads > 0 {
 		b.WriteString(tsHelpers)
 	}
 	if calls > 0 {
@@ -277,6 +288,9 @@ export function configure(options: { baseUrl?: string; headers?: Record<string, 
 	}
 	if streams > 0 {
 		b.WriteString(tsStream)
+	}
+	if uploads > 0 {
+		b.WriteString(tsUpload)
 	}
 	if usesEncodedParam(c.Operations) {
 		b.WriteString("const p = encodeURIComponent\n\n")
@@ -291,16 +305,23 @@ export function configure(options: { baseUrl?: string; headers?: Record<string, 
 			}
 			args = append(args, "params: { "+strings.Join(fields, "; ")+" }")
 		}
+		ret := "void"
+		if op.Output != "" {
+			ret = "T." + op.Output
+		}
+		if op.Upload {
+			args = append(args, "file: Blob", "options?: UploadOptions")
+			fmt.Fprintf(&b, "  /** %s %s: uploads file as the raw body; options.onProgress reports the bytes sent. */\n", op.Method, op.Path)
+			fmt.Fprintf(&b, "  %s(%s): Promise<%s> {\n", op.ID, strings.Join(args, ", "), ret)
+			fmt.Fprintf(&b, "    return upload<%s>(%q, %s, file, options)\n  },\n", ret, op.Method, tsPath(op.Path))
+			continue
+		}
 		bodyArg := "undefined"
 		if op.Input != "" {
 			args = append(args, "body: T."+op.Input)
 			bodyArg = "body"
 		}
 		args = append(args, "options?: RequestOptions")
-		ret := "void"
-		if op.Output != "" {
-			ret = "T." + op.Output
-		}
 		if op.Stream {
 			fmt.Fprintf(&b, "  /** %s %s: server-sent events, read with for await; break or options.signal closes it. */\n", op.Method, op.Path)
 			fmt.Fprintf(&b, "  %s(%s): AsyncGenerator<%s, void, undefined> {\n", op.ID, strings.Join(args, ", "), ret)
@@ -407,6 +428,46 @@ async function* stream<E>(method: string, path: string, body: unknown, options?:
     await reader.cancel().catch(() => undefined)
   }
   throw new ApiError(res.status, undefined, ` + "`${method} ${url}: the stream closed before its end`" + `)
+}
+
+`
+
+// tsUpload sends a router.File route's body: the file, its type as
+// Content-Type and its name in Content-Disposition. fetch cannot report
+// upload progress, so onProgress takes XMLHttpRequest.
+const tsUpload = `/** Uploads file as the raw body and reads the JSON reply. */
+async function upload<R>(method: string, path: string, file: Blob, options?: UploadOptions): Promise<R> {
+  const { onProgress, ...rest } = options ?? {}
+  const [url, init] = prepare(method, path, undefined, 'application/json', { ...rest, body: file })
+  const headers = init.headers as Record<string, string>
+  const name = (file as { name?: unknown }).name
+  if (typeof name === 'string' && name) {
+    const encoded = encodeURIComponent(name).replace(/['()*!]/g, (c) => '%' + c.charCodeAt(0).toString(16).toUpperCase())
+    headers['Content-Disposition'] = "attachment; filename*=UTF-8''" + encoded
+  }
+  if (!onProgress) {
+    const res = await fetch(baseUrl + url, init)
+    const parsed = parse(await res.text())
+    if (!res.ok) throw failure(method, url, res.status, res.statusText, parsed)
+    return parsed as R
+  }
+  return new Promise<R>((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open(method, baseUrl + url)
+    for (const [k, v] of Object.entries(headers)) xhr.setRequestHeader(k, v)
+    xhr.upload.onprogress = (e) => onProgress(e.loaded, e.lengthComputable ? e.total : file.size)
+    xhr.onload = () => {
+      const parsed = parse(xhr.responseText)
+      if (xhr.status >= 200 && xhr.status < 300) resolve(parsed as R)
+      else reject(failure(method, url, xhr.status, xhr.statusText, parsed))
+    }
+    xhr.onerror = () => reject(new ApiError(0, undefined, ` + "`${method} ${url}: network error`" + `))
+    xhr.onabort = () => reject(new DOMException('The upload was aborted', 'AbortError'))
+    const signal = options?.signal
+    if (signal?.aborted) return reject(new DOMException('The upload was aborted', 'AbortError'))
+    signal?.addEventListener('abort', () => xhr.abort(), { once: true })
+    xhr.send(file)
+  })
 }
 
 `

@@ -3,6 +3,7 @@ package router
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -111,5 +112,52 @@ func TestErrorCode(t *testing.T) {
 	r.Handler().ServeHTTP(rec, httptest.NewRequest("POST", "/x", nil))
 	if rec.Code != 403 || strings.TrimSpace(rec.Body.String()) != `{"code":"wrong_password","error":"password does not match"}` {
 		t.Fatalf("%d %s", rec.Code, rec.Body)
+	}
+}
+
+// An upload route (In = File) hands the raw body to the handler with its
+// type and name, and bounds it: 413 from Content-Length up front, or from
+// the read error the handler returns.
+func TestUpload(t *testing.T) {
+	type stored struct {
+		Name        string `json:"name"`
+		ContentType string `json:"contentType"`
+		Bytes       string `json:"bytes"`
+		ID          string `json:"id"`
+	}
+	r := New()
+	Route(r, "PUT /api/v1/posts/{id}/image", func(ctx context.Context, req *Request[File]) (stored, error) {
+		data, err := io.ReadAll(req.Body.Body)
+		if err != nil {
+			return stored{}, err
+		}
+		req.Status(http.StatusCreated)
+		return stored{Name: req.Body.Name, ContentType: req.Body.ContentType, Bytes: string(data), ID: req.Param("id")}, nil
+	}, UploadLimit(12))
+
+	put := func(body io.Reader, header map[string]string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPut, "/api/v1/posts/7/image", body)
+		for k, v := range header {
+			req.Header.Set(k, v)
+		}
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+		return rec
+	}
+	rec := put(strings.NewReader("{not json"), map[string]string{"Content-Type": "image/png", "Content-Disposition": `attachment; filename*=UTF-8''caf%C3%A9%20%281%29.png`})
+	want := `{"name":"café (1).png","contentType":"image/png","bytes":"{not json","id":"7"}`
+	if rec.Code != http.StatusCreated || strings.TrimSpace(rec.Body.String()) != want {
+		t.Fatalf("upload: %d %s", rec.Code, rec.Body)
+	}
+	rec = put(strings.NewReader("abc"), nil)
+	if rec.Code != http.StatusCreated || !strings.Contains(rec.Body.String(), `"contentType":"application/octet-stream"`) {
+		t.Fatalf("no type: %d %s", rec.Code, rec.Body)
+	}
+	if rec = put(strings.NewReader("1234567890abc"), nil); rec.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("over the limit by Content-Length: %d %s", rec.Code, rec.Body)
+	}
+	// No Content-Length: the limit shows when the handler reads.
+	if rec = put(io.MultiReader(strings.NewReader("1234567"), strings.NewReader("890abc")), nil); rec.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("over the limit while reading: %d %s", rec.Code, rec.Body)
 	}
 }

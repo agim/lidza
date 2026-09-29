@@ -116,12 +116,12 @@ func TestNotes(t *testing.T) {
 		t.Fatalf("stats: %d %+v", res.StatusCode, st)
 	}
 
-	// An attachment: uploaded raw, read back with its type, gone with the
+	// An attachment: uploaded raw (router.File), read back with its type, gone with the
 	// note. The local provider keeps it under .lidza/test-storage.
 	upload, _ := http.NewRequest(http.MethodPut, srv.URL+"/api/v1/notes/"+note.ID+"/attachment", strings.NewReader("attached bytes"))
 	upload.Header.Set("Content-Type", "text/plain")
 	upload.Header.Set("Sec-Fetch-Site", "same-origin")
-	if res, err := srv.Client().Do(upload); err != nil || res.StatusCode != http.StatusCreated {
+	if res, err := srv.Client().Do(upload); err != nil || res.StatusCode != http.StatusNoContent {
 		t.Fatalf("upload: %v %v", err, res)
 	}
 	download, _ := http.NewRequest(http.MethodGet, srv.URL+"/api/v1/notes/"+note.ID+"/attachment", nil)

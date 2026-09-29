@@ -56,6 +56,9 @@ func LLMS(c *Context, cfg *config.Config, guide string) (short, full string) {
 			if op.Input != "" {
 				in = op.Input
 			}
+			if op.Upload {
+				in = "a file sent raw (router.File; the client takes a File or Blob after the params)"
+			}
 			if op.Output != "" {
 				out = op.Output
 			}

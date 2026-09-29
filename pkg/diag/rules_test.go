@@ -72,6 +72,7 @@ func anon(ctx context.Context, req *router.Request[struct{ A int }]) (any, error
 func helper[In any](req *router.Request[In], n int) (In, error) { var z In; return z, nil }
 func stream(ctx context.Context, req *router.Request[router.None], send func(adHoc) error) error { return nil }
 func streamOK(ctx context.Context, req *router.Request[schema.CreateThing], send func(string) error) error { return nil }
+func upload(ctx context.Context, req *router.Request[router.File]) (router.None, error) { return router.None{}, nil }
 `)
 	// A RoundTripper takes *http.Request and returns two values; it is not a
 	// typed handler, so L005 stays silent.

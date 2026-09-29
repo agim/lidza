@@ -78,7 +78,11 @@ func routes(r *router.Router) {
 	r.HandleFunc("GET /api/v1/raw", nil)
 	router.Stream(r, "POST /api/v1/summarize", summarize)
 	router.Stream(r, "GET /api/v1/posts/feed", feed)
+	post := r.Group("/api/v1/posts/{id}")
+	router.Route(post, "PUT /api/v1/posts/{id}/image", uploadImage, router.UploadLimit(1<<20))
 }
+
+func uploadImage(ctx context.Context, req *router.Request[router.File]) (Post, error) { return Post{}, nil }
 
 func summarize(ctx context.Context, req *router.Request[schema.CreatePost], send func(string) error) error {
 	return send("x")
@@ -111,7 +115,7 @@ func main() { _ = routes }
 	for _, op := range c.Operations {
 		byID[op.ID] = op
 	}
-	if len(c.Operations) != 7 {
+	if len(c.Operations) != 8 {
 		t.Fatalf("operations: %+v", c.Operations)
 	}
 	if op := byID["getPost"]; op.Method != "GET" || op.Path != "/api/v1/posts/{id}" || op.Params[0] != "id" || op.Input != "" || op.Output != "Post" ||
@@ -136,6 +140,13 @@ func main() { _ = routes }
 	}
 	if op := byID["feed"]; !op.Stream || op.Output != "Post" || byID["getPost"].Stream {
 		t.Errorf("feed: %+v", op)
+	}
+	// An upload: the body is the file, no input schema.
+	if op := byID["uploadImage"]; !op.Upload || op.Input != "" || op.Output != "Post" || op.Method != "PUT" || strings.Join(op.Params, ",") != "id" {
+		t.Errorf("uploadImage: %+v", op)
+	}
+	if _, ok := c.Schemas["File"]; ok || byID["createPost"].Upload {
+		t.Error("router.File should not be a component")
 	}
 	typedRoute := false
 	for _, r := range c.Routes {
@@ -193,6 +204,10 @@ func main() { _ = routes }
 	}
 	if del := paths["/api/v1/posts/{id}"].(map[string]any)["delete"].(map[string]any); del["responses"].(map[string]any)["204"] == nil {
 		t.Errorf("delete: %v", del)
+	}
+	upload := paths["/api/v1/posts/{id}/image"].(map[string]any)["put"].(map[string]any)
+	if body, _ := upload["requestBody"].(map[string]any); body == nil || body["content"].(map[string]any)["application/octet-stream"] == nil || upload["responses"].(map[string]any)["413"] == nil {
+		t.Errorf("openapi upload: %v", upload)
 	}
 	summarize := paths["/api/v1/summarize"].(map[string]any)["post"].(map[string]any)
 	ok := summarize["x-lidza-stream"] == true

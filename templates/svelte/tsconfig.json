@@ -12,7 +12,6 @@
     "isolatedModules": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "baseUrl": ".",
     "paths": {
       "@lidza/client": ["./.lidza/client/index.ts"]
     }

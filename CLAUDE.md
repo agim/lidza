@@ -56,5 +56,8 @@ Working agreements (Agim's standing decisions):
 - Never assume the developer's machine: CI runners have no git author,
   macOS keeps the Postgres socket in `/tmp`, Node may be newer than 22.
   Setup and the doctor detect and say, they do not fail silently.
+- Decisions for Agim come as brief-style interview questions: each with
+  2 to 4 options, the recommended one first and marked, a line on what
+  each means; never as open questions buried in a report.
 - Nested agent runs (the agent eval) use `claude -p --permission-mode
   acceptEdits` with an allow-list, not `--dangerously-skip-permissions`.

@@ -9,7 +9,7 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
-## Unreleased
+## v0.1.44 (2026-09-30)
 
 - `lidza.json` `"appDir"`: the app's package (`routes.go`, `start.go`,
   `tools.go`, the generated `packs.go`) can live in a directory, `app/`,

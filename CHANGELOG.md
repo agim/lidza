@@ -9,6 +9,14 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- Generation refuses a released CLI that differs from the app's framework
+  module before rewriting pack schemas, and shows how to install the
+  matching CLI. Explicit local replacements and development builds remain
+  supported. This prevents an old CLI from silently removing newer pack
+  fields when running gen, setup, test, check or verify.
+
 ## v0.1.44 (2026-09-30)
 
 - `lidza.json` `"appDir"`: the app's package (`routes.go`, `start.go`,

@@ -11,6 +11,9 @@ import (
 	"slices"
 	"strings"
 
+	"golang.org/x/mod/modfile"
+	"golang.org/x/mod/semver"
+
 	"github.com/agim/lidza/pkg/config"
 	"github.com/agim/lidza/pkg/crud"
 	"github.com/agim/lidza/pkg/diag"
@@ -20,6 +23,7 @@ import (
 	"github.com/agim/lidza/pkg/scaffold"
 	"github.com/agim/lidza/pkg/schema"
 	"github.com/agim/lidza/pkg/sdk"
+	"github.com/agim/lidza/pkg/version"
 )
 
 func runGen(ctx context.Context, args []string) error {
@@ -66,6 +70,9 @@ func runGenResource(_ context.Context, args []string) error {
 	if cfg == nil {
 		return errors.New("gen resource needs a lidza.json project")
 	}
+	if err := generationVersion(abs, version.Module()); err != nil {
+		return err
+	}
 	res, err := crud.Generate(abs, crud.Options{Model: model, Module: inspect.ModulePath(abs), Force: *force, Public: *public, Shared: *shared, Auth: slices.Contains(cfg.Packs, "lidza/auth"), AppDir: cfg.AppDir})
 	if err != nil {
 		return err
@@ -97,6 +104,9 @@ func runGenResource(_ context.Context, args []string) error {
 // generateAll runs the schema generators, the pack wrappers and builds,
 // then the handler-derived outputs.
 func generateAll(dir string, cfg *config.Config, out io.Writer) error {
+	if err := generationVersion(dir, version.Module()); err != nil {
+		return err
+	}
 	if cfg != nil {
 		added, err := pack.SyncFragments(dir, cfg.Packs)
 		if err != nil {
@@ -124,6 +134,50 @@ func generateAll(dir string, cfg *config.Config, out io.Writer) error {
 		return fmt.Errorf("skills: %w", err)
 	}
 	return generateClient(dir, cfg, out)
+}
+
+// Released CLIs embed the schemas and templates of their own release.
+// Generating against a different module can silently add or drop pack
+// fields. Check the app's pin before any of those files are rewritten.
+func generationVersion(dir, cli string) error {
+	if !semver.IsValid(cli) { // Unreleased framework development.
+		return nil
+	}
+	path := filepath.Join(dir, "go.mod")
+	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	mod, err := modfile.Parse(path, data, nil)
+	if err != nil {
+		return err
+	}
+	var project string
+	for _, req := range mod.Require {
+		if req.Mod.Path == version.ModulePath {
+			project = req.Mod.Version
+			break
+		}
+	}
+	if project == "" {
+		return nil
+	}
+	for _, rep := range mod.Replace {
+		if rep.Old.Path == version.ModulePath && (rep.Old.Version == "" || rep.Old.Version == project) {
+			if rep.New.Version == "" { // An explicit local framework checkout.
+				return nil
+			}
+			project = rep.New.Version
+			break
+		}
+	}
+	if semver.Compare(cli, project) != 0 {
+		return fmt.Errorf("framework module %s does not match CLI %s; generation stopped before rewriting pack schemas. Install the matching CLI: go install %s/cmd/lidza@%s (or update the app and CLI together with lidza update)", project, cli, version.ModulePath, project)
+	}
+	return nil
 }
 
 // generatePacks writes packs.go and each enabled pack's wrapper and

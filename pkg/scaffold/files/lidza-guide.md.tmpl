@@ -23,7 +23,7 @@ app is always at one address: http://127.0.0.1:3000.
 ├── packs.go         generated from lidza.json "packs". Do not edit.
 ├── tools.go         the app's MCP tools (lidza.ToolFunc), served by lidza mcp and /mcp
 ├── packs/<name>/    a pack: pack.lidza.json, rust/ crate, generated pack.go and <name>.wasm
-├── lidza.json       project config: name, frontend template, dev server, dist
+├── lidza.json       project config: name, frontend template, dev server, dist, appDir
 ├── go.mod           module {{.Name}}, requires {{.Module}}
 {{- if .Dist}}
 ├── package.json     frontend ({{.Template}}); npm scripts dev, build, check
@@ -41,6 +41,27 @@ app is always at one address: http://127.0.0.1:3000.
 └── .lidza/          dev build artifacts (gitignored)
 ```
 
+### The app in its own package (`appDir`)
+
+At the root, the app is package `main`, which Go cannot import: its tests
+live next to `routes.go`. To keep them in their own directory, move the
+app into an importable package and name it in `lidza.json`:
+
+1. Move `start.go`, `routes.go`, `tools.go` and the other files of the
+   root package except `main.go` into `app/`, with `package app`. The
+   function that builds the `lidza.App` becomes `func New(dist fs.FS)
+   lidza.App` in `app/app.go`.
+2. `main.go` keeps the embed and runs it:
+   `func main() { lidza.Run(app.New(lidza.Sub(dist, "dist"))) }`.
+3. Add `"appDir": "app"` to `lidza.json` and run `lidza gen`: `packs.go`
+   is generated into `app/` (delete the root one). `lidza gen resource`
+   registers routes in `app/routes.go` and `lidza mcp` reads
+   `app/tools.go`.
+4. A directory a moved file embeds moves with it (`//go:embed admin` in
+   `routes.go`: `app/admin/`; the i18n pack's catalogs: `app/locales/`).
+5. Tests go in `tests/` (`package tests`) and start the app with
+   `srv := lidzatest.Start(t, app.New(nil))`; `lidza test` runs them.
+
 ## Commands
 
 | Command | What it does |
@@ -51,7 +72,7 @@ app is always at one address: http://127.0.0.1:3000.
 | `lidza gen` | `schema.lidza` to `schema/schema.go`, `db/schema.sql`, a migration in `db/migrations` when models changed; handlers to `.lidza/openapi.json` and the client in `.lidza/client`. `lidza dev` runs it on every change. |
 | `lidza context` | writes `.lidza/context.json`: routes, handler signatures, Rust exports. |
 | `lidza mcp` | MCP server on stdio; see "Agent interface". |
-| `lidza gen resource <Model> [--public \| --shared]` | queries, `Create/Update/<Model>List` types, `handlers/<table>.go` with list, get, create, patch, delete under `/api/v1/<plural>`, registered in `routes.go` behind `auth.Require()`. An owned model (`ownerId`, or a field with `@ref(User)`) is scoped to the signed-in user. `--public` marks the model `@public`: open routes, no owner. `--shared` marks it `@shared`: behind sign-in, rows not scoped. Needs the `db` and `auth` packs (`auth` not with `--public`). |
+| `lidza gen resource <Model> [--public \| --shared]` | queries, `Create/Update/<Model>List` types, `handlers/<table>.go` with list, get, create, patch, delete under `/api/v1/<plural>`, registered in `routes.go` (in `appDir` when set) behind `auth.Require()`. An owned model (`ownerId`, or a field with `@ref(User)`) is scoped to the signed-in user. `--public` marks the model `@public`: open routes, no owner. `--shared` marks it `@shared`: behind sign-in, rows not scoped. Needs the `db` and `auth` packs (`auth` not with `--public`). |
 | `lidza update [--migrate]` | moves the CLI and this app's framework module to the newest release together, regenerates, refreshes the deployment files, and names pending migrations. |
 | `lidza gen deploy [--force]` | the `Dockerfile`, `.dockerignore` and `deploy/{{.Name}}.service` from the current templates; a file the app changed is kept and named unless `--force`. |
 | `lidza pack add <name>` | enables an official pack: `db`, `auth`, `jobs`, `mail`, `llm`, `storage`, `cache`, `i18n`, `realtime`, `analytics`, `geo`, `media`. |

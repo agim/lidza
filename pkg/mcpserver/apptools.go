@@ -30,7 +30,7 @@ func addAppTools(s *group, dir string, cfg *config.Config) {
 	if cfg == nil {
 		return
 	}
-	if _, err := os.Stat(filepath.Join(dir, "tools.go")); err != nil {
+	if _, err := os.Stat(filepath.Join(dir, cfg.AppPath("tools.go"))); err != nil {
 		return
 	}
 	a := &appInstance{dir: dir, bin: filepath.Join(dir, devserver.BuildDir, "mcp-app")}

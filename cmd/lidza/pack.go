@@ -107,7 +107,7 @@ func runPack(ctx context.Context, args []string) error {
 			if err != nil {
 				return err
 			}
-			changed, err := pack.Generate(abs, module, cfg.Packs, s)
+			changed, err := pack.Generate(abs, module, cfg.AppDir, cfg.Packs, s)
 			if err != nil {
 				return fmt.Errorf("packs: %w", err)
 			}

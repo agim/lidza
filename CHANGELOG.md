@@ -9,6 +9,17 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- `lidza.json` `"appDir"`: the app's package (`routes.go`, `start.go`,
+  `tools.go`, the generated `packs.go`) can live in a directory, `app/`,
+  instead of the root's package main, so it can be imported and the
+  app's tests can live in `tests/`. `lidza gen` writes `packs.go` there
+  (in that package), `lidza gen resource` registers in its `routes.go`,
+  `lidza mcp` reads its `tools.go` and `lidza verify` checks its
+  `packs.go`. Unset, nothing changes. The guide's Layout section has the
+  steps to move an app.
+
 ## v0.1.43 (2026-09-29)
 
 - `App.TLSHosts`: approve hostnames beyond `LIDZA_TLS_DOMAINS` while the

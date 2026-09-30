@@ -150,7 +150,7 @@ func New(ctx context.Context, opt Options) error {
 	if _, err := schema.Generate(opt.Dir, parsed, "", ""); err != nil {
 		return err
 	}
-	if _, err := pack.Generate(opt.Dir, opt.Name, nil, parsed); err != nil {
+	if _, err := pack.Generate(opt.Dir, opt.Name, "", nil, parsed); err != nil {
 		return err
 	}
 	fmt.Fprintf(opt.Out, "created %s (%s template)\n", opt.Dir, opt.Template)

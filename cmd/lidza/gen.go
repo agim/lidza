@@ -66,7 +66,7 @@ func runGenResource(_ context.Context, args []string) error {
 	if cfg == nil {
 		return errors.New("gen resource needs a lidza.json project")
 	}
-	res, err := crud.Generate(abs, crud.Options{Model: model, Module: inspect.ModulePath(abs), Force: *force, Public: *public, Shared: *shared, Auth: slices.Contains(cfg.Packs, "lidza/auth")})
+	res, err := crud.Generate(abs, crud.Options{Model: model, Module: inspect.ModulePath(abs), Force: *force, Public: *public, Shared: *shared, Auth: slices.Contains(cfg.Packs, "lidza/auth"), AppDir: cfg.AppDir})
 	if err != nil {
 		return err
 	}
@@ -85,7 +85,7 @@ func runGenResource(_ context.Context, args []string) error {
 		fmt.Printf("schema.lidza: %s still takes %s, which the handlers ignore: remove it\n", t, res.Owner)
 	}
 	if !res.Registered {
-		fmt.Printf("add to routes.go (func routes):\n\t%s\n", strings.ReplaceAll(res.RoutesLine, "\n", "\n\t"))
+		fmt.Printf("add to %s (func routes):\n\t%s\n", filepath.ToSlash(cfg.AppPath("routes.go")), strings.ReplaceAll(res.RoutesLine, "\n", "\n\t"))
 	}
 	if err := generateAll(abs, cfg, os.Stdout); err != nil {
 		return err
@@ -140,7 +140,7 @@ func generatePacks(ctx context.Context, dir string, cfg *config.Config, out io.W
 	if err != nil {
 		return err
 	}
-	changed, err := pack.Generate(dir, module, cfg.Packs, s)
+	changed, err := pack.Generate(dir, module, cfg.AppDir, cfg.Packs, s)
 	if err != nil {
 		return fmt.Errorf("packs: %w", err)
 	}

@@ -147,8 +147,17 @@ func (srv *Server) watched() []string {
 	return []string{
 		filepath.Join(srv.dir, config.FileName),
 		filepath.Join(srv.dir, filepath.FromSlash(recipes.GuideFile)),
-		filepath.Join(srv.dir, "tools.go"),
+		filepath.Join(srv.dir, srv.toolsFile()),
 	}
+}
+
+// toolsFile is the app's tools.go, relative to the project: in lidza.json's
+// appDir when it names one.
+func (srv *Server) toolsFile() string {
+	if srv.cfg == nil {
+		return "tools.go"
+	}
+	return srv.cfg.AppPath("tools.go")
 }
 
 func (srv *Server) stamp() map[string]time.Time {
@@ -172,7 +181,7 @@ func (srv *Server) Refresh() {
 		p := filepath.Join(srv.dir, name)
 		return !now[p].Equal(srv.stamps[p])
 	}
-	cfgChanged, guideChanged, toolsChanged := changed(config.FileName), changed(filepath.FromSlash(recipes.GuideFile)), changed("tools.go")
+	cfgChanged, guideChanged, toolsChanged := changed(config.FileName), changed(filepath.FromSlash(recipes.GuideFile)), changed(srv.toolsFile())
 	srv.stamps = now
 	if cfgChanged {
 		if cfg, err := config.Load(srv.dir); err == nil {

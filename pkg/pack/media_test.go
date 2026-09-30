@@ -35,7 +35,7 @@ func TestOfficialMedia(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Generate(root, "app", []string{"media"}, s); err != nil {
+	if _, err := Generate(root, "app", "", []string{"media"}, s); err != nil {
 		t.Fatal(err)
 	}
 	m, err := Load(root, "media")

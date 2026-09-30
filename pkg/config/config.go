@@ -27,6 +27,12 @@ type Config struct {
 	// Deploy is what `lidza ship` writes into deploy/production.env: the
 	// domains the binary serves over TLS and the ACME contact.
 	Deploy Deploy `json:"deploy,omitempty"`
+	// AppDir is the directory, relative to the project root, of the Go
+	// package that describes the app (routes.go, start.go, tools.go and
+	// the generated packs.go). Empty is the root's package main. Set, the
+	// package is importable, so the app's tests can live in their own
+	// directory (tests/) and main.go only runs it.
+	AppDir string `json:"appDir,omitempty"`
 
 	// Dir is the project root the file was read from. Not serialized.
 	Dir string `json:"-"`
@@ -122,6 +128,24 @@ func (c Config) Save(dir string) error {
 	return os.WriteFile(filepath.Join(dir, FileName), append(data, '\n'), 0o644)
 }
 
+// AppPath is rel inside the app's package directory (AppDir), relative
+// to the project root: "routes.go" or "app/routes.go".
+func (c Config) AppPath(rel string) string {
+	if c.AppDir == "" {
+		return rel
+	}
+	return filepath.Join(filepath.FromSlash(c.AppDir), rel)
+}
+
+// AppPackage is the Go package name of the app's package: main at the
+// root, else the last element of AppDir.
+func (c Config) AppPackage() string {
+	if c.AppDir == "" {
+		return "main"
+	}
+	return filepath.Base(filepath.FromSlash(c.AppDir))
+}
+
 func (c Config) validate() error {
 	if c.Name == "" {
 		return errors.New(`"name" is required`)
@@ -139,5 +163,25 @@ func (c Config) validate() error {
 	if f.Dist != "" && (filepath.IsAbs(f.Dist) || strings.HasPrefix(f.Dist, "..")) {
 		return fmt.Errorf(`"frontend.dist" must be a relative path inside the project, got %q`, f.Dist)
 	}
+	if d := c.AppDir; d != "" {
+		clean := filepath.ToSlash(filepath.Clean(filepath.FromSlash(d)))
+		base := filepath.Base(clean)
+		if filepath.IsAbs(d) || clean == "." || strings.HasPrefix(clean, "..") || clean != d || !goIdent(base) {
+			return fmt.Errorf(`"appDir" must be a clean relative directory inside the project whose name is a Go package name (app, internal/app), got %q`, d)
+		}
+	}
 	return nil
+}
+
+// goIdent reports whether s is a lowercase Go package name.
+func goIdent(s string) bool {
+	if s == "" || s == "main" || s[0] < 'a' || s[0] > 'z' {
+		return false
+	}
+	for _, r := range s {
+		if !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '_') {
+			return false
+		}
+	}
+	return true
 }

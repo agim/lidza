@@ -40,6 +40,9 @@ type Options struct {
 	// Auth is true when the app enables the auth pack, which a resource
 	// that is not public needs.
 	Auth bool
+	// AppDir is lidza.json's appDir: the directory of the app's package,
+	// whose routes.go gets the registration. Empty is the root.
+	AppDir string
 }
 
 // Result lists what was written.
@@ -142,13 +145,14 @@ func Generate(root string, opt Options) (*Result, error) {
 	res.StaleInputs = staleOwnerInputs(s, r)
 	reg := r.registration()
 	res.RoutesLine = strings.Join(reg.lines(), "\n")
-	registered, err := registerRoutes(root, opt.Module, reg, opt.Force)
+	routesFile := filepath.ToSlash(filepath.Join(filepath.FromSlash(opt.AppDir), "routes.go"))
+	registered, err := registerRoutes(filepath.Join(root, routesFile), opt.Module, reg, opt.Force)
 	if err != nil {
 		return nil, err
 	}
 	res.Registered = registered
 	if registered {
-		res.Files = append(res.Files, "routes.go")
+		res.Files = append(res.Files, routesFile)
 	}
 	return res, nil
 }
@@ -603,8 +607,7 @@ func (reg registration) lines() []string {
 // registration without sign-in (handlers.<Model>Routes(r)) moves behind
 // auth.Require(). It reports false when routes.go does not have the
 // expected shape, so the caller prints the lines to add.
-func registerRoutes(root, module string, reg registration, force bool) (bool, error) {
-	p := filepath.Join(root, "routes.go")
+func registerRoutes(p, module string, reg registration, force bool) (bool, error) {
 	data, err := os.ReadFile(p)
 	if err != nil {
 		return false, nil

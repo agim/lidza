@@ -3,6 +3,7 @@ package crud
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -22,6 +23,26 @@ model Post @table("posts") {
   createdAt time    @default(now())
 }
 `
+
+func TestGenerateInAppDir(t *testing.T) {
+	root := t.TempDir()
+	os.WriteFile(filepath.Join(root, schema.FileName), []byte(src), 0o644)
+	os.WriteFile(filepath.Join(root, "sqlc.yaml"), []byte("version: 2\n"), 0o644)
+	os.MkdirAll(filepath.Join(root, "app"), 0o755)
+	os.WriteFile(filepath.Join(root, "app", "routes.go"), []byte("package app\n\nimport (\n\t\"github.com/agim/lidza/pkg/router\"\n)\n\nfunc routes(r *router.Router) {\n}\n"), 0o644)
+
+	res, err := Generate(root, Options{Model: "Post", Module: "app", Auth: true, AppDir: "app"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	routes, _ := os.ReadFile(filepath.Join(root, "app", "routes.go"))
+	if !res.Registered || !strings.Contains(string(routes), "handlers.PostRoutes(") || !slices.Contains(res.Files, "app/routes.go") {
+		t.Fatalf("registered %v in %v:\n%s", res.Registered, res.Files, routes)
+	}
+	if _, err := os.Stat(filepath.Join(root, "routes.go")); err == nil {
+		t.Fatal("a root routes.go was written")
+	}
+}
 
 func TestGenerate(t *testing.T) {
 	root := t.TempDir()

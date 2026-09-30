@@ -166,7 +166,11 @@ var errSkipped = errors.New("skipped")
 // generatedPaths are the tracked outputs of lidza gen: a commit that
 // changes their inputs without them is incomplete.
 func generatedPaths(cfg *config.Config) []string {
-	paths := append([]string{filepath.Dir(schema.GoFile), schema.SQLFile, schema.MigrationsDir, schema.LockFile, pack.PacksFile, pack.Dir}, recipes.OutputDirs...)
+	packsFile := pack.PacksFile
+	if cfg != nil {
+		packsFile = filepath.ToSlash(cfg.AppPath(pack.PacksFile))
+	}
+	paths := append([]string{filepath.Dir(schema.GoFile), schema.SQLFile, schema.MigrationsDir, schema.LockFile, packsFile, pack.Dir}, recipes.OutputDirs...)
 	if cfg != nil && cfg.SDK.Dart != "" {
 		paths = append(paths, cfg.SDK.Dart)
 	}

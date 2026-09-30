@@ -31,6 +31,25 @@ func TestHTMXHasNoDevServer(t *testing.T) {
 	}
 }
 
+func TestAppDir(t *testing.T) {
+	root := Config{}
+	if root.AppPath("routes.go") != "routes.go" || root.AppPackage() != "main" {
+		t.Fatalf("root: %q %q", root.AppPath("routes.go"), root.AppPackage())
+	}
+	dir := t.TempDir()
+	body := `{"name":"x","frontend":{"template":"react"},"appDir":"internal/app"}`
+	if err := os.WriteFile(filepath.Join(dir, FileName), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.AppPath("tools.go") != filepath.Join("internal", "app", "tools.go") || c.AppPackage() != "app" {
+		t.Fatalf("appDir: %q %q", c.AppPath("tools.go"), c.AppPackage())
+	}
+}
+
 func TestLoadErrors(t *testing.T) {
 	dir := t.TempDir()
 	if _, err := Load(dir); err == nil {
@@ -42,6 +61,11 @@ func TestLoadErrors(t *testing.T) {
 		"dev only":     `{"name":"x","frontend":{"template":"react","dev":"npm run dev"}}`,
 		"bad url":      `{"name":"x","frontend":{"template":"react","dev":"x","url":"127.0.0.1:5173"}}`,
 		"dist escapes": `{"name":"x","frontend":{"template":"react","dist":"../out"}}`,
+		"appDir up":    `{"name":"x","frontend":{"template":"react"},"appDir":"../app"}`,
+		"appDir root":  `{"name":"x","frontend":{"template":"react"},"appDir":"."}`,
+		"appDir main":  `{"name":"x","frontend":{"template":"react"},"appDir":"main"}`,
+		"appDir name":  `{"name":"x","frontend":{"template":"react"},"appDir":"My-App"}`,
+		"appDir dirty": `{"name":"x","frontend":{"template":"react"},"appDir":"app/"}`,
 		"not json":     `{`,
 	}
 	for name, body := range cases {

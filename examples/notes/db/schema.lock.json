@@ -525,7 +525,7 @@
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 133
+          "Line": 132
         },
         {
           "Name": "recipient",
@@ -543,7 +543,61 @@
           "Email": false,
           "URL": false,
           "Pattern": "",
+          "Line": 133
+        },
+        {
+          "Name": "fromAddress",
+          "Type": "string",
+          "Optional": true,
+          "Array": false,
+          "ID": false,
+          "Unique": false,
+          "Index": false,
+          "Default": "",
+          "Ref": "",
+          "OnDelete": "",
+          "Min": null,
+          "Max": null,
+          "Email": false,
+          "URL": false,
+          "Pattern": "",
           "Line": 134
+        },
+        {
+          "Name": "replyTo",
+          "Type": "string",
+          "Optional": true,
+          "Array": false,
+          "ID": false,
+          "Unique": false,
+          "Index": false,
+          "Default": "",
+          "Ref": "",
+          "OnDelete": "",
+          "Min": null,
+          "Max": null,
+          "Email": false,
+          "URL": false,
+          "Pattern": "",
+          "Line": 135
+        },
+        {
+          "Name": "headers",
+          "Type": "json",
+          "Optional": true,
+          "Array": false,
+          "ID": false,
+          "Unique": false,
+          "Index": false,
+          "Default": "",
+          "Ref": "",
+          "OnDelete": "",
+          "Min": null,
+          "Max": null,
+          "Email": false,
+          "URL": false,
+          "Pattern": "",
+          "Line": 136
         },
         {
           "Name": "subject",
@@ -561,7 +615,7 @@
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 135
+          "Line": 137
         },
         {
           "Name": "text",
@@ -579,7 +633,7 @@
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 136
+          "Line": 138
         },
         {
           "Name": "html",
@@ -597,7 +651,7 @@
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 137
+          "Line": 139
         },
         {
           "Name": "template",
@@ -615,7 +669,7 @@
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 138
+          "Line": 140
         },
         {
           "Name": "status",
@@ -633,7 +687,7 @@
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 139
+          "Line": 141
         },
         {
           "Name": "providerId",
@@ -651,7 +705,7 @@
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 140
+          "Line": 142
         },
         {
           "Name": "error",
@@ -669,7 +723,7 @@
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 141
+          "Line": 143
         },
         {
           "Name": "attempts",
@@ -687,7 +741,7 @@
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 142
+          "Line": 144
         },
         {
           "Name": "createdAt",
@@ -705,7 +759,7 @@
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 143
+          "Line": 145
         },
         {
           "Name": "sentAt",
@@ -723,11 +777,11 @@
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 144
+          "Line": 146
         }
       ],
       "Indexes": null,
-      "Line": 132,
+      "Line": 131,
       "Persisted": true
     },
     {
@@ -750,7 +804,7 @@
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 151
+          "Line": 153
         },
         {
           "Name": "at",
@@ -768,7 +822,7 @@
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 152
+          "Line": 154
         },
         {
           "Name": "provider",
@@ -786,7 +840,7 @@
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 153
+          "Line": 155
         },
         {
           "Name": "model",
@@ -804,7 +858,7 @@
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 154
+          "Line": 156
         },
         {
           "Name": "label",
@@ -822,7 +876,7 @@
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 155
+          "Line": 157
         },
         {
           "Name": "input",
@@ -840,7 +894,7 @@
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 156
+          "Line": 158
         },
         {
           "Name": "output",
@@ -858,7 +912,7 @@
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 157
+          "Line": 159
         },
         {
           "Name": "ms",
@@ -876,7 +930,7 @@
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 158
+          "Line": 160
         },
         {
           "Name": "status",
@@ -894,7 +948,7 @@
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 159
+          "Line": 161
         },
         {
           "Name": "error",
@@ -912,11 +966,11 @@
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 160
+          "Line": 162
         }
       ],
       "Indexes": null,
-      "Line": 150,
+      "Line": 152,
       "Persisted": true
     },
     {
@@ -939,7 +993,7 @@
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 166
+          "Line": 168
         },
         {
           "Name": "label",
@@ -957,7 +1011,7 @@
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 167
+          "Line": 169
         },
         {
           "Name": "disabledAt",
@@ -975,7 +1029,7 @@
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 168
+          "Line": 170
         },
         {
           "Name": "firstSeenAt",
@@ -993,7 +1047,7 @@
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 169
+          "Line": 171
         },
         {
           "Name": "lastSeenAt",
@@ -1011,11 +1065,11 @@
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 170
+          "Line": 172
         }
       ],
       "Indexes": null,
-      "Line": 165,
+      "Line": 167,
       "Persisted": true
     },
     {
@@ -1038,7 +1092,7 @@
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 178
+          "Line": 180
         },
         {
           "Name": "email",
@@ -1056,7 +1110,7 @@
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 179
+          "Line": 181
         },
         {
           "Name": "name",
@@ -1074,7 +1128,7 @@
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 180
+          "Line": 182
         },
         {
           "Name": "passwordHash",
@@ -1092,7 +1146,7 @@
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 181
+          "Line": 183
         },
         {
           "Name": "verifiedAt",
@@ -1110,7 +1164,7 @@
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 182
+          "Line": 184
         },
         {
           "Name": "createdAt",
@@ -1128,7 +1182,7 @@
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 183
+          "Line": 185
         },
         {
           "Name": "updatedAt",
@@ -1146,11 +1200,11 @@
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 184
+          "Line": 186
         }
       ],
       "Indexes": null,
-      "Line": 177,
+      "Line": 179,
       "Persisted": true
     },
     {
@@ -1173,7 +1227,7 @@
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 190
+          "Line": 192
         },
         {
           "Name": "provider",
@@ -1191,7 +1245,7 @@
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 191
+          "Line": 193
         },
         {
           "Name": "providerSubject",
@@ -1209,7 +1263,7 @@
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 192
+          "Line": 194
         },
         {
           "Name": "subject",
@@ -1227,7 +1281,7 @@
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 193
+          "Line": 195
         },
         {
           "Name": "email",
@@ -1245,7 +1299,7 @@
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 194
+          "Line": 196
         },
         {
           "Name": "name",
@@ -1263,7 +1317,7 @@
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 195
+          "Line": 197
         },
         {
           "Name": "createdAt",
@@ -1281,7 +1335,7 @@
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 196
+          "Line": 198
         },
         {
           "Name": "lastUsedAt",
@@ -1299,11 +1353,11 @@
           "Email": false,
           "URL": false,
           "Pattern": "",
-          "Line": 197
+          "Line": 199
         }
       ],
       "Indexes": null,
-      "Line": 189,
+      "Line": 191,
       "Persisted": true
     }
   ],

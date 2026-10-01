@@ -2,6 +2,9 @@
 model MailMessage @table("mail_message") {
   id         uuid   @id @default(uuid())
   recipient  string @index
+  fromAddress string?
+  replyTo    string?
+  headers    json?
   subject    string
   text       text?
   html       text?

@@ -15,6 +15,7 @@ import (
 
 	"github.com/agim/lidza"
 	"github.com/agim/lidza/packs/db"
+	"github.com/agim/lidza/packs/jobs"
 )
 
 // redirect sends every request to the test server, whatever host the
@@ -288,4 +289,61 @@ func TestOutbox(t *testing.T) {
 	if err := m.Deliver(rctx, failed.ID); err == nil {
 		t.Fatal("retry of a failing message succeeded")
 	}
+	// A queued message must keep metadata through the outbox round trip,
+	// including a retry after the sending configuration changes.
+	if _, err := pool.Exec(ctx, jobs.JobTable); err != nil {
+		t.Fatal(err)
+	}
+	delivered := make(chan map[string]any, 4)
+	metadataServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Error(err)
+		}
+		delivered <- body
+		io.WriteString(w, `{"id":"metadata-1"}`)
+	}))
+	defer metadataServer.Close()
+	queued, err := New(Config{Provider: "resend", APIKey: "k", From: "default@example.com"}, pool, jobs.New(jobs.Config{}, pool))
+	if err != nil {
+		t.Fatal(err)
+	}
+	metadataContext := ctxWith(t, metadataServer)
+	metadataID, err := queued.Send(metadataContext, Message{
+		To: "ada@example.com", From: "sender@example.com", ReplyTo: "reply@example.com",
+		Subject: "metadata", Text: "hello", Headers: map[string]string{"X-Tag": "notice"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-delivered:
+		t.Fatal("queued mail was sent synchronously")
+	default:
+	}
+	for attempt := 0; attempt < 2; attempt++ {
+		if err := queued.Deliver(metadataContext, metadataID); err != nil {
+			t.Fatal(err)
+		}
+		body := <-delivered
+		if body["from"] != "sender@example.com" || body["reply_to"] != "reply@example.com" {
+			t.Fatalf("metadata lost: %+v", body)
+		}
+		headers, ok := body["headers"].(map[string]any)
+		if !ok || headers["X-Tag"] != "notice" {
+			t.Fatalf("headers lost: %+v", body)
+		}
+	}
+	// A legacy queued row has NULL metadata; its sender remains usable.
+	var legacyID string
+	if err := pool.QueryRow(ctx, `INSERT INTO mail_message (recipient, subject, text, status, attempts) VALUES ('ada@example.com', 'legacy', 'hello', 'queued', 0) RETURNING id`).Scan(&legacyID); err != nil {
+		t.Fatal(err)
+	}
+	if err := queued.Deliver(metadataContext, legacyID); err != nil {
+		t.Fatal(err)
+	}
+	if body := <-delivered; body["from"] != "default@example.com" || body["reply_to"] != nil || body["headers"] != nil {
+		t.Fatalf("legacy metadata: %+v", body)
+	}
+
 }

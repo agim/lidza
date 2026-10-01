@@ -9,6 +9,13 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- Mail outbox delivery preserves each message's sender, Reply-To and custom
+  headers, including background delivery and retries. Previously the outbox
+  dropped them. `lidza update --migrate` adds nullable fields to the mail
+  schema; old queued rows use the configured sender.
+
 ## v0.1.44 (2026-09-30)
 
 - `lidza.json` `"appDir"`: the app's package (`routes.go`, `start.go`,

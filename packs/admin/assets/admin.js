@@ -20,6 +20,21 @@
   function all(sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)) }
 
   document.addEventListener('DOMContentLoaded', function () {
+    // Keep the active item visible in long menus without scrolling the page.
+    var nav = document.getElementById('admin-nav')
+    function revealActive() {
+      if (!nav || !nav.clientHeight) return
+      var active = nav.querySelector('[aria-current="page"]')
+      if (!active) return
+      var viewport = nav.getBoundingClientRect()
+      var item = active.getBoundingClientRect()
+      if (item.bottom > viewport.bottom) nav.scrollTop += item.bottom - viewport.bottom + 8
+      else if (item.top < viewport.top) nav.scrollTop -= viewport.top - item.top + 8
+    }
+    revealActive()
+    if (nav) nav.addEventListener('shown.bs.collapse', revealActive)
+    window.addEventListener('resize', revealActive)
+
     // Theme: light, dark, or the system's.
     function markTheme() {
       var pref = preference()

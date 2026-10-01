@@ -11,6 +11,10 @@ change. A release without one is additive: an app updates with
 
 ## Unreleased
 
+- Admin sidebars cover the full page while their navigation stays within the
+  viewport. Long menus reveal the active page without moving page content;
+  expanded mobile menus scroll within the available screen height.
+
 - Generation refuses a released CLI that differs from the app's framework
   module before rewriting pack schemas, and shows how to install the
   matching CLI. Explicit local replacements and development builds remain

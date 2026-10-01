@@ -4,6 +4,7 @@ import (
 	"compress/gzip"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -505,5 +506,28 @@ func TestHumanNumber(t *testing.T) {
 		if got := humanNumber(c.in); got != c.want {
 			t.Errorf("num(%v) = %q, want %q", c.in, got, c.want)
 		}
+	}
+}
+
+func TestLongSidebar(t *testing.T) {
+	pages := make([]Page, 30)
+	templates := fstest.MapFS{"extra.html": {Data: []byte(`{{define "content"}}<p>Extra page</p>{{end}}`)}}
+	for i := range pages {
+		pages[i] = Page{Name: fmt.Sprintf("Extra %02d", i), Path: fmt.Sprintf("extra-%02d", i), Icon: "inbox", Template: "extra.html"}
+	}
+	srv := serve(t, Options{Auth: noAuth, Allow: func(context.Context) bool { return true }, CredentialsDir: t.TempDir(), Templates: templates, Pages: pages}, lidza.NewServices())
+	code, body := get(t, srv, "/admin/extra-29")
+	if code != 200 || !strings.Contains(body, `href="/admin/extra-29" aria-current="page"`) {
+		t.Fatalf("long menu current item: %d", code)
+	}
+	_, css := get(t, srv, "/admin/assets/admin.css")
+	for _, rule := range []string{"position: sticky", "height: 100dvh", "max-height: calc(100dvh - 4rem)", "overflow-y: auto"} {
+		if !strings.Contains(css, rule) {
+			t.Fatalf("sidebar CSS missing %q", rule)
+		}
+	}
+	_, script := get(t, srv, "/admin/assets/admin.js")
+	if !strings.Contains(script, "shown.bs.collapse") || !strings.Contains(script, "nav.scrollTop") {
+		t.Fatal("long menu does not reveal its active item")
 	}
 }

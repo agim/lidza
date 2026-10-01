@@ -104,6 +104,11 @@ stock blue, in the admin pages and the app templates alike.
 
 ## Decisions
 
+The admin sidebar's outer surface follows the page height; its inner frame
+stays within the viewport and scrolls long navigation. Revealing the active
+link changes only that navigation's scroll position, including after the
+mobile menu opens. App themes control navigation density and brand colours.
+
 Recorded with their reasons in `docs/features.md`: `sqlc` instead of an
 ORM, build-time prerendering with an optional per-request sidecar instead
 of always-on SSR, sessions in Postgres instead of a second store, a small

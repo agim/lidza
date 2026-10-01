@@ -30,6 +30,19 @@ body { background: var(--tblr-body-bg); color: var(--tblr-body-color); }
   text-transform: uppercase; letter-spacing: .06em; padding: 1rem 1rem .25rem; }
 .admin-sidebar .admin-version { opacity: .55; font-size: .75rem; padding: 1rem; }
 
+/* The shell covers long pages; its navigation stays within the viewport. */
+.page { position: relative; }
+.admin-sidebar #admin-nav { max-height: calc(100dvh - 4rem); overflow-y: auto; }
+@media (min-width: 992px) {
+  .admin-sidebar.navbar-vertical.navbar-expand-lg { position: absolute; }
+  .admin-sidebar.navbar-vertical.navbar-expand-lg > .container-fluid {
+    position: sticky;
+    top: 0;
+    height: 100dvh;
+  }
+  .admin-sidebar #admin-nav { max-height: none; }
+}
+
 /* Environment names next to labels. */
 .admin-env { font-family: var(--tblr-font-monospace); font-size: .75rem; color: var(--tblr-secondary); font-weight: 400; }
 

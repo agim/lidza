@@ -9,7 +9,7 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
-## Unreleased
+## v0.1.48 (2026-10-01)
 
 - Document application package placement under `internal/`, keeping models,
   handlers and generated contracts at their existing paths. Ship the Organize

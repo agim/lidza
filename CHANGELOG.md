@@ -9,7 +9,7 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
-## Unreleased
+## v0.1.46 (2026-10-01)
 
 - Refresh the reference app's generated mail recipe skills to match the guide;
   reference-app verification no longer reports unstaged generated recipes.

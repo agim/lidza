@@ -9,6 +9,11 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- Refresh the reference app's generated mail recipe skills to match the guide;
+  reference-app verification no longer reports unstaged generated recipes.
+
 ## v0.1.45 (2026-10-01)
 
 - Mail outbox delivery preserves each message's sender, Reply-To and custom

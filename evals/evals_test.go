@@ -362,7 +362,7 @@ func TestGuidanceSurfaces(t *testing.T) {
 			}
 			if skill == "send-email" {
 				data, err := os.ReadFile(filepath.Join(app, p))
-				for _, want := range []string{"SendTx(ctx, tx", "must roll back", "exactly-once"} {
+				for _, want := range []string{"SendTx(ctx, tx", "must roll back", "exactly-once", "mail.Attachment", "MAIL_MAX_ATTACHMENT_BYTES", "MAIL_SMTP_TIMEOUT", "`Cc`", "`Bcc`"} {
 					if err != nil || !strings.Contains(string(data), want) {
 						t.Errorf("%s: transactional mail guidance missing %q: %v", p, want, err)
 					}

@@ -1,7 +1,9 @@
 package mail
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -97,6 +99,7 @@ func TestSendTx(t *testing.T) {
 		t.Fatal(err)
 	}
 	message := Message{To: "ada@example.com", From: "sender@example.com", ReplyTo: "reply@example.com",
+		Cc: []string{"cc@example.com"}, Bcc: []string{"blind@example.com"}, Attachments: []Attachment{{Name: "report.txt", Data: []byte("report")}},
 		Template: "notice", Lang: "de-CH", Data: map[string]string{"Title": "A", "Name": "Ada"}, Headers: map[string]string{"X-Tag": "notice"}}
 	begin := func(t *testing.T) pgx.Tx {
 		t.Helper()
@@ -177,6 +180,46 @@ func TestSendTx(t *testing.T) {
 		body := <-delivered
 		if body["from"] != message.From || body["reply_to"] != message.ReplyTo || body["subject"] != "Nachricht A" || body["text"] != "Hallo Ada" || body["html"] != "<p>Hallo Ada</p>" {
 			t.Fatalf("delivered metadata: %+v", body)
+		}
+		if body["cc"].([]any)[0] != message.Cc[0] || body["bcc"].([]any)[0] != message.Bcc[0] {
+			t.Fatalf("queued recipients lost: %+v", body)
+		}
+		files := body["attachments"].([]any)
+		file := files[0].(map[string]any)
+		data, err := base64.StdEncoding.DecodeString(file["content"].(string))
+		if err != nil || file["filename"] != "report.txt" || !bytes.Equal(data, message.Attachments[0].Data) {
+			t.Fatal("queued attachment lost", body, err)
+		}
+		// Failed attempts retain the original payload for a later retry.
+		if _, err := pool.Exec(ctx, `UPDATE mail_message SET status='failed', error='temporary failure' WHERE id=$1`, id); err != nil {
+			t.Fatal(err)
+		}
+		if err := m.Deliver(rctx, id); err != nil {
+			t.Fatal(err)
+		}
+		if retry := <-delivered; retry["attachments"].([]any)[0].(map[string]any)["content"] != file["content"] {
+			t.Fatal("retry changed attachment")
+		}
+	})
+	t.Run("legacy null columns and invalid retry", func(t *testing.T) {
+		reset(t)
+		var id string
+		if err := pool.QueryRow(ctx, `INSERT INTO mail_message(recipient,subject,text,status,attempts) VALUES('ada@example.com','Hi','hello','queued',0) RETURNING id`).Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+		if err := m.Deliver(ctx, id); err != nil {
+			t.Fatal("legacy message", err)
+		}
+		if _, err := pool.Exec(ctx, `UPDATE mail_message SET headers='{"Bcc":"hidden@example.com"}' WHERE id=$1`, id); err != nil {
+			t.Fatal(err)
+		}
+		if err := m.Deliver(ctx, id); err == nil {
+			t.Fatal("unsafe legacy header accepted")
+		}
+		var status, failure string
+		var attempts int
+		if err := pool.QueryRow(ctx, `SELECT status,error,attempts FROM mail_message WHERE id=$1`, id).Scan(&status, &failure, &attempts); err != nil || status != StatusFailed || failure == "" || attempts != 2 {
+			t.Fatal(status, failure, attempts, err)
 		}
 	})
 	t.Run("rollback", func(t *testing.T) {

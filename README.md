@@ -59,6 +59,14 @@ roadmap phase is delivered. See
 
 ## Developing the framework
 
+The `mail` pack sends through Mailgun, SendGrid, Postmark, Resend or SMTP,
+with To lists, Cc/Bcc and byte attachments. `SendTx` commits the outbox
+and delivery job with application writes. Default limits are 50 recipients,
+10 files and 10 MiB of decoded attachment data; set `MAIL_MAX_RECIPIENTS`,
+`MAIL_MAX_ATTACHMENTS` and `MAIL_MAX_ATTACHMENT_BYTES` to change them.
+`MAIL_SMTP_TIMEOUT` bounds the entire SMTP exchange (default 30 seconds).
+The generated guide's Send an email recipe covers the API and safety checks.
+
 ```sh
 go vet ./... && staticcheck ./... && go test ./...
 (cd core && cargo test)

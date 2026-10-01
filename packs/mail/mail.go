@@ -18,7 +18,6 @@ import (
 	htmltemplate "html/template"
 	"log/slog"
 	"net/http"
-	"net/mail"
 	"os"
 	"path/filepath"
 	"sort"
@@ -76,6 +75,14 @@ type Config struct {
 	TemplatesDir string `env:"MAIL_TEMPLATES" default:"mail"`
 	// MaxAttempts bounds delivery retries through the jobs pack.
 	MaxAttempts int `env:"MAIL_MAX_ATTEMPTS" default:"5"`
+	// MaxRecipients bounds the total To, Cc and Bcc addresses per message.
+	MaxRecipients int `env:"MAIL_MAX_RECIPIENTS" default:"50"`
+	// MaxAttachments bounds the number of files per message.
+	MaxAttachments int `env:"MAIL_MAX_ATTACHMENTS" default:"10"`
+	// MaxAttachmentBytes bounds the total decoded attachment bytes.
+	MaxAttachmentBytes int `env:"MAIL_MAX_ATTACHMENT_BYTES" default:"10485760"`
+	// SMTPTimeout bounds connection setup and sending, including a stalled peer.
+	SMTPTimeout time.Duration `env:"MAIL_SMTP_TIMEOUT" default:"30s"`
 	// AppURL is where the app is reached from an inbox
 	// (https://app.example.com); Link puts it in front of a path. Empty
 	// keeps links relative, which only the outbox can follow.
@@ -88,11 +95,17 @@ type Config struct {
 // "subject" ({{define "subject"}}...{{end}} in the .txt.tmpl) gives the
 // message its subject, over Subject.
 type Message struct {
-	To       string `json:"to"`
-	Subject  string `json:"subject"`
-	Text     string `json:"text,omitempty"`
-	HTML     string `json:"html,omitempty"`
-	Template string `json:"template,omitempty"`
+	// To is an address or a comma-separated RFC 5322 address list.
+	To string `json:"to"`
+	// Cc and Bcc contain individual addresses, optionally with display names.
+	// Bcc addresses are envelope recipients and never become MIME headers.
+	Cc          []string     `json:"cc,omitempty"`
+	Bcc         []string     `json:"bcc,omitempty"`
+	Attachments []Attachment `json:"attachments,omitempty"`
+	Subject     string       `json:"subject"`
+	Text        string       `json:"text,omitempty"`
+	HTML        string       `json:"html,omitempty"`
+	Template    string       `json:"template,omitempty"`
 	// Lang is the language to write the message in ("de", "pt-BR"): Send
 	// renders <Template>.<Lang> when the app has it, then
 	// <Template>.<base language> ("pt"), then <Template>. Empty means the
@@ -192,6 +205,18 @@ func (m *Mail) Reconfigure(ctx context.Context) error {
 func (m *Mail) setup() error {
 	if m.cfg.MaxAttempts <= 0 {
 		m.cfg.MaxAttempts = 5
+	}
+	if m.cfg.MaxRecipients <= 0 {
+		m.cfg.MaxRecipients = 50
+	}
+	if m.cfg.MaxAttachments <= 0 {
+		m.cfg.MaxAttachments = 10
+	}
+	if m.cfg.MaxAttachmentBytes <= 0 {
+		m.cfg.MaxAttachmentBytes = 10 << 20
+	}
+	if m.cfg.SMTPTimeout <= 0 {
+		m.cfg.SMTPTimeout = 30 * time.Second
 	}
 	if m.cfg.TemplatesDir == "" {
 		m.cfg.TemplatesDir = "mail"
@@ -310,9 +335,13 @@ func (m *Mail) store(ctx context.Context, db rowQuerier, msg Message) (string, e
 	if err != nil {
 		return "", fmt.Errorf("mail: headers: %w", err)
 	}
+	attachments, err := json.Marshal(msg.Attachments)
+	if err != nil {
+		return "", fmt.Errorf("mail: attachments: %w", err)
+	}
 	var id string
-	err = db.QueryRow(ctx, `INSERT INTO mail_message (recipient, subject, text, html, template, status, attempts, from_address, reply_to, headers) VALUES ($1, $2, $3, $4, $5, $6, 0, $7, $8, $9) RETURNING id`,
-		msg.To, msg.Subject, nullable(msg.Text), nullable(msg.HTML), nullable(msg.Template), StatusQueued, nullable(msg.From), nullable(msg.ReplyTo), headers).Scan(&id)
+	err = db.QueryRow(ctx, `INSERT INTO mail_message (recipient, subject, text, html, template, status, attempts, from_address, reply_to, headers, cc, bcc, attachments) VALUES ($1, $2, $3, $4, $5, $6, 0, $7, $8, $9, $10, $11, $12) RETURNING id`,
+		msg.To, msg.Subject, nullable(msg.Text), nullable(msg.HTML), nullable(msg.Template), StatusQueued, nullable(msg.From), nullable(msg.ReplyTo), headers, msg.Cc, msg.Bcc, attachments).Scan(&id)
 	if err != nil {
 		return "", fmt.Errorf("mail: outbox: %w", err)
 	}
@@ -327,8 +356,8 @@ func (m *Mail) Deliver(ctx context.Context, id string) error {
 	}
 	var msg Message
 	var text, html, template, from, replyTo *string
-	var headers []byte
-	err := m.pool.QueryRow(ctx, `SELECT recipient, subject, text, html, template, from_address, reply_to, headers FROM mail_message WHERE id = $1`, id).Scan(&msg.To, &msg.Subject, &text, &html, &template, &from, &replyTo, &headers)
+	var headers, attachments []byte
+	err := m.pool.QueryRow(ctx, `SELECT recipient, subject, text, html, template, from_address, reply_to, headers, cc, bcc, attachments FROM mail_message WHERE id = $1`, id).Scan(&msg.To, &msg.Subject, &text, &html, &template, &from, &replyTo, &headers, &msg.Cc, &msg.Bcc, &attachments)
 	if err != nil {
 		return fmt.Errorf("mail: outbox row %s: %w", id, err)
 	}
@@ -340,24 +369,34 @@ func (m *Mail) Deliver(ctx context.Context, id string) error {
 	}
 	if len(headers) > 0 {
 		if err := json.Unmarshal(headers, &msg.Headers); err != nil {
-			return fmt.Errorf("mail: outbox headers: %w", err)
+			return m.failed(ctx, id, errors.New("mail: invalid outbox headers"))
 		}
+	}
+	if len(attachments) > 0 {
+		if err := json.Unmarshal(attachments, &msg.Attachments); err != nil {
+			return m.failed(ctx, id, errors.New("mail: invalid outbox attachments"))
+		}
+	}
+	// Legacy rows and operator retries receive the same safety checks.
+	if err := validateMessage(&msg, m.cfg); err != nil {
+		return m.failed(ctx, id, err)
 	}
 	providerID, sendErr := m.providerNow().Send(ctx, msg)
 	if sendErr != nil {
-		m.pool.Exec(ctx, `UPDATE mail_message SET status = $2, error = $3, attempts = attempts + 1 WHERE id = $1`, id, StatusFailed, sendErr.Error())
-		return sendErr
+		return m.failed(ctx, id, sendErr)
 	}
 	_, err = m.pool.Exec(ctx, `UPDATE mail_message SET status = $2, provider_id = $3, error = NULL, attempts = attempts + 1, sent_at = now() WHERE id = $1`, id, StatusSent, nullable(providerID))
 	return err
 }
 
+func (m *Mail) failed(ctx context.Context, id string, cause error) error {
+	_, err := m.pool.Exec(ctx, `UPDATE mail_message SET status = $2, error = $3, attempts = attempts + 1 WHERE id = $1`, id, StatusFailed, cause.Error())
+	return errors.Join(cause, err)
+}
+
 // prepare validates the address, applies the default sender and renders
 // the template bodies, in the message's language or the context's.
 func (m *Mail) prepare(ctx context.Context, msg *Message) error {
-	if _, err := mail.ParseAddress(msg.To); err != nil {
-		return fmt.Errorf("mail: to %q: %w", msg.To, err)
-	}
 	if msg.From == "" {
 		msg.From = m.cfg.From
 	}
@@ -389,7 +428,7 @@ func (m *Mail) prepare(ctx context.Context, msg *Message) error {
 	if msg.Text == "" && msg.HTML == "" {
 		return errors.New("mail: no body: set Text or HTML, or a Template with mail/<name>.txt.tmpl")
 	}
-	return nil
+	return validateMessage(msg, m.cfg)
 }
 
 // loadTemplates parses every <name>.txt.tmpl (text/template) and
@@ -712,6 +751,9 @@ const OutboxTable = `CREATE TABLE IF NOT EXISTS mail_message (
   from_address text,
   reply_to text,
   headers jsonb,
+  cc text[],
+  bcc text[],
+  attachments jsonb,
   subject text NOT NULL,
   text text,
   html text,

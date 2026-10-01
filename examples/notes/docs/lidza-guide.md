@@ -656,7 +656,7 @@ mail pack, never through a vendor SDK.
    the app is reached at from an inbox), so the link works outside the
    outbox. Send returns once the row is in the outbox (queued for the
    jobs pack, or delivered right away without it). The outbox preserves
-   `From`, `ReplyTo` and custom `Headers` for delivery and retries. Do not build the
+   `From`, `ReplyTo`, `Cc`, `Bcc`, `Attachments` and custom `Headers` for delivery and retries. Do not build the
    message with `fmt.Sprintf` and do not call the vendor's API.
 
    When mail follows a database write, use `SendTx(ctx, tx, message)`
@@ -677,6 +677,19 @@ mail pack, never through a vendor SDK.
    }
    return tx.Commit(ctx)
    ```
+
+   `To` also accepts a comma-separated address list. `Cc` and `Bcc` are
+   slices of individual addresses; display names are allowed. Each address
+   must appear only once across the three lists. Blind recipients are
+   never included in SMTP headers. Attach files as `mail.Attachment{Name:
+   "receipt.pdf", ContentType: "application/pdf", Data: pdfBytes}`; pass
+   bytes, never a path or URL. An empty content type is detected from the
+   bytes. Attachments and recipients survive queued delivery and retries.
+   Defaults: `MAIL_MAX_RECIPIENTS=50`, `MAIL_MAX_ATTACHMENTS=10`,
+   `MAIL_MAX_ATTACHMENT_BYTES=10485760` (total decoded bytes), and
+   `MAIL_SMTP_TIMEOUT=30s` for the entire SMTP exchange.
+   Custom `Headers` cannot override address, subject or MIME headers;
+   use the message fields. Header values must not contain control characters.
 4. Test it: `mail.From(srv.Context()).WaitFor(ctx, to, "Verify", 5*time.Second)`
    returns the newest message to that address whose subject contains the
    text, waiting for one a job sends; `Outbox(ctx, 5)` lists them newest

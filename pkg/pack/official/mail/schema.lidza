@@ -5,6 +5,9 @@ model MailMessage @table("mail_message") {
   fromAddress string?
   replyTo    string?
   headers    json?
+  cc         string[]?
+  bcc        string[]?
+  attachments json?
   subject    string
   text       text?
   html       text?

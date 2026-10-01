@@ -1,13 +1,14 @@
 package mail
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"mime/multipart"
 	"net"
 	"net/http"
@@ -44,7 +45,13 @@ func newProvider(cfg Config) (Provider, error) {
 		return outboxProvider{}, nil
 	case "smtp":
 		if cfg.SMTPURL != "" {
-			return newSMTP(cfg.SMTPURL)
+			provider, err := newSMTP(cfg.SMTPURL)
+			if err != nil {
+				return nil, err
+			}
+			smtp := provider.(smtpProvider)
+			smtp.timeout = cfg.SMTPTimeout
+			return smtp, nil
 		}
 		if err := need("MAIL_SMTP_HOST (or MAIL_SMTP_URL)", cfg.SMTPHost); err != nil {
 			return nil, err
@@ -91,7 +98,7 @@ var SMTPSecurities = []string{"starttls", "tls", "none"}
 // smtpFromParts builds the SMTP provider from the separate settings.
 func smtpFromParts(cfg Config) (Provider, error) {
 	security := strings.ToLower(or(cfg.SMTPSecurity, "starttls"))
-	p := smtpProvider{host: cfg.SMTPHost, user: cfg.SMTPUsername, pass: cfg.SMTPPassword}
+	p := smtpProvider{host: cfg.SMTPHost, user: cfg.SMTPUsername, pass: cfg.SMTPPassword, timeout: cfg.SMTPTimeout}
 	port := map[string]string{"starttls": "587", "tls": "465", "none": "25"}
 	switch security {
 	case "starttls":
@@ -166,7 +173,17 @@ func jsonRequest(ctx context.Context, url string, v any) (*http.Request, error) 
 type mailgun struct{ key, domain, base string }
 
 func (p mailgun) Send(ctx context.Context, msg Message) (string, error) {
-	form := url.Values{"from": {msg.From}, "to": {msg.To}, "subject": {msg.Subject}}
+	to, cc, bcc, err := recipientLists(msg)
+	if err != nil {
+		return "", err
+	}
+	form := url.Values{"from": {msg.From}, "to": toStrings(msg.To, to), "subject": {msg.Subject}}
+	if len(cc) > 0 {
+		form["cc"] = addressStrings(cc)
+	}
+	if len(bcc) > 0 {
+		form["bcc"] = addressStrings(bcc)
+	}
 	if msg.Text != "" {
 		form.Set("text", msg.Text)
 	}
@@ -179,11 +196,41 @@ func (p mailgun) Send(ctx context.Context, msg Message) (string, error) {
 	for k, v := range msg.Headers {
 		form.Set("h:"+k, v)
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.base+"/v3/"+p.domain+"/messages", strings.NewReader(form.Encode()))
+	var data io.Reader = strings.NewReader(form.Encode())
+	contentType := "application/x-www-form-urlencoded"
+	if len(msg.Attachments) > 0 {
+		var buffer bytes.Buffer
+		writer := multipart.NewWriter(&buffer)
+		for key, values := range form {
+			for _, value := range values {
+				if err := writer.WriteField(key, value); err != nil {
+					return "", err
+				}
+			}
+		}
+		for _, file := range msg.Attachments {
+			header := textproto.MIMEHeader{
+				"Content-Disposition": {mime.FormatMediaType("form-data", map[string]string{"name": "attachment", "filename": file.Name})},
+				"Content-Type":        {file.ContentType},
+			}
+			part, err := writer.CreatePart(header)
+			if err != nil {
+				return "", err
+			}
+			if _, err := part.Write(file.Data); err != nil {
+				return "", err
+			}
+		}
+		if err := writer.Close(); err != nil {
+			return "", err
+		}
+		contentType, data = writer.FormDataContentType(), &buffer
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.base+"/v3/"+p.domain+"/messages", data)
 	if err != nil {
 		return "", err
 	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Content-Type", contentType)
 	req.SetBasicAuth("api", p.key)
 	body, _, err := post(ctx, req)
 	if err != nil {
@@ -204,7 +251,7 @@ func (p sendgrid) Send(ctx context.Context, msg Message) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	to, err := parseAddress(msg.To)
+	to, cc, bcc, err := recipientLists(msg)
 	if err != nil {
 		return "", err
 	}
@@ -215,8 +262,22 @@ func (p sendgrid) Send(ctx context.Context, msg Message) (string, error) {
 	if msg.HTML != "" {
 		content = append(content, map[string]string{"type": "text/html", "value": msg.HTML})
 	}
+	addresses := func(list []*mail.Address) []map[string]string {
+		out := make([]map[string]string, len(list))
+		for i, a := range list {
+			out[i] = map[string]string{"email": a.Address, "name": a.Name}
+		}
+		return out
+	}
+	personalization := map[string]any{"to": addresses(to)}
+	if len(cc) > 0 {
+		personalization["cc"] = addresses(cc)
+	}
+	if len(bcc) > 0 {
+		personalization["bcc"] = addresses(bcc)
+	}
 	payload := map[string]any{
-		"personalizations": []map[string]any{{"to": []map[string]string{{"email": to.Address, "name": to.Name}}}},
+		"personalizations": []map[string]any{personalization},
 		"from":             map[string]string{"email": from.Address, "name": from.Name},
 		"subject":          msg.Subject,
 		"content":          content,
@@ -230,6 +291,18 @@ func (p sendgrid) Send(ctx context.Context, msg Message) (string, error) {
 	}
 	if len(msg.Headers) > 0 {
 		payload["headers"] = msg.Headers
+	}
+	if len(msg.Attachments) > 0 {
+		var files []map[string]any
+		for _, file := range msg.Attachments {
+			// SendGrid accepts a media type without parameters.
+			kind, _, err := mime.ParseMediaType(file.ContentType)
+			if err != nil {
+				return "", err
+			}
+			files = append(files, map[string]any{"filename": file.Name, "type": kind, "content": file.Data, "disposition": "attachment"})
+		}
+		payload["attachments"] = files
 	}
 	req, err := jsonRequest(ctx, p.base+"/v3/mail/send", payload)
 	if err != nil {
@@ -248,6 +321,19 @@ type postmark struct{ key, base string }
 
 func (p postmark) Send(ctx context.Context, msg Message) (string, error) {
 	payload := map[string]any{"From": msg.From, "To": msg.To, "Subject": msg.Subject, "MessageStream": "outbound"}
+	if len(msg.Cc) > 0 {
+		payload["Cc"] = strings.Join(msg.Cc, ", ")
+	}
+	if len(msg.Bcc) > 0 {
+		payload["Bcc"] = strings.Join(msg.Bcc, ", ")
+	}
+	if len(msg.Attachments) > 0 {
+		var files []map[string]any
+		for _, file := range msg.Attachments {
+			files = append(files, map[string]any{"Name": file.Name, "ContentType": file.ContentType, "Content": file.Data})
+		}
+		payload["Attachments"] = files
+	}
 	if msg.Text != "" {
 		payload["TextBody"] = msg.Text
 	}
@@ -284,7 +370,24 @@ func (p postmark) Send(ctx context.Context, msg Message) (string, error) {
 type resend struct{ key, base string }
 
 func (p resend) Send(ctx context.Context, msg Message) (string, error) {
-	payload := map[string]any{"from": msg.From, "to": []string{msg.To}, "subject": msg.Subject}
+	to, cc, bcc, err := recipientLists(msg)
+	if err != nil {
+		return "", err
+	}
+	payload := map[string]any{"from": msg.From, "to": toStrings(msg.To, to), "subject": msg.Subject}
+	if len(cc) > 0 {
+		payload["cc"] = addressStrings(cc)
+	}
+	if len(bcc) > 0 {
+		payload["bcc"] = addressStrings(bcc)
+	}
+	if len(msg.Attachments) > 0 {
+		var files []map[string]any
+		for _, file := range msg.Attachments {
+			files = append(files, map[string]any{"filename": file.Name, "content": file.Data, "content_type": file.ContentType})
+		}
+		payload["attachments"] = files
+	}
 	if msg.Text != "" {
 		payload["text"] = msg.Text
 	}
@@ -313,10 +416,11 @@ func (p resend) Send(ctx context.Context, msg Message) (string, error) {
 	return out.ID, nil
 }
 
-// smtpProvider speaks SMTP with PLAIN or LOGIN auth: STARTTLS on smtp://,
+// smtpProvider speaks SMTP with PLAIN auth: STARTTLS on smtp://,
 // implicit TLS on smtps://.
 type smtpProvider struct {
 	host, port, user, pass string
+	timeout                time.Duration
 	implicitTLS            bool
 	// requireTLS refuses a server without STARTTLS; plain never
 	// upgrades. A URL (smtp://) upgrades when the server offers it.
@@ -344,45 +448,52 @@ func (p smtpProvider) Send(ctx context.Context, msg Message) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	to, err := parseAddress(msg.To)
+	to, cc, bcc, err := recipientLists(msg)
 	if err != nil {
 		return "", err
 	}
-	raw, id, err := buildMIME(msg, from, to)
+	raw, id, err := buildMIME(msg, from, to[0])
 	if err != nil {
 		return "", err
 	}
-	addr := net.JoinHostPort(p.host, p.port)
-	dialer := &net.Dialer{Timeout: 15 * time.Second}
-	var client *smtp.Client
+	timeout := p.timeout
+	if timeout <= 0 {
+		timeout = 30 * time.Second
+	}
+	call, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	dialer := &net.Dialer{Timeout: timeout}
+	conn, err := dialer.DialContext(call, "tcp", net.JoinHostPort(p.host, p.port))
+	if err != nil {
+		return "", err
+	}
+	defer conn.Close()
+	deadline, _ := call.Deadline()
+	if err := conn.SetDeadline(deadline); err != nil {
+		return "", err
+	}
+	original := conn
+	stop := context.AfterFunc(call, func() { _ = original.Close() })
+	defer stop()
 	if p.implicitTLS {
-		conn, err := tls.DialWithDialer(dialer, "tcp", addr, &tls.Config{ServerName: p.host})
-		if err != nil {
+		secure := tls.Client(conn, &tls.Config{ServerName: p.host})
+		if err := secure.HandshakeContext(call); err != nil {
 			return "", err
 		}
-		client, err = smtp.NewClient(conn, p.host)
-		if err != nil {
-			return "", err
-		}
-	} else {
-		conn, err := dialer.DialContext(ctx, "tcp", addr)
-		if err != nil {
-			return "", err
-		}
-		client, err = smtp.NewClient(conn, p.host)
-		if err != nil {
-			return "", err
-		}
-		if ok, _ := client.Extension("STARTTLS"); ok && !p.plain {
-			if err := client.StartTLS(&tls.Config{ServerName: p.host}); err != nil {
-				return "", err
-			}
-		} else if p.requireTLS {
-			client.Close()
-			return "", fmt.Errorf("mail: %s does not offer STARTTLS; set MAIL_SMTP_SECURITY=tls for port 465, or none for a local relay", addr)
-		}
+		conn = secure
+	}
+	client, err := smtp.NewClient(conn, p.host)
+	if err != nil {
+		return "", err
 	}
 	defer client.Close()
+	if ok, _ := client.Extension("STARTTLS"); ok && !p.plain && !p.implicitTLS {
+		if err := client.StartTLS(&tls.Config{ServerName: p.host}); err != nil {
+			return "", err
+		}
+	} else if p.requireTLS && !p.implicitTLS {
+		return "", fmt.Errorf("mail: %s does not offer STARTTLS; set MAIL_SMTP_SECURITY=tls for port 465, or none for a local relay", net.JoinHostPort(p.host, p.port))
+	}
 	if p.user != "" {
 		if err := client.Auth(smtp.PlainAuth("", p.user, p.pass, p.host)); err != nil {
 			return "", err
@@ -391,81 +502,28 @@ func (p smtpProvider) Send(ctx context.Context, msg Message) (string, error) {
 	if err := client.Mail(from.Address); err != nil {
 		return "", err
 	}
-	if err := client.Rcpt(to.Address); err != nil {
-		return "", err
+	seen := map[string]bool{}
+	for _, recipient := range append(append(to, cc...), bcc...) {
+		// Preserve visible headers but send each envelope recipient once.
+		if seen[recipient.Address] {
+			continue
+		}
+		seen[recipient.Address] = true
+		if err := client.Rcpt(recipient.Address); err != nil {
+			return "", err
+		}
 	}
-	w, err := client.Data()
+	writer, err := client.Data()
 	if err != nil {
 		return "", err
 	}
-	if _, err := w.Write(raw); err != nil {
+	if _, err := writer.Write(raw); err != nil {
 		return "", err
 	}
-	if err := w.Close(); err != nil {
+	if err := writer.Close(); err != nil {
 		return "", err
 	}
 	return id, client.Quit()
-}
-
-// buildMIME renders the message as RFC 5322 with a multipart/alternative
-// body when both parts are present. It returns the Message-ID it set.
-func buildMIME(msg Message, from, to *mail.Address) ([]byte, string, error) {
-	id := fmt.Sprintf("<%d.%s@%s>", time.Now().UnixNano(), base64.RawURLEncoding.EncodeToString([]byte(to.Address))[:8], domainOf(from.Address))
-	var b strings.Builder
-	h := textproto.MIMEHeader{}
-	h.Set("From", from.String())
-	h.Set("To", to.String())
-	h.Set("Subject", msg.Subject)
-	h.Set("Date", time.Now().Format(time.RFC1123Z))
-	h.Set("Message-ID", id)
-	h.Set("MIME-Version", "1.0")
-	if msg.ReplyTo != "" {
-		h.Set("Reply-To", msg.ReplyTo)
-	}
-	for k, v := range msg.Headers {
-		h.Set(k, v)
-	}
-	writeHeaders := func(h textproto.MIMEHeader) {
-		for k, vs := range h {
-			for _, v := range vs {
-				fmt.Fprintf(&b, "%s: %s\r\n", k, v)
-			}
-		}
-	}
-	switch {
-	case msg.Text != "" && msg.HTML != "":
-		mw := multipart.NewWriter(&b)
-		h.Set("Content-Type", "multipart/alternative; boundary="+mw.Boundary())
-		writeHeaders(h)
-		b.WriteString("\r\n")
-		for _, part := range []struct{ ctype, body string }{{"text/plain; charset=utf-8", msg.Text}, {"text/html; charset=utf-8", msg.HTML}} {
-			pw, err := mw.CreatePart(textproto.MIMEHeader{"Content-Type": {part.ctype}, "Content-Transfer-Encoding": {"quoted-printable"}})
-			if err != nil {
-				return nil, "", err
-			}
-			writeQuotedPrintable(pw, part.body)
-		}
-		mw.Close()
-	case msg.HTML != "":
-		h.Set("Content-Type", "text/html; charset=utf-8")
-		h.Set("Content-Transfer-Encoding", "quoted-printable")
-		writeHeaders(h)
-		b.WriteString("\r\n")
-		writeQuotedPrintable(&b, msg.HTML)
-	default:
-		h.Set("Content-Type", "text/plain; charset=utf-8")
-		h.Set("Content-Transfer-Encoding", "quoted-printable")
-		writeHeaders(h)
-		b.WriteString("\r\n")
-		writeQuotedPrintable(&b, msg.Text)
-	}
-	return []byte(b.String()), id, nil
-}
-
-func writeQuotedPrintable(w io.Writer, s string) {
-	qp := newQPWriter(w)
-	qp.Write([]byte(s))
-	qp.Close()
 }
 
 func parseAddress(s string) (*mail.Address, error) {

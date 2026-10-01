@@ -86,6 +86,9 @@ type MailMessage struct {
 	FromAddress *string    `json:"from_address"`
 	ReplyTo     *string    `json:"reply_to"`
 	Headers     []byte     `json:"headers"`
+	Cc          []string   `json:"cc"`
+	Bcc         []string   `json:"bcc"`
+	Attachments []byte     `json:"attachments"`
 	Subject     string     `json:"subject"`
 	Text        *string    `json:"text"`
 	HTML        *string    `json:"html"`

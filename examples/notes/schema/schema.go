@@ -120,6 +120,9 @@ type MailMessage struct {
 	FromAddress *string         `json:"fromAddress" db:"from_address"`
 	ReplyTo     *string         `json:"replyTo" db:"reply_to"`
 	Headers     json.RawMessage `json:"headers" db:"headers"`
+	Cc          []string        `json:"cc" db:"cc"`
+	Bcc         []string        `json:"bcc" db:"bcc"`
+	Attachments json.RawMessage `json:"attachments" db:"attachments"`
 	Subject     string          `json:"subject" db:"subject"`
 	Text        *string         `json:"text" db:"text"`
 	HTML        *string         `json:"html" db:"html"`

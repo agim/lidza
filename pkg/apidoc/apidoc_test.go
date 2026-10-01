@@ -48,6 +48,12 @@ func TestRender(t *testing.T) {
 	if err != nil || !strings.Contains(mailAPI, "func (m *Mail) SendTx(ctx context.Context, tx pgx.Tx, msg Message) (string, error)") || !strings.Contains(mailAPI, "on any error it must roll back") {
 		t.Errorf("transactional mail API: %v\n%s", err, mailAPI)
 	}
+	mailTypes, err := Render(dir, []string{"packs/mail"}, "")
+	for _, want := range []string{"type Attachment struct", "MaxAttachmentBytes", "SMTPTimeout", "Cc", "Bcc", "Attachments"} {
+		if err != nil || !strings.Contains(mailTypes, want) {
+			t.Errorf("mail API missing %q: %v", want, err)
+		}
+	}
 	public := strings.Join(AppPackages(dir), ",")
 	if !strings.Contains(public, "pkg/webhook") {
 		t.Errorf("pkg/webhook is not public: %s", public)

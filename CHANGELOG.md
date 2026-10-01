@@ -9,6 +9,24 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- Breaking: reject duplicate recipients, control characters and reserved
+  address/subject/MIME custom headers. Use `To`, `Cc`, `Bcc`, `From`,
+  `ReplyTo`, `Subject` and attachment fields instead of overriding headers.
+- Mail accepts a To address list, Cc/Bcc and byte attachments across
+  Mailgun, SendGrid, Postmark, Resend and SMTP; queued messages and retries
+  preserve them. Existing outbox rows with null new columns still deliver.
+  `lidza update --migrate` adds the nullable outbox columns.
+- Bound recipient counts and attachment count/total bytes with configurable
+  defaults of 50 recipients, 10 files and 10 MiB. Validate filenames and
+  content types before storing or contacting a provider.
+- SMTP sends multipart attachments with hidden Bcc recipients, UTF-8 subjects
+  and random message IDs. The whole exchange respects cancellation and
+  `MAIL_SMTP_TIMEOUT` (30 seconds by default), including TLS and stalled peers.
+- Record invalid outbox retries as failed attempts for operator visibility.
+  Update the mail API and all three agents' generated email recipes.
+
 ## v0.1.50 (2026-10-01)
 
 - Create the framework CI database when Postgres starts. Database-backed

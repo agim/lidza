@@ -181,6 +181,52 @@ func TestSyncFragments(t *testing.T) {
 	}
 }
 
+func TestMailRecipientAttachmentMigration(t *testing.T) {
+	dir := t.TempDir()
+	current, err := officialFS.ReadFile("official/mail/schema.lidza")
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := string(current)
+	for _, line := range []string{"  cc         string[]?\n", "  bcc        string[]?\n", "  attachments json?\n"} {
+		if !strings.Contains(old, line) {
+			t.Fatal("fragment field missing", line)
+		}
+		old = strings.Replace(old, line, "", 1)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "schema.lidza"), []byte(old), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	before, err := schema.Parse(old)
+	if err != nil {
+		t.Fatal(err)
+	}
+	synced, err := SyncFragments(dir, []string{"lidza/mail"})
+	if err != nil || strings.Join(synced, ",") != "MailMessage" {
+		t.Fatal(synced, err)
+	}
+	after, err := schema.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	migration := schema.Diff(before, after, 2)
+	if migration == nil || len(migration.Up) != 3 {
+		t.Fatalf("migration: %+v", migration)
+	}
+	up := strings.Join(migration.Up, "\n")
+	for _, want := range []string{"ADD COLUMN cc text[]", "ADD COLUMN bcc text[]", "ADD COLUMN attachments jsonb"} {
+		if !strings.Contains(up, want) {
+			t.Errorf("missing %s: %s", want, up)
+		}
+	}
+	if strings.Contains(up, "NOT NULL") || strings.Contains(up, "DROP") {
+		t.Fatal("unsafe migration", up)
+	}
+	if again, err := SyncFragments(dir, []string{"lidza/mail"}); err != nil || len(again) != 0 {
+		t.Fatal(again, err)
+	}
+}
+
 // TestAddWithExistingDeclaration: an add after a half-done one, or after
 // lidza gen synced the pack's model, keeps the declaration and adds only
 // what is missing.

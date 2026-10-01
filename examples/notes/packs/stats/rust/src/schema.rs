@@ -69,6 +69,9 @@ pub struct MailMessage {
     #[serde(rename = "replyTo")]
     pub reply_to: Option<String>,
     pub headers: Option<serde_json::Value>,
+    pub cc: Option<Vec<String>>,
+    pub bcc: Option<Vec<String>>,
+    pub attachments: Option<serde_json::Value>,
     pub subject: String,
     pub text: Option<String>,
     pub html: Option<String>,

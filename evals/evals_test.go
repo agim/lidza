@@ -355,7 +355,7 @@ func TestInaccessibleElement(t *testing.T) {
 }
 
 func TestGuidanceSurfaces(t *testing.T) {
-	for _, skill := range []string{"start-with-brief", "add-api-route", "add-resource", "scope-query-to-signed-in-user", "add-page", "set-head-of-page", "add-pack-capability", "add-mcp-tool", "send-email", "add-background-job", "publish-live-updates", "add-llm-feature", "store-file", "receive-webhook", "add-admin-pages", "extend-admin-pages", "add-recipe", "write-test"} {
+	for _, skill := range []string{"start-with-brief", "add-api-route", "add-resource", "scope-query-to-signed-in-user", "add-page", "set-head-of-page", "add-pack-capability", "add-mcp-tool", "send-email", "add-background-job", "publish-live-updates", "add-llm-feature", "store-file", "receive-webhook", "add-admin-pages", "extend-admin-pages", "add-recipe", "write-test", "organize-application-packages"} {
 		for _, p := range []string{filepath.Join(".claude", "skills", skill, "SKILL.md"), filepath.Join(".agents", "skills", skill, "SKILL.md"), filepath.Join(".gemini", "commands", "lidza", skill+".toml")} {
 			if _, err := os.Stat(filepath.Join(app, p)); err != nil {
 				t.Errorf("%s missing", p)
@@ -427,7 +427,7 @@ func TestGuidanceSurfaces(t *testing.T) {
 		t.Fatal(err)
 	}
 	prompts, err := c.ListPrompts(ctx, mcp.ListPromptsRequest{})
-	if err != nil || len(prompts.Prompts) != 19 {
+	if err != nil || len(prompts.Prompts) != 20 {
 		t.Errorf("prompts: %v %d", err, len(prompts.Prompts))
 	}
 	tools, err := c.ListTools(ctx, mcp.ListToolsRequest{})
@@ -731,5 +731,60 @@ func TestSetup(t *testing.T) {
 	// The app runs its tests against the databases setup created.
 	if out, err := command(dir, lidza, "test"); err != nil {
 		t.Fatalf("lidza test after setup: %v\n%s", err, out)
+	}
+}
+
+func TestInternalApplicationAPISurfaces(t *testing.T) {
+	edit(t, map[string]string{"internal/orders/orders.go": "package orders\n\n// Submit validates an order.\nfunc Submit() {}\n"})
+	for _, args := range [][]string{{"api", "--list"}, {"api", "app", "--filter", "Submit"}, {"api", "./internal/orders", "--filter", "Submit"}} {
+		out, err := command(app, lidza, args...)
+		if err != nil || !strings.Contains(string(out), "evalapp/internal/orders") {
+			t.Fatalf("%v: %v\n%s", args, err, out)
+		}
+		if len(args) > 2 && args[2] != "--list" && !strings.Contains(string(out), "func Submit()") {
+			t.Errorf("API declaration missing: %s", out)
+		}
+	}
+	cfg, err := config.Load(app)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := client.NewInProcessClient(mcpserver.New(app, cfg).MCPServer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	if err := c.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	if _, err := c.Initialize(ctx, mcp.InitializeRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	req := mcp.CallToolRequest{}
+	req.Params.Name = "lidza_api"
+	req.Params.Arguments = map[string]any{"package": "app", "filter": "Submit"}
+	res, err := c.CallTool(ctx, req)
+	if err != nil || res.IsError || len(res.Content) == 0 || !strings.Contains(mcp.GetTextFromContent(res.Content[0]), "func Submit()") {
+		t.Fatalf("MCP app API: %v %+v", err, res)
+	}
+	resource, err := c.ReadResource(ctx, mcp.ReadResourceRequest{Params: mcp.ReadResourceParams{URI: "lidza://api/./internal/orders"}})
+	if err != nil || len(resource.Contents) == 0 {
+		t.Fatalf("internal resource: %v %+v", err, resource)
+	}
+	text, ok := resource.Contents[0].(mcp.TextResourceContents)
+	if !ok || !strings.Contains(text.Text, "func Submit()") {
+		t.Fatalf("internal resource text: %+v", resource.Contents)
+	}
+	canonical, err := os.ReadFile(filepath.Join(app, "CLAUDE.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"AGENTS.md", "GEMINI.md"} {
+		body, err := os.ReadFile(filepath.Join(app, name))
+		if err != nil || string(body) != string(canonical) {
+			t.Errorf("%s differs: %v", name, err)
+		}
 	}
 }

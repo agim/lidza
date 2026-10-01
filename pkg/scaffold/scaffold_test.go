@@ -73,7 +73,7 @@ func TestNewReact(t *testing.T) {
 	if read("CLAUDE.md") != read("AGENTS.md") || read("CLAUDE.md") != read("GEMINI.md") {
 		t.Errorf("agent files should be identical")
 	}
-	if !strings.Contains(read("CLAUDE.md"), "<!-- lidza:recipes -->`start-with-brief`, `add-api-route`, `add-resource`, `add-sign-in`, `scope-query-to-signed-in-user`, `add-page`, `set-head-of-page`, `add-pack-capability`, `add-mcp-tool`, `send-email`, `add-background-job`, `publish-live-updates`, `add-llm-feature`, `store-file`, `receive-webhook`, `add-admin-pages`, `extend-admin-pages`, `add-recipe`, `write-test`<!-- /lidza:recipes -->") {
+	if !strings.Contains(read("CLAUDE.md"), "<!-- lidza:recipes -->`start-with-brief`, `add-api-route`, `add-resource`, `add-sign-in`, `scope-query-to-signed-in-user`, `add-page`, `set-head-of-page`, `add-pack-capability`, `add-mcp-tool`, `send-email`, `add-background-job`, `publish-live-updates`, `add-llm-feature`, `store-file`, `receive-webhook`, `add-admin-pages`, `extend-admin-pages`, `add-recipe`, `write-test`, `organize-application-packages`<!-- /lidza:recipes -->") {
 		t.Errorf("CLAUDE.md should list the recipes: %s", read("CLAUDE.md"))
 	}
 	// An app recipe: added to the guide, generated, listed in the agent files.
@@ -87,7 +87,7 @@ func TestNewReact(t *testing.T) {
 	if strings.Join(changed, ",") != "CLAUDE.md,AGENTS.md,GEMINI.md" {
 		t.Errorf("refresh changed %v", changed)
 	}
-	if !strings.Contains(read("CLAUDE.md"), "`write-test`; this app's own: `paginate-list`<!-- /lidza:recipes -->") {
+	if !strings.Contains(read("CLAUDE.md"), "`organize-application-packages`; this app's own: `paginate-list`<!-- /lidza:recipes -->") {
 		t.Errorf("app recipe not listed: %s", read("CLAUDE.md"))
 	}
 	if _, err := os.Stat(filepath.Join(dir, ".claude", "skills", "paginate-list", "SKILL.md")); err != nil {
@@ -263,5 +263,59 @@ func TestRefreshTestEnv(t *testing.T) {
 	data, _ := os.ReadFile(p)
 	if string(data) != "DATABASE_URL=postgres:///demo_test\nCACHE_URL=memory\nLLM_PROVIDER=fake\nEMBED_PROVIDER=fake\n" {
 		t.Fatalf(".env.test: %q", data)
+	}
+}
+
+func TestRefreshPackageGuidanceForAllAgents(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "demo")
+	if err := New(context.Background(), Options{Name: "demo", Dir: dir, LidzaDir: "../..", SkipModTidy: true}); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"CLAUDE.md", "AGENTS.md", "GEMINI.md"} {
+		p := filepath.Join(dir, name)
+		body, err := os.ReadFile(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		old := strings.ReplaceAll(string(body), "- "+LayoutLine+"\n", "")
+		old = strings.ReplaceAll(old, "- "+AgentGuidanceLine+"\n", "")
+		old += "\n- Keep the application-specific instructions.\n"
+		if err := os.WriteFile(p, []byte(old), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := Refresh(dir, cfg); err != nil {
+		t.Fatal(err)
+	}
+	var canonical string
+	for _, name := range []string{"CLAUDE.md", "AGENTS.md", "GEMINI.md"} {
+		body, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, want := range []string{LayoutLine, AgentGuidanceLine, "Keep the application-specific instructions."} {
+			if !strings.Contains(string(body), want) {
+				t.Errorf("%s missing %s", name, want)
+			}
+		}
+		if canonical == "" {
+			canonical = string(body)
+		} else if canonical != string(body) {
+			t.Errorf("%s guidance differs", name)
+		}
+	}
+	for _, file := range []string{".claude/skills/organize-application-packages/SKILL.md", ".agents/skills/organize-application-packages/SKILL.md", ".gemini/commands/lidza/organize-application-packages.toml"} {
+		body, err := os.ReadFile(filepath.Join(dir, file))
+		if err != nil || !strings.Contains(string(body), "internal/providers/<vendor>/") {
+			t.Errorf("recipe %s: %v", file, err)
+		}
+	}
+	changed, err := Refresh(dir, cfg)
+	if err != nil || len(changed) != 0 {
+		t.Errorf("second refresh changed %v: %v", changed, err)
 	}
 }

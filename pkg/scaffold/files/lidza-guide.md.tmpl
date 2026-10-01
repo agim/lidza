@@ -17,6 +17,8 @@ app is always at one address: http://127.0.0.1:3000.
 ├── main.go          entrypoint: lidza.Run(...). Do not edit.
 ├── start.go         onStart: register job handlers, provide services; appMiddleware: middleware around the whole app (rate limits, redirects). The app's hooks.
 ├── routes.go        API handlers. Add routes here (or in packages it calls).
+├── handlers/        HTTP and job handlers; resource generation writes here
+├── internal/        app-owned business logic, provider clients and infrastructure
 ├── schema.lidza     data shapes: models (tables), types (API shapes), enums
 ├── schema/          generated Go structs with Validate(). Do not edit.
 ├── db/              generated schema.sql, migrations/, schema.lock.json; queries/*.sql with the db pack
@@ -1223,6 +1225,43 @@ browser test.
    Run `lidza test --e2e` (add `--install` once if the browser is
    missing).
 {{- end}}
+
+### Organize application packages
+
+Place app-owned Go code consistently as the app grows; preserve generated
+contracts and keep the same instructions available to every agent.
+
+1. Read the brief, decisions and layout in this guide. With `appDir`, keep
+   the application factory, routes, startup, tools and embedded assets there;
+   `main.go` stays the entrypoint. Keep HTTP and job handlers in `handlers/`,
+   where `lidza gen resource` writes them. Integration tests live in `tests/`
+   when the app has an importable factory; unit tests stay beside their package.
+2. Put business behavior in `internal/<feature>/` (for example
+   `internal/orders/`), vendor clients in `internal/providers/<vendor>/` and
+   shared infrastructure in `internal/platform/<name>/`. Create packages as
+   features need them. Go enforces the `internal` import boundary. An app that
+   needs a reusable public library should extract a separate module.
+3. Declare models, API shapes and enums in `schema.lidza`. Write SQL in
+   `db/queries/*.sql`. Keep generated `schema/`, `db/queries/gen/`, pack wrappers
+   and `.lidza/` at their existing paths. Handwritten behavior belongs with its
+   feature; do not introduce a second models folder or edit generated structs.
+4. Wire services in the startup hook and pass dependencies through the existing
+   services registry or constructors. Feature and provider packages do not
+   import the application factory or its handlers. Avoid import cycles and
+   keep the scalability rules, deadlines and test stubs.
+5. For existing code, move files with `git mv`, preserve tests and assertions,
+   update imports and current documentation references, and carry embedded
+   assets and package-relative fixtures with their package. Keep historical
+   migration source references unchanged. Run `lidza gen` afterwards.
+6. Keep `CLAUDE.md`, `AGENTS.md` and `GEMINI.md` synchronized: shared rules,
+   agreements and notes change in all three together. Edit recipes in this
+   guide; `lidza gen` updates both agents' skills and Gemini commands.
+7. Record the layout decision in `docs/decisions.md`. Verify discovery with
+   `lidza api --list` and `lidza api ./internal/orders --filter Name` for a
+   real package and declaration. App internal packages are discoverable through
+   CLI and MCP; framework internals are not an app API.
+8. Run `lidza check`, `lidza test` and `lidza verify`. Run the browser suite
+   for an application move that changes its wiring or embedded assets.
 
 ## App recipes
 

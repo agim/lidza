@@ -90,7 +90,8 @@ framework, pass `--lidza-dir <checkout>`.
 | `docs/lidza-guide.md` | all three; the framework rules in one place |
 
 The three instruction files are short and point at `docs/lidza-guide.md`,
-so there is one source of truth. `lidza new` also writes `main.go` (do not
+so there is one source of truth. Keep their shared rules, agreements and
+notes synchronized in all three files. `lidza new` also writes `main.go` (do not
 edit), `routes.go` (API handlers), `schema.lidza` (data shapes) and
 `lidza.json`.
 
@@ -347,3 +348,14 @@ are reachable.
   still complete.
 - Windows: run everything inside WSL2 (Ubuntu). Native Windows is not
   supported yet.
+
+## Application packages
+
+Follow the guide's Organize application packages recipe: app-owned behavior
+in `internal/<feature>/`, provider clients in `internal/providers/<vendor>/`,
+shared infrastructure in `internal/platform/<name>/`. `appDir` holds wiring;
+handlers and generated schema/query paths stay where the generator expects.
+Models and API shapes come from `schema.lidza`.
+
+`lidza api --list` includes internal packages owned by the current app;
+`lidza api ./internal/orders --filter Name` renders one declared API.

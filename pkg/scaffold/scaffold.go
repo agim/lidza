@@ -170,7 +170,8 @@ type templateData struct {
 	// DecisionsLine tells the agent about the decision log.
 	DecisionsLine string
 	// BriefLine tells the agent about the brief and the team notes.
-	BriefLine string
+	BriefLine                     string
+	LayoutLine, AgentGuidanceLine string
 	// Recipes is the comma-separated list of recipe names from the guide.
 	Recipes string
 }
@@ -178,17 +179,19 @@ type templateData struct {
 // dataFor builds the template data for an app from its configuration.
 func dataFor(cfg *config.Config, lidzaDir string) templateData {
 	return templateData{
-		Name:          cfg.Name,
-		Module:        Module,
-		LidzaDir:      lidzaDir,
-		Template:      cfg.Frontend.Template,
-		Dist:          cfg.Frontend.Dist,
-		DevCmd:        cfg.Frontend.Dev,
-		DevURL:        cfg.Frontend.URL,
-		Go:            goMinor(),
-		LidzaVersion:  moduleVersion(),
-		DecisionsLine: DecisionsLine,
-		BriefLine:     BriefLine,
+		Name:              cfg.Name,
+		Module:            Module,
+		LidzaDir:          lidzaDir,
+		Template:          cfg.Frontend.Template,
+		Dist:              cfg.Frontend.Dist,
+		DevCmd:            cfg.Frontend.Dev,
+		DevURL:            cfg.Frontend.URL,
+		Go:                goMinor(),
+		LidzaVersion:      moduleVersion(),
+		DecisionsLine:     DecisionsLine,
+		BriefLine:         BriefLine,
+		LayoutLine:        LayoutLine,
+		AgentGuidanceLine: AgentGuidanceLine,
 	}
 }
 
@@ -211,6 +214,12 @@ const BriefLine = "Read `" + brief.File + "` first: what the app is for, who own
 // DecisionsLine is the agent files' line about the decision log; Refresh
 // adds it to apps that predate it.
 const DecisionsLine = "Why the app is built a way (a pack added, Rust for a module, a dependency, a schema tradeoff) is recorded in `docs/decisions.md`: read it before working in those areas, and record yours in the same commit with `lidza decision add \"Title\" --why \"...\"` (MCP `lidza_decision_add`)."
+
+// LayoutLine places app-owned Go code without moving generated contracts.
+const LayoutLine = "App-owned Go packages: business logic in `internal/<feature>/`, vendor clients in `internal/providers/<vendor>/`, shared infrastructure in `internal/platform/<name>/`. Keep handlers in `handlers/`; `appDir` holds application wiring and embedded assets. Models and API shapes stay in `schema.lidza`, SQL in `db/queries/*.sql`; generated `schema/` and `db/queries/gen/` are never moved or edited. Recipe: Organize application packages."
+
+// AgentGuidanceLine keeps durable instructions available to all three agents.
+const AgentGuidanceLine = "Shared agent guidance: keep `CLAUDE.md`, `AGENTS.md` and `GEMINI.md` synchronized. Update rules, working agreements and team notes in all three in the same change. Edit recipes in `docs/lidza-guide.md`, then run `lidza gen` to refresh Claude Code skills, Codex skills and Gemini commands together."
 
 // RecipesLine lists recipe names for the agent files: the framework's,
 // then the app's own.
@@ -372,6 +381,8 @@ func Refresh(dir string, cfg *config.Config) ([]string, error) {
 		} else if k := strings.Index(next, "\n- "); k >= 0 {
 			next = next[:k+1] + "- " + BriefLine + "\n" + next[k+1:]
 		}
+		next = refreshAgentLine(next, "- App-owned Go packages:", LayoutLine)
+		next = refreshAgentLine(next, "- Shared agent guidance:", AgentGuidanceLine)
 		if next == text {
 			continue
 		}
@@ -381,6 +392,22 @@ func Refresh(dir string, cfg *config.Config) ([]string, error) {
 		changed = append(changed, name)
 	}
 	return dedupe(changed), nil
+}
+
+// Replace an owned guidance line or insert it into an existing agent's list.
+// Other app instructions and notes are retained.
+func refreshAgentLine(text, prefix, line string) string {
+	lines := strings.Split(text, "\n")
+	for i, old := range lines {
+		if strings.HasPrefix(old, prefix) {
+			lines[i] = "- " + line
+			return strings.Join(lines, "\n")
+		}
+	}
+	if i := strings.Index(text, "\n- "); i >= 0 {
+		return text[:i+1] + "- " + line + "\n" + text[i+1:]
+	}
+	return text + "\n- " + line + "\n"
 }
 
 func dedupe(in []string) []string {

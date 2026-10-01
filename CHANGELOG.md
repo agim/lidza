@@ -9,6 +9,16 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- Document application package placement under `internal/`, keeping models,
+  handlers and generated contracts at their existing paths. Ship the Organize
+  application packages recipe as MCP guidance and all three agents' recipes.
+- API discovery lists and renders an app's own internal packages through CLI
+  and MCP, while keeping framework internals outside its app-facing listing.
+- Keep the framework's Claude Code, Codex and Gemini instructions identical;
+  generated and refreshed apps receive the shared-guidance rule together.
+
 ## v0.1.47 (2026-10-01)
 
 - Admin sidebars cover the full page while their navigation stays within the

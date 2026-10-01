@@ -96,7 +96,7 @@ func Resolve(ctx context.Context, dir, pkg string) (Source, []string, error) {
 	case pkg == "":
 		return fw, AppPackages(fw.Dir), nil
 	case pkg == "app" && hasApp:
-		pkgs, err := Packages(app.Dir)
+		pkgs, err := app.Packages()
 		return app, pkgs, err
 	case hasApp && app.Module != Module:
 		if rel, ok := app.Rel(pkg); ok && app.Exists(pkg) {
@@ -125,7 +125,7 @@ func Resolve(ctx context.Context, dir, pkg string) (Source, []string, error) {
 func Listing(ctx context.Context, dir string) (string, error) {
 	var b strings.Builder
 	if app, ok := App(dir); ok && app.Module != Module {
-		pkgs, err := Packages(app.Dir)
+		pkgs, err := app.Packages()
 		if err != nil {
 			return "", err
 		}
@@ -203,6 +203,16 @@ func ModuleDir(ctx context.Context, dir string) (string, error) {
 // relative to it, "" for the root. Commands, internal, test data,
 // examples, node_modules and nested modules are left out.
 func Packages(moduleDir string) ([]string, error) {
+	return packages(moduleDir, false)
+}
+
+// Packages lists the source's packages, including internal packages owned by
+// an application. Framework sources retain their public package boundary.
+func (s Source) Packages() ([]string, error) {
+	return packages(s.Dir, s.Module != Module)
+}
+
+func packages(moduleDir string, includeInternal bool) ([]string, error) {
 	var out []string
 	err := filepath.WalkDir(moduleDir, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -210,7 +220,7 @@ func Packages(moduleDir string) ([]string, error) {
 		}
 		if d.IsDir() {
 			name := d.Name()
-			if p != moduleDir && (strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_") || name == "cmd" || name == "internal" || name == "testdata" || name == "examples" || name == "node_modules" || name == "templates" || name == "core" || name == "dist" || name == "bin") {
+			if p != moduleDir && (strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_") || name == "cmd" || name == "internal" && !includeInternal || name == "testdata" || name == "examples" || name == "node_modules" || name == "templates" || name == "core" || name == "dist" || name == "bin") {
 				return filepath.SkipDir
 			}
 			if p != moduleDir {

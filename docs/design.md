@@ -114,3 +114,18 @@ ORM, build-time prerendering with an optional per-request sidecar instead
 of always-on SSR, sessions in Postgres instead of a second store, a small
 Postgres queue instead of River, `html/template` instead of `templ` for
 htmx.
+
+## Application package placement
+
+Application wiring lives in the configured `appDir`; HTTP and job handlers
+stay in `handlers/`. App-owned business packages use `internal/<feature>/`,
+vendor clients `internal/providers/<vendor>/`, and shared infrastructure
+`internal/platform/<name>/`. Models and API shapes remain in `schema.lidza`,
+with SQL in `db/queries/*.sql`; generated paths do not move. This convention
+uses Go's enforced import boundary and avoids a second model definition.
+CLI and MCP API discovery include an app's own internal packages. Framework
+internals remain outside the public API offered to applications.
+
+Agent instructions are shared: `CLAUDE.md`, `AGENTS.md` and `GEMINI.md` carry
+the same content and change together. The guide is the recipe source for
+Claude Code skills, Codex skills and Gemini commands.

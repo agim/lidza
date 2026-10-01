@@ -360,6 +360,14 @@ func TestGuidanceSurfaces(t *testing.T) {
 			if _, err := os.Stat(filepath.Join(app, p)); err != nil {
 				t.Errorf("%s missing", p)
 			}
+			if skill == "send-email" {
+				data, err := os.ReadFile(filepath.Join(app, p))
+				for _, want := range []string{"SendTx(ctx, tx", "must roll back", "exactly-once"} {
+					if err != nil || !strings.Contains(string(data), want) {
+						t.Errorf("%s: transactional mail guidance missing %q: %v", p, want, err)
+					}
+				}
+			}
 		}
 	}
 	for _, f := range []string{"CLAUDE.md", "AGENTS.md", "GEMINI.md"} {

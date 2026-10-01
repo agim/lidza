@@ -9,6 +9,17 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- Mail `SendTx` stores the outbox row and delivery job in the caller's
+  database transaction, so application writes and queued mail commit or
+  roll back together. It requires the db and jobs packs.
+- Queued `Send` now commits its outbox row and job atomically; a queue
+  failure no longer leaves an orphaned outbox row. Synchronous delivery
+  without jobs and direct delivery without db keep their existing behavior.
+- Document transaction ownership and delivery retries in the mail API and
+  all three agents' generated Send an email recipes.
+
 ## v0.1.48 (2026-10-01)
 
 - Document application package placement under `internal/`, keeping models,

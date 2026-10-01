@@ -35,12 +35,32 @@ mail pack, never through a vendor SDK.
    jobs pack, or delivered right away without it). The outbox preserves
    `From`, `ReplyTo` and custom `Headers` for delivery and retries. Do not build the
    message with `fmt.Sprintf` and do not call the vendor's API.
+
+   When mail follows a database write, use `SendTx(ctx, tx, message)`
+   inside that write's transaction. It requires both `db` and `jobs`,
+   using the same database as `tx`; it stores the outbox row and delivery
+   job together. The caller commits or rolls back, and must roll back on
+   any error. Do not call ordinary `Send` inside a transaction: it uses
+   its own connection and transaction. Workers cannot see a queued
+   message until commit. Delivery retains the jobs pack's retries;
+   this does not guarantee exactly-once delivery at the provider.
+
+   ```go
+   _, err := mail.From(ctx).SendTx(ctx, tx, mail.Message{
+       To: user.Email, Subject: "Your receipt", Template: "receipt", Data: receipt,
+   })
+   if err != nil {
+       return err // the caller rolls back tx, including its earlier writes
+   }
+   return tx.Commit(ctx)
+   ```
 4. Test it: `mail.From(srv.Context()).WaitFor(ctx, to, "Verify", 5*time.Second)`
    returns the newest message to that address whose subject contains the
    text, waiting for one a job sends; `Outbox(ctx, 5)` lists them newest
    first. Both have `Status`, `Text` and `HTML`; read the link out of the
    text. The snippet `auth-handlers` and `routes_test.go` in the
-   reference app show both sides.
+   reference app show both sides. For `SendTx`, also assert that rolling
+   back leaves neither the app write, the outbox row nor the delivery job.
 5. `lidza check`, then `lidza test`. In dev, `lidza_mail` (MCP) shows the
    outbox.
 

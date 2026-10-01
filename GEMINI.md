@@ -73,3 +73,7 @@ Working agreements (Agim's standing decisions):
   `internal/platform/<name>/`. Keep application wiring in `appDir`, handlers
   in `handlers/`, and models and API shapes in `schema.lidza`. Generated paths
   stay fixed. Framework APIs that applications import stay outside `internal/`.
+
+- Queue mail that follows database writes with `mail.SendTx` in the same
+  transaction, with db and jobs enabled; roll back on any error. Ordinary
+  `Send` owns its transaction and must run outside an app transaction.

@@ -44,6 +44,10 @@ func TestRender(t *testing.T) {
 	if strings.Contains(text, "func writeError") {
 		t.Error("unexported function rendered")
 	}
+	mailAPI, err := Render(dir, []string{"packs/mail"}, "SendTx")
+	if err != nil || !strings.Contains(mailAPI, "func (m *Mail) SendTx(ctx context.Context, tx pgx.Tx, msg Message) (string, error)") || !strings.Contains(mailAPI, "on any error it must roll back") {
+		t.Errorf("transactional mail API: %v\n%s", err, mailAPI)
+	}
 	public := strings.Join(AppPackages(dir), ",")
 	if !strings.Contains(public, "pkg/webhook") {
 		t.Errorf("pkg/webhook is not public: %s", public)

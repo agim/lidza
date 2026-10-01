@@ -536,7 +536,10 @@ delivery runs as a job with retries. The outbox preserves the resolved sender,
 Reply-To and custom headers across delivery and retries. `lidza check` L006 flags an import
 of a vendor SDK. The reference app sends its verification and reset
 links through it and its tests read the outbox; the guide has the recipe
-"Send an email".
+"Send an email". `SendTx(ctx, tx, message)` commits the outbox and delivery
+job with the caller's database writes; it requires db and jobs on the same
+database. Queued `Send` also commits its outbox and job together. Delivery
+retains the queue's retries, without an exactly-once provider guarantee.
 
 ### App-scoped recipes (done 2026-09-25)
 

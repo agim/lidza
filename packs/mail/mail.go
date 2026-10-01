@@ -27,6 +27,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/agim/lidza"
@@ -239,7 +240,8 @@ func (m *Mail) Link(path string) string {
 // Send sends a message. With the outbox (db pack) it returns the row id:
 // the message is queued for the jobs pack when it runs, delivered before
 // returning otherwise, and the row records the outcome. Without the
-// outbox the provider's message id comes back.
+// outbox the provider's message id comes back. With the jobs pack the
+// outbox row and delivery job commit together.
 func (m *Mail) Send(ctx context.Context, msg Message) (string, error) {
 	if err := m.prepare(ctx, &msg); err != nil {
 		return "", err
@@ -247,23 +249,74 @@ func (m *Mail) Send(ctx context.Context, msg Message) (string, error) {
 	if m.pool == nil {
 		return m.providerNow().Send(ctx, msg)
 	}
+	if m.queue != nil {
+		tx, err := m.pool.Begin(ctx)
+		if err != nil {
+			return "", fmt.Errorf("mail: begin: %w", err)
+		}
+		defer tx.Rollback(ctx)
+		id, err := m.enqueuePrepared(ctx, tx, msg)
+		if err != nil {
+			return "", err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return "", fmt.Errorf("mail: commit: %w", err)
+		}
+		return id, nil
+	}
+	id, err := m.store(ctx, m.pool, msg)
+	if err != nil {
+		return "", err
+	}
+	return id, m.Deliver(ctx, id)
+}
+
+// SendTx validates and renders a message, then stores its outbox row and
+// delivery job inside the caller's transaction. It requires the db and
+// jobs packs and a transaction on their database. The caller commits or
+// rolls back; on any error it must roll back. No provider is called here,
+// and the job cannot be claimed before commit. Provider delivery still
+// has the jobs pack's retry semantics, not an exactly-once guarantee.
+func (m *Mail) SendTx(ctx context.Context, tx pgx.Tx, msg Message) (string, error) {
+	if tx == nil {
+		return "", errors.New("mail: SendTx requires a transaction")
+	}
+	if m.pool == nil || m.queue == nil {
+		return "", errors.New("mail: SendTx requires the db and jobs packs")
+	}
+	if err := m.prepare(ctx, &msg); err != nil {
+		return "", err
+	}
+	return m.enqueuePrepared(ctx, tx, msg)
+}
+
+func (m *Mail) enqueuePrepared(ctx context.Context, tx pgx.Tx, msg Message) (string, error) {
+	id, err := m.store(ctx, tx, msg)
+	if err != nil {
+		return "", err
+	}
+	if _, err := m.queue.EnqueueTx(ctx, tx, JobKind, map[string]string{"id": id}, jobs.MaxAttempts(m.cfg.MaxAttempts)); err != nil {
+		return "", fmt.Errorf("mail: delivery job: %w", err)
+	}
+	return id, nil
+}
+
+type rowQuerier interface {
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
+func (m *Mail) store(ctx context.Context, db rowQuerier, msg Message) (string, error) {
 	headers, err := json.Marshal(msg.Headers)
 	if err != nil {
 		return "", fmt.Errorf("mail: headers: %w", err)
 	}
 	var id string
-	err = m.pool.QueryRow(ctx, `INSERT INTO mail_message (recipient, subject, text, html, template, status, attempts, from_address, reply_to, headers) VALUES ($1, $2, $3, $4, $5, $6, 0, $7, $8, $9) RETURNING id`,
+	err = db.QueryRow(ctx, `INSERT INTO mail_message (recipient, subject, text, html, template, status, attempts, from_address, reply_to, headers) VALUES ($1, $2, $3, $4, $5, $6, 0, $7, $8, $9) RETURNING id`,
 		msg.To, msg.Subject, nullable(msg.Text), nullable(msg.HTML), nullable(msg.Template), StatusQueued, nullable(msg.From), nullable(msg.ReplyTo), headers).Scan(&id)
 	if err != nil {
 		return "", fmt.Errorf("mail: outbox: %w", err)
 	}
-	if m.queue != nil {
-		if _, err := m.queue.Enqueue(ctx, JobKind, map[string]string{"id": id}, jobs.MaxAttempts(m.cfg.MaxAttempts)); err != nil {
-			return "", err
-		}
-		return id, nil
-	}
-	return id, m.Deliver(ctx, id)
+	return id, nil
 }
 
 // Deliver sends the outbox row id through the provider and records the

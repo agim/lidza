@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -212,6 +213,73 @@ func TestSendTx(t *testing.T) {
 		}
 		if retry := <-delivered; retry["attachments"].([]any)[0].(map[string]any)["content"] != file["content"] {
 			t.Fatal("retry changed attachment")
+		}
+	})
+	t.Run("inline files and reply lists survive retry", func(t *testing.T) {
+		reset(t)
+		delivered := make(chan map[string]any, 2)
+		var attempts atomic.Int32
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			var body map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Error(err)
+			}
+			delivered <- body
+			if attempts.Add(1) == 1 {
+				w.WriteHeader(503)
+			}
+			io.WriteString(w, `{"id":"sent"}`)
+		}))
+		defer server.Close()
+		cfg := mailCfg
+		cfg.Provider, cfg.APIKey, cfg.BaseURL = "resend", "test", server.URL
+		m, err := New(cfg, pool, jobs.New(jobs.Config{}, pool))
+		if err != nil {
+			t.Fatal(err)
+		}
+		message := inlineMessage()
+		rctx, stop := context.WithTimeout(ctxWith(t, server), 10*time.Second)
+		defer stop()
+		tx := begin(t)
+		write(t, tx)
+		id, err := m.SendTx(rctx, tx, message)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var reply string
+		var stored []byte
+		if err := tx.QueryRow(ctx, `SELECT reply_to, attachments FROM mail_message WHERE id=$1`, id).Scan(&reply, &stored); err != nil {
+			t.Fatal(err)
+		}
+		var files []Attachment
+		if err := json.Unmarshal(stored, &files); err != nil {
+			t.Fatal(err)
+		}
+		if reply != message.ReplyTo || len(files) != len(message.Attachments) {
+			t.Fatal("outbox lost reply list or files")
+		}
+		for i, file := range files {
+			want := message.Attachments[i]
+			if file.ContentID != want.ContentID || file.Name != want.Name || !bytes.Equal(file.Data, want.Data) {
+				t.Fatal("outbox changed file", i)
+			}
+		}
+		if err := tx.Commit(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if err := m.Deliver(rctx, id); err == nil {
+			t.Fatal("provider failure ignored")
+		}
+		first := <-delivered
+		if err := m.Deliver(rctx, id); err != nil {
+			t.Fatal(err)
+		}
+		second := <-delivered
+		if !reflect.DeepEqual(first, second) {
+			t.Fatal("retry changed content", first, second)
+		}
+		if second["reply_to"].([]any)[1] != "\"Two\" <two@example.com>" || second["attachments"].([]any)[2].(map[string]any)["content_id"] != "logo@message" || second["headers"].(map[string]any)["X-Tag"] != "receipt" {
+			t.Fatal("queued metadata lost", second)
 		}
 	})
 	t.Run("legacy null columns and invalid retry", func(t *testing.T) {

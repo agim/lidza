@@ -15,8 +15,9 @@ import (
 	"time"
 )
 
-// buildMIME keeps a multipart/alternative body inside multipart/mixed
-// when attachments are present. Blind recipients never enter the headers.
+// buildMIME nests related HTML resources inside the HTML alternative and
+// regular files outside the body in multipart/mixed. Blind recipients never
+// enter the headers.
 func buildMIME(msg Message, from, first *mail.Address) ([]byte, string, error) {
 	if msg.To == "" {
 		msg.To = first.String()
@@ -44,7 +45,15 @@ func buildMIME(msg Message, from, first *mail.Address) ([]byte, string, error) {
 	h.Set("Message-ID", id)
 	h.Set("MIME-Version", "1.0")
 	if msg.ReplyTo != "" {
-		h.Set("Reply-To", msg.ReplyTo)
+		reply, err := replyAddresses(msg.ReplyTo)
+		if err != nil {
+			return nil, "", err
+		}
+		if len(reply) == 1 {
+			h.Set("Reply-To", msg.ReplyTo)
+		} else {
+			h.Set("Reply-To", join(reply))
+		}
 	}
 	for key, value := range msg.Headers {
 		h.Set(key, value)
@@ -54,7 +63,11 @@ func buildMIME(msg Message, from, first *mail.Address) ([]byte, string, error) {
 		return nil, "", err
 	}
 	var output bytes.Buffer
-	if len(msg.Attachments) == 0 {
+	hasFiles := false
+	for _, file := range msg.Attachments {
+		hasFiles = hasFiles || file.ContentID == ""
+	}
+	if !hasFiles {
 		for key, values := range bodyHeader {
 			h[key] = values
 		}
@@ -76,15 +89,10 @@ func buildMIME(msg Message, from, first *mail.Address) ([]byte, string, error) {
 			return nil, "", err
 		}
 		for _, file := range msg.Attachments {
-			part, err := mixed.CreatePart(textproto.MIMEHeader{
-				"Content-Type":              {file.ContentType},
-				"Content-Disposition":       {mime.FormatMediaType("attachment", map[string]string{"filename": file.Name})},
-				"Content-Transfer-Encoding": {"base64"},
-			})
-			if err != nil {
-				return nil, "", err
+			if file.ContentID != "" {
+				continue
 			}
-			if err := writeBase64(part, file.Data); err != nil {
+			if err := mimeAttachment(mixed, file); err != nil {
 				return nil, "", err
 			}
 		}
@@ -102,14 +110,15 @@ func mimeBody(msg Message) (textproto.MIMEHeader, []byte, error) {
 		alternative := multipart.NewWriter(&body)
 		h.Set("Content-Type", mime.FormatMediaType("multipart/alternative", map[string]string{"boundary": alternative.Boundary()}))
 		for _, content := range []struct{ kind, text string }{{"text/plain", msg.Text}, {"text/html", msg.HTML}} {
-			part, err := alternative.CreatePart(textproto.MIMEHeader{
-				"Content-Type":              {content.kind + "; charset=utf-8"},
-				"Content-Transfer-Encoding": {"quoted-printable"},
-			})
+			header, data, err := mimeContent(msg, content.kind, content.text)
 			if err != nil {
 				return nil, nil, err
 			}
-			if err := writeQuotedPrintable(part, content.text); err != nil {
+			part, err := alternative.CreatePart(header)
+			if err != nil {
+				return nil, nil, err
+			}
+			if _, err := part.Write(data); err != nil {
 				return nil, nil, err
 			}
 		}
@@ -121,13 +130,61 @@ func mimeBody(msg Message) (textproto.MIMEHeader, []byte, error) {
 		if msg.HTML != "" {
 			kind, text = "text/html", msg.HTML
 		}
-		h.Set("Content-Type", kind+"; charset=utf-8")
-		h.Set("Content-Transfer-Encoding", "quoted-printable")
-		if err := writeQuotedPrintable(&body, text); err != nil {
+		return mimeContent(msg, kind, text)
+	}
+	return h, body.Bytes(), nil
+}
+
+func mimeContent(msg Message, kind, text string) (textproto.MIMEHeader, []byte, error) {
+	h := textproto.MIMEHeader{"Content-Type": {kind + "; charset=utf-8"}, "Content-Transfer-Encoding": {"quoted-printable"}}
+	var body bytes.Buffer
+	if err := writeQuotedPrintable(&body, text); err != nil {
+		return nil, nil, err
+	}
+	var inline []Attachment
+	if kind == "text/html" {
+		for _, file := range msg.Attachments {
+			if file.ContentID != "" {
+				inline = append(inline, file)
+			}
+		}
+	}
+	if len(inline) == 0 {
+		return h, body.Bytes(), nil
+	}
+	var resources bytes.Buffer
+	related := multipart.NewWriter(&resources)
+	part, err := related.CreatePart(h)
+	if err != nil {
+		return nil, nil, err
+	}
+	if _, err := part.Write(body.Bytes()); err != nil {
+		return nil, nil, err
+	}
+	for _, file := range inline {
+		if err := mimeAttachment(related, file); err != nil {
 			return nil, nil, err
 		}
 	}
-	return h, body.Bytes(), nil
+	if err := related.Close(); err != nil {
+		return nil, nil, err
+	}
+	return textproto.MIMEHeader{"Content-Type": {mime.FormatMediaType("multipart/related", map[string]string{"boundary": related.Boundary(), "type": "text/html"})}}, resources.Bytes(), nil
+}
+
+func mimeAttachment(writer *multipart.Writer, file Attachment) error {
+	disposition := "attachment"
+	h := textproto.MIMEHeader{"Content-Type": {file.ContentType}, "Content-Transfer-Encoding": {"base64"}}
+	if file.ContentID != "" {
+		disposition = "inline"
+		h.Set("Content-ID", "<"+file.ContentID+">")
+	}
+	h.Set("Content-Disposition", mime.FormatMediaType(disposition, map[string]string{"filename": file.Name}))
+	part, err := writer.CreatePart(h)
+	if err != nil {
+		return err
+	}
+	return writeBase64(part, file.Data)
 }
 
 func writeMIMEHeaders(w io.Writer, headers textproto.MIMEHeader) error {

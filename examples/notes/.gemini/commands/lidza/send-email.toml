@@ -62,6 +62,15 @@ mail pack, never through a vendor SDK.
    "receipt.pdf", ContentType: "application/pdf", Data: pdfBytes}`; pass
    bytes, never a path or URL. An empty content type is detected from the
    bytes. Attachments and recipients survive queued delivery and retries.
+   For embedded HTML files, set `ContentID: "logo@message"` on the attachment
+   and reference it as `cid:logo@message` in HTML. IDs are unique, at most
+   127 bytes of printable ASCII, without whitespace, angle brackets,
+   parentheses, square brackets, backslashes, commas, colons, semicolons or
+   double quotes. Pass the bare ID, without `cid:`. Inline and ordinary files
+   share the attachment limits; inline files require an HTML body.
+   `ReplyTo` accepts a comma-separated address list, bounded independently by
+   `MAIL_MAX_RECIPIENTS`, with no duplicate addresses. Custom header names
+   are unique ignoring case; the pack refuses ambiguous duplicates.
    Defaults: `MAIL_MAX_RECIPIENTS=50`, `MAIL_MAX_ATTACHMENTS=10`,
    `MAIL_MAX_ATTACHMENT_BYTES=10485760` (total decoded bytes), and
    `MAIL_SMTP_TIMEOUT=30s` for the entire SMTP exchange.

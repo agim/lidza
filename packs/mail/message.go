@@ -18,6 +18,17 @@ type Attachment struct {
 	Name        string `json:"name"`
 	ContentType string `json:"contentType,omitempty"`
 	Data        []byte `json:"data"`
+	// ContentID embeds the file in the HTML body as cid:<ContentID>.
+	// Supply a unique printable ASCII ID of at most 127 bytes, without
+	// angle brackets, spaces or a cid: prefix. Empty means a regular file.
+	ContentID string `json:"contentId,omitempty"`
+}
+
+func replyAddresses(raw string) ([]*mail.Address, error) {
+	if raw == "" {
+		return nil, nil
+	}
+	return mail.ParseAddressList(raw)
 }
 
 func recipientLists(msg Message) (to, cc, bcc []*mail.Address, err error) {
@@ -89,12 +100,24 @@ func validateMessage(msg *Message, cfg Config) error {
 			seen[a.Address] = true
 		}
 	}
-	for _, value := range []string{msg.From, msg.ReplyTo} {
-		if value != "" {
-			if _, err := mail.ParseAddress(value); err != nil {
-				return errors.New("mail: invalid From or Reply-To address")
-			}
+	if msg.From != "" {
+		if _, err := mail.ParseAddress(msg.From); err != nil {
+			return errors.New("mail: invalid From address")
 		}
+	}
+	if len(msg.ReplyTo) > 64<<10 {
+		return errors.New("mail: Reply-To list exceeds byte limit")
+	}
+	reply, err := replyAddresses(msg.ReplyTo)
+	if err != nil || msg.ReplyTo != "" && len(reply) == 0 || len(reply) > cfg.MaxRecipients {
+		return errors.New("mail: invalid or oversized Reply-To address list")
+	}
+	seenReply := map[string]bool{}
+	for _, a := range reply {
+		if seenReply[a.Address] {
+			return errors.New("mail: duplicate Reply-To address")
+		}
+		seenReply[a.Address] = true
 	}
 	if !safeHeader(msg.Subject) || !utf8.ValidString(msg.Text) || !utf8.ValidString(msg.HTML) {
 		return errors.New("mail: invalid subject or body")
@@ -102,6 +125,7 @@ func validateMessage(msg *Message, cfg Config) error {
 	if len(msg.Headers) > 100 {
 		return errors.New("mail: too many headers")
 	}
+	seenHeaders := map[string]bool{}
 	for key, value := range msg.Headers {
 		if key == "" || len(key) > 200 || !safeHeader(value) || len(value) > 8<<10 {
 			return errors.New("mail: invalid custom header")
@@ -111,7 +135,12 @@ func validateMessage(msg *Message, cfg Config) error {
 				return errors.New("mail: invalid custom header name")
 			}
 		}
-		switch strings.ToLower(key) {
+		lower := strings.ToLower(key)
+		if seenHeaders[lower] {
+			return errors.New("mail: duplicate custom header name")
+		}
+		seenHeaders[lower] = true
+		switch lower {
 		case "to", "cc", "bcc", "from", "subject", "reply-to", "return-path", "mime-version", "content-type", "content-transfer-encoding", "content-disposition":
 			return fmt.Errorf("mail: reserved header %s: use Message fields", key)
 		}
@@ -122,8 +151,15 @@ func validateMessage(msg *Message, cfg Config) error {
 	// Clone metadata before resolving a type, so the caller's slice stays intact.
 	msg.Attachments = append([]Attachment(nil), msg.Attachments...)
 	remaining := cfg.MaxAttachmentBytes
+	seenIDs := map[string]bool{}
 	for i := range msg.Attachments {
 		a := &msg.Attachments[i]
+		if a.ContentID != "" {
+			if msg.HTML == "" || !validContentID(a.ContentID) || seenIDs[a.ContentID] {
+				return errors.New("mail: inline files require HTML and unique valid content IDs")
+			}
+			seenIDs[a.ContentID] = true
+		}
 		if a.Name == "" || len(a.Name) > 255 || !safeHeader(a.Name) || strings.ContainsAny(a.Name, `/\`) || !safeHeader(a.ContentType) {
 			return errors.New("mail: invalid attachment name or content type")
 		}
@@ -146,6 +182,18 @@ func validateMessage(msg *Message, cfg Config) error {
 		a.ContentType = mime.FormatMediaType(kind, params)
 	}
 	return nil
+}
+
+func validContentID(id string) bool {
+	if len(id) == 0 || len(id) > 127 {
+		return false
+	}
+	for _, r := range id {
+		if r <= 32 || r >= 127 || strings.ContainsRune(`<>()[\\],:;"`, r) {
+			return false
+		}
+	}
+	return true
 }
 
 func safeHeader(value string) bool {

@@ -77,3 +77,9 @@ Working agreements (Agim's standing decisions):
 - Queue mail that follows database writes with `mail.SendTx` in the same
   transaction, with db and jobs enabled; roll back on any error. Ordinary
   `Send` owns its transaction and must run outside an app transaction.
+
+- Mail inline files use `Attachment.ContentID` (a bare, unique safe ASCII ID,
+  at most 127 bytes) referenced as `cid:<ID>` from HTML. `ReplyTo` accepts an
+  address list bounded by `MAIL_MAX_RECIPIENTS`; custom header names are
+  unique ignoring case. Keep fields intact through queued retries and test
+  MIME nesting plus each provider mapping with local transports.

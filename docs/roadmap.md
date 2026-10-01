@@ -533,7 +533,7 @@ from `mail/<name>.txt.tmpl` and `.html.tmpl`. With the db pack every
 message is a row in `mail_message` with status, provider id, error and
 attempts (`Outbox`, the MCP tool `lidza_mail`); with the jobs pack
 delivery runs as a job with retries. The outbox preserves the resolved sender,
-Reply-To, To lists, Cc/Bcc, byte attachments and custom headers across delivery
+Reply-To lists, To lists, Cc/Bcc, byte/inline attachments and custom headers across delivery
 and retries. Recipient counts and attachment count/total bytes are bounded;
 SMTP obeys cancellation and a deadline throughout the exchange. `lidza check` L006 flags an import
 of a vendor SDK. The reference app sends its verification and reset
@@ -542,6 +542,10 @@ links through it and its tests read the outbox; the guide has the recipe
 job with the caller's database writes; it requires db and jobs on the same
 database. Queued `Send` also commits its outbox and job together. Delivery
 retains the queue's retries, without an exactly-once provider guarantee.
+Inline content IDs stay independent of filenames; SMTP nests related HTML
+resources inside the HTML alternative, with ordinary files in an outer mixed
+part. Mailgun uses MIME upload for inline files; JSON providers keep their
+native inline fields. IDs and Reply-To lists are validated before queueing.
 
 ### App-scoped recipes (done 2026-09-25)
 

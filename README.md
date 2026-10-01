@@ -60,7 +60,10 @@ roadmap phase is delivered. See
 ## Developing the framework
 
 The `mail` pack sends through Mailgun, SendGrid, Postmark, Resend or SMTP,
-with To lists, Cc/Bcc and byte attachments. `SendTx` commits the outbox
+with To/Reply-To lists, Cc/Bcc and byte attachments. Set `ContentID` on an
+attachment and reference `cid:<ID>` in HTML to embed it; the ID and filename
+stay independent. Queued delivery and retries preserve these fields and
+custom headers. `SendTx` commits the outbox
 and delivery job with application writes. Default limits are 50 recipients,
 10 files and 10 MiB of decoded attachment data; set `MAIL_MAX_RECIPIENTS`,
 `MAIL_MAX_ATTACHMENTS` and `MAIL_MAX_ATTACHMENT_BYTES` to change them.

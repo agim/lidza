@@ -177,6 +177,13 @@ func (p mailgun) Send(ctx context.Context, msg Message) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	for _, file := range msg.Attachments {
+		if file.ContentID != "" {
+			// MIME preserves independent Content-ID and filename values
+			// without rewriting the caller's HTML.
+			return p.sendMIME(ctx, msg, to, cc, bcc)
+		}
+	}
 	form := url.Values{"from": {msg.From}, "to": toStrings(msg.To, to), "subject": {msg.Subject}}
 	if len(cc) > 0 {
 		form["cc"] = addressStrings(cc)
@@ -243,6 +250,58 @@ func (p mailgun) Send(ctx context.Context, msg Message) (string, error) {
 	return out.ID, nil
 }
 
+func (p mailgun) sendMIME(ctx context.Context, msg Message, to, cc, bcc []*mail.Address) (string, error) {
+	from, err := parseAddress(msg.From)
+	if err != nil {
+		return "", err
+	}
+	message, _, err := buildMIME(msg, from, to[0])
+	if err != nil {
+		return "", err
+	}
+	var buffer bytes.Buffer
+	writer := multipart.NewWriter(&buffer)
+	// Mailgun's MIME endpoint takes all envelope recipients in `to`.
+	// Cc stays in the MIME header and Bcc stays out of it.
+	for _, list := range [][]*mail.Address{to, cc, bcc} {
+		for _, address := range list {
+			if err := writer.WriteField("to", address.Address); err != nil {
+				return "", err
+			}
+		}
+	}
+	part, err := writer.CreatePart(textproto.MIMEHeader{
+		"Content-Disposition": {mime.FormatMediaType("form-data", map[string]string{"name": "message", "filename": "message.eml"})},
+		"Content-Type":        {"message/rfc822"},
+	})
+	if err != nil {
+		return "", err
+	}
+	if _, err := part.Write(message); err != nil {
+		return "", err
+	}
+	if err := writer.Close(); err != nil {
+		return "", err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.base+"/v3/"+p.domain+"/messages.mime", &buffer)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	req.SetBasicAuth("api", p.key)
+	body, _, err := post(ctx, req)
+	if err != nil {
+		return "", err
+	}
+	var out struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(body, &out); err != nil {
+		return "", err
+	}
+	return out.ID, nil
+}
+
 // sendgrid: POST /v3/mail/send, JSON, bearer key; the id is a header.
 type sendgrid struct{ key, base string }
 
@@ -283,11 +342,15 @@ func (p sendgrid) Send(ctx context.Context, msg Message) (string, error) {
 		"content":          content,
 	}
 	if msg.ReplyTo != "" {
-		reply, err := parseAddress(msg.ReplyTo)
+		reply, err := replyAddresses(msg.ReplyTo)
 		if err != nil {
 			return "", err
 		}
-		payload["reply_to"] = map[string]string{"email": reply.Address, "name": reply.Name}
+		if len(reply) == 1 {
+			payload["reply_to"] = addresses(reply)[0]
+		} else {
+			payload["reply_to_list"] = addresses(reply)
+		}
 	}
 	if len(msg.Headers) > 0 {
 		payload["headers"] = msg.Headers
@@ -300,7 +363,11 @@ func (p sendgrid) Send(ctx context.Context, msg Message) (string, error) {
 			if err != nil {
 				return "", err
 			}
-			files = append(files, map[string]any{"filename": file.Name, "type": kind, "content": file.Data, "disposition": "attachment"})
+			entry := map[string]any{"filename": file.Name, "type": kind, "content": file.Data, "disposition": "attachment"}
+			if file.ContentID != "" {
+				entry["disposition"], entry["content_id"] = "inline", file.ContentID
+			}
+			files = append(files, entry)
 		}
 		payload["attachments"] = files
 	}
@@ -330,7 +397,11 @@ func (p postmark) Send(ctx context.Context, msg Message) (string, error) {
 	if len(msg.Attachments) > 0 {
 		var files []map[string]any
 		for _, file := range msg.Attachments {
-			files = append(files, map[string]any{"Name": file.Name, "ContentType": file.ContentType, "Content": file.Data})
+			entry := map[string]any{"Name": file.Name, "ContentType": file.ContentType, "Content": file.Data}
+			if file.ContentID != "" {
+				entry["ContentID"] = "cid:" + file.ContentID
+			}
+			files = append(files, entry)
 		}
 		payload["Attachments"] = files
 	}
@@ -384,7 +455,11 @@ func (p resend) Send(ctx context.Context, msg Message) (string, error) {
 	if len(msg.Attachments) > 0 {
 		var files []map[string]any
 		for _, file := range msg.Attachments {
-			files = append(files, map[string]any{"filename": file.Name, "content": file.Data, "content_type": file.ContentType})
+			entry := map[string]any{"filename": file.Name, "content": file.Data, "content_type": file.ContentType}
+			if file.ContentID != "" {
+				entry["content_id"] = file.ContentID
+			}
+			files = append(files, entry)
 		}
 		payload["attachments"] = files
 	}
@@ -395,7 +470,15 @@ func (p resend) Send(ctx context.Context, msg Message) (string, error) {
 		payload["html"] = msg.HTML
 	}
 	if msg.ReplyTo != "" {
-		payload["reply_to"] = msg.ReplyTo
+		reply, err := replyAddresses(msg.ReplyTo)
+		if err != nil {
+			return "", err
+		}
+		if len(reply) == 1 {
+			payload["reply_to"] = msg.ReplyTo
+		} else {
+			payload["reply_to"] = addressStrings(reply)
+		}
 	}
 	if len(msg.Headers) > 0 {
 		payload["headers"] = msg.Headers

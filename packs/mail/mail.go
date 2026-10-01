@@ -110,9 +110,11 @@ type Message struct {
 	// renders <Template>.<Lang> when the app has it, then
 	// <Template>.<base language> ("pt"), then <Template>. Empty means the
 	// languages of the context (Languages): the request's.
-	Lang    string            `json:"lang,omitempty"`
-	Data    any               `json:"data,omitempty"`
-	From    string            `json:"from,omitempty"`
+	Lang string `json:"lang,omitempty"`
+	Data any    `json:"data,omitempty"`
+	From string `json:"from,omitempty"`
+	// ReplyTo accepts one address or a comma-separated RFC 5322 address list.
+	// Its count is bounded independently by MaxRecipients.
 	ReplyTo string            `json:"replyTo,omitempty"`
 	Headers map[string]string `json:"headers,omitempty"`
 }

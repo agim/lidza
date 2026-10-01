@@ -9,6 +9,19 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- Mail supports bounded Reply-To address lists and inline byte attachments with
+  independent filenames and content IDs. Keep MIME related resources inside
+  the HTML alternative; preserve IDs, reply lists and headers in the outbox
+  and retries. Mailgun uses its MIME endpoint for inline resources; SendGrid,
+  Postmark and Resend use their documented attachment fields.
+- Reject inline resources without HTML, invalid/duplicate content IDs and
+  ambiguous custom header names differing only by case. Existing single
+  Reply-To and ordinary attachment messages retain their wire formats.
+- Cover all providers and SMTP with offline transport/MIME tests and real
+  database-backed queued retry tests. Update the email recipe for all agents.
+
 ## v0.1.52 (2026-10-01)
 
 - Encode empty attachment data as an empty base64 string instead of JSON

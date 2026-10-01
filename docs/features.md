@@ -44,7 +44,7 @@ does not reimplement).
 | Deployment | done | `Dockerfile`, `.dockerignore`, `deploy/<name>.service` from `lidza new`; `docs/deploy.md`; `DB_MIGRATE=true` |
 | Sign-in | done | `auth.Mount`: registration, login, logout, session, email verification, password reset and change on the pack's own `auth_user` table; sign-in providers from `AUTH_PROVIDERS` (Google, GitHub, Microsoft, any OIDC issuer with discovery) with PKCE, nonce and key verification, identities linked to accounts in `auth_identity`, the admin pages hold the credentials; `OnSignUp` and `OnDeleteUser` in the account's transaction, `OnSignIn` with the request and the reply's cookies, "remember me" (`remember: false` for session cookies), `NoVerifyEmail`, `DeleteUser` and a confirmed "delete my account" route; rule L013 |
 | Auth hardening | done | `auth.Throttle()` and `auth.ThrottleSignIn()` (its own `AUTH_SIGNIN_RPS`), `ValidatePassword`, one-time tokens for verification and reset, sessions ended at once; `router.Route` per-route middleware |
-| Transactional email | done | `mail` pack: `Send`, `SendTx` to commit app writes with the outbox and delivery job, To lists, Cc/Bcc and bounded byte attachments preserved across retries, Mailgun, SendGrid, Postmark, Resend and SMTP spoken directly, `log` and `outbox` providers, templates in `mail/` with a copy per language and a template-defined subject, outbox table, delivery through the jobs pack with retries, `lidza_mail` MCP tool, rule L006 against vendor SDKs |
+| Transactional email | done | `mail` pack: `Send`, `SendTx` to commit app writes with the outbox and delivery job, To and Reply-To lists, Cc/Bcc and bounded byte/inline attachments preserved across retries, Mailgun, SendGrid, Postmark, Resend and SMTP spoken directly, `log` and `outbox` providers, templates in `mail/` with a copy per language and a template-defined subject, outbox table, delivery through the jobs pack with retries, `lidza_mail` MCP tool, rule L006 against vendor SDKs |
 | Authorization | done | `auth.Require()` and `auth.Optional()` middleware, `r.Group(prefix, mw...)` for a protected sub-tree (its routes share the one ServeMux, so the most specific pattern wins across groups), `auth.CurrentUser(ctx)`; the CSRF guard accepts JSON content or a same-origin `Sec-Fetch-Site` |
 | TLS built in | done | `LIDZA_TLS_DOMAINS`: HTTPS on 443 with Let's Encrypt through `autocert`, 80 redirected, certificates in Postgres through the db pack (every node shares them) or a directory for one node, `APP_URL` and Secure cookies derived, `lidza doctor` checks DNS, ports and the bind capability, the systemd unit grants it |
 | File storage | done | `storage` pack: `Put`, `Get`, `Stat`, `List`, `Delete`, presigned URLs, any S3-compatible service through Signature V4 spoken directly, `local` provider for tests, `storage.Handler` for private files, typed uploads (`router.Route` with `router.File`, `router.UploadLimit`), rule L008; wire format proven by the AWS documentation example, a stub and MinIO live |
@@ -59,6 +59,30 @@ does not reimplement).
 | Load testing | done | `lidza benchmark` on k6 with heap and goroutine comparison; `benchmarks/scale_test.js` in every app |
 | Server-side rendering | done | build-time prerendering for `react` and `astro`; per-request rendering with `LIDZA_SSR=1` through the Node sidecar (loaders run on the server with the visitor's cookies), falling back to the static page; see "Decisions" |
 | Per-page head (SEO, link previews) | done | `App.Head` sets title, description, canonical, Open Graph and Twitter tags, JSON-LD, noindex and the status per request, in Go, for the shell and prerendered pages alike (and the sidecar's and the dev server's pages); every value escaped; recipe "Set a page's head" |
+
+## Inline mail and reply lists
+
+`mail.Attachment.ContentID` embeds a byte file in an HTML body. Inline files
+share the configured count and byte limits with ordinary attachments; IDs
+are unique, safe ASCII strings of at most 127 bytes. `Message.ReplyTo` also
+accepts an address list bounded independently by the recipient limit. These
+values and custom headers survive queued delivery and retries.
+
+SMTP builds related resources inside the HTML alternative and ordinary files
+outside it in a mixed part. Mailgun's MIME upload keeps content IDs independent
+of filenames and sends To/Cc/Bcc as envelope recipients without a Bcc header.
+Other providers use their native inline and reply-list fields. This extends
+the mail pack's common message contract; applications need no provider SDK
+or separate MIME implementation. Existing messages without inline files keep
+their provider request shape.
+
+Wire contracts: [Mailgun MIME](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/messages/post-v3--domain-name--messages-mime),
+[SendGrid](https://www.twilio.com/docs/sendgrid/api-reference/mail-send/mail-send),
+[Postmark](https://postmarkapp.com/developer/api/email-api),
+[Resend](https://resend.com/docs/api-reference/emails/send-email) and
+[Resend content IDs](https://resend.com/changelog/embed-images-using-cid).
+Local transport/MIME tests and a database-backed failed delivery/retry test
+verify preservation; they do not establish live provider delivery.
 
 ## Decisions
 

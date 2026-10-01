@@ -9,7 +9,7 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
-## Unreleased
+## v0.1.50 (2026-10-01)
 
 - Create the framework CI database when Postgres starts. Database-backed
   tests now run against the configured database; the transactional mail

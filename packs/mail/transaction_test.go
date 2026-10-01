@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -134,12 +135,18 @@ func TestSendTx(t *testing.T) {
 	t.Run("commit and delivery", func(t *testing.T) {
 		reset(t)
 		delivered := make(chan map[string]any, 1)
+		var failNext atomic.Bool
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			var body map[string]any
 			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 				t.Error(err)
 			}
 			delivered <- body
+			if failNext.Swap(false) {
+				w.WriteHeader(http.StatusServiceUnavailable)
+				io.WriteString(w, `{"error":"temporary failure"}`)
+				return
+			}
 			io.WriteString(w, `{"id":"sent-1"}`)
 		}))
 		defer server.Close()
@@ -191,8 +198,14 @@ func TestSendTx(t *testing.T) {
 			t.Fatal("queued attachment lost", body, err)
 		}
 		// Failed attempts retain the original payload for a later retry.
-		if _, err := pool.Exec(ctx, `UPDATE mail_message SET status='failed', error='temporary failure' WHERE id=$1`, id); err != nil {
-			t.Fatal(err)
+		failNext.Store(true)
+		if err := m.Deliver(rctx, id); err == nil {
+			t.Fatal("provider failure not returned")
+		}
+		<-delivered
+		var failedStatus string
+		if err := pool.QueryRow(ctx, `SELECT status FROM mail_message WHERE id=$1`, id).Scan(&failedStatus); err != nil || failedStatus != StatusFailed {
+			t.Fatal(failedStatus, err)
 		}
 		if err := m.Deliver(rctx, id); err != nil {
 			t.Fatal(err)
@@ -241,6 +254,9 @@ func TestSendTx(t *testing.T) {
 			{To: "ada@example.com", Text: "body"},
 			{To: "ada@example.com", Subject: "A"},
 			{To: "ada@example.com", Template: "missing"},
+			{To: "ada@example.com", Subject: "A", Text: "body", Cc: []string{"invalid"}},
+			{To: "ada@example.com", Subject: "A", Text: "body", Bcc: []string{"ada@example.com"}},
+			{To: "ada@example.com", Subject: "A", Text: "body", Attachments: []Attachment{{Name: "../file"}}},
 		} {
 			tx := begin(t)
 			if id, err := m.SendTx(ctx, tx, invalid); err == nil || id != "" {

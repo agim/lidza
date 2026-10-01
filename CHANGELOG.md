@@ -9,6 +9,12 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- Encode empty attachment data as an empty base64 string instead of JSON
+  null, matching the HTTP providers' content field contracts. Cover
+  SendGrid, Postmark and Resend with local request regressions.
+
 ## v0.1.51 (2026-10-01)
 
 - Breaking: reject duplicate recipients, control characters and reserved

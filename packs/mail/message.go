@@ -131,6 +131,11 @@ func validateMessage(msg *Message, cfg Config) error {
 			return errors.New("mail: attachments exceed byte limit")
 		}
 		remaining -= len(a.Data)
+		// JSON providers require a base64 string, including for an empty file.
+		// A nil byte slice would otherwise encode as null.
+		if a.Data == nil {
+			a.Data = []byte{}
+		}
 		if a.ContentType == "" {
 			a.ContentType = http.DetectContentType(a.Data)
 		}

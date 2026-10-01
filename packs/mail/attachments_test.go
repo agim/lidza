@@ -72,6 +72,39 @@ func TestAttachmentValidation(t *testing.T) {
 	if original.Attachments[0].ContentType != "" {
 		t.Fatal("caller metadata changed")
 	}
+	empty := Message{To: "ada@example.com", Subject: "Hi", Text: "hello", Attachments: []Attachment{{Name: "empty.txt"}}}
+	if err := m.prepare(context.Background(), &empty); err != nil {
+		t.Fatal(err)
+	}
+	if empty.Attachments[0].Data == nil {
+		t.Fatal("empty data would encode as null")
+	}
+	for _, name := range []string{"sendgrid", "resend", "postmark"} {
+		t.Run(name+" empty file", func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				data, err := io.ReadAll(r.Body)
+				if err != nil {
+					t.Error(err)
+				}
+				key := `"content":""`
+				if name == "postmark" {
+					key = `"Content":""`
+				}
+				if !bytes.Contains(data, []byte(key)) {
+					t.Errorf("empty content is not a base64 string: %s", data)
+				}
+				io.WriteString(w, `{"id":"sent","MessageID":"sent"}`)
+			}))
+			defer server.Close()
+			sender, err := New(Config{Provider: name, APIKey: "test", BaseURL: server.URL, From: "sender@example.com"}, nil, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := sender.Send(ctxWith(t, server), empty); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
 	defaults, err := New(Config{Provider: "outbox"}, nil, nil)
 	if err != nil {
 		t.Fatal(err)

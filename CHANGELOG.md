@@ -9,7 +9,7 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
-## Unreleased
+## v0.1.49 (2026-10-01)
 
 - Mail `SendTx` stores the outbox row and delivery job in the caller's
   database transaction, so application writes and queued mail commit or

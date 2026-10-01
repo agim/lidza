@@ -9,7 +9,7 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
-## Unreleased
+## v0.1.45 (2026-10-01)
 
 - Mail outbox delivery preserves each message's sender, Reply-To and custom
   headers, including background delivery and retries. Previously the outbox

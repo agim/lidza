@@ -296,6 +296,11 @@ sg docker -c 'docker info --format "{{.ServerVersion}}"'
 
 Framework build, from the repo root:
 
+Database-backed checks use `LIDZA_TEST_DATABASE_URL`. Create its database
+before running the suite; the framework CI Postgres service creates
+`lidza_test` with `POSTGRES_DB`. An explicitly configured but unreachable
+database fails the transactional mail regression instead of skipping it.
+
 ```sh
 gofmt -l . && go vet ./... && staticcheck ./... && go test ./...
 (cd core && cargo test && cargo build --target wasm32-wasip1)

@@ -9,6 +9,12 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- Create the framework CI database when Postgres starts. Database-backed
+  tests now run against the configured database; the transactional mail
+  regression fails explicitly when a configured database is unavailable.
+
 ## v0.1.49 (2026-10-01)
 
 - Mail `SendTx` stores the outbox row and delivery job in the caller's

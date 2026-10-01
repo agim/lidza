@@ -17,6 +17,18 @@ change. A release without one is additive: an app updates with
   supported. This prevents an old CLI from silently removing newer pack
   fields when running gen, setup, test, check or verify.
 
+## v0.1.46 (2026-10-01)
+
+- Refresh the reference app's generated mail recipe skills to match the guide;
+  reference-app verification no longer reports unstaged generated recipes.
+
+## v0.1.45 (2026-10-01)
+
+- Mail outbox delivery preserves each message's sender, Reply-To and custom
+  headers, including background delivery and retries. Previously the outbox
+  dropped them. `lidza update --migrate` adds nullable fields to the mail
+  schema; old queued rows use the configured sender.
+
 ## v0.1.44 (2026-09-30)
 
 - `lidza.json` `"appDir"`: the app's package (`routes.go`, `start.go`,

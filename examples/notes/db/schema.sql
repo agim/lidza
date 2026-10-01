@@ -46,6 +46,9 @@ CREATE INDEX auth_token_subject_idx ON auth_token (subject);
 CREATE TABLE mail_message (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   recipient text NOT NULL,
+  from_address text,
+  reply_to text,
+  headers jsonb,
   subject text NOT NULL,
   text text,
   html text,

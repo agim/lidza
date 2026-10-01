@@ -64,6 +64,11 @@ pub struct AuthToken {
 pub struct MailMessage {
     pub id: String,
     pub recipient: String,
+    #[serde(rename = "fromAddress")]
+    pub from_address: Option<String>,
+    #[serde(rename = "replyTo")]
+    pub reply_to: Option<String>,
+    pub headers: Option<serde_json::Value>,
     pub subject: String,
     pub text: Option<String>,
     pub html: Option<String>,

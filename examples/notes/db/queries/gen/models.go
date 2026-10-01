@@ -81,18 +81,21 @@ type LlmUsage struct {
 }
 
 type MailMessage struct {
-	ID         string     `json:"id"`
-	Recipient  string     `json:"recipient"`
-	Subject    string     `json:"subject"`
-	Text       *string    `json:"text"`
-	HTML       *string    `json:"html"`
-	Template   *string    `json:"template"`
-	Status     string     `json:"status"`
-	ProviderID *string    `json:"provider_id"`
-	Error      *string    `json:"error"`
-	Attempts   int32      `json:"attempts"`
-	CreatedAt  time.Time  `json:"created_at"`
-	SentAt     *time.Time `json:"sent_at"`
+	ID          string     `json:"id"`
+	Recipient   string     `json:"recipient"`
+	FromAddress *string    `json:"from_address"`
+	ReplyTo     *string    `json:"reply_to"`
+	Headers     []byte     `json:"headers"`
+	Subject     string     `json:"subject"`
+	Text        *string    `json:"text"`
+	HTML        *string    `json:"html"`
+	Template    *string    `json:"template"`
+	Status      string     `json:"status"`
+	ProviderID  *string    `json:"provider_id"`
+	Error       *string    `json:"error"`
+	Attempts    int32      `json:"attempts"`
+	CreatedAt   time.Time  `json:"created_at"`
+	SentAt      *time.Time `json:"sent_at"`
 }
 
 type Note struct {

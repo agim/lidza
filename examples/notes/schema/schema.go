@@ -3,6 +3,7 @@
 package schema
 
 import (
+	"encoding/json"
 	"github.com/agim/lidza/pkg/validate"
 	"time"
 )
@@ -114,18 +115,21 @@ func (v AuthToken) Validate() error {
 
 // MailMessage is a row of the mail_message table.
 type MailMessage struct {
-	ID         string     `json:"id" db:"id"`
-	Recipient  string     `json:"recipient" db:"recipient"`
-	Subject    string     `json:"subject" db:"subject"`
-	Text       *string    `json:"text" db:"text"`
-	HTML       *string    `json:"html" db:"html"`
-	Template   *string    `json:"template" db:"template"`
-	Status     string     `json:"status" db:"status"`
-	ProviderID *string    `json:"providerId" db:"provider_id"`
-	Error      *string    `json:"error" db:"error"`
-	Attempts   int        `json:"attempts" db:"attempts"`
-	CreatedAt  time.Time  `json:"createdAt" db:"created_at"`
-	SentAt     *time.Time `json:"sentAt" db:"sent_at"`
+	ID          string          `json:"id" db:"id"`
+	Recipient   string          `json:"recipient" db:"recipient"`
+	FromAddress *string         `json:"fromAddress" db:"from_address"`
+	ReplyTo     *string         `json:"replyTo" db:"reply_to"`
+	Headers     json.RawMessage `json:"headers" db:"headers"`
+	Subject     string          `json:"subject" db:"subject"`
+	Text        *string         `json:"text" db:"text"`
+	HTML        *string         `json:"html" db:"html"`
+	Template    *string         `json:"template" db:"template"`
+	Status      string          `json:"status" db:"status"`
+	ProviderID  *string         `json:"providerId" db:"provider_id"`
+	Error       *string         `json:"error" db:"error"`
+	Attempts    int             `json:"attempts" db:"attempts"`
+	CreatedAt   time.Time       `json:"createdAt" db:"created_at"`
+	SentAt      *time.Time      `json:"sentAt" db:"sent_at"`
 }
 
 // Validate applies the rules of MailMessage from schema.lidza.

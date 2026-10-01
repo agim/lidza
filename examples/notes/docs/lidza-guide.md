@@ -655,7 +655,8 @@ mail pack, never through a vendor SDK.
    `Link` makes the path absolute with `APP_URL` (`.env`: the address
    the app is reached at from an inbox), so the link works outside the
    outbox. Send returns once the row is in the outbox (queued for the
-   jobs pack, or delivered right away without it). Do not build the
+   jobs pack, or delivered right away without it). The outbox preserves
+   `From`, `ReplyTo` and custom `Headers` for delivery and retries. Do not build the
    message with `fmt.Sprintf` and do not call the vendor's API.
 4. Test it: `mail.From(srv.Context()).WaitFor(ctx, to, "Verify", 5*time.Second)`
    returns the newest message to that address whose subject contains the

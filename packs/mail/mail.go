@@ -247,9 +247,13 @@ func (m *Mail) Send(ctx context.Context, msg Message) (string, error) {
 	if m.pool == nil {
 		return m.providerNow().Send(ctx, msg)
 	}
+	headers, err := json.Marshal(msg.Headers)
+	if err != nil {
+		return "", fmt.Errorf("mail: headers: %w", err)
+	}
 	var id string
-	err := m.pool.QueryRow(ctx, `INSERT INTO mail_message (recipient, subject, text, html, template, status, attempts) VALUES ($1, $2, $3, $4, $5, $6, 0) RETURNING id`,
-		msg.To, msg.Subject, nullable(msg.Text), nullable(msg.HTML), nullable(msg.Template), StatusQueued).Scan(&id)
+	err = m.pool.QueryRow(ctx, `INSERT INTO mail_message (recipient, subject, text, html, template, status, attempts, from_address, reply_to, headers) VALUES ($1, $2, $3, $4, $5, $6, 0, $7, $8, $9) RETURNING id`,
+		msg.To, msg.Subject, nullable(msg.Text), nullable(msg.HTML), nullable(msg.Template), StatusQueued, nullable(msg.From), nullable(msg.ReplyTo), headers).Scan(&id)
 	if err != nil {
 		return "", fmt.Errorf("mail: outbox: %w", err)
 	}
@@ -269,12 +273,23 @@ func (m *Mail) Deliver(ctx context.Context, id string) error {
 		return errors.New("mail: no outbox")
 	}
 	var msg Message
-	var text, html, template *string
-	err := m.pool.QueryRow(ctx, `SELECT recipient, subject, text, html, template FROM mail_message WHERE id = $1`, id).Scan(&msg.To, &msg.Subject, &text, &html, &template)
+	var text, html, template, from, replyTo *string
+	var headers []byte
+	err := m.pool.QueryRow(ctx, `SELECT recipient, subject, text, html, template, from_address, reply_to, headers FROM mail_message WHERE id = $1`, id).Scan(&msg.To, &msg.Subject, &text, &html, &template, &from, &replyTo, &headers)
 	if err != nil {
 		return fmt.Errorf("mail: outbox row %s: %w", id, err)
 	}
 	msg.Text, msg.HTML = deref(text), deref(html)
+	msg.From, msg.ReplyTo = deref(from), deref(replyTo)
+	// Rows queued before these columns existed use the configured sender.
+	if msg.From == "" {
+		msg.From = m.cfg.From
+	}
+	if len(headers) > 0 {
+		if err := json.Unmarshal(headers, &msg.Headers); err != nil {
+			return fmt.Errorf("mail: outbox headers: %w", err)
+		}
+	}
 	providerID, sendErr := m.providerNow().Send(ctx, msg)
 	if sendErr != nil {
 		m.pool.Exec(ctx, `UPDATE mail_message SET status = $2, error = $3, attempts = attempts + 1 WHERE id = $1`, id, StatusFailed, sendErr.Error())
@@ -641,6 +656,9 @@ func deref(p *string) string {
 const OutboxTable = `CREATE TABLE IF NOT EXISTS mail_message (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   recipient text NOT NULL,
+  from_address text,
+  reply_to text,
+  headers jsonb,
   subject text NOT NULL,
   text text,
   html text,

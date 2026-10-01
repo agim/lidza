@@ -532,7 +532,8 @@ with `lidzatest`), SMTP with STARTTLS or TLS builds a MIME message;
 from `mail/<name>.txt.tmpl` and `.html.tmpl`. With the db pack every
 message is a row in `mail_message` with status, provider id, error and
 attempts (`Outbox`, the MCP tool `lidza_mail`); with the jobs pack
-delivery runs as a job with retries. `lidza check` L006 flags an import
+delivery runs as a job with retries. The outbox preserves the resolved sender,
+Reply-To and custom headers across delivery and retries. `lidza check` L006 flags an import
 of a vendor SDK. The reference app sends its verification and reset
 links through it and its tests read the outbox; the guide has the recipe
 "Send an email".

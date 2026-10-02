@@ -606,7 +606,11 @@ func (p smtpProvider) Send(ctx context.Context, msg Message) (string, error) {
 	if err := writer.Close(); err != nil {
 		return "", err
 	}
-	return id, client.Quit()
+	// The server accepted the message when DATA closed: a failed QUIT (a
+	// dropped connection, a timeout) must not mark it failed, or the retry
+	// sends the recipient a second copy.
+	_ = client.Quit()
+	return id, nil
 }
 
 func parseAddress(s string) (*mail.Address, error) {

@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"golang.org/x/mod/modfile"
+	"golang.org/x/mod/module"
 	"golang.org/x/mod/semver"
 
 	"github.com/agim/lidza/pkg/config"
@@ -140,7 +141,9 @@ func generateAll(dir string, cfg *config.Config, out io.Writer) error {
 // Generating against a different module can silently add or drop pack
 // fields. Check the app's pin before any of those files are rewritten.
 func generationVersion(dir, cli string) error {
-	if !semver.IsValid(cli) { // Unreleased framework development.
+	// Unreleased framework development: a CLI built from source carries a
+	// pseudo-version (go build stamps one), not a release tag.
+	if !semver.IsValid(cli) || module.IsPseudoVersion(cli) {
 		return nil
 	}
 	path := filepath.Join(dir, "go.mod")

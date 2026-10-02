@@ -9,6 +9,21 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- Breaking: mail refuses custom `Message-ID` and `Date` headers; the pack
+  sets both, and a custom Message-ID made the stored provider id wrong
+  for bounce and reply correlation. Remove them from `Message.Headers`.
+- Mail no longer sends a message twice: the queued job skips a row
+  already marked sent (a stale claim taken over, a retry after the
+  provider accepted it), and SMTP counts a message as sent once the
+  server accepts DATA, whatever QUIT then does. `Deliver` called
+  directly still resends.
+- The CLI version guard treats a CLI built from source (a Go
+  pseudo-version) as development, as the v0.1.47 notes said, so it no
+  longer refuses `lidza gen`, `check`, `test` and `verify` against an
+  app pinned to a release.
+
 ## v0.1.53 (2026-10-01)
 
 - Mail supports bounded Reply-To address lists and inline byte attachments with

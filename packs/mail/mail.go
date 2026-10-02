@@ -241,7 +241,7 @@ func (m *Mail) setup() error {
 			if err := json.Unmarshal(payload, &p); err != nil {
 				return err
 			}
-			return m.Deliver(ctx, p.ID)
+			return m.deliverQueued(ctx, p.ID)
 		})
 	}
 	return nil
@@ -350,8 +350,24 @@ func (m *Mail) store(ctx context.Context, db rowQuerier, msg Message) (string, e
 	return id, nil
 }
 
+// deliverQueued is the queued job: a re-run of it (a stale claim taken
+// over, a retry after the provider accepted the message but the outcome
+// was not recorded) never sends a delivered message again. An explicit
+// Deliver still resends.
+func (m *Mail) deliverQueued(ctx context.Context, id string) error {
+	var status string
+	if err := m.pool.QueryRow(ctx, `SELECT status FROM mail_message WHERE id = $1`, id).Scan(&status); err != nil {
+		return fmt.Errorf("mail: outbox row %s: %w", id, err)
+	}
+	if status == StatusSent {
+		return nil
+	}
+	return m.Deliver(ctx, id)
+}
+
 // Deliver sends the outbox row id through the provider and records the
-// outcome. The jobs pack calls it; an error makes the job retry.
+// outcome. The queued job calls it (through deliverQueued); an error makes
+// the job retry. Called directly, it resends whatever the row's status.
 func (m *Mail) Deliver(ctx context.Context, id string) error {
 	if m.pool == nil {
 		return errors.New("mail: no outbox")

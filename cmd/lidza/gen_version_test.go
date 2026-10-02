@@ -26,6 +26,8 @@ func TestGenerationVersion(t *testing.T) {
 		{"unrelated replacement", "v0.1.44", "v0.1.43", "replace example.com/pkg => ../pkg\n", true},
 		{"different replaced version", "v0.1.44", "v0.1.43", "replace github.com/agim/lidza v0.1.42 => ../lidza\n", true},
 		{"matching pseudo version", "v0.1.44-0.20260930123456-0123456789ab", "v0.1.44-0.20260930123456-0123456789ab", "", false},
+		// go build stamps a pseudo-version on a CLI built from source.
+		{"source-built CLI", "v0.1.54-0.20261002120000-0123456789ab", "v0.1.53", "", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()

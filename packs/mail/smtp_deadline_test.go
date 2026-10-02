@@ -140,7 +140,13 @@ func TestSMTPDeadlineAndCancellation(t *testing.T) {
 				}
 				select {
 				case err := <-done:
-					if err == nil {
+					// A stalled QUIT comes after the server accepted the
+					// message: it returns in time, as sent, so no retry
+					// sends a second copy. Every earlier stall fails.
+					if stage == "quit" && err != nil {
+						t.Fatalf("accepted message failed on QUIT: %v", err)
+					}
+					if stage != "quit" && err == nil {
 						t.Fatal("stalled SMTP succeeded")
 					}
 				case <-time.After(time.Second):

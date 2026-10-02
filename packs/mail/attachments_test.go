@@ -48,6 +48,8 @@ func TestAttachmentValidation(t *testing.T) {
 		"header name":          func(m *Message) { m.Headers = map[string]string{"X-Foo: bad": "yes"} },
 		"header value":         func(m *Message) { m.Headers = map[string]string{"X-Foo": "yes\nBcc: hidden@example.com"} },
 		"reserved header":      func(m *Message) { m.Headers = map[string]string{"bCc": "hidden@example.com"} },
+		"message id header":    func(m *Message) { m.Headers = map[string]string{"Message-ID": "<own@example.com>"} },
+		"date header":          func(m *Message) { m.Headers = map[string]string{"Date": "Mon, 1 Jan 2024 00:00:00 +0000"} },
 		"file count":           func(m *Message) { m.Attachments = append(m.Attachments, Attachment{Name: "a.txt"}) },
 		"file bytes":           func(m *Message) { m.Attachments[0].Data = make([]byte, 1024) },
 		"file name":            func(m *Message) { m.Attachments[0].Name = "../report.txt" },

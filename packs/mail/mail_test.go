@@ -285,6 +285,13 @@ func TestOutbox(t *testing.T) {
 	if failed.Status != StatusFailed || failed.Error == nil || !strings.Contains(*failed.Error, "500") || failed.Attempts != 1 {
 		t.Fatalf("failed row: %+v", failed)
 	}
+	// A re-run job never sends a delivered message again.
+	if err := m.deliverQueued(rctx, sent.ID); err != nil {
+		t.Fatal(err)
+	}
+	if again, err := m.Outbox(rctx, 10); err != nil || again[1].Attempts != 1 {
+		t.Fatalf("delivered message sent again: %v %+v", err, again)
+	}
 	// Delivery can be retried by id.
 	if err := m.Deliver(rctx, failed.ID); err == nil {
 		t.Fatal("retry of a failing message succeeded")

@@ -141,7 +141,10 @@ func validateMessage(msg *Message, cfg Config) error {
 		}
 		seenHeaders[lower] = true
 		switch lower {
-		case "to", "cc", "bcc", "from", "subject", "reply-to", "return-path", "mime-version", "content-type", "content-transfer-encoding", "content-disposition":
+		// Message-ID and Date are the pack's: a custom one would not match the
+		// provider_id stored for bounce and reply correlation.
+		case "to", "cc", "bcc", "from", "subject", "reply-to", "return-path", "mime-version", "content-type", "content-transfer-encoding", "content-disposition",
+			"message-id", "date":
 			return fmt.Errorf("mail: reserved header %s: use Message fields", key)
 		}
 	}

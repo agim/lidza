@@ -3,12 +3,15 @@
 # creates the annotated tag. It lets a release be cut from a place that
 # can push master but not tags (RELEASE_TAG=ci scripts/release.sh). A tag
 # pushed with the workflow token starts no other workflow, so the checks
-# ci.yml's release job runs on a tag are repeated here.
+# ci.yml's release job runs on a tag are repeated here. Run by hand
+# (workflow_dispatch), it only checks that the workflow may push a tag:
+# it pushes a throwaway tag-probe-<run> tag and deletes it.
 name: tag
 
 on:
   push:
     branches: [master]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -19,6 +22,7 @@ concurrency:
 
 jobs:
   tag:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -62,3 +66,25 @@ jobs:
           got=$("$(go env GOPATH)/bin/lidza" version)
           echo "$got"
           [ "$got" = "lidza $VER" ]
+
+  probe:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+      - name: push and delete a throwaway tag
+        env:
+          PROBE: tag-probe-${{ github.run_id }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$PROBE" -m "$PROBE"
+          git push origin "refs/tags/$PROBE"
+          git ls-remote --exit-code --tags origin "refs/tags/$PROBE"
+      - name: delete the throwaway tag
+        if: always()
+        env:
+          PROBE: tag-probe-${{ github.run_id }}
+        run: git push origin ":refs/tags/$PROBE" || true

@@ -9,7 +9,7 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
-## Unreleased
+## v0.1.54 (2026-10-02)
 
 - Breaking: mail refuses custom `Message-ID` and `Date` headers; the pack
   sets both, and a custom Message-ID made the stored provider id wrong

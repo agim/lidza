@@ -3,11 +3,17 @@
 #
 # Turns the "## Unreleased" section of CHANGELOG.md into the release
 # heading, pins the installer to the release, commits, tags and pushes
-# master and the tag. CI's release job then installs the tag through Go
-# and checks `lidza version`. Needs a clean tree on master with an
-# "## Unreleased" section that has at least one entry.
+# master and the tag together. CI's release job then installs the tag
+# through Go and checks `lidza version`. Needs a clean tree on master with
+# an "## Unreleased" section that has at least one entry.
+#
+# RELEASE_TAG=ci pushes master only and leaves the tag to the tag workflow
+# (.github/workflows/tag.yml), for a place that may push master but not
+# tags, such as an agent's cloud session.
 set -eu
 ver=${1:-}
+tagger=${RELEASE_TAG:-local}
+case "$tagger" in local|ci) ;; *) echo "RELEASE_TAG is local or ci" >&2; exit 2 ;; esac
 case "$ver" in v[0-9]*.[0-9]*.[0-9]*) ;; *) echo "usage: scripts/release.sh vX.Y.Z" >&2; exit 2 ;; esac
 cd "$(dirname "$0")/.."
 [ "$(git branch --show-current)" = master ] || { echo "not on master" >&2; exit 1; }
@@ -29,7 +35,12 @@ sed -i.bak "s/^LIDZA_VERSION=\"\${LIDZA_VERSION:-v[0-9.]*}\"$/LIDZA_VERSION=\"\$
 go test ./pkg/version >/dev/null
 git add CHANGELOG.md install.sh
 git commit -q -m "Release $ver"
+if [ "$tagger" = ci ]; then
+	git push -q -u origin master
+	echo "pushed $ver: $(git rev-parse --short HEAD); the tag workflow tags it, then: go install github.com/agim/lidza/cmd/lidza@$ver"
+	exit 0
+fi
 git tag -a "$ver" -m "$ver"
-git push -q -u origin master
-git push -q origin "$ver"
+# One push for both, so the tag workflow finds the tag already there.
+git push -q --atomic -u origin master "$ver"
 echo "released $ver: $(git rev-parse --short HEAD); go install github.com/agim/lidza/cmd/lidza@$ver"

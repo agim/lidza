@@ -1,0 +1,64 @@
+# Tags a release from master: when the pushed head is a "Release vX.Y.Z"
+# commit made by scripts/release.sh and the tag is not there yet, this
+# creates the annotated tag. It lets a release be cut from a place that
+# can push master but not tags (RELEASE_TAG=ci scripts/release.sh). A tag
+# pushed with the workflow token starts no other workflow, so the checks
+# ci.yml's release job runs on a tag are repeated here.
+name: tag
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tag
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+      - name: release commit
+        id: release
+        run: |
+          subject=$(git log -1 --format=%s)
+          ver=$(printf '%s\n' "$subject" | sed -n 's/^Release \(v[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)$/\1/p')
+          if [ -z "$ver" ]; then
+            echo "not a release commit: $subject"
+            exit 0
+          fi
+          grep -q "^## $ver (" CHANGELOG.md || { echo "CHANGELOG.md has no '## $ver' heading" >&2; exit 1; }
+          grep -q "LIDZA_VERSION:-$ver}" install.sh || { echo "install.sh does not pin $ver" >&2; exit 1; }
+          tagged=$(git ls-remote --tags origin "refs/tags/$ver^{}" | cut -f1)
+          [ -n "$tagged" ] || tagged=$(git ls-remote --tags origin "refs/tags/$ver" | cut -f1)
+          if [ -n "$tagged" ]; then
+            [ "$tagged" = "$(git rev-parse HEAD)" ] || { echo "$ver already tags $tagged, not this commit" >&2; exit 1; }
+            echo "$ver is already tagged"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag -a "$ver" -m "$ver"
+            git push origin "refs/tags/$ver"
+          fi
+          echo "ver=$ver" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-go@v7
+        if: steps.release.outputs.ver != ''
+        with:
+          go-version: stable
+      - name: go install the tag
+        if: steps.release.outputs.ver != ''
+        env:
+          GOPROXY: direct
+          GONOSUMDB: github.com/agim/lidza
+          VER: ${{ steps.release.outputs.ver }}
+        run: |
+          go install "github.com/agim/lidza/cmd/lidza@$VER"
+          got=$("$(go env GOPATH)/bin/lidza" version)
+          echo "$got"
+          [ "$got" = "lidza $VER" ]

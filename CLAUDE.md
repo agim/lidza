@@ -22,6 +22,10 @@ Gotchas:
   or flag reaches users only once `scripts/release.sh vX.Y.Z` has tagged it,
   so tag before a runbook or the README tells anyone to run it. Entries go
   under "## Unreleased" in `CHANGELOG.md` until then.
+  Where tags cannot be pushed (an agent's cloud session),
+  `RELEASE_TAG=ci scripts/release.sh vX.Y.Z` pushes master only and
+  `.github/workflows/tag.yml` tags the release commit; check the tag exists
+  remotely (`git ls-remote --tags origin vX.Y.Z`) before an app updates.
 - Keep docs plain: short headings, facts, no decorative arrows, no taglines.
 
 Working agreements (Agim's standing decisions):

@@ -9,6 +9,16 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- Admin pages: a form posts the frame's `.Back` as `back` to return to
+  the view it was sent from (the same page and query, never another
+  address), with the action's message. `Page.MaxUpload` lets a page's
+  forms send files (multipart, limited to that many bytes; other pages
+  refuse them), and `Page.Downloads` serves GET handlers at
+  `<Path>/<name>` behind the admin gate, for exports and attachments.
+  The guide's "Extend the admin pages" recipe says how.
+
 ## v0.1.54 (2026-10-02)
 
 - Breaking: mail refuses custom `Message-ID` and `Date` headers; the pack

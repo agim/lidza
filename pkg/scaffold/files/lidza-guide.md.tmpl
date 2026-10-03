@@ -1198,7 +1198,14 @@ instead of a separate admin screen.
    `assets/icons.txt`, `Template`, `Data` (sqlc queries; the page is
    admin-only, so a query may cross accounts) and `Actions` (a form
    posts to `<Path>/<action>`; return the message the page shows, or an
-   error).
+   error). A form inside a detail view (`?order=1001`) adds
+   `<input type="hidden" name="back" value="{{"{{"}}$.Back{{"}}"}}">` so
+   its action returns to that view. A page that takes files sets
+   `MaxUpload` (bytes) and its form `enctype="multipart/form-data"`; the
+   action reads `r.MultipartForm.File`. A file to download (an export, an
+   attachment) is a `Downloads` handler at `<Path>/<name>`, behind the
+   same gate; it sets `Content-Disposition` and
+   `X-Content-Type-Options: nosniff`.
 3. The template is `admin/<page>.html` defining `content` (snippet
    `admin-page-template`): Tabler's classes (`card`, `table card-table`,
    `badge`, `btn`), the functions `icon`, `since`, `num`, `bytes`,

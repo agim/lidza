@@ -2,10 +2,13 @@ package admin
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"html/template"
 	"io/fs"
+	"mime"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 )
@@ -42,8 +45,21 @@ type Page struct {
 	Data func(r *http.Request) (any, error)
 	// Actions are the page's forms: a POST to <Path>/<name> runs
 	// Actions[name] and redirects back to the page with its message, or
-	// with its error as an alert.
+	// with its error as an alert. A form that posts the frame's .Back as
+	// "back" (<input type="hidden" name="back" value="{{$.Back}}">)
+	// returns to the view it was sent from: the same page with the same
+	// query (?order=1001), never another address.
 	Actions map[string]Action
+	// MaxUpload, when above zero, lets the page's forms send files
+	// (enctype="multipart/form-data"): the body is limited to MaxUpload
+	// bytes and an action reads r.MultipartForm.File; a larger body is
+	// refused with an alert. Zero refuses file forms.
+	MaxUpload int64
+	// Downloads answer GET <Path>/<name> behind the same gate as the
+	// page: an attachment, an export. The handler writes the whole
+	// response; set Content-Type, Content-Disposition and
+	// X-Content-Type-Options: nosniff for anything a user uploaded.
+	Downloads map[string]http.HandlerFunc
 }
 
 // Action handles one of a page's forms. It reads r.Form (parsed) and the
@@ -72,6 +88,12 @@ func (h *Handler) mountPages() {
 		seen[path] = true
 		h.mux.HandleFunc("GET "+h.path+"/"+path, func(w http.ResponseWriter, r *http.Request) { h.appPage(w, r, pg) })
 		h.mux.HandleFunc("POST "+h.path+"/"+path+"/{action}", func(w http.ResponseWriter, r *http.Request) { h.appAction(w, r, pg) })
+		for name, fn := range pg.Downloads {
+			if name == "" || strings.ContainsAny(name, "/{}? ") || fn == nil {
+				panic(fmt.Sprintf("admin: page %q: download %q needs a plain name and a handler", pg.Name, name))
+			}
+			h.mux.HandleFunc("GET "+h.path+"/"+path+"/"+name, fn)
+		}
 	}
 }
 
@@ -113,10 +135,26 @@ func (h *Handler) appAction(w http.ResponseWriter, r *http.Request, pg Page) {
 		http.NotFound(w, r)
 		return
 	}
-	if err := r.ParseForm(); err != nil {
+	if mt, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type")); mt == "multipart/form-data" {
+		if pg.MaxUpload <= 0 {
+			h.redirect(w, r, back, "", "this form takes no files")
+			return
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, pg.MaxUpload)
+		if err := r.ParseMultipartForm(min(pg.MaxUpload, 8<<20)); err != nil {
+			msg := "bad form"
+			if errors.As(err, new(*http.MaxBytesError)) {
+				msg = "the upload is larger than " + humanBytes(pg.MaxUpload)
+			}
+			h.redirect(w, r, back, "", msg)
+			return
+		}
+		defer func() { _ = r.MultipartForm.RemoveAll() }()
+	} else if err := r.ParseForm(); err != nil {
 		h.redirect(w, r, back, "", "bad form")
 		return
 	}
+	back += viewQuery(r.Form.Get("back"))
 	msg, err := action(r)
 	if err != nil {
 		h.redirect(w, r, back, "", err.Error())
@@ -126,6 +164,25 @@ func (h *Handler) appAction(w http.ResponseWriter, r *http.Request, pg Page) {
 		msg = "done"
 	}
 	h.redirect(w, r, back, msg, "")
+}
+
+// viewQuery is a page's query for returning to the same view ("?a=1"),
+// without the flash and alert of an earlier action; anything but a query
+// (another path, a scheme, an over-long value) is dropped.
+func viewQuery(raw string) string {
+	if raw == "" || len(raw) > 2048 || raw[0] != '?' {
+		return ""
+	}
+	v, err := url.ParseQuery(raw[1:])
+	if err != nil {
+		return ""
+	}
+	v.Del("saved")
+	v.Del("error")
+	if len(v) == 0 {
+		return ""
+	}
+	return "?" + v.Encode()
 }
 
 // appNav lists the app's pages for the sidebar.

@@ -297,6 +297,9 @@ type page struct {
 	User    string
 	SignOut string
 	Data    any
+	// Back is the view's query ("?order=1001"), for a form's hidden
+	// "back" field: its action returns to this view.
+	Back string
 }
 
 // navItem is one entry of the sidebar; Group starts a heading. Status
@@ -496,7 +499,7 @@ func (h *Handler) renderStatus(w http.ResponseWriter, r *http.Request, status in
 func (h *Handler) renderWith(w http.ResponseWriter, r *http.Request, status int, name, active string, data any, addContent func(*template.Template) (*template.Template, error)) {
 	ctx := r.Context()
 	p := page{Title: h.opt.Title, App: h.opt.Title, Path: h.path, Version: version.String(), Active: active, Data: data,
-		Flash: r.URL.Query().Get("saved"), Error: r.URL.Query().Get("error")}
+		Flash: r.URL.Query().Get("saved"), Error: r.URL.Query().Get("error"), Back: viewQuery("?" + r.URL.RawQuery)}
 	if d, ok := data.(appPageData); ok {
 		p.Data = d.Data
 		if d.Err != nil {
@@ -693,11 +696,14 @@ func humanUntil(at time.Time) string {
 
 // redirect sends the browser back to a page with a message.
 func (h *Handler) redirect(w http.ResponseWriter, r *http.Request, to, flash, errText string) {
-	q := ""
+	q, sep := "", "?"
+	if strings.Contains(to, "?") {
+		sep = "&"
+	}
 	if flash != "" {
-		q = "?saved=" + template.URLQueryEscaper(flash)
+		q = sep + "saved=" + template.URLQueryEscaper(flash)
 	} else if errText != "" {
-		q = "?error=" + template.URLQueryEscaper(errText)
+		q = sep + "error=" + template.URLQueryEscaper(errText)
 	}
 	http.Redirect(w, r, h.path+to+q, http.StatusSeeOther)
 }

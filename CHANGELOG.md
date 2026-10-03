@@ -9,6 +9,18 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- One agent instructions file: `AGENTS.md` holds them, and `CLAUDE.md`
+  and `GEMINI.md` are the one line `@AGENTS.md`, an import Claude Code
+  and Gemini CLI expand; Codex, which has no imports, reads `AGENTS.md`
+  itself. The brief's working agreements, `lidza note` and the recipe
+  list write `AGENTS.md` only. `lidza gen` and `lidza update` turn an
+  app's three identical copies into the file and two stubs; a
+  `CLAUDE.md` or `GEMINI.md` that differs is kept, still updated, and
+  named with what to do: merge what it adds into `AGENTS.md`, then make
+  it the one line `@AGENTS.md`.
+
 ## v0.1.56 (2026-10-03)
 
 - Auth: `POST /api/v1/auth/verify/resend` emails the signed-in user a new

@@ -19,5 +19,4 @@ is verified, how a report is built) is a recipe.
    run, and the check at the end. Point at a file in this app that does
    it already.
 3. `lidza gen` (or the next check) turns it into the prompt, the skills
-   and the command, and lists it in `CLAUDE.md`, `AGENTS.md` and
-   `GEMINI.md`. Restart `lidza mcp` to see the new prompt.
+   and the command, and lists it in `AGENTS.md`. Restart `lidza mcp` to see the new prompt.

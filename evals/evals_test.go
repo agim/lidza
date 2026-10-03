@@ -370,12 +370,16 @@ func TestGuidanceSurfaces(t *testing.T) {
 			}
 		}
 	}
-	for _, f := range []string{"CLAUDE.md", "AGENTS.md", "GEMINI.md"} {
-		data, _ := os.ReadFile(filepath.Join(app, f))
-		for _, want := range []string{"docs/lidza-guide.md", "lidza_api", "lidza_snippet", "lidza verify", "lidza_verify", "add-api-route", "docs/decisions.md"} {
-			if !strings.Contains(string(data), want) {
-				t.Errorf("%s does not mention %s", f, want)
-			}
+	data, _ := os.ReadFile(filepath.Join(app, "AGENTS.md"))
+	for _, want := range []string{"docs/lidza-guide.md", "lidza_api", "lidza_snippet", "lidza verify", "lidza_verify", "add-api-route", "docs/decisions.md"} {
+		if !strings.Contains(string(data), want) {
+			t.Errorf("AGENTS.md does not mention %s", want)
+		}
+	}
+	// Claude Code and Gemini CLI read it through a one-line import.
+	for _, f := range []string{"CLAUDE.md", "GEMINI.md"} {
+		if s := mustRead(t, f); s != "@AGENTS.md\n" {
+			t.Errorf("%s is not the line @AGENTS.md: %q", f, s)
 		}
 	}
 	if _, err := os.Stat(filepath.Join(app, ".githooks", "pre-commit")); err != nil {
@@ -594,8 +598,8 @@ func TestRecipeAdd(t *testing.T) {
 	if !strings.Contains(guide, "## App recipes") || !strings.Contains(guide, "### Paginate a list") || strings.Index(guide, "## Recipes") > strings.Index(guide, "### Paginate a list") {
 		t.Errorf("guide:\n%s", guide)
 	}
-	if !strings.Contains(mustRead(t, "CLAUDE.md"), "this app's own: `paginate-list`") {
-		t.Errorf("CLAUDE.md does not list the app recipe")
+	if !strings.Contains(mustRead(t, "AGENTS.md"), "this app's own: `paginate-list`") {
+		t.Errorf("AGENTS.md does not list the app recipe")
 	}
 	if out, _ := command(app, lidza, "recipe", "list"); !strings.Contains(string(out), "paginate-list") || !strings.Contains(string(out), "app") {
 		t.Errorf("recipe list:\n%s", out)
@@ -642,7 +646,7 @@ func TestBrief(t *testing.T) {
 		restore[f] = mustRead(t, f)
 	}
 	edit(t, restore)
-	if out, err := command(app, lidza, "brief", "answer", "purpose", "A place to collect art"); err != nil {
+	if out, err := command(app, lidza, "brief", "answer", "purpose", "A place to keep project notes"); err != nil {
 		t.Fatalf("brief answer: %v\n%s", err, out)
 	}
 	if out, err := command(app, lidza, "brief", "answer", "signin", "Email and password, Google"); err != nil || !strings.Contains(string(out), "decision recorded: Sign-in: Email and password, Google") {
@@ -654,15 +658,18 @@ func TestBrief(t *testing.T) {
 	if out, err := command(app, lidza, "note", "add", "Prices are shown in euros"); err != nil {
 		t.Fatalf("note add: %v\n%s", err, out)
 	}
-	if b := mustRead(t, "docs/brief.md"); !strings.Contains(b, "A place to collect art") {
+	if b := mustRead(t, "docs/brief.md"); !strings.Contains(b, "A place to keep project notes") {
 		t.Errorf("brief.md:\n%s", b)
 	}
-	for _, f := range []string{"CLAUDE.md", "AGENTS.md", "GEMINI.md"} {
-		if s := mustRead(t, f); !strings.Contains(s, "- Pushing: After every verified commit.") || !strings.Contains(s, ": Prices are shown in euros.") {
-			t.Errorf("%s:\n%s", f, s)
+	if s := mustRead(t, "AGENTS.md"); !strings.Contains(s, "- Pushing: After every verified commit.") || !strings.Contains(s, ": Prices are shown in euros.") {
+		t.Errorf("AGENTS.md:\n%s", s)
+	}
+	for _, f := range []string{"CLAUDE.md", "GEMINI.md"} {
+		if s := mustRead(t, f); s != "@AGENTS.md\n" {
+			t.Errorf("%s grew past the import: %q", f, s)
 		}
 	}
-	if out, _ := command(app, lidza, "brief", "--list"); !strings.Contains(string(out), "A place to collect art") || !strings.Contains(string(out), "(open)") {
+	if out, _ := command(app, lidza, "brief", "--list"); !strings.Contains(string(out), "A place to keep project notes") || !strings.Contains(string(out), "(open)") {
 		t.Errorf("brief --list:\n%s", out)
 	}
 	// Without a terminal the interview points at the tools.

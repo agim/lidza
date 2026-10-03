@@ -15,6 +15,7 @@ import (
 	"golang.org/x/mod/module"
 	"golang.org/x/mod/semver"
 
+	"github.com/agim/lidza/pkg/brief"
 	"github.com/agim/lidza/pkg/config"
 	"github.com/agim/lidza/pkg/crud"
 	"github.com/agim/lidza/pkg/diag"
@@ -130,6 +131,9 @@ func generateAll(dir string, cfg *config.Config, out io.Writer) error {
 		}
 		if len(changed) > 0 {
 			fmt.Fprintf(out, "[lidza] recipes: updated %s\n", strings.Join(changed, ", "))
+		}
+		for _, name := range brief.AgentFiles(dir)[1:] {
+			fmt.Fprintf(out, "[lidza] %s differs from %s, so it was kept: merge what it adds into %s, then make it the one line %s", name, brief.AgentFile, brief.AgentFile, brief.AgentStub)
 		}
 	} else if _, err := recipes.Sync(dir); err != nil {
 		return fmt.Errorf("skills: %w", err)

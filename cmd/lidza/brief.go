@@ -251,7 +251,7 @@ func isTerminal(f *os.File) bool {
 // agent files' Team notes.
 func runNote(_ context.Context, args []string) error {
 	if len(args) == 0 || args[0] != "add" {
-		return errors.New("note add \"text\": a lasting fact about this app for the team and every agent, in CLAUDE.md, AGENTS.md and GEMINI.md")
+		return errors.New("note add \"text\": a lasting fact about this app for the team and every agent, in AGENTS.md")
 	}
 	fs := flags("note add")
 	dir := fs.String("dir", ".", "project directory")

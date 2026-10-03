@@ -27,9 +27,10 @@ was tested with, `go install github.com/agim/lidza/cmd/lidza@v0.1.2` a
 specific one, and an app's `go.mod` pins the version of the CLI that created it.
 
 The installer sets up Go, Rust with wasm targets, the helper tools and the
-`lidza` CLI, skipping what you already have. `lidza new` writes `CLAUDE.md`,
-`AGENTS.md` and `GEMINI.md`, so any of the three agents can start building
-at once. Full guide: `docs/getting-started.md`.
+`lidza` CLI, skipping what you already have. `lidza new` writes the
+agent instructions once, in `AGENTS.md`, with `CLAUDE.md` and `GEMINI.md`
+importing it, so Claude Code, Codex and Gemini CLI can start building at
+once. Full guide: `docs/getting-started.md`.
 
 ## Frontend
 

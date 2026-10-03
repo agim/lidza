@@ -61,20 +61,21 @@ func TestNewReact(t *testing.T) {
 	if !strings.Contains(read("main.go"), "//go:embed all:dist") {
 		t.Errorf("main.go should embed dist")
 	}
-	if !strings.Contains(read("CLAUDE.md"), "docs/lidza-guide.md") {
-		t.Errorf("CLAUDE.md should point at the guide")
+	if !strings.Contains(read("AGENTS.md"), "docs/lidza-guide.md") {
+		t.Errorf("AGENTS.md should point at the guide")
 	}
-	if !strings.Contains(read("CLAUDE.md"), "docs/decisions.md") || !strings.HasPrefix(read("docs/decisions.md"), "# Decisions") {
-		t.Errorf("CLAUDE.md should point at the decision log")
+	if !strings.Contains(read("AGENTS.md"), "docs/decisions.md") || !strings.HasPrefix(read("docs/decisions.md"), "# Decisions") {
+		t.Errorf("AGENTS.md should point at the decision log")
 	}
-	if c := read("CLAUDE.md"); !strings.Contains(c, "Read `docs/brief.md` first") || !strings.Contains(c, "<!-- lidza:agreements -->") || !strings.Contains(c, "## Team notes") {
-		t.Errorf("CLAUDE.md should point at the brief and end with the working agreements and team notes")
+	if c := read("AGENTS.md"); !strings.Contains(c, "Read `docs/brief.md` first") || !strings.Contains(c, "<!-- lidza:agreements -->") || !strings.Contains(c, "## Team notes") {
+		t.Errorf("AGENTS.md should point at the brief and end with the working agreements and team notes")
 	}
-	if read("CLAUDE.md") != read("AGENTS.md") || read("CLAUDE.md") != read("GEMINI.md") {
-		t.Errorf("agent files should be identical")
+	// One instructions file; CLAUDE.md and GEMINI.md import it.
+	if read("CLAUDE.md") != "@AGENTS.md\n" || read("GEMINI.md") != "@AGENTS.md\n" {
+		t.Errorf("CLAUDE.md and GEMINI.md should be the line @AGENTS.md: %q %q", read("CLAUDE.md"), read("GEMINI.md"))
 	}
-	if !strings.Contains(read("CLAUDE.md"), "<!-- lidza:recipes -->`start-with-brief`, `add-api-route`, `add-resource`, `add-sign-in`, `scope-query-to-signed-in-user`, `add-page`, `set-head-of-page`, `add-pack-capability`, `add-mcp-tool`, `send-email`, `add-background-job`, `publish-live-updates`, `add-llm-feature`, `store-file`, `receive-webhook`, `add-admin-pages`, `extend-admin-pages`, `add-recipe`, `write-test`, `organize-application-packages`<!-- /lidza:recipes -->") {
-		t.Errorf("CLAUDE.md should list the recipes: %s", read("CLAUDE.md"))
+	if !strings.Contains(read("AGENTS.md"), "<!-- lidza:recipes -->`start-with-brief`, `add-api-route`, `add-resource`, `add-sign-in`, `scope-query-to-signed-in-user`, `add-page`, `set-head-of-page`, `add-pack-capability`, `add-mcp-tool`, `send-email`, `add-background-job`, `publish-live-updates`, `add-llm-feature`, `store-file`, `receive-webhook`, `add-admin-pages`, `extend-admin-pages`, `add-recipe`, `write-test`, `organize-application-packages`<!-- /lidza:recipes -->") {
+		t.Errorf("AGENTS.md should list the recipes: %s", read("AGENTS.md"))
 	}
 	// An app recipe: added to the guide, generated, listed in the agent files.
 	if _, err := recipes.Add(dir, "Paginate a list", "Lists take limit and offset.", []string{"Use PageParams."}); err != nil {
@@ -84,11 +85,11 @@ func TestNewReact(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Join(changed, ",") != "CLAUDE.md,AGENTS.md,GEMINI.md" {
+	if strings.Join(changed, ",") != "AGENTS.md" {
 		t.Errorf("refresh changed %v", changed)
 	}
-	if !strings.Contains(read("CLAUDE.md"), "`organize-application-packages`; this app's own: `paginate-list`<!-- /lidza:recipes -->") {
-		t.Errorf("app recipe not listed: %s", read("CLAUDE.md"))
+	if !strings.Contains(read("AGENTS.md"), "`organize-application-packages`; this app's own: `paginate-list`<!-- /lidza:recipes -->") {
+		t.Errorf("app recipe not listed: %s", read("AGENTS.md"))
 	}
 	if _, err := os.Stat(filepath.Join(dir, ".claude", "skills", "paginate-list", "SKILL.md")); err != nil {
 		t.Error("app recipe has no skill")

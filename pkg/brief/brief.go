@@ -326,8 +326,66 @@ const (
 	notesHeading    = "## Team notes"
 )
 
-// AgentFiles are the files every agent reads.
-var AgentFiles = []string{"CLAUDE.md", "AGENTS.md", "GEMINI.md"}
+// AgentFile holds the instructions every coding agent reads: Codex and
+// the tools that follow the AGENTS.md convention read it as it is, and
+// Claude Code and Gemini CLI through the one-line stubs AgentStubs.
+const AgentFile = "AGENTS.md"
+
+// AgentStubs import AgentFile with "@AGENTS.md", which Claude Code and
+// Gemini CLI expand; Codex has no imports, so the content stays in
+// AGENTS.md.
+var AgentStubs = []string{"CLAUDE.md", "GEMINI.md"}
+
+// AgentStub is the content of each stub.
+const AgentStub = "@" + AgentFile + "\n"
+
+// IsAgentStub reports whether data is a stub importing AgentFile.
+func IsAgentStub(data []byte) bool {
+	return strings.TrimSpace(string(data)) == strings.TrimSpace(AgentStub)
+}
+
+// AgentFiles lists the agent files in dir that hold instructions:
+// AGENTS.md, and a CLAUDE.md or GEMINI.md that is still a full copy (an
+// app from before the stubs that ConvertAgentStubs left alone because
+// it differs).
+func AgentFiles(dir string) []string {
+	out := []string{AgentFile}
+	for _, name := range AgentStubs {
+		if data, err := os.ReadFile(filepath.Join(dir, name)); err == nil && !IsAgentStub(data) {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
+// ConvertAgentStubs makes CLAUDE.md and GEMINI.md the stubs: a missing
+// one is written, and one identical to AGENTS.md (the three copies apps
+// had before) is replaced. One that differs keeps its content, and is
+// returned in kept so the developer merges it into AGENTS.md first.
+func ConvertAgentStubs(dir string) (changed, kept []string, err error) {
+	main, err := os.ReadFile(filepath.Join(dir, AgentFile))
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, name := range AgentStubs {
+		p := filepath.Join(dir, name)
+		data, err := os.ReadFile(p)
+		switch {
+		case err == nil && IsAgentStub(data):
+			continue
+		case err == nil && string(data) != string(main):
+			kept = append(kept, name)
+			continue
+		case err != nil && !errors.Is(err, os.ErrNotExist):
+			return changed, kept, err
+		}
+		if err := os.WriteFile(p, []byte(AgentStub), 0o644); err != nil {
+			return changed, kept, err
+		}
+		changed = append(changed, name)
+	}
+	return changed, kept, nil
+}
 
 // Sections the agent files end with: the working agreements the brief
 // writes, and the team's notes.
@@ -338,7 +396,7 @@ const agentSections = "\n## Working agreements\n\n" + agreementsOpen + "\n_Set b
 // closing sections; it returns the files it changed.
 func EnsureAgentSections(dir string) ([]string, error) {
 	var changed []string
-	for _, name := range AgentFiles {
+	for _, name := range AgentFiles(dir) {
 		p := filepath.Join(dir, name)
 		data, err := os.ReadFile(p)
 		if err != nil {
@@ -372,7 +430,7 @@ func SyncAgreements(dir string, b Brief) ([]string, error) {
 		return nil, err
 	}
 	var changed []string
-	for _, name := range AgentFiles {
+	for _, name := range AgentFiles(dir) {
 		p := filepath.Join(dir, name)
 		data, err := os.ReadFile(p)
 		if err != nil {
@@ -407,7 +465,7 @@ func AddNote(dir, text string) ([]string, error) {
 	}
 	line := "- " + time.Now().Format("2006-01-02") + ": " + text + "."
 	var changed []string
-	for _, name := range AgentFiles {
+	for _, name := range AgentFiles(dir) {
 		p := filepath.Join(dir, name)
 		data, err := os.ReadFile(p)
 		if err != nil {
@@ -440,7 +498,7 @@ func AddNote(dir, text string) ([]string, error) {
 		changed = append(changed, name)
 	}
 	if len(changed) == 0 {
-		return nil, errors.New("note: no agent file (CLAUDE.md, AGENTS.md, GEMINI.md) in the project")
+		return nil, errors.New("note: no " + AgentFile + " in the project")
 	}
 	return changed, nil
 }

@@ -17,8 +17,9 @@ func app(t *testing.T) string {
 	os.MkdirAll(filepath.Join(dir, "src"), 0o755)
 	os.WriteFile(filepath.Join(dir, recipes.GuideFile), []byte("# Guide\n\n## Recipes\n\n### Add an API route\n\nExpose an operation.\n\n1. Step.\n\n## App recipes\n\nThis app's own.\n\n## Packs\n\nText.\n"), 0o644)
 	os.WriteFile(filepath.Join(dir, "src", "index.css"), []byte("@import \"tailwindcss\";\n@theme {\n  --color-brand: #1d4ed8;\n  --color-brand-strong: #1e40af;\n  --color-ink: #1a1a1a;\n  --font-sans: system-ui;\n}\n"), 0o644)
-	for _, f := range AgentFiles {
-		os.WriteFile(filepath.Join(dir, f), []byte("# app\n\n- A line.\n"), 0o644)
+	os.WriteFile(filepath.Join(dir, AgentFile), []byte("# app\n\n- A line.\n"), 0o644)
+	for _, f := range AgentStubs {
+		os.WriteFile(filepath.Join(dir, f), []byte(AgentStub), 0o644)
 	}
 	if _, err := decisions.Ensure(dir, "app"); err != nil {
 		t.Fatal(err)
@@ -125,14 +126,16 @@ func TestAnswerApplies(t *testing.T) {
 		t.Fatalf("data recipe: %+v", res)
 	}
 
-	// Working agreements land in every agent file.
+	// Working agreements land in AGENTS.md; the stubs stay one line.
 	Answer(dir, "demo", "push", "After every verified commit")
 	Answer(dir, "demo", "tests", "A Go test for every handler")
-	for _, f := range AgentFiles {
-		data, _ := os.ReadFile(filepath.Join(dir, f))
-		s := string(data)
-		if !strings.Contains(s, "- Pushing: After every verified commit.") || !strings.Contains(s, "- Tests: A Go test for every handler.") || !strings.Contains(s, "- A line.") {
-			t.Fatalf("%s: %s", f, s)
+	data, _ := os.ReadFile(filepath.Join(dir, AgentFile))
+	if s := string(data); !strings.Contains(s, "- Pushing: After every verified commit.") || !strings.Contains(s, "- Tests: A Go test for every handler.") || !strings.Contains(s, "- A line.") {
+		t.Fatalf("%s: %s", AgentFile, s)
+	}
+	for _, f := range AgentStubs {
+		if data, _ := os.ReadFile(filepath.Join(dir, f)); !IsAgentStub(data) {
+			t.Fatalf("%s is no longer a stub: %s", f, data)
 		}
 	}
 	// Clearing an answer reopens it.
@@ -150,10 +153,10 @@ func TestNotes(t *testing.T) {
 	if _, err := AddNote(dir, "Prices are in euros, always with VAT"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := AddNote(dir, "The museum asks for a User-Agent with a contact."); err != nil {
+	if _, err := AddNote(dir, "The data provider asks for a User-Agent with a contact."); err != nil {
 		t.Fatal(err)
 	}
-	data, _ := os.ReadFile(filepath.Join(dir, "CLAUDE.md"))
+	data, _ := os.ReadFile(filepath.Join(dir, AgentFile))
 	s := string(data)
 	i := strings.Index(s, "## Team notes")
 	if i < 0 || !strings.Contains(s[i:], ": Prices are in euros, always with VAT.\n- ") || !strings.HasSuffix(s, "with a contact.\n") || strings.Count(s, "## Working agreements") != 1 {
@@ -272,5 +275,41 @@ func TestGarbledIsOpen(t *testing.T) {
 	}
 	if Garbled(purpose, "Map 1,500 cafés from OpenStreetMap") {
 		t.Fatal("a real answer with numbers is not garbled")
+	}
+}
+
+// Three identical copies become AGENTS.md and two stubs; a copy that
+// differs is kept, and still receives notes until it is merged.
+func TestConvertAgentStubs(t *testing.T) {
+	dir := t.TempDir()
+	same := "# app\n\n- A line.\n"
+	os.WriteFile(filepath.Join(dir, AgentFile), []byte(same), 0o644)
+	os.WriteFile(filepath.Join(dir, "CLAUDE.md"), []byte(same), 0o644)
+	os.WriteFile(filepath.Join(dir, "GEMINI.md"), []byte(same+"- Only here.\n"), 0o644)
+	changed, kept, err := ConvertAgentStubs(dir)
+	if err != nil || len(changed) != 1 || changed[0] != "CLAUDE.md" || len(kept) != 1 || kept[0] != "GEMINI.md" {
+		t.Fatalf("changed %v, kept %v, %v", changed, kept, err)
+	}
+	if data, _ := os.ReadFile(filepath.Join(dir, "CLAUDE.md")); string(data) != AgentStub {
+		t.Fatalf("CLAUDE.md: %q", data)
+	}
+	if files := AgentFiles(dir); len(files) != 2 || files[1] != "GEMINI.md" {
+		t.Fatalf("files with content: %v", files)
+	}
+	if _, err := AddNote(dir, "Deploys on Fridays are fine"); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{AgentFile, "GEMINI.md"} {
+		if data, _ := os.ReadFile(filepath.Join(dir, f)); !strings.Contains(string(data), "Deploys on Fridays are fine") {
+			t.Errorf("%s has no note", f)
+		}
+	}
+	if data, _ := os.ReadFile(filepath.Join(dir, "CLAUDE.md")); !IsAgentStub(data) {
+		t.Errorf("the note grew the stub: %q", data)
+	}
+	// A missing stub is written.
+	os.Remove(filepath.Join(dir, "CLAUDE.md"))
+	if changed, _, _ := ConvertAgentStubs(dir); len(changed) != 1 {
+		t.Fatalf("missing stub: %v", changed)
 	}
 }

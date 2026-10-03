@@ -1,7 +1,9 @@
 # Līdza guide for {{.Name}}
 
 Written by `lidza new`. One source of truth for every agent working here;
-`CLAUDE.md`, `AGENTS.md` and `GEMINI.md` point at this file.
+`AGENTS.md` points at this file (`CLAUDE.md` and `GEMINI.md` are the
+line `@AGENTS.md`, which Claude Code and Gemini CLI expand; Codex reads
+`AGENTS.md` itself).
 
 ## What this is
 
@@ -190,7 +192,7 @@ result says so while that is the case.
    tool `lidza_snippet`): it is the reference app's code, verified by its
    tests.
 12. The brief (`docs/brief.md`) and the working agreements and Team
-   notes at the end of `CLAUDE.md`, `AGENTS.md` and `GEMINI.md` are this
+   notes at the end of `AGENTS.md` are this
    app's shared memory: read them first, fill the brief with the
    developer while it has open questions (recipe "Start with the
    brief"), and record a lasting fact with `lidza note add` (MCP
@@ -1241,8 +1243,7 @@ is verified, how a report is built) is a recipe.
    run, and the check at the end. Point at a file in this app that does
    it already.
 3. `lidza gen` (or the next check) turns it into the prompt, the skills
-   and the command, and lists it in `CLAUDE.md`, `AGENTS.md` and
-   `GEMINI.md`. Restart `lidza mcp` to see the new prompt.
+   and the command, and lists it in `AGENTS.md`. Restart `lidza mcp` to see the new prompt.
 
 ### Write a test
 

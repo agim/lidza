@@ -137,8 +137,12 @@ func New(ctx context.Context, opt Options) error {
 		return err
 	}
 	data.Recipes = RecipesLine(rs)
-	for _, dst := range []string{"CLAUDE.md", "AGENTS.md", "GEMINI.md"} {
-		if err := render("agent.md.tmpl", filepath.Join(opt.Dir, dst), data); err != nil {
+	// One instructions file, AGENTS.md; CLAUDE.md and GEMINI.md import it.
+	if err := render("agent.md.tmpl", filepath.Join(opt.Dir, brief.AgentFile), data); err != nil {
+		return err
+	}
+	for _, stub := range brief.AgentStubs {
+		if err := os.WriteFile(filepath.Join(opt.Dir, stub), []byte(brief.AgentStub), 0o644); err != nil {
 			return err
 		}
 	}
@@ -352,7 +356,7 @@ func Refresh(dir string, cfg *config.Config) ([]string, error) {
 		return nil, err
 	}
 	line := recipesOpen + RecipesLine(rs) + recipesClose
-	for _, name := range []string{"CLAUDE.md", "AGENTS.md", "GEMINI.md"} {
+	for _, name := range brief.AgentFiles(dir) {
 		p := filepath.Join(dir, name)
 		data, err := os.ReadFile(p)
 		if err != nil {
@@ -390,6 +394,10 @@ func Refresh(dir string, cfg *config.Config) ([]string, error) {
 			return nil, err
 		}
 		changed = append(changed, name)
+	}
+	// Apps from before the stubs had three identical copies.
+	if converted, _, err := brief.ConvertAgentStubs(dir); err == nil {
+		changed = append(changed, converted...)
 	}
 	return dedupe(changed), nil
 }

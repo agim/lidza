@@ -185,7 +185,7 @@ func addBriefTools(s *server.MCPServer, dir string, cfg *config.Config) {
 		return jsonResult(map[string]any{"file": brief.File, "app": cfg.Name, "open": len(b.Open()), "openRequired": len(b.OpenRequired()), "skipped": len(b.Skipped), "total": len(brief.Questions), "questions": qs})
 	})
 	s.AddTool(mcp.NewTool("lidza_brief_answer",
-		mcp.WithDescription("Record the developer's answer to one brief question, in their words or the suggestion they picked; never an answer they did not give. It is saved in docs/brief.md and applied: a decision for a real choice, the working agreements in CLAUDE.md, AGENTS.md and GEMINI.md, the palette in the design tokens, a seeded app recipe. An empty answer reopens the question. The result lists the files changed and anything left for you to apply."),
+		mcp.WithDescription("Record the developer's answer to one brief question, in their words or the suggestion they picked; never an answer they did not give. It is saved in docs/brief.md and applied: a decision for a real choice, the working agreements in AGENTS.md, the palette in the design tokens, a seeded app recipe. An empty answer reopens the question. The result lists the files changed and anything left for you to apply."),
 		mcp.WithString("id", mcp.Required(), mcp.Description("The question's id from lidza_brief.")),
 		mcp.WithString("answer", mcp.Description("The answer: a suggestion's value, several joined with commas for a many question, or the developer's own words.")),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -212,7 +212,7 @@ func addBriefTools(s *server.MCPServer, dir string, cfg *config.Config) {
 		return jsonResult(map[string]any{"skipped": done, "file": brief.File})
 	})
 	s.AddTool(mcp.NewTool("lidza_note_add",
-		mcp.WithDescription("Record a lasting fact about this app that the team and every agent should know (a preference, a constraint, a convention the developer states) in the Team notes of CLAUDE.md, AGENTS.md and GEMINI.md, shared through git. Use it instead of an agent's local memory for anything about this app; a convention with steps is a recipe (lidza_recipe_add), a choice with a reason a decision (lidza_decision_add)."),
+		mcp.WithDescription("Record a lasting fact about this app that the team and every agent should know (a preference, a constraint, a convention the developer states) in the Team notes of AGENTS.md (which CLAUDE.md and GEMINI.md import), shared through git. Use it instead of an agent's local memory for anything about this app; a convention with steps is a recipe (lidza_recipe_add), a choice with a reason a decision (lidza_decision_add)."),
 		mcp.WithString("text", mcp.Required(), mcp.Description("The fact, one sentence.")),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		files, err := brief.AddNote(dir, req.GetString("text", ""))

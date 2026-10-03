@@ -377,8 +377,8 @@ The app guide has a "Recipes" section (add an API route, a resource, a
 page, a pack capability, an MCP tool, a test); `pkg/recipes` parses it
 and `lidza mcp` serves each recipe as a prompt with an optional task
 argument, while `lidza new` and `lidza gen` write each as a Claude Code
-skill in `.claude/skills/<name>/SKILL.md`; `CLAUDE.md`, `AGENTS.md` and
-`GEMINI.md` list them. `pkg/apidoc` renders the framework's exported API
+skill in `.claude/skills/<name>/SKILL.md`; `AGENTS.md` lists them
+(`CLAUDE.md` and `GEMINI.md` import it). `pkg/apidoc` renders the framework's exported API
 from the sources the app resolves (a `replace` to a checkout or the
 module cache): `lidza api [package] [--filter name] [--list]`, the MCP
 tool `lidza_api`, the resources `lidza://api` and `lidza://api/{package}`.

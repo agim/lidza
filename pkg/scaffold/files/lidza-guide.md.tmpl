@@ -459,7 +459,9 @@ OAuth flow.
    `remember=false` for a session that ends with the browser); the callback
    sets the cookies and redirects, or lands on `/login?error=...`. The
    pages `/verify` and `/reset` read `?token=` and call `authVerify` or
-   `authReset`.
+   `authReset`. While `me.verified` is false, a banner offers
+   `authVerifyResend()`: a new link to the signed-in user's address
+   (nothing is sent once it is verified, or with `NoVerifyEmail`).
 3. Providers: `AUTH_PROVIDERS=google,github` in `.env` or on the admin
    pages (section "Sign-in providers"); the client id and secret in the
    credentials: `lidza credentials set AUTH_GOOGLE_CLIENT_ID=...

@@ -299,16 +299,32 @@ func TestNoVerifyEmail(t *testing.T) {
 	sent := func() int { return rows(t, a, `SELECT count(*) FROM mail_message`) }
 
 	srv, _ := signinServerWith(t, a, Options{}, m)
-	if code, _ := post(t, browser(), srv.URL+Prefix+"/register", map[string]any{"email": "one@example.com", "password": "correct horse battery"}); code != 201 || sent() != 1 {
+	one := browser()
+	if code, _ := post(t, one, srv.URL+Prefix+"/register", map[string]any{"email": "one@example.com", "password": "correct horse battery"}); code != 201 || sent() != 1 {
 		t.Fatalf("default: %d, %d sent", code, sent())
+	}
+	// A new link on request, while the address is unverified.
+	if code, _ := post(t, one, srv.URL+Prefix+"/verify/resend", map[string]any{}); code != 204 || sent() != 2 {
+		t.Fatalf("resend: %d, %d sent", code, sent())
+	}
+	first, _ := a.ProfileByEmail(ctx, "one@example.com")
+	if err := a.MarkVerified(ctx, first.Subject); err != nil {
+		t.Fatal(err)
+	}
+	if code, _ := post(t, one, srv.URL+Prefix+"/verify/resend", map[string]any{}); code != 204 || sent() != 2 {
+		t.Fatalf("resend when verified: %d, %d sent", code, sent())
 	}
 	var welcomed []string
 	srv, _ = signinServerWith(t, a, Options{NoVerifyEmail: true, OnSignUp: func(ctx context.Context, _ pgx.Tx, s SignUp) error {
 		welcomed = append(welcomed, s.Profile.Email)
 		return nil
 	}}, m)
-	if code, _ := post(t, browser(), srv.URL+Prefix+"/register", map[string]any{"email": "two@example.com", "password": "correct horse battery"}); code != 201 || sent() != 1 || len(welcomed) != 1 {
+	two := browser()
+	if code, _ := post(t, two, srv.URL+Prefix+"/register", map[string]any{"email": "two@example.com", "password": "correct horse battery"}); code != 201 || sent() != 2 || len(welcomed) != 1 {
 		t.Fatalf("NoVerifyEmail: %d, %d sent, welcomed %v", code, sent(), welcomed)
+	}
+	if code, _ := post(t, two, srv.URL+Prefix+"/verify/resend", map[string]any{}); code != 204 || sent() != 2 {
+		t.Fatalf("resend with NoVerifyEmail: %d, %d sent", code, sent())
 	}
 	p, err := a.ProfileByEmail(ctx, "two@example.com")
 	if err != nil {

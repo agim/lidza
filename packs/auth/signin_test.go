@@ -144,6 +144,14 @@ func TestSignInLocal(t *testing.T) {
 		t.Fatalf("login: %d %v", code, out)
 	}
 
+	// A new verification link on request: signed in only.
+	if code, _ := call(t, client, "POST", api+"/verify/resend", nil); code != 204 {
+		t.Fatalf("resend: %d", code)
+	}
+	if code, _ := call(t, http.DefaultClient, "POST", api+"/verify/resend", nil); code != 401 {
+		t.Fatalf("resend signed out: %d", code)
+	}
+
 	// Verification and reset links through the tokens (no mail pack here:
 	// the routes still work with a token issued directly).
 	tok, _ := a.IssueToken(context.Background(), PurposeVerifyEmail, subject, 0)

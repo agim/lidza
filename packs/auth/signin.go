@@ -145,7 +145,8 @@ const MethodPassword = "password"
 const Prefix = "/api/v1/auth"
 
 // Mount registers the sign-in routes under /api/v1/auth: register,
-// login, logout, session, me, verify, forgot, reset, password, delete,
+// login, logout, session, me, verify, verify/resend, forgot, reset,
+// password, delete,
 // providers, and {provider}/start plus {provider}/callback for the
 // external sign-ins. Sessions are the pack's usual ones: HttpOnly
 // cookies that slide, and the access token in the reply for other
@@ -161,6 +162,7 @@ func Mount(r *router.Router, opt Options) {
 		}
 		router.Route(r, "POST /api/v1/auth/login", s.authLogin, ThrottleSignIn())
 		router.Route(r, "POST /api/v1/auth/verify", s.authVerify, Throttle())
+		router.Route(r, "POST /api/v1/auth/verify/resend", s.authVerifyResend, Throttle(), Require())
 		router.Route(r, "POST /api/v1/auth/forgot", s.authForgot, Throttle())
 		router.Route(r, "POST /api/v1/auth/reset", s.authReset, Throttle())
 		router.Route(r, "POST /api/v1/auth/password", s.authPassword, Require())
@@ -879,6 +881,24 @@ func (s *signin) authVerify(ctx context.Context, req *router.Request[TokenReques
 		return router.None{}, err
 	}
 	return router.None{}, a.MarkVerified(ctx, subject)
+}
+
+// authVerifyResend emails the signed-in user a new verification link,
+// for an unverified address; a verified one, or an app that does not
+// verify addresses, gets 204 and no mail.
+func (s *signin) authVerifyResend(ctx context.Context, req *router.Request[router.None]) (router.None, error) {
+	req.Status(http.StatusNoContent)
+	if s.opt.NoVerifyEmail {
+		return router.None{}, nil
+	}
+	p, err := From(ctx).Profile(ctx, CurrentUser(ctx).ID)
+	if err != nil {
+		return router.None{}, err
+	}
+	if p.Verified() {
+		return router.None{}, nil
+	}
+	return router.None{}, s.sendLink(withRequestLanguage(ctx, req.Raw), p, PurposeVerifyEmail)
 }
 
 // authForgot sends a reset link when the email is registered, and

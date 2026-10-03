@@ -792,14 +792,10 @@ func TestInternalApplicationAPISurfaces(t *testing.T) {
 	if !ok || !strings.Contains(text.Text, "func Submit()") {
 		t.Fatalf("internal resource text: %+v", resource.Contents)
 	}
-	canonical, err := os.ReadFile(filepath.Join(app, "CLAUDE.md"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, name := range []string{"AGENTS.md", "GEMINI.md"} {
-		body, err := os.ReadFile(filepath.Join(app, name))
-		if err != nil || string(body) != string(canonical) {
-			t.Errorf("%s differs: %v", name, err)
+	// One instructions file; Claude Code and Gemini CLI import it.
+	for _, name := range []string{"CLAUDE.md", "GEMINI.md"} {
+		if body := mustRead(t, name); body != "@AGENTS.md\n" {
+			t.Errorf("%s is not the line @AGENTS.md: %q", name, body)
 		}
 	}
 }

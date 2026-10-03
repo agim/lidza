@@ -28,7 +28,7 @@ func TestNewReact(t *testing.T) {
 		".gitignore", "dist/.gitkeep", "Dockerfile", ".dockerignore", "deploy/demo.service",
 		".claude/skills/add-api-route/SKILL.md", ".claude/skills/add-resource/SKILL.md", ".claude/skills/add-page/SKILL.md",
 		".claude/skills/add-pack-capability/SKILL.md", ".claude/skills/add-mcp-tool/SKILL.md", ".claude/skills/write-test/SKILL.md", ".claude/skills/add-recipe/SKILL.md",
-		".agents/skills/add-api-route/SKILL.md", ".gemini/commands/lidza/add-api-route.toml", ".gemini/commands/lidza/write-test.toml",
+		".agents/skills/add-api-route/SKILL.md",
 	} {
 		if _, err := os.Stat(filepath.Join(dir, f)); err != nil {
 			t.Errorf("missing %s", f)
@@ -304,7 +304,7 @@ func TestRefreshPackageGuidanceForAllAgents(t *testing.T) {
 			t.Errorf("%s is not the stub: %q", name, got)
 		}
 	}
-	for _, file := range []string{".claude/skills/organize-application-packages/SKILL.md", ".agents/skills/organize-application-packages/SKILL.md", ".gemini/commands/lidza/organize-application-packages.toml"} {
+	for _, file := range []string{".claude/skills/organize-application-packages/SKILL.md", ".agents/skills/organize-application-packages/SKILL.md"} {
 		body, err := os.ReadFile(filepath.Join(dir, file))
 		if err != nil || !strings.Contains(string(body), "internal/providers/<vendor>/") {
 			t.Errorf("recipe %s: %v", file, err)

@@ -167,8 +167,8 @@ prints the install line; `lidza test --e2e --install` runs it.
 ## Recipes
 
 Step-by-step tasks. Each one is also a prompt in `lidza mcp`, a skill in
-`.claude/skills/<name>` and `.agents/skills/<name>`, and a Gemini command
-in `.gemini/commands/lidza/<name>.toml`; `lidza gen` rewrites them from
+`.claude/skills/<name>` (Claude Code) and `.agents/skills/<name>` (Codex
+and Gemini CLI); `lidza gen` rewrites them from
 the guide. This section is the framework's: `lidza gen` refreshes it when
 the framework changes. This app's own recipes go under "App recipes"
 below, which the framework never touches. Every recipe ends the same way: `lidza check

@@ -224,7 +224,7 @@ const LayoutLine = "App-owned Go packages: business logic in `internal/<feature>
 
 // AgentGuidanceLine says where durable instructions go: one file every
 // agent reads.
-const AgentGuidanceLine = "Shared agent guidance: `AGENTS.md` is the one instructions file; `CLAUDE.md` and `GEMINI.md` are the line `@AGENTS.md`, which Claude Code and Gemini CLI expand, and stay that way. Update rules, working agreements and team notes here. Edit recipes in `docs/lidza-guide.md`, then run `lidza gen` to refresh Claude Code skills, Codex skills and Gemini commands together."
+const AgentGuidanceLine = "Shared agent guidance: `AGENTS.md` is the one instructions file; `CLAUDE.md` and `GEMINI.md` are the line `@AGENTS.md`, which Claude Code and Gemini CLI expand, and stay that way. Update rules, working agreements and team notes here. Edit recipes in `docs/lidza-guide.md`, then run `lidza gen` to refresh the skills of Claude Code, Codex and Gemini CLI together."
 
 // RecipesLine lists recipe names for the agent files: the framework's,
 // then the app's own.

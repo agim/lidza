@@ -437,9 +437,10 @@ reference app's own verify passes when Postgres is reachable.
 
 The recipes are now written for each agent CLI from the one guide
 section: Claude Code skills (`.claude/skills`), Codex skills in the Agent
-Skills layout (`.agents/skills`, invoked as `$add-api-route`) and Gemini
-CLI commands (`.gemini/commands/lidza/<name>.toml`, invoked as
-`/lidza:add-api-route`, the user's words appended as the task). Codex
+Skills layout (`.agents/skills`, invoked as `$add-api-route`), which
+Gemini CLI reads too (`/add-api-route`; its TOML commands in
+`.gemini/commands/lidza` were dropped once it did, as each recipe showed
+twice). Codex
 custom prompts stay user-level by design, so skills are the shared form.
 `lidza api` and `lidza_api` render the app's own packages too (`app`,
 `./handlers`, or the app's import path); `--list` and `lidza_api list`

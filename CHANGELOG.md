@@ -9,6 +9,15 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- Recipes are no longer written as Gemini CLI commands
+  (`.gemini/commands/lidza/<name>.toml`, `/lidza:<name>`). Gemini CLI
+  reads the skills in `.agents/skills`, as Codex does, and offers each
+  as `/<name>`, so every recipe showed twice there. `lidza gen` removes
+  the commands it generated (a command the developer wrote stays) and
+  the directories when empty; commit the deletions.
+
 ## v0.1.57 (2026-10-03)
 
 - One agent instructions file: `AGENTS.md` holds them, and `CLAUDE.md`

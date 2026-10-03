@@ -126,6 +126,7 @@ uses Go's enforced import boundary and avoids a second model definition.
 CLI and MCP API discovery include an app's own internal packages. Framework
 internals remain outside the public API offered to applications.
 
-Agent instructions are shared: `CLAUDE.md`, `AGENTS.md` and `GEMINI.md` carry
-the same content and change together. The guide is the recipe source for
-Claude Code skills, Codex skills and Gemini commands.
+Agent instructions are shared: `AGENTS.md` carries them, and `CLAUDE.md`
+and `GEMINI.md` import it with `@AGENTS.md`. The guide is the recipe
+source for the skills of Claude Code (`.claude/skills`) and of Codex and
+Gemini CLI (`.agents/skills`).

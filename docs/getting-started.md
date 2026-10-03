@@ -186,10 +186,9 @@ tools from `tools.go` as `app_<name>`; resources `lidza://llms.txt`,
 `lidza://llms-full.txt`, `lidza://api` and `lidza://api/{package}`;
 prompts, one per recipe in `docs/lidza-guide.md`. The recipes are also
 on disk for each CLI: Claude Code reads `.claude/skills/<name>/SKILL.md`,
-Codex reads `.agents/skills/<name>/SKILL.md` (type `$add-api-route`, or
-`/skills`), Gemini CLI reads `.gemini/commands/lidza/<name>.toml` (type
-`/lidza:add-api-route what to add`). `lidza gen` rewrites all three from
-the guide. With `LIDZA_MCP_TOKEN`
+Codex and Gemini CLI read `.agents/skills/<name>/SKILL.md` (type
+`$add-api-route` or `/skills` in Codex, `/add-api-route` in Gemini).
+`lidza gen` rewrites both from the guide. With `LIDZA_MCP_TOKEN`
 set, the running binary serves the app's tools at `/mcp` to agents that
 send the token. While `lidza dev` runs, the two llms documents are at
 http://127.0.0.1:3000/llms.txt and `/llms-full.txt`.

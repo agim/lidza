@@ -39,7 +39,7 @@ app is always at one address: http://127.0.0.1:3000.
 {{- end}}
 ├── .githooks/pre-commit  runs lidza verify before every commit
 ├── .claude/skills/  one skill per recipe below (Claude Code), generated from this file
-├── .agents/skills/  the same skills for Codex; .gemini/commands/lidza/ the same as Gemini commands
+├── .agents/skills/  the same skills for Codex and Gemini CLI
 ├── docs/lidza-guide.md   this file
 ├── docs/decisions.md     why the app is built a way: packs, Rust, dependencies, tradeoffs
 └── .lidza/          dev build artifacts (gitignored)
@@ -125,10 +125,9 @@ agent needs no shell here. Its tools:
 
 Its prompts are the recipes of this guide (`add-api-route`,
 `add-resource`, ...). The same recipes are skills for Claude Code
-(`.claude/skills/`) and Codex (`.agents/skills/`, invoked as
-`$add-api-route`) and commands for Gemini CLI (`.gemini/commands/lidza/`,
-invoked as `/lidza:add-api-route`); `lidza gen` rewrites all of them from
-this file.
+(`.claude/skills/`), and for Codex and Gemini CLI (`.agents/skills/`,
+invoked as `$add-api-route` in Codex and `/add-api-route` in Gemini);
+`lidza gen` rewrites them from this file.
 
 The app adds its own tools in `tools.go` with
 `lidza.ToolFunc("name", "what it does", func(ctx, In) (Out, error))`;
@@ -255,8 +254,8 @@ pass `exact: true` when one name is a prefix of another ("Comment" and
 ## Recipes
 
 Step-by-step tasks. Each one is also a prompt in `lidza mcp`, a skill in
-`.claude/skills/<name>` and `.agents/skills/<name>`, and a Gemini command
-in `.gemini/commands/lidza/<name>.toml`; `lidza gen` rewrites them from
+`.claude/skills/<name>` (Claude Code) and `.agents/skills/<name>` (Codex
+and Gemini CLI); `lidza gen` rewrites them from
 the guide. This section is the framework's: `lidza gen` refreshes it when
 the framework changes. This app's own recipes go under "App recipes"
 below, which the framework never touches. Every recipe ends the same way: `lidza check

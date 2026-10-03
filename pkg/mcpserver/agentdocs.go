@@ -62,7 +62,7 @@ func addRecipeTool(s *server.MCPServer, dir string, cfg *config.Config, after fu
 		return
 	}
 	s.AddTool(mcp.NewTool("lidza_recipe_add",
-		mcp.WithDescription("Record one of this app's conventions as a recipe (a pattern used twice: how lists paginate, how ownership is checked, ...). It is appended under \"App recipes\" in docs/lidza-guide.md and becomes a prompt, a skill for Claude Code and Codex, and a Gemini command; the agent files list it. Give numbered steps that name files, functions and commands, and point at a file in this app that already does it."),
+		mcp.WithDescription("Record one of this app's conventions as a recipe (a pattern used twice: how lists paginate, how ownership is checked, ...). It is appended under \"App recipes\" in docs/lidza-guide.md and becomes a prompt and a skill for Claude Code, Codex and Gemini CLI; AGENTS.md lists it. Give numbered steps that name files, functions and commands, and point at a file in this app that already does it."),
 		mcp.WithString("title", mcp.Required(), mcp.Description("Imperative title, e.g. \"Paginate a list\".")),
 		mcp.WithString("description", mcp.Description("When the recipe applies, one or two sentences.")),
 		mcp.WithArray("steps", mcp.Description("The steps in order; each names the file, the function or type, the command, and ends with the check."), mcp.Items(map[string]any{"type": "string"})),

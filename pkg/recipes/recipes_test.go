@@ -84,16 +84,16 @@ func TestWriteSkills(t *testing.T) {
 	if err != nil || string(agents) != string(claude) {
 		t.Errorf("codex skill: %v", err)
 	}
-	gem, err := os.ReadFile(filepath.Join(dir, GeminiCommandsDir, "add-api-route.toml"))
-	if err != nil || !strings.HasPrefix(string(gem), geminiMarker+"\ndescription = \"Expose an operation with \\\"typed\\\" input and output. Second line of the paragraph.\"\nprompt = \"\"\"\n# Add an API route\n") || !strings.Contains(string(gem), "Task: {{args}}\n\"\"\"\n") {
-		t.Errorf("gemini command: %v\n%s", err, gem)
+	// Gemini CLI reads .agents/skills: no command of its own.
+	if _, err := os.Stat(filepath.Join(dir, GeminiCommandsDir)); !os.IsNotExist(err) {
+		t.Errorf("gemini commands written: %v", err)
 	}
 	// A second sync with one recipe gone removes its files everywhere.
 	os.WriteFile(filepath.Join(dir, GuideFile), []byte("## Recipes\n\n### Write a test\n\nBoot.\n"), 0o644)
 	if _, err := Sync(dir); err != nil {
 		t.Fatal(err)
 	}
-	for _, p := range []string{filepath.Join(SkillsDir, "add-api-route"), filepath.Join(AgentsSkillsDir, "add-api-route"), filepath.Join(GeminiCommandsDir, "add-api-route.toml")} {
+	for _, p := range []string{filepath.Join(SkillsDir, "add-api-route"), filepath.Join(AgentsSkillsDir, "add-api-route")} {
 		if _, err := os.Stat(filepath.Join(dir, p)); !os.IsNotExist(err) {
 			t.Errorf("%s not removed", p)
 		}
@@ -155,5 +155,34 @@ func TestScopesAddAndReplace(t *testing.T) {
 	guide, _ = os.ReadFile(filepath.Join(dir, GuideFile))
 	if !strings.Contains(string(guide), "## Packs\n\nText.") {
 		t.Fatalf("later section damaged:\n%s", guide)
+	}
+}
+
+// The Gemini commands lidza wrote before are removed; one the developer
+// wrote in the same directory stays.
+func TestGeminiCommandsRemoved(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, "docs"), 0o755)
+	os.WriteFile(filepath.Join(dir, GuideFile), []byte("## Recipes\n\n### Write a test\n\nBoot.\n"), 0o644)
+	cmds := filepath.Join(dir, GeminiCommandsDir)
+	os.MkdirAll(cmds, 0o755)
+	os.WriteFile(filepath.Join(cmds, "write-test.toml"), []byte(geminiMarker+"\ndescription = \"x\"\n"), 0o644)
+	os.WriteFile(filepath.Join(cmds, "deploy.toml"), []byte("description = \"mine\"\n"), 0o644)
+	if _, err := Sync(dir); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(cmds, "write-test.toml")); !os.IsNotExist(err) {
+		t.Error("generated command kept")
+	}
+	if _, err := os.Stat(filepath.Join(cmds, "deploy.toml")); err != nil {
+		t.Error("hand-written command removed")
+	}
+	// Without it, the directories go.
+	os.Remove(filepath.Join(cmds, "deploy.toml"))
+	if _, err := Sync(dir); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".gemini", "commands")); !os.IsNotExist(err) {
+		t.Error("empty command directories kept")
 	}
 }

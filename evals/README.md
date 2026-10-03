@@ -14,7 +14,7 @@ What the platform does for an agent, checked end to end on a fresh app:
 | a frontend call to an operation that does not exist | TS2339 error in the page |
 | a field renamed in `schema.lidza` | TS2339 error in the page that reads the old name |
 | an `<img>` without `alt` | `jsx-a11y/alt-text` error |
-| guidance | the six recipes as Claude Code skills, Codex skills and Gemini commands, the agent files naming them and the tools, the pre-commit hook, `lidza api`, `lidza snippet`, and the MCP prompts, tools and `lidza://api` |
+| guidance | the recipes as skills for Claude Code and for Codex and Gemini CLI, the agent files naming them and the tools, the pre-commit hook, `lidza api`, `lidza snippet`, and the MCP prompts, tools and `lidza://api` |
 | `lidza verify` | passes on the fresh app, tests included |
 | `examples/notes` | its own `lidza verify` passes (needs Postgres; skipped otherwise) |
 
@@ -49,8 +49,7 @@ LIDZA_EVAL_AGENT='gemini --yolo' go test -tags agenteval ./evals -run TestAgent 
 Claude Code has run it (three of three tasks pass). Codex CLI and Gemini
 CLI are installed on the development host but need an account or an API
 key (`OPENAI_API_KEY`, `GEMINI_API_KEY`) that the runner does not have;
-their skill and command layouts (`.agents/skills`,
-`.gemini/commands/lidza`) are checked against their documentation and
+their skill layout (`.agents/skills`, which both read) is checked against their documentation and
 present in every app, not yet by a run.
 
 The Claude Code line above gives the agent no shell at all: every

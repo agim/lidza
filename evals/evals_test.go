@@ -355,8 +355,12 @@ func TestInaccessibleElement(t *testing.T) {
 }
 
 func TestGuidanceSurfaces(t *testing.T) {
+	// Gemini CLI reads .agents/skills; no commands of its own.
+	if _, err := os.Stat(filepath.Join(app, ".gemini", "commands")); !os.IsNotExist(err) {
+		t.Errorf(".gemini/commands written: %v", err)
+	}
 	for _, skill := range []string{"start-with-brief", "add-api-route", "add-resource", "scope-query-to-signed-in-user", "add-page", "set-head-of-page", "add-pack-capability", "add-mcp-tool", "send-email", "add-background-job", "publish-live-updates", "add-llm-feature", "store-file", "receive-webhook", "add-admin-pages", "extend-admin-pages", "add-recipe", "write-test", "organize-application-packages"} {
-		for _, p := range []string{filepath.Join(".claude", "skills", skill, "SKILL.md"), filepath.Join(".agents", "skills", skill, "SKILL.md"), filepath.Join(".gemini", "commands", "lidza", skill+".toml")} {
+		for _, p := range []string{filepath.Join(".claude", "skills", skill, "SKILL.md"), filepath.Join(".agents", "skills", skill, "SKILL.md")} {
 			if _, err := os.Stat(filepath.Join(app, p)); err != nil {
 				t.Errorf("%s missing", p)
 			}
@@ -576,20 +580,19 @@ func TestPackCapability(t *testing.T) {
 }
 
 // TestRecipeAdd: an app convention recorded with lidza recipe add becomes
-// a skill, a Gemini command, a prompt after restart, and a line in the
-// agent files; the framework's own recipes stay separate.
+// a skill for each agent, a prompt after restart, and a line in
+// AGENTS.md; the framework's own recipes stay separate.
 func TestRecipeAdd(t *testing.T) {
 	edit(t, map[string]string{"docs/lidza-guide.md": mustRead(t, "docs/lidza-guide.md"), "CLAUDE.md": mustRead(t, "CLAUDE.md"), "AGENTS.md": mustRead(t, "AGENTS.md"), "GEMINI.md": mustRead(t, "GEMINI.md")})
 	t.Cleanup(func() {
 		os.RemoveAll(filepath.Join(app, ".claude", "skills", "paginate-list"))
 		os.RemoveAll(filepath.Join(app, ".agents", "skills", "paginate-list"))
-		os.Remove(filepath.Join(app, ".gemini", "commands", "lidza", "paginate-list.toml"))
 	})
 	out, err := command(app, lidza, "recipe", "add", "Paginate a list", "--description", "Lists take limit and offset.", "--step", "Read them with PageParams.", "--step", "`lidza check`.")
 	if err != nil {
 		t.Fatalf("recipe add: %v\n%s", err, out)
 	}
-	for _, p := range []string{".claude/skills/paginate-list/SKILL.md", ".agents/skills/paginate-list/SKILL.md", ".gemini/commands/lidza/paginate-list.toml"} {
+	for _, p := range []string{".claude/skills/paginate-list/SKILL.md", ".agents/skills/paginate-list/SKILL.md"} {
 		if _, err := os.Stat(filepath.Join(app, p)); err != nil {
 			t.Errorf("%s missing", p)
 		}

@@ -114,6 +114,19 @@ OAuth flow.
    rolls it all back), and clears the cookies. From the app or an admin
    action: `auth.From(ctx).DeleteUser(ctx, id)`; an app with its own
    users table uses `DeleteUserTx(ctx, tx, id)` in its transaction.
+
+   A security log: `OnEvent(ctx, auth.Event{Kind, Subject, Email,
+   Method, Reason, Request})` runs after each account event the routes
+   handle: `auth.EventSignedIn`, `EventSignInFailed` (Reason
+   `bad_credentials`, `not_verified`, `refused`, `disabled`, or a
+   provider's `denied`, `state`, `provider`, `signup`; Subject empty for
+   an address no account has), `EventSignedOut`, `EventSignedUp`,
+   `EventPasswordChanged`, `EventPasswordCheckFailed` (a wrong current
+   password on the change or delete route), `EventResetRequested`,
+   `EventPasswordReset`, `EventEmailVerified` and `EventAccountDeleted`.
+   It cannot refuse anything and runs on the request: insert a row (the
+   subject, the kind, `Request.RemoteAddr` or the app's client address,
+   the user agent) and log your own errors.
 6. Emails: with the mail pack the links go out as plain text, or
    through `mail/auth_verify.txt.tmpl` and `mail/auth_reset.txt.tmpl`
    when the app has them (Data: `App`, `Link`, `Email`, `Name`). A

@@ -9,6 +9,15 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- Auth: `Options.OnEvent` reports each account event the routes handle,
+  for an app's security log: sign-ins and failed sign-ins (with the
+  reason, and the account when the address has one), sign-outs,
+  sign-ups, password changes, wrong current passwords, reset requests,
+  resets, verifications and deletions, each with the request. It cannot
+  refuse anything; a panic in it is logged.
+
 ## v0.1.58 (2026-10-03)
 
 - Recipes are no longer written as Gemini CLI commands

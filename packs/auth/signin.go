@@ -93,6 +93,12 @@ type Options struct {
 	// app says what happens to its rows before users can delete
 	// themselves (a no-op function when it keeps none).
 	OnDeleteUser func(ctx context.Context, tx pgx.Tx, subject string) error
+	// OnEvent runs after each account event the routes handle (the Event*
+	// kinds: sign-ins and failed ones, sign-outs, password changes and
+	// resets, verifications, sign-ups, deletions), for a security log. It
+	// cannot refuse anything and runs on the request, so it stays quick
+	// (an insert); the app logs its own errors.
+	OnEvent func(ctx context.Context, e Event)
 	// Client is the HTTP client the providers use (tests).
 	Client *http.Client
 }
@@ -713,6 +719,7 @@ func (s *signin) signUp(ctx context.Context, create func(tx pgx.Tx) (Profile, er
 	if err := tx.Commit(ctx); err != nil {
 		return Profile{}, err
 	}
+	s.event(ctx, eventRequest(ctx), Event{Kind: EventSignedUp, Subject: p.Subject, Email: p.Email, Method: su.Method})
 	return p, nil
 }
 
@@ -762,6 +769,11 @@ func (s *signin) session(ctx context.Context, req interface{ SetCookie(*http.Coo
 	for _, c := range a.Cookies(tokens) {
 		req.SetCookie(c)
 	}
+	method := provider
+	if method == "" {
+		method = MethodPassword
+	}
+	s.event(ctx, r, Event{Kind: EventSignedIn, Subject: p.Subject, Email: p.Email, Method: method})
 	out, err := s.describe(ctx, p)
 	if err != nil {
 		return SignedIn{}, err
@@ -793,7 +805,7 @@ func (s *signin) authRegister(ctx context.Context, req *router.Request[Registrat
 	if err != nil {
 		return SignedIn{}, err
 	}
-	ctx = withRequestLanguage(ctx, req.Raw)
+	ctx = withEventRequest(withRequestLanguage(ctx, req.Raw), req.Raw)
 	p, err := s.signUp(ctx, func(tx pgx.Tx) (Profile, error) {
 		return createUser(ctx, tx, email, strings.TrimSpace(req.Body.Name), hash, nil)
 	}, SignUp{Method: MethodPassword})
@@ -819,27 +831,43 @@ var ErrNotVerified = router.ErrorCode(http.StatusForbidden, "email_not_verified"
 
 func (s *signin) authLogin(ctx context.Context, req *router.Request[Credentials]) (SignedIn, error) {
 	a := From(ctx)
-	subject, hash, verified, err := a.passwordHash(ctx, NormalizeEmail(req.Body.Email))
+	email := NormalizeEmail(req.Body.Email)
+	subject, hash, verified, err := a.passwordHash(ctx, email)
+	failed := func(reason string) {
+		s.event(ctx, req.Raw, Event{Kind: EventSignInFailed, Subject: subject, Email: email, Method: MethodPassword, Reason: reason})
+	}
 	if errors.Is(err, pgx.ErrNoRows) || (err == nil && (hash == "" || !CheckPassword(hash, req.Body.Password))) {
+		failed("bad_credentials")
 		return SignedIn{}, ErrBadCredentials
 	}
 	if err != nil {
 		return SignedIn{}, err
 	}
 	if s.opt.RequireVerified && !verified {
+		failed("not_verified")
 		return SignedIn{}, ErrNotVerified
 	}
 	p, err := a.Profile(ctx, subject)
 	if err != nil {
 		return SignedIn{}, err
 	}
-	return s.session(ctx, req, req.Raw, p, "", true, remembered(req.Body.Remember))
+	out, err := s.session(ctx, req, req.Raw, p, "", true, remembered(req.Body.Remember))
+	var si *signInError
+	switch {
+	case errors.Is(err, ErrDisabled):
+		failed("disabled")
+	case errors.As(err, &si):
+		failed("refused")
+	}
+	return out, err
 }
 
 func (s *signin) authLogout(ctx context.Context, req *router.Request[router.None]) (router.None, error) {
-	if err := From(ctx).Logout(ctx, CurrentUser(ctx).SessionID); err != nil {
+	u := CurrentUser(ctx)
+	if err := From(ctx).Logout(ctx, u.SessionID); err != nil {
 		return router.None{}, err
 	}
+	s.event(ctx, req.Raw, Event{Kind: EventSignedOut, Subject: u.ID, Email: claimString(u.Claims, "email")})
 	for _, c := range ClearedCookies() {
 		req.SetCookie(c)
 	}
@@ -880,7 +908,11 @@ func (s *signin) authVerify(ctx context.Context, req *router.Request[TokenReques
 	if err != nil {
 		return router.None{}, err
 	}
-	return router.None{}, a.MarkVerified(ctx, subject)
+	if err := a.MarkVerified(ctx, subject); err != nil {
+		return router.None{}, err
+	}
+	s.event(ctx, req.Raw, Event{Kind: EventEmailVerified, Subject: subject})
+	return router.None{}, nil
 }
 
 // authVerifyResend emails the signed-in user a new verification link,
@@ -911,7 +943,11 @@ func (s *signin) authForgot(ctx context.Context, req *router.Request[EmailReques
 	if err != nil {
 		return router.None{}, err
 	}
-	return router.None{}, s.sendLink(ctx, p, PurposeResetPassword)
+	if err := s.sendLink(ctx, p, PurposeResetPassword); err != nil {
+		return router.None{}, err
+	}
+	s.event(ctx, req.Raw, Event{Kind: EventResetRequested, Subject: p.Subject, Email: p.Email})
+	return router.None{}, nil
 }
 
 func (s *signin) authReset(ctx context.Context, req *router.Request[PasswordReset]) (router.None, error) {
@@ -931,7 +967,11 @@ func (s *signin) authReset(ctx context.Context, req *router.Request[PasswordRese
 	if err := a.MarkVerified(ctx, subject); err != nil {
 		return router.None{}, err
 	}
-	return router.None{}, a.SetPassword(ctx, subject, req.Body.Password)
+	if err := a.SetPassword(ctx, subject, req.Body.Password); err != nil {
+		return router.None{}, err
+	}
+	s.event(ctx, req.Raw, Event{Kind: EventPasswordReset, Subject: subject, Email: p.Email})
+	return router.None{}, nil
 }
 
 // authPassword changes the signed-in user's password: the current one
@@ -945,6 +985,7 @@ func (s *signin) authPassword(ctx context.Context, req *router.Request[PasswordC
 	if p.HasPassword {
 		_, hash, _, err := a.passwordHash(ctx, p.Email)
 		if err != nil || !CheckPassword(hash, req.Body.Current) {
+			s.event(ctx, req.Raw, Event{Kind: EventPasswordCheckFailed, Subject: p.Subject, Email: p.Email})
 			return router.None{}, router.ErrorCode(http.StatusForbidden, "wrong_password", "current password does not match")
 		}
 	}
@@ -964,6 +1005,7 @@ func (s *signin) authPassword(ctx context.Context, req *router.Request[PasswordC
 	for _, c := range a.Cookies(tokens) {
 		req.SetCookie(c)
 	}
+	s.event(ctx, req.Raw, Event{Kind: EventPasswordChanged, Subject: p.Subject, Email: p.Email})
 	return router.None{}, nil
 }
 
@@ -993,6 +1035,7 @@ func (s *signin) authDelete(ctx context.Context, req *router.Request[AccountDele
 	if p.HasPassword {
 		_, hash, _, err := a.passwordHash(ctx, p.Email)
 		if err != nil || !CheckPassword(hash, req.Body.Password) {
+			s.event(ctx, req.Raw, Event{Kind: EventPasswordCheckFailed, Subject: p.Subject, Email: p.Email})
 			return router.None{}, router.ErrorCode(http.StatusForbidden, "wrong_password", "password does not match")
 		}
 	} else {
@@ -1005,6 +1048,7 @@ func (s *signin) authDelete(ctx context.Context, req *router.Request[AccountDele
 	if err := a.DeleteUser(ctx, p.Subject); err != nil {
 		return router.None{}, err
 	}
+	s.event(ctx, req.Raw, Event{Kind: EventAccountDeleted, Subject: p.Subject, Email: p.Email})
 	for _, c := range ClearedCookies() {
 		req.SetCookie(c)
 	}

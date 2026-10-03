@@ -598,6 +598,13 @@ func localPath(p, fallback string) string {
 }
 
 func (s *signin) fail(w http.ResponseWriter, r *http.Request, reason string, err error) {
+	s.failFor(w, r, reason, err, Profile{})
+}
+
+// failFor is fail for a sign-in whose account is known (refused or
+// disabled after the provider answered).
+func (s *signin) failFor(w http.ResponseWriter, r *http.Request, reason string, err error, p Profile) {
+	s.event(r.Context(), r, Event{Kind: EventSignInFailed, Subject: p.Subject, Email: p.Email, Method: r.PathValue("provider"), Reason: reason})
 	if err != nil {
 		slog.Warn("auth: provider sign-in failed", "reason", reason, "err", err)
 	}
@@ -675,7 +682,7 @@ func (s *signin) callback(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, "provider", err)
 		return
 	}
-	ctx := withRequestLanguage(r.Context(), r)
+	ctx := withEventRequest(withRequestLanguage(r.Context(), r), r)
 	prof, err := s.link(ctx, id)
 	if err != nil {
 		var su *signUpError
@@ -688,12 +695,12 @@ func (s *signin) callback(w http.ResponseWriter, r *http.Request) {
 	}
 	if _, err := s.session(ctx, cookieSetter{w}, r, prof, name, false, !trip.Forget); err != nil {
 		if errors.Is(err, ErrDisabled) {
-			s.fail(w, r, "disabled", nil)
+			s.failFor(w, r, "disabled", nil, prof)
 			return
 		}
 		var si *signInError
 		if errors.As(err, &si) {
-			s.fail(w, r, "signin", err)
+			s.failFor(w, r, "signin", err, prof)
 			return
 		}
 		s.fail(w, r, "provider", err)

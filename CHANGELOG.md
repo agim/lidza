@@ -9,7 +9,7 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
-## Unreleased
+## v0.1.55 (2026-10-03)
 
 - Admin pages: a form posts the frame's `.Back` as `back` to return to
   the view it was sent from (the same page and query, never another

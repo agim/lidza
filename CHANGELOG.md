@@ -9,7 +9,7 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
-## Unreleased
+## v0.1.58 (2026-10-03)
 
 - Recipes are no longer written as Gemini CLI commands
   (`.gemini/commands/lidza/<name>.toml`, `/lidza:<name>`). Gemini CLI

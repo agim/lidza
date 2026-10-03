@@ -89,9 +89,11 @@ framework, pass `--lidza-dir <checkout>`.
 | `.gemini/settings.json` | Gemini CLI MCP server |
 | `docs/lidza-guide.md` | all three; the framework rules in one place |
 
-The three instruction files are short and point at `docs/lidza-guide.md`,
-so there is one source of truth. Keep their shared rules, agreements and
-notes synchronized in all three files. `lidza new` also writes `main.go` (do not
+The instructions are one short file, `AGENTS.md`, which points at
+`docs/lidza-guide.md`, so there is one source of truth; `CLAUDE.md` and
+`GEMINI.md` are the line `@AGENTS.md`, which Claude Code and Gemini CLI
+expand (Codex reads `AGENTS.md` itself). Shared rules, agreements and
+notes go in `AGENTS.md`. `lidza new` also writes `main.go` (do not
 edit), `routes.go` (API handlers), `schema.lidza` (data shapes) and
 `lidza.json`.
 

@@ -222,8 +222,9 @@ const DecisionsLine = "Why the app is built a way (a pack added, Rust for a modu
 // LayoutLine places app-owned Go code without moving generated contracts.
 const LayoutLine = "App-owned Go packages: business logic in `internal/<feature>/`, vendor clients in `internal/providers/<vendor>/`, shared infrastructure in `internal/platform/<name>/`. Keep handlers in `handlers/`; `appDir` holds application wiring and embedded assets. Models and API shapes stay in `schema.lidza`, SQL in `db/queries/*.sql`; generated `schema/` and `db/queries/gen/` are never moved or edited. Recipe: Organize application packages."
 
-// AgentGuidanceLine keeps durable instructions available to all three agents.
-const AgentGuidanceLine = "Shared agent guidance: keep `CLAUDE.md`, `AGENTS.md` and `GEMINI.md` synchronized. Update rules, working agreements and team notes in all three in the same change. Edit recipes in `docs/lidza-guide.md`, then run `lidza gen` to refresh Claude Code skills, Codex skills and Gemini commands together."
+// AgentGuidanceLine says where durable instructions go: one file every
+// agent reads.
+const AgentGuidanceLine = "Shared agent guidance: `AGENTS.md` is the one instructions file; `CLAUDE.md` and `GEMINI.md` are the line `@AGENTS.md`, which Claude Code and Gemini CLI expand, and stay that way. Update rules, working agreements and team notes here. Edit recipes in `docs/lidza-guide.md`, then run `lidza gen` to refresh Claude Code skills, Codex skills and Gemini commands together."
 
 // RecipesLine lists recipe names for the agent files: the framework's,
 // then the app's own.

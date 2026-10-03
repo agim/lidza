@@ -276,37 +276,32 @@ func TestRefreshPackageGuidanceForAllAgents(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// An app from before the stubs: three identical copies, without the
+	// layout and guidance lines, with an app's own instruction.
+	body, err := os.ReadFile(filepath.Join(dir, "AGENTS.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := strings.ReplaceAll(string(body), "- "+LayoutLine+"\n", "")
+	old = strings.ReplaceAll(old, "- "+AgentGuidanceLine+"\n", "")
+	old += "\n- Keep the application-specific instructions.\n"
 	for _, name := range []string{"CLAUDE.md", "AGENTS.md", "GEMINI.md"} {
-		p := filepath.Join(dir, name)
-		body, err := os.ReadFile(p)
-		if err != nil {
-			t.Fatal(err)
-		}
-		old := strings.ReplaceAll(string(body), "- "+LayoutLine+"\n", "")
-		old = strings.ReplaceAll(old, "- "+AgentGuidanceLine+"\n", "")
-		old += "\n- Keep the application-specific instructions.\n"
-		if err := os.WriteFile(p, []byte(old), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(old), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
 	if _, err := Refresh(dir, cfg); err != nil {
 		t.Fatal(err)
 	}
-	var canonical string
-	for _, name := range []string{"CLAUDE.md", "AGENTS.md", "GEMINI.md"} {
-		body, err := os.ReadFile(filepath.Join(dir, name))
-		if err != nil {
-			t.Fatal(err)
+	agents := readFile(t, dir, "AGENTS.md")
+	for _, want := range []string{LayoutLine, AgentGuidanceLine, "Keep the application-specific instructions."} {
+		if !strings.Contains(agents, want) {
+			t.Errorf("AGENTS.md missing %s", want)
 		}
-		for _, want := range []string{LayoutLine, AgentGuidanceLine, "Keep the application-specific instructions."} {
-			if !strings.Contains(string(body), want) {
-				t.Errorf("%s missing %s", name, want)
-			}
-		}
-		if canonical == "" {
-			canonical = string(body)
-		} else if canonical != string(body) {
-			t.Errorf("%s guidance differs", name)
+	}
+	for _, name := range []string{"CLAUDE.md", "GEMINI.md"} {
+		if got := readFile(t, dir, name); got != "@AGENTS.md\n" {
+			t.Errorf("%s is not the stub: %q", name, got)
 		}
 	}
 	for _, file := range []string{".claude/skills/organize-application-packages/SKILL.md", ".agents/skills/organize-application-packages/SKILL.md", ".gemini/commands/lidza/organize-application-packages.toml"} {
@@ -319,4 +314,13 @@ func TestRefreshPackageGuidanceForAllAgents(t *testing.T) {
 	if err != nil || len(changed) != 0 {
 		t.Errorf("second refresh changed %v: %v", changed, err)
 	}
+}
+
+func readFile(t *testing.T, dir, name string) string {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(dir, name))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(data)
 }

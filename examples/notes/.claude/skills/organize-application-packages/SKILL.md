@@ -31,9 +31,10 @@ contracts and keep the same instructions available to every agent.
    update imports and current documentation references, and carry embedded
    assets and package-relative fixtures with their package. Keep historical
    migration source references unchanged. Run `lidza gen` afterwards.
-6. Keep `CLAUDE.md`, `AGENTS.md` and `GEMINI.md` synchronized: shared rules,
-   agreements and notes change in all three together. Edit recipes in this
-   guide; `lidza gen` updates both agents' skills and Gemini commands.
+6. Shared rules, agreements and notes go in `AGENTS.md`, the one
+   instructions file (`CLAUDE.md` and `GEMINI.md` import it). Edit recipes
+   in this guide; `lidza gen` updates both agents' skills and Gemini
+   commands.
 7. Record the layout decision in `docs/decisions.md`. Verify discovery with
    `lidza api --list` and `lidza api ./internal/orders --filter Name` for a
    real package and declaration. App internal packages are discoverable through

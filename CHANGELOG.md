@@ -9,7 +9,7 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
-## Unreleased
+## v0.1.60 (2026-10-03)
 
 - Admin pages: `Options.OnAudit` reports every admin action for a staff
   audit log: each form sent on any page, the pack's own (admins, users,

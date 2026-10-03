@@ -9,7 +9,7 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
-## Unreleased
+## v0.1.56 (2026-10-03)
 
 - Auth: `POST /api/v1/auth/verify/resend` emails the signed-in user a new
   verification link while the address is unverified (a verified address,

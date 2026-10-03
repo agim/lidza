@@ -11,10 +11,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/agim/lidza"
-	"github.com/agim/lidza/packs/db"
 	"github.com/agim/lidza/packs/jobs"
 )
 
@@ -237,17 +235,8 @@ func TestMIME(t *testing.T) {
 // TestOutbox needs Postgres: the message is a row, delivered at once
 // without the jobs pack, with the outcome recorded.
 func TestOutbox(t *testing.T) {
-	url := os.Getenv("LIDZA_TEST_DATABASE_URL")
-	if url == "" {
-		url = "postgres:///lidza_test?host=/var/run/postgresql"
-	}
 	ctx := context.Background()
-	pool, err := db.Open(ctx, db.Config{URL: url, MaxConns: 2, ConnectTimeout: 2 * time.Second})
-	if err != nil {
-		t.Skipf("no test database: %v", err)
-	}
-	t.Cleanup(pool.Close)
-	pool.Exec(ctx, `DROP TABLE IF EXISTS mail_message`)
+	pool := schemaPool(ctx, t, "mail_outbox")
 	if _, err := pool.Exec(ctx, OutboxTable); err != nil {
 		t.Fatal(err)
 	}

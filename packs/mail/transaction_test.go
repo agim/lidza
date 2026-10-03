@@ -48,41 +48,7 @@ func TestSendTxRequiresDependencies(t *testing.T) {
 func TestSendTx(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
-	dsn := os.Getenv("LIDZA_TEST_DATABASE_URL")
-	if dsn == "" {
-		dsn = "postgres:///lidza_test?host=/var/run/postgresql"
-	}
-	admin, err := db.Open(ctx, db.Config{URL: dsn, MaxConns: 2, ConnectTimeout: 2 * time.Second})
-	if err != nil {
-		if os.Getenv("LIDZA_TEST_DATABASE_URL") != "" {
-			t.Fatal(err)
-		}
-		t.Skipf("no test database: %v", err)
-	}
-	t.Cleanup(admin.Close)
-	// Other packs test their public tables in the same database.
-	namespace := pgx.Identifier{fmt.Sprintf("mail_tx_%d", time.Now().UnixNano())}.Sanitize()
-	if _, err := admin.Exec(ctx, "CREATE SCHEMA "+namespace); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		cleanup, stop := context.WithTimeout(context.Background(), 5*time.Second)
-		defer stop()
-		if _, err := admin.Exec(cleanup, "DROP SCHEMA "+namespace+" CASCADE"); err != nil {
-			t.Error(err)
-		}
-	})
-	cfg, err := pgxpool.ParseConfig(dsn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	cfg.MaxConns = 4
-	cfg.ConnConfig.RuntimeParams["search_path"] = namespace
-	pool, err := pgxpool.NewWithConfig(ctx, cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(pool.Close)
+	pool := schemaPool(ctx, t, "mail_tx")
 	for _, ddl := range []string{OutboxTable, jobs.JobTable, "CREATE TABLE review (id text PRIMARY KEY)"} {
 		if _, err := pool.Exec(ctx, ddl); err != nil {
 			t.Fatal(err)
@@ -378,4 +344,47 @@ func TestSendTx(t *testing.T) {
 		}
 	})
 	reset(t)
+}
+
+// schemaPool connects to the test database with a schema of its own on
+// the search path, dropped after the test: the auth pack's tests create
+// mail_message in the shared public schema at the same time, and two
+// concurrent CREATE TABLEs of one name fail on its row type.
+func schemaPool(ctx context.Context, t *testing.T, prefix string) *pgxpool.Pool {
+	t.Helper()
+	dsn := os.Getenv("LIDZA_TEST_DATABASE_URL")
+	if dsn == "" {
+		dsn = "postgres:///lidza_test?host=/var/run/postgresql"
+	}
+	admin, err := db.Open(ctx, db.Config{URL: dsn, MaxConns: 2, ConnectTimeout: 2 * time.Second})
+	if err != nil {
+		if os.Getenv("LIDZA_TEST_DATABASE_URL") != "" {
+			t.Fatal(err)
+		}
+		t.Skipf("no test database: %v", err)
+	}
+	t.Cleanup(admin.Close)
+	namespace := pgx.Identifier{fmt.Sprintf("%s_%d", prefix, time.Now().UnixNano())}.Sanitize()
+	if _, err := admin.Exec(ctx, "CREATE SCHEMA "+namespace); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		cleanup, stop := context.WithTimeout(context.Background(), 5*time.Second)
+		defer stop()
+		if _, err := admin.Exec(cleanup, "DROP SCHEMA "+namespace+" CASCADE"); err != nil {
+			t.Error(err)
+		}
+	})
+	cfg, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.MaxConns = 4
+	cfg.ConnConfig.RuntimeParams["search_path"] = namespace
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(pool.Close)
+	return pool
 }

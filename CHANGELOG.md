@@ -9,7 +9,7 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
-## Unreleased
+## v0.1.57 (2026-10-03)
 
 - One agent instructions file: `AGENTS.md` holds them, and `CLAUDE.md`
   and `GEMINI.md` are the one line `@AGENTS.md`, an import Claude Code

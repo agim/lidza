@@ -1221,7 +1221,13 @@ instead of a separate admin screen.
    action reads `r.MultipartForm.File`. A file to download (an export, an
    attachment) is a `Downloads` handler at `<Path>/<name>`, behind the
    same gate; it sets `Content-Disposition` and
-   `X-Content-Type-Options: nosniff`.
+   `X-Content-Type-Options: nosniff`. A staff audit log is
+   `admin.Options.OnAudit(ctx, admin.Audit{Path, Form, Message, Error,
+   Download, Status, Request})`: it runs after every form on every page
+   (the pack's own and the app's) and every download, with secret
+   values already redacted; insert a row with the admin
+   (`auth.CurrentUser(ctx)`), and the action needs no audit code of its
+   own.
 3. The template is `admin/<page>.html` defining `content` (snippet
    `admin-page-template`): Tabler's classes (`card`, `table card-table`,
    `badge`, `btn`), the functions `icon`, `since`, `num`, `bytes`,

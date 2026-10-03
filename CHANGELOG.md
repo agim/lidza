@@ -9,6 +9,16 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- Admin pages: `Options.OnAudit` reports every admin action for a staff
+  audit log: each form sent on any page, the pack's own (admins, users,
+  settings, credentials, jobs) and the app's, with its message or
+  error, and each download with its status. The form comes with secret
+  values redacted (secret settings, every credential, fields named like
+  a password, secret, token, key or code) and long values cut; files
+  by name and size.
+
 ## v0.1.59 (2026-10-03)
 
 - Auth: `Options.OnEvent` reports each account event the routes handle,

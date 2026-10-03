@@ -64,6 +64,11 @@ type Options struct {
 	// or email claim ADMIN_USERS lists (in .env, the credentials, or
 	// saved from the Overview page).
 	Allow func(ctx context.Context) bool
+	// OnAudit runs after every admin action, for a staff audit log: each
+	// form sent on any page (the pack's own and the app's, with its
+	// outcome) and each download. Audit.Form has the secrets redacted. It
+	// cannot refuse anything and runs on the request: insert a row.
+	OnAudit func(ctx context.Context, a Audit)
 	// FirstUser returns the id of the app's first account, an admin by
 	// default; the auth pack's FirstSubject unless set. Empty means no
 	// such rule.
@@ -696,6 +701,9 @@ func humanUntil(at time.Time) string {
 
 // redirect sends the browser back to a page with a message.
 func (h *Handler) redirect(w http.ResponseWriter, r *http.Request, to, flash, errText string) {
+	if r.Method != http.MethodGet {
+		h.audit(r, Audit{Message: flash, Error: errText})
+	}
 	q, sep := "", "?"
 	if strings.Contains(to, "?") {
 		sep = "&"

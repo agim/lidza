@@ -92,7 +92,7 @@ func (h *Handler) mountPages() {
 			if name == "" || strings.ContainsAny(name, "/{}? ") || fn == nil {
 				panic(fmt.Sprintf("admin: page %q: download %q needs a plain name and a handler", pg.Name, name))
 			}
-			h.mux.HandleFunc("GET "+h.path+"/"+path+"/"+name, fn)
+			h.mux.HandleFunc("GET "+h.path+"/"+path+"/"+name, h.audited(fn))
 		}
 	}
 }

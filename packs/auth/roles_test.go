@@ -204,3 +204,11 @@ func TestGrants(t *testing.T) {
 		}
 	}
 }
+
+// A forged members cursor is refused.
+func TestMembersCursor(t *testing.T) {
+	_, _, ctx := rolesApp(t)
+	if _, _, err := teamRoles.Members(ctx, "a", "not-a-cursor!", 2); err == nil {
+		t.Fatal("forged cursor accepted")
+	}
+}

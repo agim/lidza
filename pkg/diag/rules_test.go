@@ -237,3 +237,29 @@ func TestOpenBrief(t *testing.T) {
 		t.Fatalf("answered brief still noted: %+v", got)
 	}
 }
+
+// The audit pack is used by the admin pages: an app mounting them is
+// not told the pack is unused; one with neither is.
+func TestUnusedAuditPack(t *testing.T) {
+	for _, c := range []struct {
+		routes  string
+		flagged bool
+	}{
+		{"package main\n\nimport _ \"github.com/agim/lidza/packs/admin\"\n", false},
+		{"package main\n", true},
+	} {
+		dir := t.TempDir()
+		os.WriteFile(filepath.Join(dir, "lidza.json"), []byte(`{"name":"x","frontend":{"template":"react","dev":"npm run dev","url":"http://127.0.0.1:5173","dist":"dist"},"packs":["lidza/db","lidza/auth","lidza/audit"]}`), 0o644)
+		os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module app\n\ngo 1.27\n\nrequire github.com/agim/lidza v0.0.0\n\nreplace github.com/agim/lidza => "+frameworkRoot(t)+"\n"), 0o644)
+		os.WriteFile(filepath.Join(dir, "routes.go"), []byte(c.routes), 0o644)
+		flagged := false
+		for _, d := range Rules(context.Background(), dir) {
+			if d.Code == "L011" && strings.HasPrefix(d.Message, "pack audit") {
+				flagged = true
+			}
+		}
+		if flagged != c.flagged {
+			t.Errorf("routes %q: flagged %v", c.routes, flagged)
+		}
+	}
+}

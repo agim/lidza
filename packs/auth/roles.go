@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -196,12 +197,20 @@ func (r Roles) Require(permission string, scope func(*http.Request) string) func
 
 // Members lists the memberships of scope (AppWide lists the app-wide
 // ones), by subject then role, up to limit (at most 500) after the
-// cursor; next is the cursor of the following page, "" at the end.
+// cursor (opaque, safe in a URL); next is the cursor of the following
+// page, "" at the end.
 func (r Roles) Members(ctx context.Context, scope, cursor string, limit int) (page []Membership, next string, err error) {
 	if limit <= 0 || limit > 500 {
 		limit = 500
 	}
-	afterSubject, afterRole, _ := strings.Cut(cursor, "\x00")
+	var afterSubject, afterRole string
+	if cursor != "" {
+		raw, err := base64.RawURLEncoding.DecodeString(cursor)
+		var ok bool
+		if afterSubject, afterRole, ok = strings.Cut(string(raw), "\x00"); err != nil || !ok {
+			return nil, "", errors.New("auth: members: invalid cursor")
+		}
+	}
 	rows, err := From(ctx).pool.Query(ctx, `SELECT subject, scope, role, coalesce(granted_by, ''), created_at FROM auth_member
 		WHERE scope = $1 AND (subject, role) > ($2, $3) ORDER BY subject, role LIMIT $4`, scope, afterSubject, afterRole, limit+1)
 	if err != nil {
@@ -217,7 +226,7 @@ func (r Roles) Members(ctx context.Context, scope, cursor string, limit int) (pa
 	if len(page) > limit {
 		page = page[:limit]
 		last := page[limit-1]
-		next = last.Subject + "\x00" + last.Role
+		next = base64.RawURLEncoding.EncodeToString([]byte(last.Subject + "\x00" + last.Role))
 	}
 	return page, next, nil
 }

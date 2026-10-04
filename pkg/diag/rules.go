@@ -329,6 +329,10 @@ func unusedPacks(root string, imported map[string]bool) []Diagnostic {
 		if imported[apidoc.Module+"/packs/"+name] {
 			continue
 		}
+		// The admin pages record their actions in the audit log.
+		if name == "audit" && imported[apidoc.Module+"/packs/admin"] {
+			continue
+		}
 		// A note, not a warning: a new app enables its packs before the
 		// code that uses them exists, and its CI (--strict) must pass.
 		out = append(out, Diagnostic{Layer: "go", Tool: "lidza rules", Severity: "note", Code: "L011", File: config.FileName, Line: 1, Column: 1,

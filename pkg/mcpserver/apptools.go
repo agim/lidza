@@ -50,7 +50,9 @@ func addAppTools(s *group, dir string, cfg *config.Config) {
 	for _, t := range list.Tools {
 		tool := t
 		schema, _ := json.Marshal(tool.InputSchema)
-		s.AddTool(mcp.NewToolWithRawSchema(appToolPrefix+tool.Name, "App tool: "+tool.Description, schema),
+		proxied := mcp.NewToolWithRawSchema(appToolPrefix+tool.Name, "App tool: "+tool.Description, schema)
+		proxied.Annotations = tool.Annotations // the app's ReadOnly and Destructive
+		s.AddTool(proxied,
 			func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 				call := mcp.CallToolRequest{}
 				call.Params.Name = tool.Name

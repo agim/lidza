@@ -9,6 +9,25 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- The agent files are a pre-commit requirement. `lidza verify` (the
+  pre-commit hook) gains the step "agent files current": the framework
+  block of `AGENTS.md` names the release that rendered it
+  (`<!-- lidza:framework v0.1.74 -->`); while that is the CLI's release
+  the step passes at once, otherwise it refreshes `AGENTS.md`, the guide
+  and the MCP configurations and the commit waits until they are staged.
+  The first commit after an update so records the new release even when
+  nothing else changed. A CLI built from source, and an app whose
+  `go.mod` points the framework at a local checkout, record nothing.
+- App tools say what they do to the data: `lidza.Tool` gains `ReadOnly`
+  and `Destructive`, sent to the MCP client as hints through the app's
+  `/mcp` and `lidza mcp` (as `app_<name>`); a tool marked neither keeps
+  the protocol's default (it may destroy, so the client asks).
+- `scripts/release.sh` runs `go vet` and `staticcheck` before tagging:
+  v0.1.73 was tagged with an unused constant that failed CI's
+  staticcheck step (fixed here).
+
 ## v0.1.73 (2026-10-04)
 
 - MCP tool hints are right: the read-only tools (`lidza_api`,

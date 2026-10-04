@@ -19,7 +19,17 @@ Let an agent call a function of this app, with its packs, from
    }),
    ```
 
-2. Give the input a `schema.lidza` type to have its rules enforced; the
+2. Say what it does to the data: `ReadOnly: true` for a lookup or a
+   report, so the agent's client runs it without asking, and
+   `Destructive: true` for one that deletes or overwrites. A tool marked
+   neither counts as one that may destroy, and the client asks first:
+
+   ```go
+   count := lidza.ToolFunc("count_posts", "Number of posts.", countPosts)
+   count.ReadOnly = true
+   ```
+
+3. Give the input a `schema.lidza` type to have its rules enforced; the
    input schema shown to the agent comes from the Go type.
-3. `lidza check`; then restart `lidza mcp` (the MCP client reconnects) and
+4. `lidza check`; then restart `lidza mcp` (the MCP client reconnects) and
    call `app_count_posts`.

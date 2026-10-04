@@ -4,7 +4,7 @@ A Līdza application: Go control plane, {{.Template}} frontend, one binary.
 Read `docs/lidza-guide.md` before changing anything; it has the layout, the
 commands and the rules.
 
-<!-- lidza:framework -->
+<!-- lidza:framework{{if .Release}} {{.Release}}{{end}} -->
 - {{.BriefLine}}
 - {{.LayoutLine}}
 - {{.AgentGuidanceLine}}

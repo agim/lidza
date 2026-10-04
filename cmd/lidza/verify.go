@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -17,6 +18,7 @@ import (
 	"github.com/agim/lidza/pkg/diag"
 	"github.com/agim/lidza/pkg/pack"
 	"github.com/agim/lidza/pkg/recipes"
+	"github.com/agim/lidza/pkg/scaffold"
 	"github.com/agim/lidza/pkg/schema"
 )
 
@@ -98,6 +100,12 @@ func runVerify(ctx context.Context, args []string) error {
 		return s.Status != "failed"
 	}
 
+	step("agent files current", func() (string, error) {
+		if cfg == nil {
+			return "plain Go module", errSkipped
+		}
+		return agentFilesCurrent(abs, cfg)
+	})
 	step("generate", func() (string, error) {
 		if cfg == nil {
 			return "plain Go module", errSkipped
@@ -175,6 +183,38 @@ func generatedPaths(cfg *config.Config) []string {
 		paths = append(paths, cfg.SDK.Dart)
 	}
 	return paths
+}
+
+// agentFilesCurrent requires the agents' files (AGENTS.md, the guide,
+// the MCP configurations) to be the CLI release's: one whose framework
+// marker names that release passes at once; otherwise they are refreshed
+// and the commit waits until the refreshed files are staged. The first
+// commit after an update so carries at least the new marker.
+func agentFilesCurrent(dir string, cfg *config.Config) (string, error) {
+	release := scaffold.ReleaseFor(dir)
+	if release != "" && scaffold.AgentStamp(dir) == release {
+		return "refreshed for " + release, nil
+	}
+	changed, err := scaffold.Refresh(dir, cfg)
+	if err != nil {
+		return "", err
+	}
+	var files []string
+	for _, c := range changed {
+		name, _, _ := strings.Cut(c, " (")
+		if slices.Contains(scaffold.AgentPaths, filepath.ToSlash(name)) {
+			files = append(files, name)
+		}
+	}
+	if len(files) == 0 {
+		return "", nil
+	}
+	sort.Strings(files)
+	target := release
+	if target == "" {
+		target = "this CLI"
+	}
+	return "", fmt.Errorf("the agent files were refreshed for %s: review them, then git add %s", target, strings.Join(files, " "))
 }
 
 // staleGenerated reports tracked generated files that differ from the git

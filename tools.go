@@ -30,6 +30,12 @@ type Tool struct {
 	// Handler receives the raw JSON input and returns a JSON-encodable
 	// result or an error the caller sees.
 	Handler func(ctx context.Context, input json.RawMessage) (any, error)
+	// ReadOnly says the tool changes nothing (a lookup, a report): an
+	// agent's client may run it without asking.
+	ReadOnly bool
+	// Destructive says the tool can lose data (a delete, an overwrite).
+	// A tool marked neither counts as one that may.
+	Destructive bool
 }
 
 // ToolFunc builds a Tool from a typed function. In is decoded from the
@@ -80,7 +86,7 @@ func mcpServer(app App, services *Services) *server.MCPServer {
 		if tool.Input == nil {
 			schema = []byte(`{"type":"object","properties":{}}`)
 		}
-		s.AddTool(mcp.NewToolWithRawSchema(tool.Name, tool.Description, schema),
+		s.AddTool(withHints(mcp.NewToolWithRawSchema(tool.Name, tool.Description, schema), tool),
 			func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 				raw, err := json.Marshal(req.GetArguments())
 				if err != nil {
@@ -103,6 +109,21 @@ func mcpServer(app App, services *Services) *server.MCPServer {
 
 // serveToolsStdio boots the app and serves its tools over stdio until the
 // client disconnects.
+// withHints puts the tool's ReadOnly and Destructive on the MCP tool; a
+// tool marked neither keeps the protocol's default (it may destroy).
+func withHints(t mcp.Tool, tool Tool) mcp.Tool {
+	switch {
+	case tool.ReadOnly:
+		t.Annotations.ReadOnlyHint = mcp.ToBoolPtr(true)
+		t.Annotations.DestructiveHint = mcp.ToBoolPtr(false)
+		t.Annotations.IdempotentHint = mcp.ToBoolPtr(true)
+	case tool.Destructive:
+		t.Annotations.ReadOnlyHint = mcp.ToBoolPtr(false)
+		t.Annotations.DestructiveHint = mcp.ToBoolPtr(true)
+	}
+	return t
+}
+
 func serveToolsStdio(ctx context.Context, app App) error {
 	booted, err := Boot(ctx, app)
 	if err != nil {

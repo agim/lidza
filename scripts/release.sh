@@ -29,6 +29,14 @@ unformatted=$(gofmt -l $(git ls-files '*.go'))
 big=$(git ls-files -z | xargs -0 -r ls -ln 2>/dev/null | awk '$5 > 2097152 {print $9}')
 [ -z "$big" ] || { echo "tracked files over 2 MB: $big" >&2; exit 1; }
 git pull -q --rebase=merges origin master
+# What CI's framework job runs first: a release never tags a tree that
+# fails it (v0.1.73 did, on an unused constant).
+go vet ./... || { echo "go vet failed" >&2; exit 1; }
+if command -v staticcheck >/dev/null; then
+	staticcheck ./... || { echo "staticcheck failed" >&2; exit 1; }
+else
+	echo "staticcheck not installed: CI will run it (go install honnef.co/go/tools/cmd/staticcheck@latest)" >&2
+fi
 today=$(date -u +%Y-%m-%d)
 sed -i.bak "s/^## Unreleased$/## $ver ($today)/" CHANGELOG.md && rm CHANGELOG.md.bak
 sed -i.bak "s/^LIDZA_VERSION=\"\${LIDZA_VERSION:-v[0-9.]*}\"$/LIDZA_VERSION=\"\${LIDZA_VERSION:-$ver}\"/" install.sh && rm install.sh.bak

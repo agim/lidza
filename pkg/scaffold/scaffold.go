@@ -32,6 +32,7 @@ import (
 	"github.com/agim/lidza/pkg/version"
 	"github.com/agim/lidza/templates"
 	"golang.org/x/mod/modfile"
+	"golang.org/x/mod/module"
 )
 
 // Module is the framework's Go module path, required by every app.
@@ -106,6 +107,9 @@ func New(ctx context.Context, opt Options) error {
 		return err
 	}
 	data := dataFor(&cfg, opt.LidzaDir)
+	if opt.LidzaDir == "" {
+		data.Release = Release()
+	}
 	if _, err := brief.Ensure(opt.Dir, opt.Name); err != nil {
 		return err
 	}
@@ -184,6 +188,10 @@ type templateData struct {
 	LayoutLine, AgentGuidanceLine string
 	// Recipes is the comma-separated list of recipe names from the guide.
 	Recipes string
+	// Release is the framework release that rendered the agent file's
+	// framework block, recorded in its marker: lidza verify passes the
+	// agent files without refreshing them while it is the CLI's.
+	Release string
 }
 
 // dataFor builds the template data for an app from its configuration.
@@ -248,41 +256,6 @@ func RecipesLine(rs []recipes.Recipe) string {
 		line += "; this app's own: " + strings.Join(app, ", ")
 	}
 	return line
-}
-
-// Agent-file markers around the recipe list, rewritten by lidza gen.
-const (
-	recipesOpen  = "<!-- lidza:recipes -->"
-	recipesClose = "<!-- /lidza:recipes -->"
-)
-
-// FrameworkRecipes renders the guide template for an app and returns the
-// body of its "## Recipes" section: the framework's recipes for this
-// framework version and template.
-func FrameworkRecipes(cfg *config.Config) (string, error) {
-	body, err := files.ReadFile("files/lidza-guide.md.tmpl")
-	if err != nil {
-		return "", err
-	}
-	t, err := template.New("guide").Parse(string(body))
-	if err != nil {
-		return "", err
-	}
-	var buf bytes.Buffer
-	if err := t.Execute(&buf, dataFor(cfg, "")); err != nil {
-		return "", err
-	}
-	guide := buf.String()
-	start := strings.Index(guide, "\n"+recipes.Heading+"\n")
-	if start < 0 {
-		return "", errors.New("guide template has no Recipes section")
-	}
-	start += len(recipes.Heading) + 2
-	end := len(guide)
-	if next := strings.Index(guide[start:], "\n## "); next >= 0 {
-		end = start + next + 1
-	}
-	return strings.TrimSpace(guide[start:end]), nil
 }
 
 // Refresh brings an existing app up to date after the framework or the
@@ -369,6 +342,11 @@ func Refresh(dir string, cfg *config.Config) ([]string, error) {
 	// bullets, working agreements and team notes stay.
 	data := dataFor(cfg, "")
 	data.Recipes = RecipesLine(rs)
+	data.Release = ReleaseFor(dir)
+	if data.Release == "" && AppVersions(dir).LocalPath == "" {
+		// A CLI built from source records nothing new.
+		data.Release = AgentStamp(dir)
+	}
 	block, err := frameworkBlock(data)
 	if err != nil {
 		return nil, err
@@ -407,11 +385,58 @@ func Refresh(dir string, cfg *config.Config) ([]string, error) {
 	return dedupe(changed), nil
 }
 
-// The markers around the framework's guidance in an agent file.
+// The markers around the framework's guidance in an agent file; the
+// opening one may name the release that rendered it
+// ("<!-- lidza:framework v0.1.74 -->").
 const (
-	frameworkOpen  = "<!-- lidza:framework -->"
+	frameworkOpen  = "<!-- lidza:framework"
 	frameworkClose = "<!-- /lidza:framework -->"
 )
+
+// AgentPaths are the files the framework keeps current for the agents:
+// the instructions, the guide, each agent's MCP configuration.
+var AgentPaths = []string{brief.AgentFile, "CLAUDE.md", "GEMINI.md", recipes.GuideFile, ".mcp.json", ".gemini/settings.json", ".codex/config.toml"}
+
+// Release is the framework release this CLI is, "" for a build from
+// source (a pseudo-version): only a release is recorded in the agent
+// file, so building from a checkout never rewrites it.
+func Release() string {
+	v := version.Module()
+	if v == "" || module.IsPseudoVersion(v) {
+		return ""
+	}
+	return v
+}
+
+// ReleaseFor is Release for the app at dir: "" when its go.mod points
+// the framework at a local checkout (the reference app, an app made with
+// --lidza-dir), whose code a release number does not describe.
+func ReleaseFor(dir string) string {
+	if AppVersions(dir).LocalPath != "" {
+		return ""
+	}
+	return Release()
+}
+
+// AgentStamp is the release named in the agent file's framework marker,
+// "" when there is none.
+func AgentStamp(dir string) string {
+	data, err := os.ReadFile(filepath.Join(dir, brief.AgentFile))
+	if err != nil {
+		return ""
+	}
+	text := string(data)
+	i := strings.Index(text, frameworkOpen)
+	if i < 0 {
+		return ""
+	}
+	rest := text[i+len(frameworkOpen):]
+	j := strings.Index(rest, "-->")
+	if j < 0 {
+		return ""
+	}
+	return strings.TrimSpace(rest[:j])
+}
 
 // mcpConfigs are the agents' MCP server files: Claude Code, Gemini CLI,
 // Codex (a trusted project's .codex/config.toml).

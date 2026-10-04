@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/mark3labs/mcp-go/mcp"
 	"io"
 	"log/slog"
 	"net/http"
@@ -401,5 +402,24 @@ func TestStartErrorNamesSavedSettings(t *testing.T) {
 	_, err := Boot(context.Background(), App{Packs: []Pack{failingPack{}}})
 	if err == nil || !strings.Contains(err.Error(), "needs a region (saved from the admin pages: MAIL_PROVIDER, STORAGE_PROVIDER;") || !strings.Contains(err.Error(), "lidza credentials unset NAME") {
 		t.Fatalf("start error: %v", err)
+	}
+}
+
+// An app tool's ReadOnly and Destructive reach the MCP client as hints;
+// one marked neither keeps the default (it may destroy).
+func TestToolHints(t *testing.T) {
+	cases := []struct {
+		tool                  Tool
+		readOnly, destructive bool
+	}{
+		{Tool{Name: "find", ReadOnly: true}, true, false},
+		{Tool{Name: "purge", Destructive: true}, false, true},
+		{Tool{Name: "other"}, false, true},
+	}
+	for _, c := range cases {
+		got := withHints(mcp.NewTool(c.tool.Name), c.tool)
+		if *got.Annotations.ReadOnlyHint != c.readOnly || *got.Annotations.DestructiveHint != c.destructive {
+			t.Errorf("%s: read-only %v destructive %v", c.tool.Name, *got.Annotations.ReadOnlyHint, *got.Annotations.DestructiveHint)
+		}
 	}
 }

@@ -9,7 +9,7 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
-## Unreleased
+## v0.1.68 (2026-10-04)
 
 - `lidza install` is the one command after cloning and after every pull
   (`lidza setup` is its former name and still works): it adds to `.env`

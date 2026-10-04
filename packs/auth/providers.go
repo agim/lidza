@@ -535,8 +535,19 @@ type roundTrip struct {
 	Forget bool `json:"f,omitempty"`
 }
 
-func (a *Auth) sealTrip(t roundTrip) (string, error) {
-	payload, err := json.Marshal(t)
+func (a *Auth) sealTrip(t roundTrip) (string, error) { return a.seal(t) }
+
+func (a *Auth) openTrip(value string) (roundTrip, error) {
+	var t roundTrip
+	if err := a.open(value, &t); err != nil {
+		return roundTrip{}, err
+	}
+	return t, nil
+}
+
+// seal signs v (a round trip with an Expires field) for a cookie.
+func (a *Auth) seal(v any) (string, error) {
+	payload, err := json.Marshal(v)
 	if err != nil {
 		return "", err
 	}
@@ -545,32 +556,36 @@ func (a *Auth) sealTrip(t roundTrip) (string, error) {
 	return base64.RawURLEncoding.EncodeToString(payload) + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil)), nil
 }
 
-func (a *Auth) openTrip(value string) (roundTrip, error) {
+// open checks a sealed value's signature and expiry ("e", Unix seconds)
+// and decodes it into v.
+func (a *Auth) open(value string, v any) error {
 	i := strings.IndexByte(value, '.')
 	if i < 0 {
-		return roundTrip{}, errors.New("malformed")
+		return errors.New("malformed")
 	}
 	payload, err := base64.RawURLEncoding.DecodeString(value[:i])
 	if err != nil {
-		return roundTrip{}, err
+		return err
 	}
 	sig, err := base64.RawURLEncoding.DecodeString(value[i+1:])
 	if err != nil {
-		return roundTrip{}, err
+		return err
 	}
 	mac := hmac.New(sha256.New, []byte(a.cfg.Secret))
 	mac.Write(payload)
 	if !hmac.Equal(sig, mac.Sum(nil)) {
-		return roundTrip{}, errors.New("bad signature")
+		return errors.New("bad signature")
 	}
-	var t roundTrip
-	if err := json.Unmarshal(payload, &t); err != nil {
-		return roundTrip{}, err
+	var exp struct {
+		Expires int64 `json:"e"`
 	}
-	if time.Now().Unix() > t.Expires {
-		return roundTrip{}, errors.New("expired")
+	if err := json.Unmarshal(payload, &exp); err != nil {
+		return err
 	}
-	return t, nil
+	if time.Now().Unix() > exp.Expires {
+		return errors.New("expired")
+	}
+	return json.Unmarshal(payload, v)
 }
 
 // redirectURI is the callback the provider sends the browser back to:

@@ -201,3 +201,23 @@ model AuthIdentity @table("auth_identity") {
   createdAt       time   @default(now())
   lastUsedAt      time   @default(now())
 }
+
+// One row per external account a user connected (auth.Conn): the grant's
+// tokens sealed with the master key, never sent to the browser; id is
+// provider:owner.
+model AuthConnection @table("auth_connection") {
+  id            string @id
+  owner         string
+  provider      string
+  subject       string
+  login         string @default("")
+  scopes        string @default("")
+  tokenType     string @default("")
+  accessSealed  string
+  refreshSealed string @default("")
+  expiresAt     time?
+  reconnect     bool   @default(false)
+  createdAt     time   @default(now())
+  updatedAt     time   @default(now())
+  @@unique(owner, provider)
+}

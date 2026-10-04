@@ -19,6 +19,9 @@ const (
 	EventPasswordReset       = "password_reset"        // a reset link used; every session ended
 	EventEmailVerified       = "email_verified"        // a verification link used
 	EventAccountDeleted      = "account_deleted"       // the delete route; Subject is gone by then
+	EventConnected           = "connected"             // an external account connected (Method: the provider)
+	EventConnectFailed       = "connect_failed"        // Reason: denied, state, scopes, refused, provider
+	EventDisconnected        = "disconnected"          // a connection removed and revoked at the provider
 )
 
 // Event is one account event, as Options.OnEvent sees it.

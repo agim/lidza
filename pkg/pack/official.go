@@ -110,6 +110,7 @@ var Officials = []Official{
 			"# AUTH_MIN_PASSWORD=10       # auth.ValidatePassword floor",
 			"# AUTH_TOKEN_TTL=1h          # verification and reset links",
 			"# AUTH_PROVIDERS=google,github   # sign-in providers for auth.Mount; ids and secrets in the credentials",
+			"# AUTH_CONNECT=github             # external accounts users connect (auth.Connection); AUTH_CONNECT_GITHUB_CLIENT_ID and _CLIENT_SECRET in the credentials, _SCOPES optional",
 		},
 		Notes: []string{
 			"sign-in: auth.Mount(r, auth.Options{}) in routes.go serves register, login, logout, session, verification, reset and the AUTH_PROVIDERS sign-ins on the pack's own tables (recipe \"Add sign-in\"); or keep your own users table and call auth.From(ctx).Login after auth.CheckPassword",
@@ -117,6 +118,7 @@ var Officials = []Official{
 			"protect routes: g := r.Group(\"/api/v1/notes\", auth.Require()); auth.CurrentUser(ctx) inside; auth.Optional() where visitors are served too",
 			"throttle the credential routes: router.Route(r, \"POST /api/v1/auth/register\", register, auth.Throttle()), and sign-in with its own limit: router.Route(r, \"POST /api/v1/auth/login\", login, auth.ThrottleSignIn()); check passwords with auth.From(ctx).ValidatePassword(pw, email)",
 			"email verification and password reset: auth.From(ctx).IssueToken(ctx, auth.PurposeVerifyEmail, email, 0) and ConsumeToken; the app sends the link",
+			"external accounts: AUTH_CONNECT=github (or Options.Connectors with auth.OAuth2Connect); the user goes to /api/v1/auth/connect/github/start, the server calls the API with auth.From(ctx).Connection(ctx, owner, \"github\") and its Client(); tokens sealed in auth_connection, never in the browser (recipe \"Connect an external account\")",
 			"working code: lidza snippet routes, lidza snippet auth-handlers",
 			"run `lidza gen` and `lidza db migrate`: the auth_session table comes from schema.lidza",
 		},

@@ -68,3 +68,24 @@ const IdentityTable = `CREATE TABLE IF NOT EXISTS auth_identity (
 );
 CREATE INDEX IF NOT EXISTS auth_identity_provider_idx ON auth_identity (provider);
 CREATE INDEX IF NOT EXISTS auth_identity_subject_idx ON auth_identity (subject);`
+
+// ConnectionTable is the DDL of the connections table (model
+// AuthConnection, table auth_connection in the schema fragment): one
+// row per owner and provider, the tokens sealed with the master key.
+// Tests create it directly.
+const ConnectionTable = `CREATE TABLE IF NOT EXISTS auth_connection (
+  id text PRIMARY KEY,
+  owner text NOT NULL,
+  provider text NOT NULL,
+  subject text NOT NULL,
+  login text NOT NULL DEFAULT '',
+  scopes text NOT NULL DEFAULT '',
+  token_type text NOT NULL DEFAULT '',
+  access_sealed text NOT NULL,
+  refresh_sealed text NOT NULL DEFAULT '',
+  expires_at timestamptz,
+  reconnect boolean NOT NULL DEFAULT false,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (owner, provider)
+);`

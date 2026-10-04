@@ -144,6 +144,29 @@ pub struct AuthIdentity {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AuthConnection {
+    pub id: String,
+    pub owner: String,
+    pub provider: String,
+    pub subject: String,
+    pub login: String,
+    pub scopes: String,
+    #[serde(rename = "tokenType")]
+    pub token_type: String,
+    #[serde(rename = "accessSealed")]
+    pub access_sealed: String,
+    #[serde(rename = "refreshSealed")]
+    pub refresh_sealed: String,
+    #[serde(rename = "expiresAt")]
+    pub expires_at: Option<String>,
+    pub reconnect: bool,
+    #[serde(rename = "createdAt")]
+    pub created_at: String,
+    #[serde(rename = "updatedAt")]
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CreateNote {
     pub title: String,
     pub body: Option<String>,

@@ -1157,6 +1157,74 @@ verified.
    secret to seal as `dev.PAYMENTS_WEBHOOK_SECRET`.
 7. `lidza check`, then `lidza test`.
 
+### Connect an external account
+
+Let a signed-in user connect an account of another service (a code
+host's repositories, a calendar, a storage service) so the server calls
+its API as that user. This is not sign-in: the account opens no
+session. The auth pack keeps the grant, its tokens sealed with the
+master key in `auth_connection`, renews it, and never sends a token to
+the browser.
+
+1. Register an OAuth app with the provider. For GitHub: an OAuth App
+   whose callback URL is `<APP_URL>/api/v1/auth` (GitHub accepts any
+   redirect under it, so it serves sign-in with GitHub too) or exactly
+   `<APP_URL>/api/v1/auth/connect/github/callback`. Seal its keys per
+   mode and name it: `lidza credentials set
+   dev.AUTH_CONNECT_GITHUB_CLIENT_ID=... dev.AUTH_CONNECT_GITHUB_CLIENT_SECRET=...`
+   (the production app's under `production.`), and `AUTH_CONNECT=github`
+   in `.env` and `lidza.json`'s `deploy.env`. The default scopes are
+   `repo admin:repo_hook` (repositories, private ones included, and
+   their webhooks); `AUTH_CONNECT_GITHUB_SCOPES` asks for others. A
+   grant missing a scope is refused and withdrawn.
+2. Other providers go in the options, in `routes.go`:
+
+   ```go
+   auth.Mount(r, auth.Options{Connectors: []auth.Connector{
+   	auth.GitHubConnect(id, secret),
+   	auth.OAuth2Connect(auth.OAuth2Config{Name: "calendar", ClientID: cid, ClientSecret: csecret,
+   		AuthURL: "https://provider.example/oauth/authorize", TokenURL: "https://provider.example/oauth/token",
+   		RevokeURL: "https://provider.example/oauth/revoke", UserURL: "https://provider.example/oauth/userinfo",
+   		Scopes: []string{"calendar.read"}, PKCE: true}),
+   }})
+   ```
+
+   `Options.ConnectAuthorize` may refuse a user starting one (a plan,
+   a workspace role).
+3. The page links to `/api/v1/auth/connect/github/start?redirect=/settings`
+   (a plain link, not a fetch: the browser goes to the provider and
+   back). It lands on the redirect with `?connected=github`, or with
+   `?connect_error=<reason>&provider=github` (denied, state, scopes,
+   refused, provider). `GET /api/v1/auth/connections` lists the user's
+   connections (provider, account, scopes, `reconnect` when the grant
+   stopped working), never a token; `DELETE
+   /api/v1/auth/connections/github` revokes the grant at the provider
+   and forgets it.
+4. On the server, call the API as the user:
+
+   ```go
+   conn, err := auth.From(ctx).Connection(ctx, auth.CurrentUser(ctx).ID, "github")
+   if errors.Is(err, auth.ErrNotConnected) || errors.Is(err, auth.ErrReconnect) {
+   	return out, router.Errorf(http.StatusConflict, "connect GitHub first")
+   }
+   res, err := conn.Client().Get("https://api.github.com/user/repos")
+   ```
+
+   `Client` sends the token and renews an expiring one (at most 8
+   renewals at once per node, 15 seconds each; concurrent callers
+   share one). A refused renewal is `auth.ErrReconnect`: the user
+   connects again. The owner is always the app's decision: the
+   signed-in user, or one an app's own check allows (a workspace's
+   connection used by its members). A job takes the owner in its
+   payload, never a token.
+5. A GitHub App installation token is the narrower alternative for
+   repositories (chosen repositories, fine-grained permissions, an hour
+   each): the app mints those itself; they are not a user's connection.
+6. `lidza gen` (and so `lidza update`) adds the `AuthConnection` model
+   to an app from before connections; then `lidza db migrate`.
+   Test with a fake provider (`httptest.NewServer`) and
+   `auth.OAuth2Connect` pointed at it.
+
 ### Add the admin pages
 
 Give operators a place to watch the packs and set their providers,

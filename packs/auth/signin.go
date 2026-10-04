@@ -26,6 +26,22 @@ import (
 // (Google, GitHub, Microsoft, any OIDC issuer) named by AUTH_PROVIDERS
 // and their credentials. Every field is optional.
 type Options struct {
+	// Connectors are the external APIs a signed-in user connects (see
+	// Connector): nil reads AUTH_CONNECT and its credentials, as
+	// ConnectorsFromEnv says. With any, Mount serves the connect routes;
+	// Reconfigure reloads those from the environment.
+	Connectors []Connector
+	// AfterConnect is where a connect round trip lands ("/"), with
+	// ?connected=<provider> or ?connect_error=<reason>&provider=<provider>;
+	// the start route's ?redirect= overrides it with another path.
+	AfterConnect string
+	// ConnectAuthorize, when set, may refuse a user starting a connection
+	// (an app's own check: a plan, a workspace role); an error lands on
+	// AfterConnect with connect_error=refused.
+	ConnectAuthorize func(ctx context.Context, u *User, provider string) error
+	// Connections keeps the grants: nil is the pack's table
+	// auth_connection, the tokens sealed with the master key.
+	Connections ConnectionStore
 	// Providers are the external sign-ins. Nil reads AUTH_PROVIDERS and
 	// the AUTH_<NAME>_CLIENT_ID and AUTH_<NAME>_CLIENT_SECRET credentials
 	// (AUTH_<NAME>_ISSUER for an issuer the pack does not know), and
@@ -182,14 +198,22 @@ func Mount(r *router.Router, opt Options) {
 	router.Route(r, "GET /api/v1/auth/providers", s.authProviders)
 	r.HandleFunc("GET /api/v1/auth/{provider}/start", s.start)
 	r.HandleFunc("GET /api/v1/auth/{provider}/callback", s.callback)
+	if len(s.connectors()) > 0 {
+		r.Handle("GET /api/v1/auth/connect/{provider}/start", Require()(http.HandlerFunc(s.connectStart)))
+		r.Handle("GET /api/v1/auth/connect/{provider}/callback", Require()(http.HandlerFunc(s.connectCallback)))
+		router.Route(r, "GET /api/v1/auth/connections", s.connectionsList, Require())
+		router.Route(r, "DELETE /api/v1/auth/connections/{provider}", s.connectionsDelete, Require())
+	}
 }
 
 // signin holds the options and the providers behind the routes.
 type signin struct {
-	opt   Options
-	mu    sync.RWMutex
-	provs []Provider
-	fixed bool // Providers came from the options, not the environment
+	opt        Options
+	mu         sync.RWMutex
+	provs      []Provider
+	fixed      bool // Providers came from the options, not the environment
+	conns      []Connector
+	connsFixed bool // Connectors came from the options
 }
 
 func newSignin(opt Options) *signin {
@@ -205,11 +229,14 @@ func newSignin(opt Options) *signin {
 	if opt.FailurePath == "" {
 		opt.FailurePath = "/login"
 	}
+	if opt.AfterConnect == "" {
+		opt.AfterConnect = "/"
+	}
 	if opt.Client == nil {
 		opt.Client = &http.Client{Timeout: 15 * time.Second}
 	}
-	s := &signin{opt: opt, provs: opt.Providers, fixed: opt.Providers != nil}
-	if !s.fixed {
+	s := &signin{opt: opt, provs: opt.Providers, fixed: opt.Providers != nil, conns: opt.Connectors, connsFixed: opt.Connectors != nil}
+	if !s.fixed || !s.connsFixed {
 		s.reload()
 	}
 	return s
@@ -223,11 +250,17 @@ func (s *signin) reload() {
 		return
 	}
 	provs, warnings := ProvidersFromEnv(values)
-	for _, w := range warnings {
+	conns, cwarnings := ConnectorsFromEnv(values)
+	for _, w := range append(warnings, cwarnings...) {
 		slog.Warn("auth: " + w)
 	}
 	s.mu.Lock()
-	s.provs = provs
+	if !s.fixed {
+		s.provs = provs
+	}
+	if !s.connsFixed {
+		s.conns = conns
+	}
 	s.mu.Unlock()
 }
 
@@ -259,7 +292,7 @@ func (a *Auth) Reconfigure(context.Context) error {
 	mountedMu.Lock()
 	s := mounted
 	mountedMu.Unlock()
-	if s != nil && !s.fixed {
+	if s != nil && (!s.fixed || !s.connsFixed) {
 		s.reload()
 	}
 	return nil

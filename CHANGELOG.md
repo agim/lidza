@@ -9,6 +9,35 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- External accounts (issue #23): a signed-in user connects an account of
+  another service so the server calls its API as that user, apart from
+  sign-in. `AUTH_CONNECT=github` with `AUTH_CONNECT_GITHUB_CLIENT_ID`
+  and `_CLIENT_SECRET` (`_SCOPES`; by default `repo admin:repo_hook`,
+  repositories with private ones and their webhooks), or
+  `auth.Options.Connectors` with `auth.GitHubConnect` and
+  `auth.OAuth2Connect` for any OAuth 2.0 provider. `auth.Mount` then
+  serves `GET /api/v1/auth/connect/{provider}/start` and `/callback`
+  (signed-in users only; the state a one-time token bound to the user,
+  a cookie bound to the browser, ten minutes, PKCE), `GET
+  /api/v1/auth/connections` (no token in it) and `DELETE
+  /api/v1/auth/connections/{provider}` (revoked at the provider, then
+  forgotten). A grant missing a requested scope is refused and
+  withdrawn. The server calls the API with `auth.From(ctx).Connection(ctx,
+  owner, "github")`: `Client()` sends the token and renews an expiring
+  one (8 renewals at once per node, 15 seconds each, concurrent callers
+  sharing one); a refused renewal is `auth.ErrReconnect` and the
+  connection lists with `reconnect`. Grants are kept in `auth_connection`
+  (model `AuthConnection`), the tokens sealed with the master key and
+  scoped to their owner; `auth.Grant` prints, logs and marshals without
+  them, and `auth.ConnectionStore` lets an app keep them its own way.
+  `Options.ConnectAuthorize` may refuse a user; `OnEvent` reports
+  `connected`, `connect_failed` and `disconnected`. Sign-in is
+  unchanged. Existing apps: `lidza update` adds the model to
+  schema.lidza (its `lidza gen`), then `lidza db migrate`. Recipe "Connect an external
+  account".
+
 ## v0.1.60 (2026-10-03)
 
 - Admin pages: `Options.OnAudit` reports every admin action for a staff

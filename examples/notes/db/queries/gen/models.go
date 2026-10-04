@@ -24,6 +24,22 @@ type AuthAccount struct {
 	LastSeenAt  time.Time  `json:"last_seen_at"`
 }
 
+type AuthConnection struct {
+	ID            string     `json:"id"`
+	Owner         string     `json:"owner"`
+	Provider      string     `json:"provider"`
+	Subject       string     `json:"subject"`
+	Login         string     `json:"login"`
+	Scopes        string     `json:"scopes"`
+	TokenType     string     `json:"token_type"`
+	AccessSealed  string     `json:"access_sealed"`
+	RefreshSealed string     `json:"refresh_sealed"`
+	ExpiresAt     *time.Time `json:"expires_at"`
+	Reconnect     bool       `json:"reconnect"`
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
+}
+
 type AuthIdentity struct {
 	ID              string    `json:"id"`
 	Provider        string    `json:"provider"`

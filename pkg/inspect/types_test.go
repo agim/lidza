@@ -305,7 +305,7 @@ func main() {}
 			raw = append(raw, r.Pattern)
 		}
 	}
-	if fmt.Sprint(raw) != "[GET /api/v1/auth/{provider}/start GET /api/v1/auth/{provider}/callback]" {
+	if fmt.Sprint(raw) != "[GET /api/v1/auth/{provider}/start GET /api/v1/auth/{provider}/callback GET /api/v1/auth/connect/{provider}/start GET /api/v1/auth/connect/{provider}/callback]" {
 		t.Errorf("raw pack routes: %v", raw)
 	}
 }

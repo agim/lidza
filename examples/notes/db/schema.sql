@@ -113,3 +113,20 @@ CREATE TABLE auth_identity (
 CREATE INDEX auth_identity_provider_idx ON auth_identity (provider);
 CREATE INDEX auth_identity_subject_idx ON auth_identity (subject);
 
+CREATE TABLE auth_connection (
+  id text PRIMARY KEY,
+  owner text NOT NULL,
+  provider text NOT NULL,
+  subject text NOT NULL,
+  login text NOT NULL DEFAULT '',
+  scopes text NOT NULL DEFAULT '',
+  token_type text NOT NULL DEFAULT '',
+  access_sealed text NOT NULL,
+  refresh_sealed text NOT NULL DEFAULT '',
+  expires_at timestamptz,
+  reconnect boolean NOT NULL DEFAULT false,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX auth_connection_owner_provider_key ON auth_connection (owner, provider);
+

@@ -241,6 +241,53 @@ func (v AuthIdentity) Validate() error {
 	return errs.Result()
 }
 
+// AuthConnection is a row of the auth_connection table.
+type AuthConnection struct {
+	ID            string     `json:"id" db:"id"`
+	Owner         string     `json:"owner" db:"owner"`
+	Provider      string     `json:"provider" db:"provider"`
+	Subject       string     `json:"subject" db:"subject"`
+	Login         string     `json:"login" db:"login"`
+	Scopes        string     `json:"scopes" db:"scopes"`
+	TokenType     string     `json:"tokenType" db:"token_type"`
+	AccessSealed  string     `json:"accessSealed" db:"access_sealed"`
+	RefreshSealed string     `json:"refreshSealed" db:"refresh_sealed"`
+	ExpiresAt     *time.Time `json:"expiresAt" db:"expires_at"`
+	Reconnect     bool       `json:"reconnect" db:"reconnect"`
+	CreatedAt     time.Time  `json:"createdAt" db:"created_at"`
+	UpdatedAt     time.Time  `json:"updatedAt" db:"updated_at"`
+}
+
+// Validate applies the rules of AuthConnection from schema.lidza.
+func (v AuthConnection) Validate() error {
+	var errs validate.Errors
+	if v.Owner == "" {
+		errs.Add("owner", "required", "required")
+	}
+	if v.Provider == "" {
+		errs.Add("provider", "required", "required")
+	}
+	if v.Subject == "" {
+		errs.Add("subject", "required", "required")
+	}
+	if v.Login == "" {
+		errs.Add("login", "required", "required")
+	}
+	if v.Scopes == "" {
+		errs.Add("scopes", "required", "required")
+	}
+	if v.TokenType == "" {
+		errs.Add("tokenType", "required", "required")
+	}
+	if v.AccessSealed == "" {
+		errs.Add("accessSealed", "required", "required")
+	}
+	if v.RefreshSealed == "" {
+		errs.Add("refreshSealed", "required", "required")
+	}
+	return errs.Result()
+}
+
 // CreateNote is an API type.
 type CreateNote struct {
 	Title string  `json:"title"`

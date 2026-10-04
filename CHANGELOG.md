@@ -9,7 +9,7 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
-## Unreleased
+## v0.1.62 (2026-10-04)
 
 - Admin Settings and pack settings pages no longer scroll sideways on a
   phone: their grid's gutter is 1rem below the lg breakpoint (it was

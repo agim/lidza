@@ -458,3 +458,68 @@ func TestConnectorsFromEnv(t *testing.T) {
 		t.Fatalf("warnings: %v", warnings)
 	}
 }
+
+// An app booted without connectors configures one later (saved settings,
+// then Reconfigure): its routes answer without a restart, a provider not
+// configured is 404, and removing the configuration closes it again.
+func TestConnectConfiguredLater(t *testing.T) {
+	a := testAuth(t)
+	ctx := context.Background()
+	a.pool.Exec(ctx, `DROP TABLE IF EXISTS auth_connection`)
+	if _, err := a.pool.Exec(ctx, ConnectionTable); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(credentials.EnvMasterKey, strings.Repeat("ab", 32))
+	t.Setenv("AUTH_CONNECT", "")
+	srv, _ := signinServer(t, a, Options{Providers: []Provider{}})
+	api := srv.URL + Prefix
+	alice, _ := user(t, api, "alice@example.com")
+	status := func(method, path string) int {
+		req, _ := http.NewRequest(method, api+path, nil)
+		req.Header.Set("Content-Type", "application/json")
+		res, err := alice.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		return res.StatusCode
+	}
+	if c := status("GET", "/connect/github/start"); c != http.StatusNotFound {
+		t.Fatalf("start before configuration: %d", c)
+	}
+	if c := status("GET", "/connections"); c != http.StatusOK {
+		t.Fatalf("list before configuration: %d", c)
+	}
+
+	t.Setenv("AUTH_CONNECT", "github")
+	t.Setenv("AUTH_CONNECT_GITHUB_CLIENT_ID", "Iv1.later")
+	t.Setenv("AUTH_CONNECT_GITHUB_CLIENT_SECRET", "later-secret")
+	if err := a.Reconfigure(ctx); err != nil {
+		t.Fatal(err)
+	}
+	res, err := alice.Get(api + "/connect/github/start")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	loc, _ := url.Parse(res.Header.Get("Location"))
+	if res.StatusCode != http.StatusFound || loc.Host != "github.com" || loc.Query().Get("client_id") != "Iv1.later" {
+		t.Fatalf("start after configuration: %d %s", res.StatusCode, loc)
+	}
+	if c := status("GET", "/connect/gitlab/start"); c != http.StatusNotFound {
+		t.Fatalf("a provider not configured: %d", c)
+	}
+	if c := status("DELETE", "/connections/github"); c != http.StatusNotFound {
+		t.Fatalf("disconnect without a connection: %d", c)
+	}
+	// Signed out: no connection routes.
+	if res, _ := browser().Get(api + "/connect/github/start"); res == nil || res.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("signed out: %v", res)
+	}
+
+	t.Setenv("AUTH_CONNECT", "")
+	a.Reconfigure(ctx)
+	if c := status("GET", "/connect/github/start"); c != http.StatusNotFound {
+		t.Fatalf("start after removal: %d", c)
+	}
+}

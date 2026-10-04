@@ -198,7 +198,11 @@ func Mount(r *router.Router, opt Options) {
 	router.Route(r, "GET /api/v1/auth/providers", s.authProviders)
 	r.HandleFunc("GET /api/v1/auth/{provider}/start", s.start)
 	r.HandleFunc("GET /api/v1/auth/{provider}/callback", s.callback)
-	if len(s.connectors()) > 0 {
+	// Connectors from the environment can be configured later (the admin
+	// settings, then Reconfigure): their routes are there from the start
+	// and answer 404 for a provider not configured. A fixed empty list
+	// mounts none.
+	if len(s.connectors()) > 0 || !s.connsFixed {
 		r.Handle("GET /api/v1/auth/connect/{provider}/start", Require()(http.HandlerFunc(s.connectStart)))
 		r.Handle("GET /api/v1/auth/connect/{provider}/callback", Require()(http.HandlerFunc(s.connectCallback)))
 		router.Route(r, "GET /api/v1/auth/connections", s.connectionsList, Require())

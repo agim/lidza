@@ -338,12 +338,27 @@ func (l *LLM) providerNow() Provider {
 	return l.provider
 }
 
-// embedderNow is the embeddings provider under the lock, or the error
-// that says why there is none.
-func (l *LLM) embedderNow() (Provider, error) {
+// embedderNow is the configuration and the embeddings provider under the
+// lock, or the error that says why there is none.
+func (l *LLM) embedderNow() (Config, Provider, error) {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
-	return l.embed, l.embedErr
+	return l.cfg, l.embed, l.embedErr
+}
+
+// chatNow is the configuration and the chat provider read together: a
+// call runs with one of each, whatever Reconfigure does meanwhile.
+func (l *LLM) chatNow() (Config, Provider) {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	return l.cfg, l.provider
+}
+
+// config is the configuration under the lock.
+func (l *LLM) config() Config {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	return l.cfg
 }
 
 // Reconfigure reads .env and the credentials again and switches the
@@ -366,16 +381,16 @@ func (l *LLM) Reconfigure(ctx context.Context) error {
 }
 
 // Provider returns the configured provider's name.
-func (l *LLM) Provider() string { return l.cfg.Provider }
+func (l *LLM) Provider() string { return l.config().Provider }
 
 // Model returns the configured chat model.
-func (l *LLM) Model() string { return l.cfg.Model }
+func (l *LLM) Model() string { return l.config().Model }
 
 // EmbedProvider returns the name of the provider behind Embed: the chat
 // provider's unless EMBED_PROVIDER names another, "none" when nothing
 // can embed.
 func (l *LLM) EmbedProvider() string {
-	p, _ := l.embedderNow()
+	_, p, _ := l.embedderNow()
 	if p == nil {
 		return "none"
 	}
@@ -434,14 +449,14 @@ func (l *LLM) Embeddings(ctx context.Context, req EmbedRequest) (EmbedResponse, 
 	if len(req.Texts) == 0 {
 		return EmbedResponse{}, nil
 	}
-	p, err := l.embedderNow()
+	cfg, p, err := l.embedderNow()
 	if err != nil {
 		return EmbedResponse{}, err
 	}
-	model := or(req.Model, l.cfg.EmbedModel)
+	model := or(req.Model, cfg.EmbedModel)
 	start := time.Now()
 	var out embedResult
-	err = l.retry(ctx, func(ctx context.Context) error {
+	err = l.retry(ctx, cfg, func(ctx context.Context) error {
 		var err error
 		if e, ok := p.(embedder); ok {
 			out, err = e.embed(ctx, model, req.Texts)
@@ -514,8 +529,8 @@ func (l *LLM) Run(ctx context.Context, req Request, tools []lidza.Tool) (Respons
 		if len(res.ToolCalls) == 0 {
 			return res, nil
 		}
-		if round+1 >= l.cfg.MaxToolRounds {
-			return res, fmt.Errorf("llm: the model kept calling tools after %d rounds (LLM_MAX_TOOL_ROUNDS)", l.cfg.MaxToolRounds)
+		if rounds := l.config().MaxToolRounds; round+1 >= rounds {
+			return res, fmt.Errorf("llm: the model kept calling tools after %d rounds (LLM_MAX_TOOL_ROUNDS)", rounds)
 		}
 		req.Messages = append(req.Messages, Message{Role: Assistant, Content: res.Text, ToolCalls: res.ToolCalls})
 		for _, call := range res.ToolCalls {
@@ -558,11 +573,12 @@ func ToolsOf(tools ...lidza.Tool) []Tool {
 // call runs one chat with defaults, retries and accounting. A streamed
 // call is retried only while nothing has reached the caller.
 func (l *LLM) call(ctx context.Context, req Request, stream func(string) error) (Response, error) {
+	cfg, provider := l.chatNow()
 	if req.Model == "" {
-		req.Model = l.cfg.Model
+		req.Model = cfg.Model
 	}
 	if req.MaxTokens <= 0 {
-		req.MaxTokens = l.cfg.MaxTokens
+		req.MaxTokens = cfg.MaxTokens
 	}
 	start := time.Now()
 	var res Response
@@ -574,24 +590,24 @@ func (l *LLM) call(ctx context.Context, req Request, stream func(string) error) 
 			return stream(s)
 		}
 	}
-	err := l.retry(ctx, func(ctx context.Context) error {
+	err := l.retry(ctx, cfg, func(ctx context.Context) error {
 		if started {
 			return errNoRetry
 		}
 		var err error
-		res, err = l.providerNow().Chat(ctx, req, wrapped)
+		res, err = provider.Chat(ctx, req, wrapped)
 		return err
 	})
 	l.calls.Add(1)
-	l.record(ctx, l.cfg.Provider, or(res.Model, req.Model), req.Label, res.Usage, time.Since(start), err)
+	l.record(ctx, cfg.Provider, or(res.Model, req.Model), req.Label, res.Usage, time.Since(start), err)
 	if err != nil {
 		l.failures.Add(1)
-		lidza.Log(ctx).Warn("llm chat failed", "provider", l.cfg.Provider, "model", req.Model, "label", req.Label, "error", err, "ms", time.Since(start).Milliseconds())
+		lidza.Log(ctx).Warn("llm chat failed", "provider", cfg.Provider, "model", req.Model, "label", req.Label, "error", err, "ms", time.Since(start).Milliseconds())
 		return res, err
 	}
 	l.inputTokens.Add(int64(res.Usage.Input))
 	l.outputTokens.Add(int64(res.Usage.Output))
-	lidza.Log(ctx).Info("llm chat", "provider", l.cfg.Provider, "model", res.Model, "label", req.Label, "in", res.Usage.Input, "out", res.Usage.Output, "stop", res.Stop, "tools", len(res.ToolCalls), "ms", time.Since(start).Milliseconds())
+	lidza.Log(ctx).Info("llm chat", "provider", cfg.Provider, "model", res.Model, "label", req.Label, "in", res.Usage.Input, "out", res.Usage.Output, "stop", res.Stop, "tools", len(res.ToolCalls), "ms", time.Since(start).Milliseconds())
 	return res, nil
 }
 
@@ -599,10 +615,10 @@ var errNoRetry = errors.New("llm: not retried")
 
 // retry runs fn up to MaxAttempts times, each under Timeout, backing off
 // 1s, 2s, 4s (or the provider's Retry-After) after a retryable Error.
-func (l *LLM) retry(ctx context.Context, fn func(context.Context) error) error {
+func (l *LLM) retry(ctx context.Context, cfg Config, fn func(context.Context) error) error {
 	var last error
-	for attempt := 1; attempt <= l.cfg.MaxAttempts; attempt++ {
-		actx, cancel := context.WithTimeout(ctx, l.cfg.Timeout)
+	for attempt := 1; attempt <= cfg.MaxAttempts; attempt++ {
+		actx, cancel := context.WithTimeout(ctx, cfg.Timeout)
 		err := fn(actx)
 		cancel()
 		if err == nil {
@@ -613,14 +629,14 @@ func (l *LLM) retry(ctx context.Context, fn func(context.Context) error) error {
 		}
 		last = err
 		var e *Error
-		if !errors.As(err, &e) || !e.Retryable() || attempt == l.cfg.MaxAttempts || ctx.Err() != nil {
+		if !errors.As(err, &e) || !e.Retryable() || attempt == cfg.MaxAttempts || ctx.Err() != nil {
 			return err
 		}
 		delay := time.Duration(1<<(attempt-1)) * time.Second
 		if e.RetryAfter > 0 {
 			delay = e.RetryAfter
 		}
-		l.log.Warn("llm: retrying", "provider", l.cfg.Provider, "attempt", attempt, "in", delay, "error", err)
+		l.log.Warn("llm: retrying", "provider", cfg.Provider, "attempt", attempt, "in", delay, "error", err)
 		if err := l.sleep(ctx, delay); err != nil {
 			return last
 		}

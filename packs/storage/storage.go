@@ -211,12 +211,26 @@ func (s *Storage) defaults() {
 	}
 }
 
+// view is the configuration and provider read together: an operation
+// keys and sends with one pair, whatever Reconfigure does meanwhile.
+type view struct {
+	cfg Config
+	p   Provider
+}
+
+// now is the current view, under the lock.
+func (s *Storage) now() view {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return view{s.cfg, s.provider}
+}
+
 // full is the key as the bucket stores it: under Prefix.
-func (s *Storage) full(key string) string { return s.cfg.Prefix + key }
+func (v view) full(key string) string { return v.cfg.Prefix + key }
 
 // short is the key as the app knows it: without Prefix.
-func (s *Storage) short(o Object) Object {
-	o.Key = strings.TrimPrefix(o.Key, s.cfg.Prefix)
+func (v view) short(o Object) Object {
+	o.Key = strings.TrimPrefix(o.Key, v.cfg.Prefix)
 	return o
 }
 
@@ -275,7 +289,7 @@ func (s *Storage) Reconfigure(ctx context.Context) error {
 	s.mu.Lock()
 	s.cfg, s.provider = built.cfg, built.provider
 	s.mu.Unlock()
-	s.log.Info("storage: reconfigured", "provider", s.cfg.Provider, "bucket", s.cfg.Bucket)
+	s.log.Info("storage: reconfigured", "provider", built.cfg.Provider, "bucket", built.cfg.Bucket)
 	return nil
 }
 
@@ -286,7 +300,7 @@ func (s *Storage) providerNow() Provider {
 }
 
 // Provider returns the configured provider's name.
-func (s *Storage) Provider() string { return s.cfg.Provider }
+func (s *Storage) Provider() string { return s.now().cfg.Provider }
 
 // Put stores the reader's bytes under key (a path like
 // "avatars/<id>.png"; no leading slash, no ".." segments) and returns
@@ -295,25 +309,26 @@ func (s *Storage) Put(ctx context.Context, key string, r io.Reader, opt PutOptio
 	if err := checkKey(key); err != nil {
 		return Object{}, err
 	}
-	data, err := io.ReadAll(io.LimitReader(r, s.cfg.MaxSize+1))
+	v := s.now()
+	data, err := io.ReadAll(io.LimitReader(r, v.cfg.MaxSize+1))
 	if err != nil {
 		return Object{}, err
 	}
-	if int64(len(data)) > s.cfg.MaxSize {
-		return Object{}, fmt.Errorf("storage: %s is larger than STORAGE_MAX_SIZE (%d bytes)", key, s.cfg.MaxSize)
+	if int64(len(data)) > v.cfg.MaxSize {
+		return Object{}, fmt.Errorf("storage: %s is larger than STORAGE_MAX_SIZE (%d bytes)", key, v.cfg.MaxSize)
 	}
 	if opt.ContentType == "" {
 		opt.ContentType = detectContentType(key, data)
 	}
-	ctx, cancel := context.WithTimeout(ctx, s.cfg.Timeout)
+	ctx, cancel := context.WithTimeout(ctx, v.cfg.Timeout)
 	defer cancel()
 	start := time.Now()
-	obj, err := s.providerNow().Put(ctx, s.full(key), data, opt)
+	obj, err := v.p.Put(ctx, v.full(key), data, opt)
 	if err != nil {
 		return Object{}, err
 	}
-	lidza.Log(ctx).Info("storage put", "provider", s.cfg.Provider, "key", s.full(key), "bytes", len(data), "ms", time.Since(start).Milliseconds())
-	return s.short(obj), nil
+	lidza.Log(ctx).Info("storage put", "provider", v.cfg.Provider, "key", v.full(key), "bytes", len(data), "ms", time.Since(start).Milliseconds())
+	return v.short(obj), nil
 }
 
 // Get opens the object for reading; the caller closes it. ErrNotFound
@@ -322,8 +337,9 @@ func (s *Storage) Get(ctx context.Context, key string) (io.ReadCloser, Object, e
 	if err := checkKey(key); err != nil {
 		return nil, Object{}, err
 	}
-	rc, obj, err := s.providerNow().Get(ctx, s.full(key))
-	return rc, s.short(obj), err
+	v := s.now()
+	rc, obj, err := v.p.Get(ctx, v.full(key))
+	return rc, v.short(obj), err
 }
 
 // Stat describes the object without reading it.
@@ -331,10 +347,11 @@ func (s *Storage) Stat(ctx context.Context, key string) (Object, error) {
 	if err := checkKey(key); err != nil {
 		return Object{}, err
 	}
-	ctx, cancel := context.WithTimeout(ctx, s.cfg.Timeout)
+	v := s.now()
+	ctx, cancel := context.WithTimeout(ctx, v.cfg.Timeout)
 	defer cancel()
-	obj, err := s.providerNow().Stat(ctx, s.full(key))
-	return s.short(obj), err
+	obj, err := v.p.Stat(ctx, v.full(key))
+	return v.short(obj), err
 }
 
 // Delete removes the object; a missing key is not an error.
@@ -342,9 +359,10 @@ func (s *Storage) Delete(ctx context.Context, key string) error {
 	if err := checkKey(key); err != nil {
 		return err
 	}
-	ctx, cancel := context.WithTimeout(ctx, s.cfg.Timeout)
+	v := s.now()
+	ctx, cancel := context.WithTimeout(ctx, v.cfg.Timeout)
 	defer cancel()
-	return s.providerNow().Delete(ctx, s.full(key))
+	return v.p.Delete(ctx, v.full(key))
 }
 
 // List returns up to limit objects under prefix, by key.
@@ -352,11 +370,12 @@ func (s *Storage) List(ctx context.Context, prefix string, limit int) ([]Object,
 	if limit <= 0 {
 		limit = 1000
 	}
-	ctx, cancel := context.WithTimeout(ctx, s.cfg.Timeout)
+	v := s.now()
+	ctx, cancel := context.WithTimeout(ctx, v.cfg.Timeout)
 	defer cancel()
-	objs, err := s.providerNow().List(ctx, s.full(strings.TrimPrefix(prefix, "/")), limit)
+	objs, err := v.p.List(ctx, v.full(strings.TrimPrefix(prefix, "/")), limit)
 	for i := range objs {
-		objs[i] = s.short(objs[i])
+		objs[i] = v.short(objs[i])
 	}
 	return objs, err
 }
@@ -367,7 +386,8 @@ func (s *Storage) PresignGet(ctx context.Context, key string, ttl time.Duration)
 	if err := checkKey(key); err != nil {
 		return "", err
 	}
-	return s.providerNow().PresignGet(ctx, s.full(key), ttl)
+	v := s.now()
+	return v.p.PresignGet(ctx, v.full(key), ttl)
 }
 
 // PresignPut returns a URL a browser can PUT the file to directly, with
@@ -376,13 +396,17 @@ func (s *Storage) PresignPut(ctx context.Context, key string, ttl time.Duration,
 	if err := checkKey(key); err != nil {
 		return "", err
 	}
-	return s.providerNow().PresignPut(ctx, s.full(key), ttl, contentType)
+	v := s.now()
+	return v.p.PresignPut(ctx, v.full(key), ttl, contentType)
 }
 
 // URL returns the public address of the object (STORAGE_PUBLIC_URL plus
 // the key, or the bucket's own address), "" when there is none: then
 // use PresignGet or serve it through a handler.
-func (s *Storage) URL(key string) string { return s.providerNow().URL(s.full(key)) }
+func (s *Storage) URL(key string) string {
+	v := s.now()
+	return v.p.URL(v.full(key))
+}
 
 // checkKey refuses keys that would escape a prefix or a directory.
 func checkKey(key string) error {

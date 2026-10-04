@@ -9,6 +9,23 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- The auth pack's connection routes (`/api/v1/auth/connect/{provider}/...`,
+  `/api/v1/auth/connections`) are mounted whenever connectors come from
+  the environment, so one configured after boot (the admin settings,
+  then `Reconfigure`) works without a restart; a provider not configured
+  answers 404. A fixed empty `Options.Connectors` still mounts none.
+- Reconfiguring the mail, LLM and storage packs while they work is
+  race-free. Mail keeps its configuration, provider and templates in one
+  snapshot swapped whole: a send or a queued delivery uses one from start
+  to end, concurrent `Reconfigure` calls run one at a time, and a reload
+  that fails (an unknown provider, a broken template) keeps the previous
+  one. LLM chats and embeddings, and storage operations, read their
+  configuration and provider together under the lock, so a storage key
+  is never prefixed by one configuration and sent to another's
+  provider.
+
 ## v0.1.70 (2026-10-04)
 
 - The generated Dockerfile builds with the app's own versions: the

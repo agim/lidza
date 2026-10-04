@@ -111,8 +111,8 @@ func TestAttachmentValidation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if defaults.cfg.MaxRecipients != 50 || defaults.cfg.MaxAttachments != 10 || defaults.cfg.MaxAttachmentBytes != 10<<20 {
-		t.Fatal(defaults.cfg)
+	if cfg := defaults.snap().cfg; cfg.MaxRecipients != 50 || cfg.MaxAttachments != 10 || cfg.MaxAttachmentBytes != 10<<20 {
+		t.Fatal(cfg)
 	}
 }
 

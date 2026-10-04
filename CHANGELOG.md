@@ -9,7 +9,7 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
-## Unreleased
+## v0.1.73 (2026-10-04)
 
 - MCP tool hints are right: the read-only tools (`lidza_api`,
   `lidza_snippet`, `lidza_routes`, `lidza_logs`, the pack readers...)

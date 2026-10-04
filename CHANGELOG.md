@@ -9,6 +9,35 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- MCP tool hints are right: the read-only tools (`lidza_api`,
+  `lidza_snippet`, `lidza_routes`, `lidza_logs`, the pack readers...)
+  say so, and only `lidza_db_migrate`, `lidza_db_rollback` and
+  `lidza_credentials_set` are destructive; before, 20 tools without a
+  hint counted as destructive, so clients asked before each call.
+  `TestToolHints` fails for a new tool without one.
+- `lidza_api` answers a package larger than about 6000 tokens with its
+  signatures (`apidoc.Source.Index`), and the docs of what the agent then
+  names with a filter: the auth pack went from 54,000 characters to
+  9,400. Tool replies in JSON are compact (a third fewer tokens:
+  `lidza_context` 30,000 to 18,000 characters).
+- Codex gets the MCP server: `.codex/config.toml` (`[mcp_servers.lidza]`,
+  read once the project is trusted) is written by `lidza new`, and by
+  `lidza gen` and `lidza update` for an app without it.
+- The framework's guidance in an app's `AGENTS.md` follows the release:
+  it sits between `<!-- lidza:framework -->` markers, rendered again on
+  every `lidza gen` and `lidza update`. Before, only a few lines were
+  refreshed, so older apps kept stale guidance (the Gemini commands
+  directory, an old pack list, no rule against weakening tests). An app
+  from before the markers has its framework bullets replaced once; its
+  own bullets, working agreements and team notes stay.
+- An app's `docs/lidza-guide.md` follows the release whole, not only its
+  Recipes section: `lidza gen` and `lidza update` render it again and
+  keep the app's own "App recipes" section. An app created before the
+  Admin pages, Settings files, Security headers and Secrets sections
+  gets them; the reference app's guide had drifted by 500 lines.
+
 ## v0.1.72 (2026-10-04)
 
 - Roles and permissions per team (`auth.Roles`, issue #28). The app maps

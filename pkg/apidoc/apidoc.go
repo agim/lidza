@@ -304,9 +304,20 @@ func Render(moduleDir string, rels []string, filter string) (string, error) {
 
 // Render writes the public API of the source's packages as markdown.
 func (s Source) Render(rels []string, filter string) (string, error) {
+	return s.render(rels, filter, false)
+}
+
+// Index is Render without the doc comments, one line per declaration:
+// the signatures of a package too large to read whole, to pick what to
+// ask for with a filter.
+func (s Source) Index(rels []string, filter string) (string, error) {
+	return s.render(rels, filter, true)
+}
+
+func (s Source) render(rels []string, filter string, index bool) (string, error) {
 	var b strings.Builder
 	for _, rel := range rels {
-		text, err := s.renderPackage(rel, strings.ToLower(filter))
+		text, err := s.renderPackage(rel, strings.ToLower(filter), index)
 		if err != nil {
 			return "", err
 		}
@@ -315,7 +326,7 @@ func (s Source) Render(rels []string, filter string) (string, error) {
 	return b.String(), nil
 }
 
-func (s Source) renderPackage(rel, filter string) (string, error) {
+func (s Source) renderPackage(rel, filter string, index bool) (string, error) {
 	dir := filepath.Join(s.Dir, filepath.FromSlash(rel))
 	ImportPath := s.ImportPath
 	entries, err := os.ReadDir(dir)
@@ -349,10 +360,14 @@ func (s Source) renderPackage(rel, filter string) (string, error) {
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "## %s (package %s)\n\n", ImportPath(rel), d.Name)
-	if s := strings.TrimSpace(d.Doc); s != "" {
+	if s := strings.TrimSpace(d.Doc); s != "" && !index {
 		b.WriteString(s + "\n\n")
 	}
-	pr := &renderer{fset: fset, files: files, filter: filter, out: &b}
+	pr := &renderer{fset: fset, files: files, filter: filter, out: &b, index: index}
+	if index {
+		b.WriteString("```go\n")
+		defer b.WriteString("```\n")
+	}
 	for _, c := range d.Consts {
 		pr.decl(c.Decl, c.Doc, c.Names...)
 	}
@@ -373,6 +388,8 @@ type renderer struct {
 	files  map[string]*ast.File
 	filter string
 	out    *strings.Builder
+	// index writes each declaration's first line only, no doc.
+	index bool
 }
 
 func (r *renderer) matches(names ...string) bool {
@@ -443,6 +460,17 @@ func (r *renderer) print(n ast.Node) string {
 
 func (r *renderer) code(code, docText string) {
 	code = strings.TrimSpace(code)
+	if r.index {
+		line := strings.TrimSuffix(strings.TrimSpace(firstCodeLine(code)), " {")
+		if i := strings.Index(line, " = `"); i > 0 && !strings.HasSuffix(line, "`") {
+			line = line[:i] // a multi-line string: its name is enough here
+		}
+		if line == "const (" || line == "var (" || line == "const" || line == "var" {
+			line = strings.TrimSuffix(line, " (") + " " + strings.Join(specNames(code), ", ")
+		}
+		fmt.Fprintln(r.out, line)
+		return
+	}
 	// A declaration's own doc comment is printed above it; drop it from
 	// the code block so it is not shown twice.
 	if docText != "" {
@@ -455,6 +483,21 @@ func (r *renderer) code(code, docText string) {
 		fmt.Fprintln(r.out, s)
 	}
 	fmt.Fprintln(r.out)
+}
+
+// specNames lists the names a grouped const or var block declares.
+func specNames(code string) []string {
+	var out []string
+	for _, l := range strings.Split(code, "\n")[1:] {
+		l = strings.TrimSpace(l)
+		if l == "" || l == ")" || strings.HasPrefix(l, "//") {
+			continue
+		}
+		if f := strings.FieldsFunc(l, func(r rune) bool { return r == ' ' || r == '\t' || r == '=' || r == ',' }); len(f) > 0 {
+			out = append(out, f[0])
+		}
+	}
+	return out
 }
 
 func firstCodeLine(code string) string {

@@ -97,7 +97,7 @@ func TestNewReact(t *testing.T) {
 	// A framework recipe edited by hand comes back on refresh; the app's stays.
 	guide := read("docs/lidza-guide.md")
 	os.WriteFile(filepath.Join(dir, "docs", "lidza-guide.md"), []byte(strings.Replace(guide, "### Add an MCP tool", "### Add an MCP tool (edited)", 1)), 0o644)
-	if changed, _ := Refresh(dir, cfg); strings.Join(changed, ",") != "docs/lidza-guide.md (framework recipes)" {
+	if changed, _ := Refresh(dir, cfg); strings.Join(changed, ",") != "docs/lidza-guide.md" {
 		t.Errorf("framework recipes not refreshed: %v", changed)
 	}
 	if g := read("docs/lidza-guide.md"); strings.Contains(g, "(edited)") || !strings.Contains(g, "### Paginate a list") {
@@ -368,5 +368,62 @@ func TestDeployFilesPinTheApp(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module example.com/pinned\n\ngo 1.24\n\nrequire github.com/agim/lidza v0.0.0\n\nreplace github.com/agim/lidza => ../lidza\n"), 0o644)
 	if v := AppVersions(dir); v.LocalPath != "../lidza" || v.Go != "1.24" {
 		t.Fatalf("local: %+v", v)
+	}
+}
+
+// The framework's guidance in an agent file follows the release: an
+// old file's framework bullets give way to the block, the app's own
+// bullet, agreements and notes stay; a second refresh changes nothing.
+func TestRefreshFramework(t *testing.T) {
+	block := "<!-- lidza:framework -->\n- `lidza dev`: run it.\n- Never weaken a test.\n- MCP server `lidza mcp` (configured in three files).\n<!-- /lidza:framework -->"
+	old := "# app\n\nRead the guide.\n\n- `lidza dev`: an old line.\n- MCP server `lidza mcp` (configured in two files).\n- Our deploys go through the ops channel.\n\n## Working agreements\n\n- Pushing: daily.\n"
+	got := refreshFramework(old, block)
+	want := "# app\n\nRead the guide.\n\n" + block + "\n- Our deploys go through the ops channel.\n\n## Working agreements\n\n- Pushing: daily.\n"
+	if got != want {
+		t.Fatalf("migrated:\n%s\nwant:\n%s", got, want)
+	}
+	if again := refreshFramework(got, block); again != got {
+		t.Fatalf("second refresh changed it:\n%s", again)
+	}
+	newer := strings.Replace(block, "Never weaken a test.", "Never weaken a test, ever.", 1)
+	if next := refreshFramework(got, newer); !strings.Contains(next, "ever.") || !strings.Contains(next, "ops channel") || strings.Count(next, frameworkOpen) != 1 {
+		t.Fatalf("block replaced:\n%s", next)
+	}
+	// A file with no framework bullets gets the block before its first
+	// section.
+	if next := refreshFramework("# app\n\n## Team notes\n", block); !strings.HasPrefix(next, "# app\n\n"+block+"\n\n## Team notes") {
+		t.Fatalf("inserted:\n%s", next)
+	}
+}
+
+// Refresh writes the agents' MCP configuration an app lacks, Codex's
+// included, and leaves an existing one alone.
+func TestRefreshMCPConfigs(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "demo")
+	if err := New(context.Background(), Options{Name: "demo", Dir: dir, LidzaDir: "../..", SkipModTidy: true}); err != nil {
+		t.Fatal(err)
+	}
+	codex := filepath.Join(dir, ".codex", "config.toml")
+	if data, err := os.ReadFile(codex); err != nil || !strings.Contains(string(data), "[mcp_servers.lidza]") {
+		t.Fatalf("new app: %s %v", data, err)
+	}
+	os.Remove(codex)
+	os.WriteFile(filepath.Join(dir, ".mcp.json"), []byte("{\"mine\": true}\n"), 0o644)
+	cfg, err := config.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Refresh(dir, cfg); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(codex); err != nil {
+		t.Fatal("codex config not restored")
+	}
+	if data, _ := os.ReadFile(filepath.Join(dir, ".mcp.json")); string(data) != "{\"mine\": true}\n" {
+		t.Fatalf(".mcp.json replaced: %s", data)
+	}
+	agents, _ := os.ReadFile(filepath.Join(dir, "AGENTS.md"))
+	if strings.Count(string(agents), frameworkOpen) != 1 || !strings.Contains(string(agents), ".codex/config.toml") {
+		t.Fatalf("AGENTS.md:\n%s", agents)
 	}
 }

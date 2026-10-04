@@ -123,6 +123,7 @@ func New(ctx context.Context, opt Options) error {
 		{"dependabot.yml.tmpl", filepath.Join(".github", "dependabot.yml")},
 		{"mcp.json.tmpl", ".mcp.json"},
 		{"gemini-settings.json.tmpl", filepath.Join(".gemini", "settings.json")},
+		{"codex-config.toml.tmpl", filepath.Join(".codex", "config.toml")},
 		{"schema.lidza.tmpl", schema.FileName},
 		{"scale_test.js.tmpl", filepath.Join("benchmarks", "scale_test.js")},
 		{"Dockerfile.tmpl", "Dockerfile"},
@@ -348,20 +349,30 @@ func Refresh(dir string, cfg *config.Config) ([]string, error) {
 	} else {
 		changed = append(changed, files...)
 	}
-	if fw, err := FrameworkRecipes(cfg); err == nil {
-		replaced, err := recipes.ReplaceFramework(dir, fw)
+	// The guide is the framework's but for the app's own recipes: it
+	// follows the release whole.
+	if guide, err := renderBytes("lidza-guide.md.tmpl", dataFor(cfg, "")); err == nil {
+		replaced, err := recipes.RefreshGuide(dir, string(guide))
 		if err != nil {
 			return nil, err
 		}
 		if replaced {
-			changed = append(changed, recipes.GuideFile+" (framework recipes)")
+			changed = append(changed, recipes.GuideFile)
 		}
 	}
 	rs, err := recipes.Sync(dir)
 	if err != nil {
 		return nil, err
 	}
-	line := recipesOpen + RecipesLine(rs) + recipesClose
+	// The framework's guidance in the agent file follows the release:
+	// the block between the markers is rendered again; the app's own
+	// bullets, working agreements and team notes stay.
+	data := dataFor(cfg, "")
+	data.Recipes = RecipesLine(rs)
+	block, err := frameworkBlock(data)
+	if err != nil {
+		return nil, err
+	}
 	for _, name := range brief.AgentFiles(dir) {
 		p := filepath.Join(dir, name)
 		data, err := os.ReadFile(p)
@@ -369,30 +380,7 @@ func Refresh(dir string, cfg *config.Config) ([]string, error) {
 			continue
 		}
 		text := string(data)
-		i, j := strings.Index(text, recipesOpen), strings.Index(text, recipesClose)
-		if i < 0 || j < i {
-			continue
-		}
-		next := text[:i] + line + text[j+len(recipesClose):]
-		// An app from before the decision log gets the line once.
-		if !strings.Contains(next, decisions.File) {
-			if k := strings.Index(next[i:], "\n"); k >= 0 {
-				next = next[:i+k+1] + "- " + DecisionsLine + "\n" + next[i+k+1:]
-			}
-		}
-		// The brief's line: added first in the list to an app from before
-		// the brief, and kept current in the others.
-		if k := strings.Index(next, "- Read `"+brief.File+"` first"); k >= 0 {
-			end := strings.Index(next[k:], "\n")
-			if end < 0 {
-				end = len(next) - k
-			}
-			next = next[:k] + "- " + BriefLine + next[k+end:]
-		} else if k := strings.Index(next, "\n- "); k >= 0 {
-			next = next[:k+1] + "- " + BriefLine + "\n" + next[k+1:]
-		}
-		next = refreshAgentLine(next, "- App-owned Go packages:", LayoutLine)
-		next = refreshAgentLine(next, "- Shared agent guidance:", AgentGuidanceLine)
+		next := refreshFramework(text, block)
 		if next == text {
 			continue
 		}
@@ -401,6 +389,17 @@ func Refresh(dir string, cfg *config.Config) ([]string, error) {
 		}
 		changed = append(changed, name)
 	}
+	// Each agent's MCP configuration, for an app from before it.
+	for _, f := range mcpConfigs {
+		p := filepath.Join(dir, f.dst)
+		if _, err := os.Stat(p); err == nil {
+			continue
+		}
+		if err := render(f.src, p, data); err != nil {
+			return nil, err
+		}
+		changed = append(changed, f.dst)
+	}
 	// Apps from before the stubs had three identical copies.
 	if converted, _, err := brief.ConvertAgentStubs(dir); err == nil {
 		changed = append(changed, converted...)
@@ -408,20 +407,108 @@ func Refresh(dir string, cfg *config.Config) ([]string, error) {
 	return dedupe(changed), nil
 }
 
-// Replace an owned guidance line or insert it into an existing agent's list.
-// Other app instructions and notes are retained.
-func refreshAgentLine(text, prefix, line string) string {
-	lines := strings.Split(text, "\n")
-	for i, old := range lines {
-		if strings.HasPrefix(old, prefix) {
-			lines[i] = "- " + line
-			return strings.Join(lines, "\n")
+// The markers around the framework's guidance in an agent file.
+const (
+	frameworkOpen  = "<!-- lidza:framework -->"
+	frameworkClose = "<!-- /lidza:framework -->"
+)
+
+// mcpConfigs are the agents' MCP server files: Claude Code, Gemini CLI,
+// Codex (a trusted project's .codex/config.toml).
+var mcpConfigs = []struct{ src, dst string }{
+	{"mcp.json.tmpl", ".mcp.json"},
+	{"gemini-settings.json.tmpl", filepath.Join(".gemini", "settings.json")},
+	{"codex-config.toml.tmpl", filepath.Join(".codex", "config.toml")},
+}
+
+// frameworkBlock is the agent template's framework guidance for an app,
+// markers included.
+func frameworkBlock(data templateData) (string, error) {
+	out, err := renderBytes("agent.md.tmpl", data)
+	if err != nil {
+		return "", err
+	}
+	text := string(out)
+	i, j := strings.Index(text, frameworkOpen), strings.Index(text, frameworkClose)
+	if i < 0 || j < i {
+		return "", errors.New("agent.md.tmpl: no framework block")
+	}
+	return text[i : j+len(frameworkClose)], nil
+}
+
+// refreshFramework puts the current block into an agent file: between
+// its markers, or, in a file from before them, in place of the bullets
+// the framework wrote (known by how they start), the app's own kept
+// after the block.
+func refreshFramework(text, block string) string {
+	if i, j := strings.Index(text, frameworkOpen), strings.Index(text, frameworkClose); i >= 0 && j > i {
+		return text[:i] + block + text[j+len(frameworkClose):]
+	}
+	keys := map[string]bool{}
+	for _, l := range strings.Split(block, "\n") {
+		if strings.HasPrefix(l, "- ") {
+			keys[bulletKey(l)] = true
 		}
 	}
-	if i := strings.Index(text, "\n- "); i >= 0 {
-		return text[:i+1] + "- " + line + "\n" + text[i+1:]
+	lines := strings.Split(text, "\n")
+	end := len(lines)
+	for i, l := range lines {
+		if strings.HasPrefix(l, "## ") {
+			end = i
+			break
+		}
 	}
-	return text + "\n- " + line + "\n"
+	var kept []string
+	first := -1
+	for i, l := range lines[:end] {
+		if strings.HasPrefix(l, "- ") && (keys[bulletKey(l)] || isOldFrameworkLine(l)) {
+			if first < 0 {
+				first = i
+			}
+			continue
+		}
+		if first >= 0 && strings.TrimSpace(l) == "" {
+			continue
+		}
+		if first >= 0 {
+			kept = append(kept, l)
+		}
+	}
+	if first < 0 {
+		// No framework bullets: the block goes before the first section.
+		head := strings.TrimRight(strings.Join(lines[:end], "\n"), "\n")
+		return head + "\n\n" + block + "\n\n" + strings.Join(lines[end:], "\n")
+	}
+	out := strings.Join(lines[:first], "\n") + "\n" + block + "\n"
+	if len(kept) > 0 {
+		out += strings.Join(kept, "\n") + "\n"
+	}
+	if end < len(lines) {
+		out += "\n" + strings.Join(lines[end:], "\n")
+	}
+	return out
+}
+
+// bulletKey is how a framework bullet starts, its first three words:
+// enough to tell it apart, and kept when a later release rewords the
+// rest.
+func bulletKey(l string) string {
+	f := strings.Fields(l)
+	if len(f) > 3 {
+		f = f[:3]
+	}
+	return strings.Join(f, " ")
+}
+
+// isOldFrameworkLine recognises bullets earlier templates wrote that the
+// current one no longer starts the same way.
+func isOldFrameworkLine(l string) bool {
+	for _, p := range []string{"- Task recipes,", "- MCP server `lidza mcp`", "- Why the app is built a way"} {
+		if strings.HasPrefix(l, p) {
+			return true
+		}
+	}
+	return false
 }
 
 func dedupe(in []string) []string {

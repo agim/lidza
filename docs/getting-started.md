@@ -87,6 +87,7 @@ framework, pass `--lidza-dir <checkout>`.
 | `GEMINI.md` | Gemini CLI |
 | `.mcp.json` | Claude Code, project-scoped MCP server |
 | `.gemini/settings.json` | Gemini CLI MCP server |
+| `.codex/config.toml` | Codex MCP server (loaded once the project is trusted) |
 | `docs/lidza-guide.md` | all three; the framework rules in one place |
 
 The instructions are one short file, `AGENTS.md`, which points at

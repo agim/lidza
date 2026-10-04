@@ -64,6 +64,7 @@ func New(dir string, cfg *config.Config) *Server {
 		server.WithPromptCapabilities(true),
 		server.WithInstructions(instructions),
 		server.WithToolHandlerMiddleware(staleGuard()),
+		server.WithToolFilter(annotate),
 	)
 	srv := &Server{MCPServer: s, dir: dir, cfg: cfg, packs: newGroup(s), app: newGroup(s), recipes: newGroup(s), stamps: map[string]time.Time{}}
 
@@ -236,8 +237,10 @@ func Serve(dir string, cfg *config.Config) error {
 	return server.ServeStdio(srv.MCPServer)
 }
 
+// jsonResult replies with v as compact JSON: indentation is a third of
+// the tokens and no help to a model.
 func jsonResult(v any) (*mcp.CallToolResult, error) {
-	data, err := json.MarshalIndent(v, "", "  ")
+	data, err := json.Marshal(v)
 	if err != nil {
 		return nil, err
 	}

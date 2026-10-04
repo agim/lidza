@@ -156,6 +156,30 @@ func section(guide, heading string) (start, end int, ok bool) {
 	return 0, 0, false
 }
 
+// RefreshGuide replaces the guide with guide (the framework's, rendered
+// for this app) keeping the app's own: the body of its "## App recipes"
+// section. It reports whether anything changed; an app without a guide
+// is left alone.
+func RefreshGuide(dir, guide string) (bool, error) {
+	p := filepath.Join(dir, GuideFile)
+	data, err := os.ReadFile(p)
+	if err != nil {
+		return false, nil
+	}
+	old := string(data)
+	if from, to, ok := section(old, AppHeading); ok {
+		if ns, ne, ok := section(guide, AppHeading); ok {
+			guide = guide[:ns] + old[from:to] + guide[ne:]
+		} else {
+			guide = strings.TrimRight(guide, "\n") + "\n\n" + AppHeading + "\n" + old[from:to]
+		}
+	}
+	if guide == old {
+		return false, nil
+	}
+	return true, os.WriteFile(p, []byte(guide), 0o644)
+}
+
 // ReplaceFramework replaces the body of the "## Recipes" section of the
 // guide with body (the framework's current recipes) and reports whether
 // anything changed. A guide without the section is left alone.

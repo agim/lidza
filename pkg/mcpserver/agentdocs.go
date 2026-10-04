@@ -253,7 +253,7 @@ func addAPI(s *server.MCPServer, dir string) {
 		return src.Render(rels, filter)
 	}
 	s.AddTool(mcp.NewTool("lidza_api",
-		mcp.WithDescription("Public Go API with doc comments, rendered from the sources: the framework as this app depends on it, or this app's own packages. Read it before calling a function; guessing a name is how imports fail. Ask for one package (\"packs/llm\"), or search every package by name with filter (\"Embed\"). Without arguments: the list of packages. \"all\" renders every framework package app code imports (thousands of lines: every later turn pays for them), \"app\" every package of this app."),
+		mcp.WithDescription("Public Go API with doc comments, rendered from the sources: the framework as this app depends on it, or this app's own packages. Read it before calling a function; guessing a name is how imports fail. Ask for one package (\"packs/llm\"; a large one comes back as signatures), then its declarations by name with filter (\"Embed\") for their docs. Without arguments: the list of packages. \"app\" is every package of this app."),
 		mcp.WithString("package", mcp.Description("A framework package as an import path or relative path (\"pkg/router\", \"packs/auth\", \"lidza\" for the root package); one of this app's as \"./handlers\" or its import path; \"app\" for all of this app's; \"all\" for every framework package; empty for the list.")),
 		mcp.WithString("filter", mcp.Description("Keep only declarations whose name contains this text (case-insensitive), e.g. \"cookie\".")),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -271,6 +271,16 @@ func addAPI(s *server.MCPServer, dir string) {
 		}
 		if strings.TrimSpace(text) == "" {
 			return mcp.NewToolResultText("(no declaration matches)"), nil
+		}
+		// A whole large package would fill the context: its signatures,
+		// and the docs of what the agent then asks for by name.
+		if filter == "" && len(text) > apiBudget {
+			src, rels, err := apidoc.Resolve(ctx, dir, apiPackage(pkg))
+			if err == nil {
+				if index, err := src.Index(rels, ""); err == nil && len(index) < len(text) {
+					return mcp.NewToolResultText(fmt.Sprintf("The full API is %d characters; these are its signatures. Call lidza_api with this package and filter (a name, e.g. \"Roles\") for the doc comments of what you need.\n\n%s", len(text), index)), nil
+				}
+			}
 		}
 		return mcp.NewToolResultText(text), nil
 	})
@@ -296,6 +306,10 @@ func addAPI(s *server.MCPServer, dir string) {
 			return []mcp.ResourceContents{mcp.TextResourceContents{URI: req.Params.URI, MIMEType: "text/markdown", Text: text}}, nil
 		})
 }
+
+// apiBudget is the size of a whole-package answer above which lidza_api
+// returns the signatures instead (about 6000 tokens).
+const apiBudget = 24000
 
 // apiPackage maps "all" to apidoc.Resolve's every-package selection.
 func apiPackage(pkg string) string {

@@ -102,8 +102,9 @@ app into an importable package and name it in `lidza.json`:
 
 ## Agent interface
 
-`.mcp.json` (Claude Code) and `.gemini/settings.json` (Gemini CLI) start
-`lidza mcp` for this project. Every command of the CLI is a tool, so an
+`.mcp.json` (Claude Code), `.gemini/settings.json` (Gemini CLI) and
+`.codex/config.toml` (Codex, once the project is trusted) start
+`lidza mcp` for this project; `lidza gen` writes one an app lacks. Every command of the CLI is a tool, so an
 agent needs no shell here. Its tools:
 
 | Tool | Returns |

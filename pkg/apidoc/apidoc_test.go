@@ -145,3 +145,25 @@ func TestApplicationInternalPackages(t *testing.T) {
 		t.Errorf("framework packages: %v %v", frameworkPackages, err)
 	}
 }
+
+// Index lists each declaration on one line, without the docs: a fraction
+// of the full render.
+func TestIndex(t *testing.T) {
+	src := Source{Dir: "../..", Module: Module}
+	full, err := src.Render([]string{"packs/auth"}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	index, err := src.Index([]string{"packs/auth"}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"func (r Roles) Grant(ctx context.Context, subject, scope, role string) error\n", "const AccessCookie, RefreshCookie\n", "const MemberTable\n", "type Options struct\n"} {
+		if !strings.Contains(index, want) {
+			t.Errorf("index lacks %q", want)
+		}
+	}
+	if strings.Contains(index, "Every check reads the database") || len(index)*3 > len(full) {
+		t.Errorf("index %d chars of %d, or with docs", len(index), len(full))
+	}
+}

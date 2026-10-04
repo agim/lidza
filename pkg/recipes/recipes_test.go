@@ -186,3 +186,25 @@ func TestGeminiCommandsRemoved(t *testing.T) {
 		t.Error("empty command directories kept")
 	}
 }
+
+// RefreshGuide brings the framework's guide whole and keeps the app's
+// own recipes.
+func TestRefreshGuide(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, "docs"), 0o755)
+	old := "# Guide\n\n## Rules\n\nOld rule.\n\n" + AppHeading + "\n\nIntro.\n\n### Deploy on Fridays\n\nNever.\n\n## Packs\n\nOld packs.\n"
+	os.WriteFile(filepath.Join(dir, GuideFile), []byte(old), 0o644)
+	fresh := "# Guide\n\n## Rules\n\nNew rule.\n\n## Secrets\n\nSealed.\n\n" + AppHeading + "\n\nTemplate intro.\n\n## Packs\n\nNew packs.\n"
+	changed, err := RefreshGuide(dir, fresh)
+	if err != nil || !changed {
+		t.Fatal(changed, err)
+	}
+	got, _ := os.ReadFile(filepath.Join(dir, GuideFile))
+	want := "# Guide\n\n## Rules\n\nNew rule.\n\n## Secrets\n\nSealed.\n\n" + AppHeading + "\n\nIntro.\n\n### Deploy on Fridays\n\nNever.\n\n## Packs\n\nNew packs.\n"
+	if string(got) != want {
+		t.Fatalf("guide:\n%s", got)
+	}
+	if again, _ := RefreshGuide(dir, fresh); again {
+		t.Fatal("second refresh changed it")
+	}
+}

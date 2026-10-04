@@ -116,7 +116,7 @@ func main() {}
 		t.Fatalf("filtered logs: %q", got)
 	}
 
-	if got := call("lidza_config", nil); !strings.Contains(got, `"template": "react"`) {
+	if got := call("lidza_config", nil); !strings.Contains(got, `"template":"react"`) {
 		t.Fatalf("config: %s", got)
 	}
 
@@ -196,7 +196,7 @@ func TestAgentDocs(t *testing.T) {
 		t.Fatalf("snippet catalog: %s", got)
 	}
 
-	if got := call("lidza_recipes", nil); !strings.Contains(got, `"Name": "add-api-route"`) || !strings.Contains(got, `"Scope": "framework"`) {
+	if got := call("lidza_recipes", nil); !strings.Contains(got, `"Name":"add-api-route"`) || !strings.Contains(got, `"Scope":"framework"`) {
 		t.Fatalf("lidza_recipes: %s", got)
 	}
 
@@ -327,5 +327,95 @@ func TestStaleServer(t *testing.T) {
 	res, err := c.CallTool(ctx, req)
 	if err != nil || !res.IsError || !strings.Contains(mcp.GetTextFromContent(res.Content[0]), "reconnect") {
 		t.Fatalf("after the update: %v %+v", err, res)
+	}
+}
+
+// Every framework tool says what it does: only the three that can lose
+// data are destructive (an unannotated tool counts as destructive, so a
+// new tool without a hint fails here), and the readers say so.
+func TestToolHints(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module demo\n\ngo 1.27\n"), 0o644)
+	cfg := config.Default("demo", "react")
+	cfg.Packs = []string{"lidza/db", "lidza/analytics", "lidza/mail", "lidza/llm", "lidza/storage"}
+	c, err := client.NewInProcessClient(New(dir, &cfg).MCPServer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	if err := c.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	if _, err := c.Initialize(ctx, mcp.InitializeRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	tools, err := c.ListTools(ctx, mcp.ListToolsRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	destructive := map[string]bool{"lidza_db_migrate": true, "lidza_db_rollback": true, "lidza_credentials_set": true}
+	seen := map[string]bool{}
+	for _, tl := range tools.Tools {
+		if !builtin(tl.Name) {
+			continue
+		}
+		seen[tl.Name] = true
+		a := tl.Annotations
+		if a.DestructiveHint == nil || a.ReadOnlyHint == nil {
+			t.Errorf("%s: no hints", tl.Name)
+			continue
+		}
+		if *a.DestructiveHint != destructive[tl.Name] {
+			t.Errorf("%s: destructive %v", tl.Name, *a.DestructiveHint)
+		}
+		if h, ok := hints[tl.Name]; ok && *a.ReadOnlyHint != h.readOnly {
+			t.Errorf("%s: read-only %v", tl.Name, *a.ReadOnlyHint)
+		}
+	}
+	for _, name := range []string{"lidza_api", "lidza_snippet", "lidza_routes", "lidza_errors", "lidza_llm", "lidza_storage", "lidza_mail"} {
+		if !seen[name] {
+			t.Errorf("%s not listed", name)
+		}
+	}
+}
+
+// A whole large package comes back as its signatures; a filter brings
+// the docs.
+func TestAPIBudget(t *testing.T) {
+	root, _ := filepath.Abs("../..")
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module demo\n\ngo 1.27\n\nrequire github.com/agim/lidza v0.0.0\n\nreplace github.com/agim/lidza => "+root+"\n"), 0o644)
+	cfg := config.Default("demo", "react")
+	c, err := client.NewInProcessClient(New(dir, &cfg).MCPServer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	if err := c.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	if _, err := c.Initialize(ctx, mcp.InitializeRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	call := func(args map[string]any) string {
+		req := mcp.CallToolRequest{}
+		req.Params.Name, req.Params.Arguments = "lidza_api", args
+		res, err := c.CallTool(ctx, req)
+		if err != nil || res.IsError {
+			t.Fatalf("%v: %v %+v", args, err, res)
+		}
+		return res.Content[0].(mcp.TextContent).Text
+	}
+	whole := call(map[string]any{"package": "packs/auth"})
+	if len(whole) > apiBudget || !strings.Contains(whole, "these are its signatures") || !strings.Contains(whole, "func (r Roles) Check(") {
+		t.Fatalf("whole package: %d chars", len(whole))
+	}
+	if one := call(map[string]any{"package": "packs/auth", "filter": "Roles"}); !strings.Contains(one, "Every check reads the database") {
+		t.Fatal("filter lost the docs")
+	}
+	if small := call(map[string]any{"package": "pkg/secrets"}); strings.Contains(small, "signatures") || !strings.Contains(small, "Package secrets") {
+		t.Fatalf("small package: %s", small)
 	}
 }

@@ -9,7 +9,7 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
-## Unreleased
+## v0.1.70 (2026-10-04)
 
 - The generated Dockerfile builds with the app's own versions: the
   framework release its `go.mod` pins (a versioned replace applied) for

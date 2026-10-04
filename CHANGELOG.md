@@ -9,6 +9,15 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- `lidza setup` on an existing `.env` adds every setting an enabled
+  official pack writes into `.env.example` and no layer sets, not only
+  `DATABASE_URL`, `AUTH_SECRET` and `MAIL_FROM`: a cache pack enabled
+  since stopped `lidza dev` at "CACHE_URL is required". `CACHE_URL` is
+  the Valkey or Redis on 127.0.0.1:6379 when one answers, else `memory`,
+  for a new `.env` too.
+
 ## v0.1.66 (2026-10-04)
 
 - `lidza db migrate`, `rollback` and `status` without a `DATABASE_URL`

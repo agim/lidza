@@ -9,12 +9,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/agim/lidza/packs/db"
 	"github.com/agim/lidza/pkg/brief"
@@ -163,6 +165,7 @@ func setup(ctx context.Context, dir string, cfg *config.Config, opt setupOptions
 			"DATABASE_URL": devURL,
 			"AUTH_SECRET":  randomHex(32),
 			"MAIL_FROM":    fmt.Sprintf("%q", cfg.Name+" <"+cfg.Name+"@example.com>"),
+			"CACHE_URL":    localCacheURL(),
 		}
 		written, err := writeEnvFromExample(dir, values)
 		if err != nil {
@@ -180,6 +183,7 @@ func setup(ctx context.Context, dir string, cfg *config.Config, opt setupOptions
 			"DATABASE_URL": devURL,
 			"AUTH_SECRET":  randomHex(32),
 			"MAIL_FROM":    fmt.Sprintf("%q", cfg.Name+" <"+cfg.Name+"@example.com>"),
+			"CACHE_URL":    localCacheURL(),
 		})
 		if err != nil {
 			return err
@@ -420,16 +424,33 @@ func writeEnvFromExample(dir string, values map[string]string) ([]string, error)
 	return written, os.WriteFile(filepath.Join(dir, ".env"), []byte(strings.Join(lines, "\n")+"\n"), 0o600)
 }
 
-// addMissingEnv appends to an existing .env each of values' keys an
-// enabled pack needs (needsKey) and no layer sets (.env, .env.<mode>,
-// the credentials), in the order DATABASE_URL, AUTH_SECRET, MAIL_FROM;
-// it returns the keys it added.
+// addMissingEnv appends to an existing .env each setting an enabled
+// official pack writes into .env.example (an uncommented KEY=value line)
+// that no layer sets (.env, .env.<mode>, the credentials): values' value
+// when it has the key (this machine's database, a fresh secret), else the
+// pack's line. It returns the keys it added.
 func addMissingEnv(dir string, values map[string]string) ([]string, error) {
+	cfg, err := config.Load(dir)
+	if err != nil {
+		return nil, err
+	}
 	set, _ := env.Values(dir)
 	var lines, added []string
-	for _, key := range []string{"DATABASE_URL", "AUTH_SECRET", "MAIL_FROM"} {
-		if v, ok := values[key]; ok && needsKey(dir, key) && set[key] == "" {
-			lines = append(lines, key+"="+v)
+	for _, entry := range cfg.Packs {
+		o, ok := pack.FindOfficial(entry)
+		if !ok || !pack.IsOfficialGo(entry) {
+			continue
+		}
+		for _, line := range o.Env {
+			key, _, ok := strings.Cut(line, "=")
+			key = strings.TrimSpace(key)
+			if !ok || strings.HasPrefix(key, "#") || strings.Contains(key, " ") || set[key] != "" || slices.Contains(added, key) {
+				continue
+			}
+			if v, ok := values[key]; ok {
+				line = key + "=" + v
+			}
+			lines = append(lines, line)
 			added = append(added, key)
 		}
 	}
@@ -443,6 +464,17 @@ func addMissingEnv(dir string, values map[string]string) ([]string, error) {
 	}
 	text := strings.TrimRight(string(data), "\n") + "\n\n# Added by lidza setup for packs enabled since.\n" + strings.Join(lines, "\n") + "\n"
 	return added, os.WriteFile(p, []byte(text), 0o600)
+}
+
+// localCacheURL is the cache address for development: the Valkey or
+// Redis on this machine when one answers, else the in-process cache.
+func localCacheURL() string {
+	c, err := net.DialTimeout("tcp", "127.0.0.1:6379", 300*time.Millisecond)
+	if err != nil {
+		return "memory"
+	}
+	c.Close()
+	return "redis://127.0.0.1:6379"
 }
 
 // needsKey says whether a key belongs in .env when the example lacks it:

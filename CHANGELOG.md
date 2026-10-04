@@ -9,7 +9,7 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
-## Unreleased
+## v0.1.67 (2026-10-04)
 
 - `lidza setup` on an existing `.env` adds every setting an enabled
   official pack writes into `.env.example` and no layer sets, not only

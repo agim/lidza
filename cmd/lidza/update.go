@@ -9,26 +9,25 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"slices"
 	"strings"
 	"time"
 
 	"github.com/agim/lidza/pkg/devserver"
-	"github.com/agim/lidza/pkg/pack"
 	"github.com/agim/lidza/pkg/version"
 )
 
 // runUpdate is `lidza update [--to vX.Y.Z] [--cli-only] [--migrate]`: the
 // CLI to the newest release (or the one named), and, in a project, the
 // framework module to the same version, go.mod tidied, the Dockerfile's
-// pin rewritten, everything regenerated with the new CLI, and a note when
-// migrations wait (--migrate applies them).
+// pin rewritten, everything regenerated with the new CLI, then lidza
+// install (.env, databases migrated, node_modules); --migrate lets a
+// migration that drops data run too.
 func runUpdate(ctx context.Context, args []string) error {
 	fs := flags("update")
 	dir := fs.String("dir", ".", "project directory")
 	to := fs.String("to", "", "the release to move to (default: the newest)")
 	cliOnly := fs.Bool("cli-only", false, "the CLI only; leave the project alone")
-	migrate := fs.Bool("migrate", false, "apply the migrations the update brings")
+	migrate := fs.Bool("migrate", false, "also apply migrations that drop data to the development database")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -114,22 +113,17 @@ func runUpdate(ctx context.Context, args []string) error {
 		if err := run(ctx, abs, exe, "gen", "deploy", "--dir", abs); err != nil {
 			fmt.Println("[update] deployment files not refreshed:", err)
 		}
-		// An app without the db pack has no database to migrate.
-		hasDB := cfg != nil && slices.Contains(cfg.Packs, pack.OfficialPrefix+"db")
-		pending, err := 0, error(nil)
-		if hasDB {
-			pending, err = pendingMigrations(ctx, abs, exe)
+		// Then everything a fresh clone or a pull needs, with the new
+		// CLI: .env settings of packs enabled since, the databases
+		// created and migrated (a migration dropping data waits for
+		// --migrate), node_modules.
+		fmt.Println("[update] lidza install")
+		args := []string{"install", "--dir", abs, "--no-commit"}
+		if *migrate {
+			args = append(args, "--migrate")
 		}
-		switch {
-		case err != nil:
-			fmt.Printf("[update] migrations: %v\n", err)
-		case pending > 0 && *migrate:
-			fmt.Printf("[update] lidza db migrate (%d pending)\n", pending)
-			if err := run(ctx, abs, exe, "db", "migrate", "--dir", abs); err != nil {
-				return errors.New("update: lidza db migrate failed")
-			}
-		case pending > 0:
-			fmt.Printf("[update] %d migration(s) wait: lidza db migrate (or lidza update --migrate); lidza test applies them to the test database itself\n", pending)
+		if err := run(ctx, abs, exe, args...); err != nil {
+			return errors.New("update: lidza install needs attention (above); fix it and run lidza install")
 		}
 	}
 	if pid, v, ok := devserver.RunningDev(abs); ok && v != target {
@@ -232,15 +226,4 @@ func repin(path, target string) (int, error) {
 		return 0, nil
 	}
 	return 1, os.WriteFile(path, next, 0o644)
-}
-
-// pendingMigrations counts what `lidza db status` reports as pending.
-func pendingMigrations(ctx context.Context, dir, exe string) (int, error) {
-	cmd := exec.CommandContext(ctx, exe, "db", "status", "--dir", dir)
-	cmd.Dir = dir
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return 0, fmt.Errorf("lidza db status: %s", strings.TrimSpace(string(out)))
-	}
-	return strings.Count(string(out), "pending"), nil
 }

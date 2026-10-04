@@ -618,7 +618,7 @@ func mustRead(t *testing.T, rel string) string {
 	return string(data)
 }
 
-// TestSetup: lidza setup on a fresh app enables packs, writes the
+// TestSetup: lidza install on a fresh app enables packs, writes the
 // environment files with real values, creates and migrates the databases
 // and installs node_modules. Skipped when Postgres is unreachable.
 // A decision is recorded through the CLI and read back.
@@ -717,13 +717,13 @@ func TestSetup(t *testing.T) {
 		t.Fatalf("lidza new: %v\n%s", err, out)
 	}
 	dir := filepath.Join(tmp, "setupapp")
-	args := []string{"setup", "--packs", "auth,mail", "--no-commit"}
+	args := []string{"install", "--packs", "auth,mail", "--no-commit"}
 	if u := os.Getenv("DATABASE_URL"); u != "" {
 		args = append(args, "--database-url", u)
 	}
 	out, err := command(dir, lidza, args...)
 	if err != nil {
-		t.Fatalf("lidza setup: %v\n%s", err, out)
+		t.Fatalf("lidza install: %v\n%s", err, out)
 	}
 	for _, want := range []string{"[setup] pack db:", "[setup] pack auth:", "[setup] pack mail:", ".env written", ".env.test written", "database setupapp_dev: created if missing", "database setupapp_test: created if missing", "node_modules: installed"} {
 		if !strings.Contains(string(out), want) {

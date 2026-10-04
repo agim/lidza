@@ -18,7 +18,7 @@ const usage = `Līdza: Go control plane, Rust core, any frontend.
 
 Usage:
   lidza new <name> [--template react] [--packs db,auth,mail] [--agent claude] [--no-setup]
-  lidza setup [--packs db,auth,mail] [--agent claude] [--database-url ...] [--no-commit]
+  lidza install [--packs db,auth,mail] [--agent claude] [--database-url ...] [--no-commit] [--migrate]
   lidza ship [--no-e2e] [--out bin/<name>]
   lidza dev   [--dir .] [--addr 127.0.0.1:3000]
   lidza build [--dir .] [--out bin/<name>]
@@ -43,7 +43,7 @@ Usage:
 
 Commands:
   new      create an app from a template, then set it up (packs, .env with a random AUTH_SECRET, databases created and migrated, node_modules, first commit)
-  setup    the same on an existing app: enable packs, write .env and .env.test, generate, create and migrate the databases, npm install, install an agent CLI, commit
+  install  the same on an existing app, a fresh clone or after a pull (setup is its former name): enable packs, write .env and .env.test and add what enabled packs need, generate, create and migrate the databases (a migration dropping data waits for --migrate), npm install, install an agent CLI, commit
   ship     verify, the browser suite, the production build: what must be green before a deploy
   dev      run the app with hot reload (frontend dev server proxied behind /api)
   build    build the frontend and compile one production binary
@@ -62,7 +62,7 @@ Commands:
   recipe   add one of this app's conventions to docs/lidza-guide.md as a recipe (prompt, skills, command), or list the recipes
   credentials the app's secrets, sealed in config/credentials.yml.enc with config/master.key; every pack reads them like .env; dev.NAME and production.NAME are for one mode
   admin    who may open the admin pages besides the first account: ADMIN_USERS in the credentials, read within seconds
-  update   the CLI to the newest release and, in a project, the module to the same version: go get, tidy, Dockerfile pin, lidza gen, a note on pending migrations
+  update   the CLI to the newest release and, in a project, the module to the same version: go get, tidy, Dockerfile pin, lidza gen, then lidza install
   decision record why the app is built a way (a pack, Rust, a dependency, a schema tradeoff) in docs/decisions.md, or list the decisions
   brief    the kickoff interview: what the app is for, who owns the data, the design, the services, the working agreements; answers go to docs/brief.md and where they act
   note     add a lasting fact about this app for the team and every agent (the agent files' Team notes)
@@ -90,8 +90,8 @@ func main() {
 	switch cmd, args := os.Args[1], os.Args[2:]; cmd {
 	case "new":
 		err = runNew(ctx, args)
-	case "setup":
-		err = runSetup(ctx, args)
+	case "install", "setup":
+		err = runInstall(ctx, args)
 	case "ship":
 		err = runShip(ctx, args)
 	case "dev":

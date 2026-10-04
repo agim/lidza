@@ -213,7 +213,7 @@ cd tracker
 lidza dev
 ```
 
-`lidza new` with `--packs` runs `lidza setup`: the packs are enabled,
+`lidza new` with `--packs` runs `lidza install`: the packs are enabled,
 `.env` is written from `.env.example` with a random `AUTH_SECRET` and a
 socket `DATABASE_URL` named after the app (`tracker_dev`; pass
 `--database-url` or set `LIDZA_DATABASE_URL` for a server elsewhere),
@@ -221,21 +221,26 @@ socket `DATABASE_URL` named after the app (`tracker_dev`; pass
 code is generated, both databases are created and migrated,
 `node_modules` is installed, the agent CLI is installed when missing
 (`--agent`; sign in once by running it), and the first commit is made
-through the pre-commit hook. `lidza setup` does the same on an existing
-app and is safe to rerun. When the app is ready for a server, `lidza
+through the pre-commit hook. `lidza install` does the same on an existing
+app, a fresh clone or after a pull, and is safe to rerun: it adds to
+`.env` what packs enabled since need, applies new migrations (one that
+drops data, marked `-- review: data loss`, waits for `--migrate`) and
+installs missing frontend packages. `lidza dev` does the `.env`,
+migration and package part on start, so `git pull && lidza dev` works.
+`lidza setup` is the command's former name. When the app is ready for a server, `lidza
 ship` runs verify, the browser suite and the production build in one go.
 
 ## Upgrade
 
 ```sh
-lidza update             # the CLI to the newest release, and the project to the same one
-lidza update --migrate   # also apply the migrations the release brings
+lidza update             # the CLI to the newest release, the project to the same one, then lidza install
+lidza update --migrate   # also apply a migration that drops data
 ```
 
 In a project it runs `go get` and `go mod tidy` for the framework module,
 rewrites the Dockerfile's pin, regenerates with the new CLI (pack tables
 that changed become a migration; the guide and the skills refresh), and
-says when a migration waits. `lidza update --cli-only` leaves the
+runs `lidza install` with the new CLI. `lidza update --cli-only` leaves the
 project alone; `--to v0.1.9` picks a release. `lidza doctor` reports when
 the CLI and the project's module differ. What changed is in the
 framework's `CHANGELOG.md`.

@@ -94,11 +94,29 @@ func Status(ctx context.Context, pool *pgxpool.Pool, fsys fs.FS) ([]Migration, e
 // transaction, under an advisory lock so two nodes never race. It returns
 // the names applied.
 func Migrate(ctx context.Context, pool *pgxpool.Pool, fsys fs.FS) ([]string, error) {
-	var appliedNow []string
-	err := withLock(ctx, pool, func(ctx context.Context) error {
+	applied, _, err := MigrateUntil(ctx, pool, fsys, nil)
+	return applied, err
+}
+
+// DataLoss marks a statement of a generated migration that drops data
+// (a column, a table); a developer reads it before it runs.
+const DataLoss = "-- review: data loss"
+
+// MigrateUntil is Migrate stopping before the first pending migration
+// hold returns true for (fresh says no migration was applied before this
+// run: a new database holds no data to lose). It returns the names
+// applied and the one it stopped at, if any.
+func MigrateUntil(ctx context.Context, pool *pgxpool.Pool, fsys fs.FS, hold func(name, sql string, fresh bool) bool) (appliedNow []string, held string, err error) {
+	err = withLock(ctx, pool, func(ctx context.Context) error {
 		status, err := Status(ctx, pool, fsys)
 		if err != nil {
 			return err
+		}
+		fresh := true
+		for _, m := range status {
+			if m.Applied {
+				fresh = false
+			}
 		}
 		for _, m := range status {
 			if m.Applied {
@@ -108,6 +126,10 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool, fsys fs.FS) ([]string, err
 			if err != nil {
 				return err
 			}
+			if hold != nil && hold(m.Name, string(sql), fresh) {
+				held = m.Name
+				return nil
+			}
 			if err := runInTx(ctx, pool, string(sql), `INSERT INTO `+Table+` (name) VALUES ($1)`, m.Name); err != nil {
 				return fmt.Errorf("%s: %w", m.Name, err)
 			}
@@ -115,7 +137,13 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool, fsys fs.FS) ([]string, err
 		}
 		return nil
 	})
-	return appliedNow, err
+	return appliedNow, held, err
+}
+
+// HoldDataLoss holds a migration that drops data on a database that has
+// some: the hold function for MigrateUntil.
+func HoldDataLoss(_, sql string, fresh bool) bool {
+	return !fresh && strings.Contains(sql, DataLoss)
 }
 
 // Rollback reverts the last steps applied migrations using their down

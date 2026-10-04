@@ -59,7 +59,7 @@ func TestDBMissingURLNamesSetup(t *testing.T) {
 	t.Setenv("DATABASE_URL", "")
 	os.Unsetenv("DATABASE_URL")
 	err := runDB(context.Background(), []string{"migrate", "--dir", dir})
-	if err == nil || !strings.Contains(err.Error(), "run lidza setup") {
+	if err == nil || !strings.Contains(err.Error(), "run lidza install") {
 		t.Fatalf("got %v", err)
 	}
 }

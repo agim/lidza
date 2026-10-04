@@ -9,6 +9,21 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- `lidza install` is the one command after cloning and after every pull
+  (`lidza setup` is its former name and still works): it adds to `.env`
+  what packs enabled since need, creates and migrates the databases,
+  installs missing frontend packages. `lidza update` runs it with the new
+  CLI after moving the framework, so pending migrations are applied
+  instead of named. A migration that drops data (`-- review: data loss`)
+  is held on a development database that has data, until `lidza install
+  --migrate` (or `lidza update --migrate`); a fresh database and the test
+  database run everything. `lidza dev` does the `.env`, migration and
+  package part on start, so `git pull && lidza dev` works.
+  `db.MigrateUntil` and `db.HoldDataLoss` are the migration runner with
+  that hold.
+
 ## v0.1.67 (2026-10-04)
 
 - `lidza setup` on an existing `.env` adds every setting an enabled

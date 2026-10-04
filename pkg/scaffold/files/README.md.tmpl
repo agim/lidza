@@ -7,7 +7,8 @@ the app is built the way it is.
 ## Run
 
 ```sh
-lidza setup      # once on a new machine: .env, databases, node_modules
+lidza install    # after cloning or pulling: .env, databases, node_modules
+lidza update     # the framework to its newest release, then lidza install
 lidza dev        # http://127.0.0.1:3000, hot reload for Go and the frontend
 lidza test       # Go tests; lidza test --e2e for the browser suite
 lidza check      # every Go, Rust and frontend error in one list

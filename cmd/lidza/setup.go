@@ -29,7 +29,7 @@ import (
 	"github.com/agim/lidza/pkg/scaffold"
 )
 
-// setupOptions is what `lidza setup` and `lidza new --packs` do after the
+// setupOptions is what `lidza install` and `lidza new --packs` do after the
 // files exist: packs, environment files with real values, generated code,
 // databases created and migrated, node_modules, the agent CLI, the first
 // commit.
@@ -38,7 +38,10 @@ type setupOptions struct {
 	Agent       string
 	DatabaseURL string
 	Commit      bool
-	Out         io.Writer
+	// AllowDataLoss applies migrations marked db.DataLoss to a
+	// development database that holds data; otherwise they wait.
+	AllowDataLoss bool
+	Out           io.Writer
 	// Interview offers the brief's questions before the first commit,
 	// when setup runs in a terminal.
 	Interview bool
@@ -52,15 +55,18 @@ var agentPackages = map[string]string{
 	"gemini": "@google/gemini-cli",
 }
 
-// runSetup is `lidza setup [--packs a,b] [--agent claude] [--database-url]
-// [--no-commit]` on an existing project.
-func runSetup(ctx context.Context, args []string) error {
-	fs := flags("setup")
+// runInstall is `lidza install [--packs a,b] [--agent claude]
+// [--database-url] [--no-commit] [--migrate]` on an existing project, for
+// a fresh clone and after every pull alike: it does what is missing and
+// leaves the rest. `lidza install` is its former name.
+func runInstall(ctx context.Context, args []string) error {
+	fs := flags("install")
 	dir := fs.String("dir", ".", "project directory")
 	packs := fs.String("packs", "", "official packs to enable, comma-separated (db is added when a pack needs it)")
 	agent := fs.String("agent", "", "agent CLI to install when missing: claude, codex or gemini")
 	dbURL := fs.String("database-url", os.Getenv("LIDZA_DATABASE_URL"), "development DATABASE_URL (default: a local socket database named after the app; env LIDZA_DATABASE_URL)")
 	noCommit := fs.Bool("no-commit", false, "do not make the first commit")
+	allowLoss := fs.Bool("migrate", false, "also apply migrations that drop data (marked "+db.DataLoss+") to the development database")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -69,9 +75,9 @@ func runSetup(ctx context.Context, args []string) error {
 		return err
 	}
 	if cfg == nil {
-		return errors.New("setup needs a lidza.json project (lidza new <name> first)")
+		return errors.New("install needs a lidza.json project (lidza new <name> first)")
 	}
-	return setup(ctx, abs, cfg, setupOptions{Packs: splitList(*packs), Agent: *agent, DatabaseURL: *dbURL, Commit: !*noCommit, Out: os.Stdout, Interview: isTerminal(os.Stdin), In: os.Stdin})
+	return setup(ctx, abs, cfg, setupOptions{Packs: splitList(*packs), Agent: *agent, DatabaseURL: *dbURL, Commit: !*noCommit, AllowDataLoss: *allowLoss, Out: os.Stdout, Interview: isTerminal(os.Stdin), In: os.Stdin})
 }
 
 func splitList(s string) []string {
@@ -90,7 +96,7 @@ func setup(ctx context.Context, dir string, cfg *config.Config, opt setupOptions
 	if out == nil {
 		out = io.Discard
 	}
-	step := func(format string, a ...any) { fmt.Fprintf(out, "[setup] "+format+"\n", a...) }
+	step := func(format string, a ...any) { fmt.Fprintf(out, "[install] "+format+"\n", a...) }
 	// A step that fails from here on is reported and setup goes on, so
 	// one problem (Postgres not running, npm offline) does not leave the
 	// later steps silently undone; the list is repeated at the end.
@@ -98,7 +104,7 @@ func setup(ctx context.Context, dir string, cfg *config.Config, opt setupOptions
 	problem := func(format string, a ...any) {
 		msg := fmt.Sprintf(format, a...)
 		problems = append(problems, msg)
-		fmt.Fprintf(out, "[setup] PROBLEM: %s\n", msg)
+		fmt.Fprintf(out, "[install] PROBLEM: %s\n", msg)
 	}
 
 	// 1. Packs, db first when any pack needs it.
@@ -134,7 +140,7 @@ func setup(ctx context.Context, dir string, cfg *config.Config, opt setupOptions
 		step("pack %s: %s", name, o.Description)
 	}
 	if len(packs) > 0 && len(cfg.Packs) == len(packs) {
-		if _, err := decisions.Add(dir, "Packs at creation: "+strings.Join(packs, ", "), "The app's initial shape, chosen with lidza new --packs (or lidza setup --packs): "+packReasons(packs)+" A pack no code uses is flagged by lidza check (L011); remove it or build the feature.", "lidza.json, packs.go"); err != nil {
+		if _, err := decisions.Add(dir, "Packs at creation: "+strings.Join(packs, ", "), "The app's initial shape, chosen with lidza new --packs (or lidza install --packs): "+packReasons(packs)+" A pack no code uses is flagged by lidza check (L011); remove it or build the feature.", "lidza.json, packs.go"); err != nil {
 			return err
 		}
 	}
@@ -161,13 +167,7 @@ func setup(ctx context.Context, dir string, cfg *config.Config, opt setupOptions
 	}
 	testURL := withDatabase(devURL, dbName(cfg.Name, "test"))
 	if _, err := os.Stat(filepath.Join(dir, ".env")); err != nil {
-		values := map[string]string{
-			"DATABASE_URL": devURL,
-			"AUTH_SECRET":  randomHex(32),
-			"MAIL_FROM":    fmt.Sprintf("%q", cfg.Name+" <"+cfg.Name+"@example.com>"),
-			"CACHE_URL":    localCacheURL(),
-		}
-		written, err := writeEnvFromExample(dir, values)
+		written, err := writeEnvFromExample(dir, envDefaults(cfg.Name, devURL))
 		if err != nil {
 			return err
 		}
@@ -179,12 +179,7 @@ func setup(ctx context.Context, dir string, cfg *config.Config, opt setupOptions
 	} else {
 		// A pack enabled since (another session's, a pull) may need a
 		// value the file never had: added, the rest left alone.
-		added, err := addMissingEnv(dir, map[string]string{
-			"DATABASE_URL": devURL,
-			"AUTH_SECRET":  randomHex(32),
-			"MAIL_FROM":    fmt.Sprintf("%q", cfg.Name+" <"+cfg.Name+"@example.com>"),
-			"CACHE_URL":    localCacheURL(),
-		})
+		added, err := addMissingEnv(dir, envDefaults(cfg.Name, devURL))
 		if err != nil {
 			return err
 		}
@@ -228,12 +223,17 @@ func setup(ctx context.Context, dir string, cfg *config.Config, opt setupOptions
 			}
 		}
 		for _, m := range []string{"dev", "test"} {
-			applied, err := migrate(ctx, dir, m)
+			// The test database is recreated by lidza test: nothing there
+			// to keep.
+			applied, held, err := migrate(ctx, dir, m, opt.AllowDataLoss || m == "test")
 			if err != nil {
-				problem("database (%s): %v; is Postgres running (lidza doctor)? Then lidza setup again", m, err)
+				problem("database (%s): %v; is Postgres running (lidza doctor)? Then lidza install again", m, err)
 				continue
 			}
 			step("database %s: created if missing, %d migration(s) applied", dbName(cfg.Name, m), applied)
+			if held != "" {
+				problem("%s", heldMessage(held))
+			}
 		}
 	}
 
@@ -293,7 +293,7 @@ func setup(ctx context.Context, dir string, cfg *config.Config, opt setupOptions
 			}
 		}
 		if len(have) == 0 {
-			step("no agent CLI on the PATH; lidza setup --agent claude installs one")
+			step("no agent CLI on the PATH; lidza install --agent claude installs one")
 		}
 	}
 
@@ -301,7 +301,7 @@ func setup(ctx context.Context, dir string, cfg *config.Config, opt setupOptions
 	if opt.Interview && opt.In != nil {
 		if b, err := brief.Load(dir); err == nil && len(b.Open()) > 0 {
 			in := bufio.NewReader(opt.In)
-			fmt.Fprintf(out, "\n[setup] The brief: %d questions on what %s is for, who owns the data, the design, the services and how agents work on it, each with suggestions. Answer now (y), later (n), or skip it altogether (skip)? [Y/n/skip] ", len(b.Open()), cfg.Name)
+			fmt.Fprintf(out, "\n[install] The brief: %d questions on what %s is for, who owns the data, the design, the services and how agents work on it, each with suggestions. Answer now (y), later (n), or skip it altogether (skip)? [Y/n/skip] ", len(b.Open()), cfg.Name)
 			ans, _ := in.ReadString('\n')
 			switch a := strings.ToLower(strings.TrimSpace(ans)); a {
 			case "", "y", "yes":
@@ -348,7 +348,7 @@ func setup(ctx context.Context, dir string, cfg *config.Config, opt setupOptions
 		}
 	}
 	if len(problems) > 0 {
-		fmt.Fprintf(out, "\n%d step(s) need attention; fix them and run lidza setup again (it skips what is done):\n", len(problems))
+		fmt.Fprintf(out, "\n%d step(s) need attention; fix them and run lidza install again (it skips what is done):\n", len(problems))
 		for _, p := range problems {
 			fmt.Fprintf(out, "  - %s\n", strings.SplitN(p, "\n", 2)[0])
 		}
@@ -462,7 +462,7 @@ func addMissingEnv(dir string, values map[string]string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	text := strings.TrimRight(string(data), "\n") + "\n\n# Added by lidza setup for packs enabled since.\n" + strings.Join(lines, "\n") + "\n"
+	text := strings.TrimRight(string(data), "\n") + "\n\n# Added by lidza install for packs enabled since.\n" + strings.Join(lines, "\n") + "\n"
 	return added, os.WriteFile(p, []byte(text), 0o600)
 }
 
@@ -497,7 +497,7 @@ func needsKey(dir, key string) bool {
 
 // migrate creates the database of a mode ("dev", "test") when missing
 // and applies the migrations; it returns how many.
-func migrate(ctx context.Context, dir, mode string) (int, error) {
+func migrate(ctx context.Context, dir, mode string, allowLoss bool) (int, string, error) {
 	prev, had := os.LookupEnv(devserver.EnvMode)
 	os.Setenv(devserver.EnvMode, mode)
 	defer func() {
@@ -509,21 +509,45 @@ func migrate(ctx context.Context, dir, mode string) (int, error) {
 	}()
 	var cfg db.Config
 	if err := env.Load(dir, &cfg); err != nil {
-		return 0, err
+		return 0, "", err
 	}
 	if err := db.EnsureDatabase(ctx, cfg.URL); err != nil {
-		return 0, err
+		return 0, "", err
 	}
 	pool, err := db.Open(ctx, cfg)
 	if err != nil {
-		return 0, err
+		return 0, "", err
 	}
 	defer pool.Close()
-	applied, err := db.Migrate(ctx, pool, os.DirFS(filepath.Join(dir, cfg.MigrationsDir)))
-	if err != nil {
-		return 0, err
+	hold := db.HoldDataLoss
+	if allowLoss {
+		hold = nil
 	}
-	return len(applied), nil
+	applied, held, err := db.MigrateUntil(ctx, pool, os.DirFS(filepath.Join(dir, cfg.MigrationsDir)), hold)
+	if err != nil {
+		return 0, "", err
+	}
+	if len(applied) > 0 {
+		// A lidza dev running here restarts the app on the new schema.
+		devserver.RequestRestart(dir)
+	}
+	return len(applied), held, nil
+}
+
+// heldMessage says why a migration waits and how to apply it.
+func heldMessage(name string) string {
+	return fmt.Sprintf("migration %s drops data in the development database (%s); read db/migrations/%s.up.sql, then lidza install --migrate applies it and the ones after it", name, db.DataLoss, name)
+}
+
+// envDefaults are the values install writes for this machine when .env
+// lacks them: the database, a fresh secret, a sender, the cache.
+func envDefaults(app, devURL string) map[string]string {
+	return map[string]string{
+		"DATABASE_URL": devURL,
+		"AUTH_SECRET":  randomHex(32),
+		"MAIL_FROM":    fmt.Sprintf("%q", app+" <"+app+"@example.com>"),
+		"CACHE_URL":    localCacheURL(),
+	}
 }
 
 // packReasons lists what each chosen pack is for, from the registry.
@@ -535,4 +559,41 @@ func packReasons(names []string) string {
 		}
 	}
 	return strings.Join(parts, " ")
+}
+
+// devRepair is what lidza dev does before it starts, so `git pull &&
+// lidza dev` works: the .env settings of packs enabled since, the
+// development database's pending migrations (one dropping data waits for
+// lidza install --migrate). It reports and goes on; the app's own start
+// says what is still missing. npm install is the dev server's own step.
+func devRepair(ctx context.Context, cfg *config.Config, out io.Writer) {
+	say := func(format string, a ...any) { fmt.Fprintf(out, "[lidza] "+format+"\n", a...) }
+	if _, err := os.Stat(filepath.Join(cfg.Dir, ".env")); err != nil {
+		say("no .env: lidza install writes it, creates the databases and installs the rest")
+		return
+	}
+	devURL := os.Getenv("LIDZA_DATABASE_URL")
+	if devURL == "" {
+		devURL = db.LocalURL(dbName(cfg.Name, "dev"))
+	}
+	if added, err := addMissingEnv(cfg.Dir, envDefaults(cfg.Name, devURL)); err != nil {
+		say(".env: %v", err)
+	} else if len(added) > 0 {
+		say(".env: added %s for the enabled packs", strings.Join(added, ", "))
+	}
+	if !slices.Contains(cfg.Packs, pack.OfficialPrefix+"db") {
+		return
+	}
+	mctx, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+	applied, held, err := migrate(mctx, cfg.Dir, "dev", false)
+	switch {
+	case err != nil:
+		say("database: %v; is Postgres running (lidza doctor)?", err)
+	case applied > 0:
+		say("database %s: %d migration(s) applied", dbName(cfg.Name, "dev"), applied)
+	}
+	if held != "" {
+		say("%s", heldMessage(held))
+	}
 }

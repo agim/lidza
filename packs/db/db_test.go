@@ -100,3 +100,55 @@ func TestOpenErrors(t *testing.T) {
 		t.Fatalf("unreachable: %v", err)
 	}
 }
+
+// A migration that drops data waits on a database that has some, and
+// runs on a fresh one (nothing to lose), with the ones before it applied.
+func TestMigrateHoldsDataLoss(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	admin, err := Open(ctx, Config{URL: testURL(t), MaxConns: 1, ConnectTimeout: 2 * time.Second})
+	if err != nil {
+		t.Skipf("no test database: %v", err)
+	}
+	defer admin.Close()
+	const schema = "lidza_test_hold"
+	if _, err := admin.Exec(ctx, `DROP SCHEMA IF EXISTS `+schema+` CASCADE; CREATE SCHEMA `+schema); err != nil {
+		t.Fatal(err)
+	}
+	defer admin.Exec(context.Background(), `DROP SCHEMA IF EXISTS `+schema+` CASCADE`)
+	sep := "&"
+	if !strings.Contains(testURL(t), "?") {
+		sep = "?"
+	}
+	pool, err := Open(ctx, Config{URL: testURL(t) + sep + "search_path=" + schema, MaxConns: 2, ConnectTimeout: 2 * time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pool.Close()
+
+	fsys := fstest.MapFS{
+		"0001_init.up.sql": {Data: []byte("CREATE TABLE things (id serial PRIMARY KEY, note text);\n")},
+		"0002_add.up.sql":  {Data: []byte("ALTER TABLE things ADD COLUMN name text;\n")},
+		"0003_drop.up.sql": {Data: []byte("ALTER TABLE things DROP COLUMN note; " + DataLoss + "\n")},
+		"0004_more.up.sql": {Data: []byte("ALTER TABLE things ADD COLUMN extra text;\n")},
+	}
+	first := fstest.MapFS{"0001_init.up.sql": fsys["0001_init.up.sql"]}
+	if applied, held, err := MigrateUntil(ctx, pool, first, HoldDataLoss); err != nil || len(applied) != 1 || held != "" {
+		t.Fatalf("first: %v %q %v", applied, held, err)
+	}
+	applied, held, err := MigrateUntil(ctx, pool, fsys, HoldDataLoss)
+	if err != nil || strings.Join(applied, ",") != "0002_add" || held != "0003_drop" {
+		t.Fatalf("held: %v %q %v", applied, held, err)
+	}
+	if applied, held, err := MigrateUntil(ctx, pool, fsys, nil); err != nil || strings.Join(applied, ",") != "0003_drop,0004_more" || held != "" {
+		t.Fatalf("allowed: %v %q %v", applied, held, err)
+	}
+
+	// A fresh database: everything runs.
+	if _, err := pool.Exec(ctx, `DROP TABLE things; DROP TABLE `+Table); err != nil {
+		t.Fatal(err)
+	}
+	if applied, held, err := MigrateUntil(ctx, pool, fsys, HoldDataLoss); err != nil || len(applied) != 4 || held != "" {
+		t.Fatalf("fresh: %v %q %v", applied, held, err)
+	}
+}

@@ -169,7 +169,7 @@ func nodeMajor(v string) int {
 func doctorDatabase(ctx context.Context, dir string, ok func(string), todo func(string, string)) {
 	values, err := env.Values(dir)
 	if err != nil || values["DATABASE_URL"] == "" {
-		todo("DATABASE_URL not set in .env", "lidza setup")
+		todo("DATABASE_URL not set in .env", "lidza install")
 		return
 	}
 	raw := values["DATABASE_URL"]
@@ -185,9 +185,9 @@ func doctorDatabase(ctx context.Context, dir string, ok func(string), todo func(
 		ok("database reachable (DATABASE_URL in .env)")
 	case func() bool { _, fixable := db.RepairSocket(raw); return fixable }():
 		fixed, _ := db.RepairSocket(raw)
-		todo("DATABASE_URL names a socket directory without Postgres; this machine's is at "+fixed, "lidza setup (repairs .env and .env.test)")
+		todo("DATABASE_URL names a socket directory without Postgres; this machine's is at "+fixed, "lidza install (repairs .env and .env.test)")
 	case strings.Contains(err.Error(), "does not exist"):
-		todo("database in DATABASE_URL does not exist yet", "lidza setup (creates and migrates it)")
+		todo("database in DATABASE_URL does not exist yet", "lidza install (creates and migrates it)")
 	default:
 		todo("database not reachable with DATABASE_URL: "+firstLine(err.Error()), "is Postgres running? "+serviceHint("postgres"))
 	}

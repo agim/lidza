@@ -61,7 +61,7 @@ func (d *DB) Start(ctx context.Context, s *lidza.Services) error {
 		if strings.Contains(err.Error(), "DATABASE_URL") {
 			// The pack was enabled after .env was written (a pull, another
 			// session): setup adds the address of this machine's Postgres.
-			return fmt.Errorf("%w (lidza setup adds it to .env and creates the database)", err)
+			return fmt.Errorf("%w (lidza install adds it to .env and creates the database)", err)
 		}
 		return err
 	}

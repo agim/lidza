@@ -9,7 +9,7 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
-## Unreleased
+## v0.1.65 (2026-10-04)
 
 - After a pull that enabled packs or added frontend packages (another
   session's, a teammate's), `lidza dev` failed: `npm install` ran only

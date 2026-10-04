@@ -157,3 +157,22 @@ func TestAgentFiles(t *testing.T) {
 		t.Fatalf("other paths: %q", got)
 	}
 }
+
+// A package.json dependency without its node_modules directory counts
+// as missing, so a pull that adds packages is installed; a scoped name
+// is looked up in its scope directory.
+func TestMissingPackages(t *testing.T) {
+	dir := t.TempDir()
+	if m, err := missingPackages(dir); err != nil || m != nil {
+		t.Fatalf("no package.json: %v %v", m, err)
+	}
+	os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{"dependencies": {"react": "^19", "@scope/ui": "^1"}, "devDependencies": {"vite": "^8"}}`), 0o644)
+	for _, p := range []string{"react", "@scope/ui"} {
+		os.MkdirAll(filepath.Join(dir, "node_modules", p), 0o755)
+		os.WriteFile(filepath.Join(dir, "node_modules", p, "package.json"), []byte(`{}`), 0o644)
+	}
+	m, err := missingPackages(dir)
+	if err != nil || len(m) != 1 || m[0] != "vite" {
+		t.Fatalf("missing: %v %v", m, err)
+	}
+}

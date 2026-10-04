@@ -9,6 +9,18 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- After a pull that enabled packs or added frontend packages (another
+  session's, a teammate's), `lidza dev` failed: `npm install` ran only
+  when `node_modules` was missing, and `lidza setup` left an existing
+  `.env` alone, so a pack enabled since had no `DATABASE_URL`. `lidza
+  dev`, `setup`, `test` and `build` now install when a `package.json`
+  dependency is not in `node_modules`, naming them; `lidza setup` adds
+  to an existing `.env` the `DATABASE_URL`, `AUTH_SECRET` or `MAIL_FROM`
+  an enabled pack needs and no layer sets, and leaves the rest. The db
+  pack's start error says `lidza setup` adds the address.
+
 ## v0.1.64 (2026-10-04)
 
 - The settings Save bar now really covers a secret field's Show button on

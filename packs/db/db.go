@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -57,6 +58,11 @@ func (d *DB) Name() string { return "lidza/db" }
 // DB_MIGRATE is set, applies pending migrations.
 func (d *DB) Start(ctx context.Context, s *lidza.Services) error {
 	if err := env.Load(".", &d.cfg); err != nil {
+		if strings.Contains(err.Error(), "DATABASE_URL") {
+			// The pack was enabled after .env was written (a pull, another
+			// session): setup adds the address of this machine's Postgres.
+			return fmt.Errorf("%w (lidza setup adds it to .env and creates the database)", err)
+		}
 		return err
 	}
 	pool, err := Open(ctx, d.cfg)

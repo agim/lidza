@@ -268,6 +268,9 @@ func TestScheduleLoop(t *testing.T) {
 func TestReleaseOnShutdown(t *testing.T) {
 	q := testQueue(t, 2)
 	q.cfg.Drain = 100 * time.Millisecond
+	// Not the helper's second: a loaded machine runs the job past it, and
+	// the other worker would take it over as a dead node's.
+	q.cfg.Stale = time.Hour
 	ctx := context.Background()
 	started := make(chan string, 2)
 	q.Handle("batch", func(ctx context.Context, _ json.RawMessage) error {

@@ -174,7 +174,21 @@ func setup(ctx context.Context, dir string, cfg *config.Config, opt setupOptions
 			step(".env written from .env.example with %s", strings.Join(written, ", "))
 		}
 	} else {
-		step(".env exists, left alone")
+		// A pack enabled since (another session's, a pull) may need a
+		// value the file never had: added, the rest left alone.
+		added, err := addMissingEnv(dir, map[string]string{
+			"DATABASE_URL": devURL,
+			"AUTH_SECRET":  randomHex(32),
+			"MAIL_FROM":    fmt.Sprintf("%q", cfg.Name+" <"+cfg.Name+"@example.com>"),
+		})
+		if err != nil {
+			return err
+		}
+		if len(added) > 0 {
+			step(".env exists; added %s for the enabled packs", strings.Join(added, ", "))
+		} else {
+			step(".env exists, left alone")
+		}
 	}
 	if _, err := os.Stat(filepath.Join(dir, ".env.test")); err != nil {
 		var b strings.Builder
@@ -404,6 +418,31 @@ func writeEnvFromExample(dir string, values map[string]string) ([]string, error)
 		}
 	}
 	return written, os.WriteFile(filepath.Join(dir, ".env"), []byte(strings.Join(lines, "\n")+"\n"), 0o600)
+}
+
+// addMissingEnv appends to an existing .env each of values' keys an
+// enabled pack needs (needsKey) and no layer sets (.env, .env.<mode>,
+// the credentials), in the order DATABASE_URL, AUTH_SECRET, MAIL_FROM;
+// it returns the keys it added.
+func addMissingEnv(dir string, values map[string]string) ([]string, error) {
+	set, _ := env.Values(dir)
+	var lines, added []string
+	for _, key := range []string{"DATABASE_URL", "AUTH_SECRET", "MAIL_FROM"} {
+		if v, ok := values[key]; ok && needsKey(dir, key) && set[key] == "" {
+			lines = append(lines, key+"="+v)
+			added = append(added, key)
+		}
+	}
+	if len(lines) == 0 {
+		return nil, nil
+	}
+	p := filepath.Join(dir, ".env")
+	data, err := os.ReadFile(p)
+	if err != nil {
+		return nil, err
+	}
+	text := strings.TrimRight(string(data), "\n") + "\n\n# Added by lidza setup for packs enabled since.\n" + strings.Join(lines, "\n") + "\n"
+	return added, os.WriteFile(p, []byte(text), 0o600)
 }
 
 // needsKey says whether a key belongs in .env when the example lacks it:

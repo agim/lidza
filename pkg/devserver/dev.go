@@ -2,12 +2,15 @@ package devserver
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -241,8 +244,6 @@ func runPrefixed(ctx context.Context, dir string, out io.Writer, prefix string, 
 	return cmd.Run()
 }
 
-// EnsureNodeModules runs `npm install` in dir when it has a package.json but
-// no node_modules yet.
 // KeepDist restores dist/.gitkeep after a frontend build: the bundler
 // empties the directory, and the Go embed of dist needs it to exist in a
 // fresh clone, so the placeholder stays tracked.
@@ -260,18 +261,57 @@ func KeepDist(dir, dist string) error {
 	return os.WriteFile(p, nil, 0o644)
 }
 
+// EnsureNodeModules runs `npm install` in dir when it has a package.json
+// whose dependencies are not all in node_modules: a fresh clone, or a
+// pull that added packages (another session's, a teammate's).
 func EnsureNodeModules(ctx context.Context, dir string, out io.Writer) error {
-	if _, err := os.Stat(filepath.Join(dir, "package.json")); err != nil {
-		return nil
+	missing, err := missingPackages(dir)
+	if err != nil || len(missing) == 0 {
+		return err
 	}
-	if _, err := os.Stat(filepath.Join(dir, "node_modules")); err == nil {
-		return nil
+	if _, err := os.Stat(filepath.Join(dir, "node_modules")); err != nil {
+		fmt.Fprintln(out, "[lidza] node_modules missing, running npm install")
+	} else {
+		more := ""
+		if len(missing) > 3 {
+			missing, more = missing[:3], fmt.Sprintf(" and %d more", len(missing)-3)
+		}
+		fmt.Fprintf(out, "[lidza] package.json needs %s%s, not installed: running npm install\n", strings.Join(missing, ", "), more)
 	}
-	fmt.Fprintln(out, "[lidza] node_modules missing, running npm install")
 	if err := runPrefixed(ctx, dir, out, "[npm]   ", "npm", "install", "--no-fund", "--no-audit"); err != nil {
 		return fmt.Errorf("npm install: %w", err)
 	}
 	return nil
+}
+
+// missingPackages lists the dependencies and devDependencies of dir's
+// package.json with no node_modules/<name>/package.json; none without a
+// package.json.
+func missingPackages(dir string) ([]string, error) {
+	data, err := os.ReadFile(filepath.Join(dir, "package.json"))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var pkg struct {
+		Dependencies    map[string]string `json:"dependencies"`
+		DevDependencies map[string]string `json:"devDependencies"`
+	}
+	if err := json.Unmarshal(data, &pkg); err != nil {
+		return nil, fmt.Errorf("package.json: %w", err)
+	}
+	var missing []string
+	for _, deps := range []map[string]string{pkg.Dependencies, pkg.DevDependencies} {
+		for name := range deps {
+			if _, err := os.Stat(filepath.Join(dir, "node_modules", filepath.FromSlash(name), "package.json")); err != nil {
+				missing = append(missing, name)
+			}
+		}
+	}
+	sort.Strings(missing)
+	return missing, nil
 }
 
 func checkPortFree(addr string) error {

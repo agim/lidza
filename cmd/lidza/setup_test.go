@@ -171,3 +171,24 @@ func TestE2ESeed(t *testing.T) {
 		t.Fatalf("rows: %d %v", n, err)
 	}
 }
+
+// An existing .env gains the keys of packs enabled since it was written,
+// and keeps every line it had; a key another layer sets is not added.
+func TestAddMissingEnv(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "lidza.json"), []byte(`{"name":"demo","frontend":{"template":"htmx"},"packs":["lidza/db","lidza/auth","lidza/mail"]}`), 0o644)
+	os.WriteFile(filepath.Join(dir, ".env"), []byte("LIDZA_ADDR=127.0.0.1:3000\nMAIL_FROM=\"Me <me@example.com>\"\n"), 0o600)
+	os.WriteFile(filepath.Join(dir, ".env.dev"), []byte("AUTH_SECRET=from-dev-file-xxxxxxxxxxxxxxxxxxxxxxxx\n"), 0o600)
+	t.Setenv("LIDZA_MODE", "dev")
+	added, err := addMissingEnv(dir, map[string]string{"DATABASE_URL": "postgres:///demo_dev", "AUTH_SECRET": "s", "MAIL_FROM": "x"})
+	if err != nil || strings.Join(added, ",") != "DATABASE_URL" {
+		t.Fatalf("added %v, %v", added, err)
+	}
+	data, _ := os.ReadFile(filepath.Join(dir, ".env"))
+	if s := string(data); !strings.HasPrefix(s, "LIDZA_ADDR=127.0.0.1:3000\nMAIL_FROM=\"Me <me@example.com>\"\n") || !strings.HasSuffix(s, "DATABASE_URL=postgres:///demo_dev\n") {
+		t.Fatalf(".env:\n%s", s)
+	}
+	if added, _ := addMissingEnv(dir, map[string]string{"DATABASE_URL": "other"}); added != nil {
+		t.Fatalf("added again: %v", added)
+	}
+}

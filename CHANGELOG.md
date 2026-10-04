@@ -9,6 +9,12 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- The settings Save bar now really covers a secret field's Show button on
+  a phone: z-index 20, above Tabler's `.input-group-text` (10, honoured on
+  a flex item); v0.1.63's 6 was not enough.
+
 ## v0.1.63 (2026-10-04)
 
 - The settings pages' sticky Save bar covers the fields scrolling under

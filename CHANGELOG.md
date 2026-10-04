@@ -9,6 +9,12 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- `lidza db migrate`, `rollback` and `status` without a `DATABASE_URL`
+  say where it is read from and that `lidza setup` adds it and creates
+  the database, instead of a bare "env: DATABASE_URL is required".
+
 ## v0.1.65 (2026-10-04)
 
 - After a pull that enabled packs or added frontend packages (another

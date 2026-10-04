@@ -44,6 +44,9 @@ func runDB(ctx context.Context, args []string) error {
 	}
 	var cfg db.Config
 	if err := env.Load(abs, &cfg); err != nil {
+		if values, verr := env.Values(abs); verr == nil && values["DATABASE_URL"] == "" {
+			return fmt.Errorf("db %s: DATABASE_URL is not set in .env, .env.<mode> or the environment; run lidza setup, which adds it and creates the database", sub)
+		}
 		return err
 	}
 	if (sub == "migrate" || sub == "rollback") && !*production {

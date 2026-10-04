@@ -48,3 +48,18 @@ func TestDBRefusesRemoteHost(t *testing.T) {
 		}
 	}
 }
+
+// A missing DATABASE_URL (a pack enabled after the .env was written)
+// names the command that adds it.
+func TestDBMissingURLNamesSetup(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("APP_NAME=x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("DATABASE_URL", "")
+	os.Unsetenv("DATABASE_URL")
+	err := runDB(context.Background(), []string{"migrate", "--dir", dir})
+	if err == nil || !strings.Contains(err.Error(), "run lidza setup") {
+		t.Fatalf("got %v", err)
+	}
+}

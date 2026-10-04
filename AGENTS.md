@@ -60,6 +60,17 @@ Working agreements (Agim's standing decisions):
 - Never assume the developer's machine: CI runners have no git author,
   macOS keeps the Postgres socket in `/tmp`, Node may be newer than 22.
   Setup and the doctor detect and say, they do not fail silently.
+- Other contributors work on this repository too (other sessions,
+  Codex, pull requests). Before starting any work: `git fetch origin
+  --tags`, pull master, and read what landed since the last session
+  (`git log`, the changelog's newest sections) for anything the planned
+  work touches. Again before releasing: pull, re-run the checks on the
+  merged tree, and only then release.
+- Never lose another contribution: resolve a conflict by keeping both
+  sides, never by taking one; never force-push, reset or drop commits
+  that are not yours. When a change of theirs contradicts a decision
+  (one rule replacing another), keep their work, adapt it to the
+  decision, and say so in the report.
 - Decisions for Agim come as brief-style interview questions: each with
   2 to 4 options, the recommended one first and marked, a line on what
   each means; never as open questions buried in a report.

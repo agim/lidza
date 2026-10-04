@@ -555,14 +555,14 @@ func TestRowGuttersFitPhones(t *testing.T) {
 }
 
 // TestSaveBarAboveInputs: the sticky save bar covers the fields scrolling
-// under it, the secret fields' Show buttons too: Bootstrap stacks an input
-// group's controls up to z-index 5.
+// under it, the secret fields' Show buttons too: Tabler gives an input
+// group's .input-group-text z-index 10, honoured on a flex item.
 func TestSaveBarAboveInputs(t *testing.T) {
 	m := regexp.MustCompile(`\.admin-savebar \{[^}]*z-index: (\d+)`).FindSubmatch(adminCSS(t))
 	if m == nil {
 		t.Fatal("no z-index on .admin-savebar")
 	}
-	if n, _ := strconv.Atoi(string(m[1])); n <= 5 {
+	if n, _ := strconv.Atoi(string(m[1])); n <= 10 {
 		t.Fatalf(".admin-savebar z-index %d: an input group's Show button draws over it", n)
 	}
 }

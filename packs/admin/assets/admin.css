@@ -47,10 +47,11 @@ body { background: var(--tblr-body-bg); color: var(--tblr-body-color); }
 .admin-env { font-family: var(--tblr-font-monospace); font-size: .75rem; color: var(--tblr-secondary); font-weight: 400; }
 
 /* The credentials page: the section list and the save bar (above an
-   input group's controls, which Bootstrap stacks up to z-index 5). */
+   input group's parts: Tabler gives .input-group-text z-index 10, which a
+   flex item honours without position). */
 .admin-sections .list-group-item { display: flex; align-items: center; gap: .5rem; }
 .admin-sections .list-group-item .status-dot { margin-left: auto; }
-.admin-savebar { position: sticky; bottom: 0; z-index: 6; background: var(--tblr-bg-surface);
+.admin-savebar { position: sticky; bottom: 0; z-index: 20; background: var(--tblr-bg-surface);
   border-top: 1px solid var(--tblr-border-color); }
 .admin-group-title { display: flex; align-items: center; gap: .5rem; font-weight: 600; margin: 1.5rem 0 .75rem; }
 .admin-group-title:first-child { margin-top: 0; }

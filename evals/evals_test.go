@@ -725,7 +725,7 @@ func TestSetup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("lidza install: %v\n%s", err, out)
 	}
-	for _, want := range []string{"[setup] pack db:", "[setup] pack auth:", "[setup] pack mail:", ".env written", ".env.test written", "database setupapp_dev: created if missing", "database setupapp_test: created if missing", "node_modules: installed"} {
+	for _, want := range []string{"[install] pack db:", "[install] pack auth:", "[install] pack mail:", ".env written", ".env.test written", "database setupapp_dev: created if missing", "database setupapp_test: created if missing", "node_modules: installed"} {
 		if !strings.Contains(string(out), want) {
 			t.Errorf("setup output lacks %q:\n%s", want, out)
 		}

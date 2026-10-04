@@ -9,6 +9,35 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- Roles and permissions per team (`auth.Roles`, issue #28). The app maps
+  its roles to permissions in code (`"admin": {"*"}`, `"editor":
+  {"posts.*"}`); memberships are rows in `auth_member` per scope (a team,
+  a workspace, `auth.AppWide` for the whole app). `Roles.Require(perm,
+  scope)` guards a route (401 signed out, 403 without the permission,
+  500 when the check cannot run, never through); `Check` and `Can` serve
+  handlers and jobs; `Grant`, `Revoke`, `RevokeAll`, `Of`, `Scopes` and a
+  paginated `Members` manage them. Every check reads the database, so a
+  revoked role or a deleted account (its memberships deleted with it) is
+  refused on its next request with its session still valid; a role the
+  map no longer names grants nothing. `lidza gen` adds the `AuthMember`
+  model to an app with the auth pack; then `lidza db migrate`.
+- The audit pack (`lidza pack add audit`, issue #28): `audit.Record` and
+  `RecordTx` store who did what to which resource, in which scope, and
+  the outcome, in `audit_event`, synchronously (a failed write is the
+  caller's error). The actor is the signed-in user, or `audit.System(ctx,
+  name)` for jobs, never the request's word. Metadata is at most 20 short
+  strings; secret-named keys and secret-shaped values (API keys, tokens,
+  database URLs with a password) are stored as `[redacted]`. `List`
+  filters by actor, action, resource, scope, outcome and time, newest
+  first, with an opaque cursor. `AUDIT_RETENTION` (a year) prunes at
+  start and daily. With the admin pages, every admin form and download is
+  recorded too. Recipes "Roles and permissions" and "Record an audit
+  event".
+- `pkg/secrets` recognises provider secrets in a string: rule L010 and
+  the audit pack share it.
+
 ## v0.1.71 (2026-10-04)
 
 - The auth pack's connection routes (`/api/v1/auth/connect/{provider}/...`,

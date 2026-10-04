@@ -1,0 +1,16 @@
+// The audit log (packs/audit): who did what to which resource, when,
+// and how it went; newest first by at, then id.
+model AuditEvent @table("audit_event") {
+  id        uuid   @id @default(uuid())
+  at        time   @default(now())
+  actor     string
+  action    string
+  resource  string @default("")
+  scope     string @default("")
+  outcome   string
+  requestId string @default("")
+  meta      json
+  @@index(at, id)
+  @@index(actor, at)
+  @@index(scope, at)
+}

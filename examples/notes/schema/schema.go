@@ -288,6 +288,31 @@ func (v AuthConnection) Validate() error {
 	return errs.Result()
 }
 
+// AuthMember is a row of the auth_member table.
+type AuthMember struct {
+	ID        string    `json:"id" db:"id"`
+	Subject   string    `json:"subject" db:"subject"`
+	Scope     string    `json:"scope" db:"scope"`
+	Role      string    `json:"role" db:"role"`
+	GrantedBy *string   `json:"grantedBy" db:"granted_by"`
+	CreatedAt time.Time `json:"createdAt" db:"created_at"`
+}
+
+// Validate applies the rules of AuthMember from schema.lidza.
+func (v AuthMember) Validate() error {
+	var errs validate.Errors
+	if v.Subject == "" {
+		errs.Add("subject", "required", "required")
+	}
+	if v.Scope == "" {
+		errs.Add("scope", "required", "required")
+	}
+	if v.Role == "" {
+		errs.Add("role", "required", "required")
+	}
+	return errs.Result()
+}
+
 // CreateNote is an API type.
 type CreateNote struct {
 	Title string  `json:"title"`

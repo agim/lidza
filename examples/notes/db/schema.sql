@@ -130,3 +130,14 @@ CREATE TABLE auth_connection (
 );
 CREATE UNIQUE INDEX auth_connection_owner_provider_key ON auth_connection (owner, provider);
 
+CREATE TABLE auth_member (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  subject text NOT NULL,
+  scope text NOT NULL DEFAULT '',
+  role text NOT NULL,
+  granted_by text,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX auth_member_subject_scope_role_key ON auth_member (subject, scope, role);
+CREATE INDEX auth_member_scope_role_idx ON auth_member (scope, role);
+

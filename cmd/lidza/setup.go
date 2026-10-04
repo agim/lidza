@@ -111,7 +111,7 @@ func setup(ctx context.Context, dir string, cfg *config.Config, opt setupOptions
 	packs := opt.Packs
 	needsDB := false
 	for _, p := range packs {
-		if o, ok := pack.FindOfficial(p); ok && !o.Rust && slices.Contains([]string{"auth", "jobs", "mail", "analytics"}, o.Name) {
+		if o, ok := pack.FindOfficial(p); ok && !o.Rust && slices.Contains([]string{"auth", "jobs", "mail", "analytics", "audit"}, o.Name) {
 			needsDB = true
 		}
 	}

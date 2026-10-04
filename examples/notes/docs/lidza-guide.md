@@ -1129,6 +1129,103 @@ the browser.
    Test with a fake provider (`httptest.NewServer`) and
    `auth.OAuth2Connect` pointed at it.
 
+### Roles and permissions
+
+Let the app decide who may do what, per team, beyond signed in or not.
+The roles and their permissions are the app's, in code; who holds a
+role, and in which team, is in the auth pack's `auth_member` table.
+
+1. Define the roles once, in the app package:
+
+   ```go
+   var roles = auth.Roles{
+   	"admin":  {"*"},
+   	"editor": {"posts.*", "members.read"},
+   	"viewer": {"posts.read", "members.read"},
+   }
+   ```
+
+   A permission is a name (`posts.write`), `prefix.*` for every name
+   under it, or `*`. A role the map no longer names grants nothing.
+2. Guard routes with a permission in the request's scope (a team, a
+   workspace; whatever the app groups by):
+
+   ```go
+   team := func(r *http.Request) string { return r.PathValue("team") }
+   g := r.Group("/api/v1/teams/{team}/posts", roles.Require("posts.read", team))
+   router.Route(r, "POST /api/v1/teams/{team}/posts", createPost, roles.Require("posts.write", team))
+   ```
+
+   `Require` signs the request in like `auth.Require()` and replies 401
+   without a session, 403 without the permission, 500 when the check
+   cannot run: it never lets a request through on an error. Inside a
+   handler or a job, `roles.Check(ctx, team, "posts.publish")` returns
+   nil, `auth.ErrForbidden` (a 403 from a typed handler) or the error.
+3. Grant and revoke from the app's own team routes, guarded by a
+   permission of their own (`members.manage`):
+
+   ```go
+   err := roles.Grant(ctx, subject, team, "editor") // idempotent; the granter is recorded
+   err = roles.Revoke(ctx, subject, team, "editor")
+   err = roles.RevokeAll(ctx, subject, team)          // a member leaving the team
+   ```
+
+   `auth.AppWide` ("") as the scope holds in every team: the app's own
+   operators. `roles.Of(ctx, subject, team)` lists a user's roles there,
+   `roles.Scopes(ctx, subject)` the teams they belong to,
+   `roles.Members(ctx, team, cursor, limit)` a team's members a page at
+   a time.
+4. Every check reads the database: a revoked role, or a deleted
+   account (whose memberships go with it), is refused on its next
+   request even with a session still valid. Keep the first operator in
+   `ADMIN_USERS` or grant them `admin` app-wide at setup.
+5. `lidza gen` (and so `lidza update`) adds the `AuthMember` model to an
+   app from before roles; then `lidza db migrate`. Test each role
+   against each route with `lidzatest`: a viewer cannot write, an editor
+   cannot manage members, another team's admin gets 403.
+
+### Record an audit event
+
+Keep a durable record of who did what, for operators and compliance:
+`lidza pack add audit` (it needs the db pack; the actor comes from the
+auth pack).
+
+1. Record after the action, with the outcome:
+
+   ```go
+   err := audit.From(ctx).Record(ctx, audit.Event{
+   	Action: "post.publish", Resource: "post/" + id, Scope: team,
+   	Meta: map[string]string{"version": v},
+   })
+   ```
+
+   The actor is the signed-in user (`auth.CurrentUser`), never a value
+   from the request; a job names itself with `audit.System(ctx,
+   "nightly-export")`. `Outcome` is `audit.OK` (the default),
+   `audit.Denied` or `audit.Failed`: record refusals too. `Record`
+   returns the database's error: an action that must be audited fails
+   with it. `RecordTx(ctx, tx, e)` writes inside the change's
+   transaction, so both commit or neither does.
+2. Metadata is up to 20 short strings the app chose. A key named like
+   a secret (`password`, `token`, `key`, `secret`, `cookie`...) or a
+   value shaped like one (an API key, a token, a database URL with its
+   password) is stored as `[redacted]`. Never pass a request body or
+   an environment value.
+3. Read it a page at a time, newest first:
+
+   ```go
+   page, err := audit.From(ctx).List(ctx, audit.Query{Scope: team, Limit: 50, Cursor: cursor})
+   // page.Records, then page.Next as the next Cursor ("" at the end)
+   ```
+
+   Filter by `Actor`, `Action`, `Resource`, `Outcome`, `Since` and
+   `Until`. Serve it behind a permission (`roles.Require("audit.read",
+   team)`).
+4. `AUDIT_RETENTION` (a year by default) prunes older records at start
+   and daily; `0` keeps them. With the admin pages mounted, every admin
+   action is recorded too (`admin.form`, `admin.download`).
+5. `lidza gen` and `lidza db migrate` create `audit_event`.
+
 ### Add the admin pages
 
 Give operators a place to watch the packs and set their providers,

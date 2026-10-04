@@ -1664,6 +1664,139 @@
       ],
       "Line": 208,
       "Persisted": true
+    },
+    {
+      "Name": "AuthMember",
+      "Table": "auth_member",
+      "Fields": [
+        {
+          "Name": "id",
+          "Type": "uuid",
+          "Optional": false,
+          "Array": false,
+          "ID": true,
+          "Unique": false,
+          "Index": false,
+          "Default": "uuid()",
+          "Ref": "",
+          "OnDelete": "",
+          "Min": null,
+          "Max": null,
+          "Email": false,
+          "URL": false,
+          "Pattern": "",
+          "Line": 229
+        },
+        {
+          "Name": "subject",
+          "Type": "string",
+          "Optional": false,
+          "Array": false,
+          "ID": false,
+          "Unique": false,
+          "Index": false,
+          "Default": "",
+          "Ref": "",
+          "OnDelete": "",
+          "Min": null,
+          "Max": null,
+          "Email": false,
+          "URL": false,
+          "Pattern": "",
+          "Line": 230
+        },
+        {
+          "Name": "scope",
+          "Type": "string",
+          "Optional": false,
+          "Array": false,
+          "ID": false,
+          "Unique": false,
+          "Index": false,
+          "Default": "\"\"",
+          "Ref": "",
+          "OnDelete": "",
+          "Min": null,
+          "Max": null,
+          "Email": false,
+          "URL": false,
+          "Pattern": "",
+          "Line": 231
+        },
+        {
+          "Name": "role",
+          "Type": "string",
+          "Optional": false,
+          "Array": false,
+          "ID": false,
+          "Unique": false,
+          "Index": false,
+          "Default": "",
+          "Ref": "",
+          "OnDelete": "",
+          "Min": null,
+          "Max": null,
+          "Email": false,
+          "URL": false,
+          "Pattern": "",
+          "Line": 232
+        },
+        {
+          "Name": "grantedBy",
+          "Type": "string",
+          "Optional": true,
+          "Array": false,
+          "ID": false,
+          "Unique": false,
+          "Index": false,
+          "Default": "",
+          "Ref": "",
+          "OnDelete": "",
+          "Min": null,
+          "Max": null,
+          "Email": false,
+          "URL": false,
+          "Pattern": "",
+          "Line": 233
+        },
+        {
+          "Name": "createdAt",
+          "Type": "time",
+          "Optional": false,
+          "Array": false,
+          "ID": false,
+          "Unique": false,
+          "Index": false,
+          "Default": "now()",
+          "Ref": "",
+          "OnDelete": "",
+          "Min": null,
+          "Max": null,
+          "Email": false,
+          "URL": false,
+          "Pattern": "",
+          "Line": 234
+        }
+      ],
+      "Indexes": [
+        {
+          "Fields": [
+            "subject",
+            "scope",
+            "role"
+          ],
+          "Unique": true
+        },
+        {
+          "Fields": [
+            "scope",
+            "role"
+          ],
+          "Unique": false
+        }
+      ],
+      "Line": 228,
+      "Persisted": true
     }
   ],
   "Types": null

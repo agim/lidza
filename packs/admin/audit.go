@@ -2,6 +2,8 @@ package admin
 
 import (
 	"context"
+	"github.com/agim/lidza"
+	"github.com/agim/lidza/packs/audit"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -37,13 +39,20 @@ var secretField = regexp.MustCompile(`(?i)pass|secret|token|key|otp|code|signatu
 
 // audit reports a finished action to OnAudit; a panic there is logged.
 func (h *Handler) audit(r *http.Request, e Audit) {
-	if h.opt.OnAudit == nil {
+	log, _ := lidza.Optional[*audit.Audit](r.Context())
+	if h.opt.OnAudit == nil && log == nil {
 		return
 	}
 	e.Path = strings.TrimPrefix(r.URL.Path, h.path)
 	e.Request = r
 	if !e.Download {
 		e.Form = h.auditForm(r.Context(), r)
+	}
+	if log != nil {
+		record(r.Context(), log, e)
+	}
+	if h.opt.OnAudit == nil {
+		return
 	}
 	defer func() {
 		if v := recover(); v != nil {
@@ -52,6 +61,42 @@ func (h *Handler) audit(r *http.Request, e Audit) {
 	}()
 	h.opt.OnAudit(r.Context(), e)
 }
+
+// record writes an admin action to the audit pack's log: action
+// "admin.form" or "admin.download", the path as the resource, the
+// redacted form (its first MaxMeta fields) as metadata. A failed write
+// is logged: the action has happened.
+func record(ctx context.Context, log *audit.Audit, e Audit) {
+	ev := audit.Event{Action: "admin.form", Resource: "admin" + e.Path, Outcome: audit.OK}
+	switch {
+	case e.Download:
+		ev.Action = "admin.download"
+		if e.Status >= 400 {
+			ev.Outcome = audit.Failed
+		}
+	case e.Error != "":
+		ev.Outcome = audit.Failed
+	}
+	keys := make([]string, 0, len(e.Form))
+	for k := range e.Form {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	ev.Meta = map[string]string{}
+	for _, k := range keys {
+		if len(ev.Meta) == audit.MaxMeta {
+			break
+		}
+		if metaKey.MatchString(k) {
+			ev.Meta[k] = strings.Join(e.Form[k], ", ")
+		}
+	}
+	if err := log.Record(ctx, ev); err != nil {
+		slog.ErrorContext(ctx, "admin: audit record failed", "path", e.Path, "err", err)
+	}
+}
+
+var metaKey = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,64}$`)
 
 // auditForm is the posted form with its secrets redacted.
 func (h *Handler) auditForm(ctx context.Context, r *http.Request) url.Values {

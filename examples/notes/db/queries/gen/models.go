@@ -51,6 +51,15 @@ type AuthIdentity struct {
 	LastUsedAt      time.Time `json:"last_used_at"`
 }
 
+type AuthMember struct {
+	ID        string    `json:"id"`
+	Subject   string    `json:"subject"`
+	Scope     string    `json:"scope"`
+	Role      string    `json:"role"`
+	GrantedBy *string   `json:"granted_by"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
 type AuthSession struct {
 	ID              string     `json:"id"`
 	Subject         string     `json:"subject"`

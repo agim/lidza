@@ -76,3 +76,17 @@ model AuthConnection @table("auth_connection") {
   updatedAt     time   @default(now())
   @@unique(owner, provider)
 }
+
+// One role a subject holds in a scope (auth.Roles): a team, a
+// workspace, or "" for the whole app. The roles' permissions are the
+// app's, in code.
+model AuthMember @table("auth_member") {
+  id        uuid   @id @default(uuid())
+  subject   string
+  scope     string @default("")
+  role      string
+  grantedBy string?
+  createdAt time   @default(now())
+  @@unique(subject, scope, role)
+  @@index(scope, role)
+}

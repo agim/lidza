@@ -89,3 +89,17 @@ const ConnectionTable = `CREATE TABLE IF NOT EXISTS auth_connection (
   updated_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE (owner, provider)
 );`
+
+// MemberTable is the DDL of the memberships table (model AuthMember,
+// table auth_member in the schema fragment): one row per subject, scope
+// and role (Roles). Tests create it directly.
+const MemberTable = `CREATE TABLE IF NOT EXISTS auth_member (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  subject text NOT NULL,
+  scope text NOT NULL DEFAULT '',
+  role text NOT NULL,
+  granted_by text,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS auth_member_subject_scope_role_key ON auth_member (subject, scope, role);
+CREATE INDEX IF NOT EXISTS auth_member_scope_role_idx ON auth_member (scope, role);`

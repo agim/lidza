@@ -119,6 +119,7 @@ var Officials = []Official{
 			"throttle the credential routes: router.Route(r, \"POST /api/v1/auth/register\", register, auth.Throttle()), and sign-in with its own limit: router.Route(r, \"POST /api/v1/auth/login\", login, auth.ThrottleSignIn()); check passwords with auth.From(ctx).ValidatePassword(pw, email)",
 			"email verification and password reset: auth.From(ctx).IssueToken(ctx, auth.PurposeVerifyEmail, email, 0) and ConsumeToken; the app sends the link",
 			"external accounts: AUTH_CONNECT=github (or Options.Connectors with auth.OAuth2Connect); the user goes to /api/v1/auth/connect/github/start, the server calls the API with auth.From(ctx).Connection(ctx, owner, \"github\") and its Client(); tokens sealed in auth_connection, never in the browser (recipe \"Connect an external account\")",
+			"roles and permissions per team: var roles = auth.Roles{\"admin\": {\"*\"}, \"editor\": {\"posts.*\"}, \"viewer\": {\"posts.read\"}}; roles.Grant(ctx, subject, team, \"editor\"); guard routes with roles.Require(\"posts.write\", func(r *http.Request) string { return r.PathValue(\"team\") }), or roles.Check(ctx, team, perm) in a handler; checked on every request (recipe \"Roles and permissions\")",
 			"working code: lidza snippet routes, lidza snippet auth-handlers",
 			"run `lidza gen` and `lidza db migrate`: the auth_session table comes from schema.lidza",
 		},
@@ -165,6 +166,20 @@ var Officials = []Official{
 			"frontend: set VITE_ANALYTICS=1 in .env; src/analytics.ts reports errors and pageviews, track(name, props) for events",
 			"run `lidza gen` and `lidza db migrate`: the app_error and app_event tables come from schema.lidza",
 			"agents: the MCP tool lidza_errors lists recent errors",
+		},
+	},
+	{
+		Name:        "audit",
+		Description: "A durable audit log: who did what to which resource, when and how it went, recorded from routes and jobs with the signed-in user as the actor, secrets redacted, paginated, pruned after a retention.",
+		Env: []string{
+			"# lidza/audit (needs lidza/db; lidza/auth for user actors)",
+			"AUDIT_RETENTION=8760h   # records older than this are pruned daily; 0 keeps them",
+		},
+		Notes: []string{
+			"record: audit.From(ctx).Record(ctx, audit.Event{Action: \"post.publish\", Resource: \"post/\" + id}); RecordTx(ctx, tx, e) inside the change's transaction",
+			"jobs and startup steps: audit.System(ctx, \"nightly-export\") names the actor",
+			"read: audit.From(ctx).List(ctx, audit.Query{Scope: team, Limit: 50}), then Query.Cursor = page.Next",
+			"run `lidza gen` and `lidza db migrate`: the audit_event table comes from schema.lidza",
 		},
 	},
 	{

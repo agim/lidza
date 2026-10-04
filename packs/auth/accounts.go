@@ -181,6 +181,16 @@ func (a *Auth) DeleteUserTx(ctx context.Context, tx pgx.Tx, subject string) erro
 	if _, err := tx.Exec(ctx, `DELETE FROM auth_identity WHERE subject = $1`, subject); err != nil {
 		return fmt.Errorf("auth: delete identities: %w", err)
 	}
+	// Memberships (Roles), in an app whose schema has the table.
+	var members bool
+	if err := tx.QueryRow(ctx, `SELECT to_regclass('auth_member') IS NOT NULL`).Scan(&members); err != nil {
+		return fmt.Errorf("auth: delete memberships: %w", err)
+	}
+	if members {
+		if _, err := tx.Exec(ctx, `DELETE FROM auth_member WHERE subject = $1`, subject); err != nil {
+			return fmt.Errorf("auth: delete memberships: %w", err)
+		}
+	}
 	keys := []string{subject}
 	for _, k := range []string{email, label} {
 		if k != "" {

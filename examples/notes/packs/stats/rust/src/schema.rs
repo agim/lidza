@@ -167,6 +167,18 @@ pub struct AuthConnection {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AuthMember {
+    pub id: String,
+    pub subject: String,
+    pub scope: String,
+    pub role: String,
+    #[serde(rename = "grantedBy")]
+    pub granted_by: Option<String>,
+    #[serde(rename = "createdAt")]
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CreateNote {
     pub title: String,
     pub body: Option<String>,

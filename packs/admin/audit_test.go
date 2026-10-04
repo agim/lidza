@@ -4,16 +4,23 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"testing"
 	"testing/fstest"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/agim/lidza"
+	"github.com/agim/lidza/packs/audit"
+	"github.com/agim/lidza/packs/auth"
 	"github.com/agim/lidza/packs/mail"
 	"github.com/agim/lidza/pkg/credentials"
 )
@@ -127,4 +134,73 @@ func TestAudit(t *testing.T) {
 		}
 	}
 	mu.Unlock()
+}
+
+// With the audit pack running, every admin action is in its log too:
+// the admin as the actor, the path as the resource, secrets redacted.
+func TestAuditToLog(t *testing.T) {
+	ctx := context.Background()
+	pool := auditPool(t)
+	log := audit.New(audit.Config{}, pool)
+	s := lidza.NewServices()
+	lidza.Provide(s, log)
+	asAdmin := func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			next.ServeHTTP(w, r.WithContext(auth.WithUser(r.Context(), &auth.User{ID: "staff-1"})))
+		})
+	}
+	dir := t.TempDir()
+	pages := []Page{{Name: "Posts", Path: "posts", Template: "posts.html",
+		Actions: map[string]Action{"fail": func(*http.Request) (string, error) { return "", errors.New("no such post") }}}}
+	srv := serve(t, Options{Auth: asAdmin, Allow: func(context.Context) bool { return true }, CredentialsDir: dir, Dir: dir,
+		Templates: fstest.MapFS{"posts.html": {Data: []byte(`{{define "content"}}posts{{end}}`)}}, Pages: pages}, s)
+	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	res, err := client.PostForm(srv.URL+"/admin/posts/fail", url.Values{"post": {"8"}, "api_token": {"tok-123"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	p, err := log.List(ctx, audit.Query{})
+	if err != nil || len(p.Records) != 1 {
+		t.Fatalf("log: %+v %v", p.Records, err)
+	}
+	r := p.Records[0]
+	if r.Actor != "staff-1" || r.Action != "admin.form" || r.Resource != "admin/posts/fail" || r.Outcome != audit.Failed || r.Meta["post"] != "8" || r.Meta["api_token"] != "[redacted]" {
+		t.Fatalf("record: %+v", r)
+	}
+}
+
+// auditPool is the test database with a schema of its own holding the
+// audit table.
+func auditPool(t *testing.T) *pgxpool.Pool {
+	t.Helper()
+	ctx := context.Background()
+	dsn := os.Getenv("LIDZA_TEST_DATABASE_URL")
+	if dsn == "" {
+		dsn = "postgres:///lidza_test?host=/var/run/postgresql"
+	}
+	admin, err := pgxpool.New(ctx, dsn)
+	if err == nil {
+		err = admin.Ping(ctx)
+	}
+	if err != nil {
+		t.Skipf("no test database: %v", err)
+	}
+	t.Cleanup(admin.Close)
+	schema := fmt.Sprintf("admin_audit_%d", time.Now().UnixNano())
+	if _, err := admin.Exec(ctx, "CREATE SCHEMA "+schema); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { admin.Exec(context.Background(), "DROP SCHEMA "+schema+" CASCADE") })
+	cfg, _ := pgxpool.ParseConfig(dsn)
+	cfg.ConnConfig.RuntimeParams["search_path"] = schema
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(pool.Close)
+	if _, err := pool.Exec(ctx, audit.Table); err != nil {
+		t.Fatal(err)
+	}
+	return pool
 }

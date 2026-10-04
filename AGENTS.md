@@ -9,6 +9,9 @@ Read before changing anything:
 - `docs/design.md`: why the parts are what they are.
 
 Gotchas:
+- These instructions live in `AGENTS.md`; `CLAUDE.md` and `GEMINI.md` are
+  the one line `@AGENTS.md` (Codex reads this file, Claude Code and Gemini
+  CLI import it). Edit this file only; `TestSharedAgentGuidance` checks.
 - **Līdza** in prose and docs, **`lidza`** in every identifier, path, package and domain. Never `ī` in code.
 - The toolchain is installed (`lidza doctor`, `sh install.sh --check`). Never install more ad hoc; `docs/environment.md` records every install and its check.
 - Go lives in `/usr/local/go` (installed with passwordless `sudo`); Rust is user-local via rustup.

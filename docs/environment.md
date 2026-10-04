@@ -305,7 +305,7 @@ database fails the transactional mail regression instead of skipping it.
 gofmt -l . && go vet ./... && staticcheck ./... && go test ./...
 (cd core && cargo test && cargo build --target wasm32-wasip1)
 go build -o bin/lidza ./cmd/lidza
-go test -tags evals ./evals -v      # platform evals on a fresh app, a few minutes
+go test -tags evals -timeout 40m ./evals -v   # platform evals on a fresh app, about 10 minutes
 (cd examples/notes && lidza verify && lidza test --e2e)   # the reference app
 ```
 

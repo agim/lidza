@@ -9,6 +9,12 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- The settings pages' sticky Save bar covers the fields scrolling under
+  it on a phone: a secret field's Show button drew over it (z-index 6, above
+  an input group's controls). `TestSaveBarAboveInputs` checks it.
+
 ## v0.1.62 (2026-10-04)
 
 - Admin Settings and pack settings pages no longer scroll sideways on a

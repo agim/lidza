@@ -9,6 +9,14 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- `lidza dev` no longer shows a blank page in an app with its own
+  Content-Security-Policy (`App.CSP`): the dev proxy hashes the inline
+  scripts of the pages it passes on into the policy, as built pages
+  already were, so the frontend dev server's inline module (React
+  Refresh's preamble) runs. `TestProxyHashesInlineScripts` checks it.
+
 ## v0.1.68 (2026-10-04)
 
 - `lidza install` is the one command after cloning and after every pull
@@ -50,14 +58,6 @@ change. A release without one is additive: an app updates with
   to an existing `.env` the `DATABASE_URL`, `AUTH_SECRET` or `MAIL_FROM`
   an enabled pack needs and no layer sets, and leaves the rest. The db
   pack's start error says `lidza setup` adds the address.
-
-## Unreleased
-
-- `lidza dev` no longer shows a blank page in an app with its own
-  Content-Security-Policy (`App.CSP`): the dev proxy hashes the inline
-  scripts of the pages it passes on into the policy, as built pages
-  already were, so the frontend dev server's inline module (React
-  Refresh's preamble) runs. `TestProxyHashesInlineScripts` checks it.
 
 ## v0.1.64 (2026-10-04)
 

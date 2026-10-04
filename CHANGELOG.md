@@ -9,7 +9,7 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
-## Unreleased
+## v0.1.75 (2026-10-04)
 
 - The framework block of `AGENTS.md` names the app's own `routes.go`,
   `packs.go` and `tools.go` where the app keeps them: under `appDir`

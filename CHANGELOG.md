@@ -9,6 +9,21 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- The generated Dockerfile builds with the app's own versions: the
+  framework release its `go.mod` pins (a versioned replace applied) for
+  `go install .../cmd/lidza`, and its Go version (the newer of the `go`
+  and `toolchain` lines) for the builder image, not the CLI's (an
+  untagged CLI wrote `latest`). An app with Rust packs gets the Rust
+  toolchain installed instead of commented lines. `lidza gen deploy`
+  names a `go.mod` replace that points the framework at a local
+  checkout, which a container build cannot reach. `scaffold.AppVersions`
+  reads the pins.
+- `credentials.Write` (and so `Set`, `Unset`, `lidza credentials set`, the
+  admin settings' file store) replaces the sealed file atomically: a
+  crash or a concurrent reader no longer sees a partial file.
+
 ## v0.1.69 (2026-10-04)
 
 - `lidza dev` no longer shows a blank page in an app with its own

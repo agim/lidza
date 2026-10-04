@@ -151,7 +151,10 @@ func Read(dir string) (map[string]string, error) {
 	return Parse(string(plain))
 }
 
-// Write seals values into the credentials file.
+// Write seals values into the credentials file, atomically: a crash
+// or a concurrent reader sees the old file or the new one, never part
+// of one. The file is sealed and committed, so it stays readable (0644)
+// for the user a container runs as; the master key is the secret.
 func Write(dir string, values map[string]string) error {
 	key, err := Key(dir)
 	if err != nil {
@@ -165,7 +168,34 @@ func Write(dir string, values map[string]string) error {
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(p, []byte(sealed+"\n"), 0o644)
+	return writeAtomic(p, []byte(sealed+"\n"), 0o644)
+}
+
+// writeAtomic writes a temporary file beside p, syncs it and renames it
+// over p.
+func writeAtomic(p string, data []byte, perm os.FileMode) error {
+	f, err := os.CreateTemp(filepath.Dir(p), "."+filepath.Base(p)+".tmp*")
+	if err != nil {
+		return err
+	}
+	tmp := f.Name()
+	defer os.Remove(tmp) // a no-op after the rename
+	if _, err := f.Write(data); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Chmod(perm); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmp, p)
 }
 
 // Mode is the run mode the values resolve for: LIDZA_MODE, else

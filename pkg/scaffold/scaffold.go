@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"go/format"
+	gover "go/version"
 	"io"
 	"io/fs"
 	"os"
@@ -30,6 +31,7 @@ import (
 	"github.com/agim/lidza/pkg/schema"
 	"github.com/agim/lidza/pkg/version"
 	"github.com/agim/lidza/templates"
+	"golang.org/x/mod/modfile"
 )
 
 // Module is the framework's Go module path, required by every app.
@@ -171,6 +173,9 @@ type templateData struct {
 	// Dockerfile and `go get` in go.mod: the release or commit the CLI was
 	// built from, else latest.
 	LidzaVersion string
+	// Rust says the app has Rust packs: the Dockerfile installs the
+	// toolchain.
+	Rust bool
 	// DecisionsLine tells the agent about the decision log.
 	DecisionsLine string
 	// BriefLine tells the agent about the brief and the team notes.
@@ -473,8 +478,20 @@ func renderBytes(src string, data templateData) ([]byte, error) {
 // (or an older template wrote) is replaced only with force, else
 // reported in kept, so `lidza update` can say which deployment files
 // the new release would change.
+//
+// The builder is pinned to the app's own versions (go.mod's framework
+// release and Go version), not the CLI's, so the image builds what the
+// app was tested with.
 func DeployFiles(dir string, cfg *config.Config, force bool) (written, kept []string, err error) {
 	data := dataFor(cfg, "")
+	app := AppVersions(dir)
+	if app.Lidza != "" && app.LocalPath == "" {
+		data.LidzaVersion = app.Lidza
+	}
+	if app.Go != "" {
+		data.Go = app.Go
+	}
+	data.Rust = hasRustPacks(dir)
 	for _, f := range []struct{ src, dst string }{
 		{"Dockerfile.tmpl", "Dockerfile"},
 		{"dockerignore.tmpl", ".dockerignore"},
@@ -568,6 +585,65 @@ func ensureEmptyDir(dir string) error {
 }
 
 // goMinor returns the running toolchain's "1.N" for the go directive.
+// Versions are what an app's go.mod pins: the framework release (with a
+// versioned replace applied), the Go minor version (the toolchain line
+// when newer than the go line), and the path of a local framework
+// checkout a replace points at, which a container build cannot reach.
+type Versions struct {
+	Lidza, Go, LocalPath string
+}
+
+// AppVersions reads dir/go.mod; a field it cannot tell is empty.
+func AppVersions(dir string) Versions {
+	var v Versions
+	path := filepath.Join(dir, "go.mod")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return v
+	}
+	mod, err := modfile.Parse(path, data, nil)
+	if err != nil {
+		return v
+	}
+	for _, req := range mod.Require {
+		if req.Mod.Path == Module {
+			v.Lidza = req.Mod.Version
+		}
+	}
+	for _, rep := range mod.Replace {
+		if rep.Old.Path == Module && (rep.Old.Version == "" || rep.Old.Version == v.Lidza) {
+			if rep.New.Version == "" {
+				v.LocalPath = rep.New.Path
+			} else {
+				v.Lidza = rep.New.Version
+			}
+		}
+	}
+	goVer := ""
+	if mod.Go != nil {
+		goVer = mod.Go.Version
+	}
+	if mod.Toolchain != nil {
+		if t := strings.TrimPrefix(mod.Toolchain.Name, "go"); goVer == "" || gover.Compare("go"+t, "go"+goVer) > 0 {
+			goVer = t
+		}
+	}
+	if goVer != "" {
+		v.Go = strings.TrimPrefix(gover.Lang("go"+goVer), "go")
+	}
+	return v
+}
+
+// hasRustPacks reports whether a local pack has a Rust crate.
+func hasRustPacks(dir string) bool {
+	for _, pattern := range []string{"*/Cargo.toml", "*/*/Cargo.toml"} {
+		if m, _ := filepath.Glob(filepath.Join(dir, pack.Dir, pattern)); len(m) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
 func goMinor() string {
 	v := strings.TrimPrefix(runtime.Version(), "go")
 	if i := strings.LastIndex(v, "."); i > strings.Index(v, ".") {

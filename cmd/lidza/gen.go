@@ -358,5 +358,8 @@ func runGenDeploy(_ context.Context, args []string) error {
 	if len(written)+len(kept) == 0 {
 		fmt.Println("[gen] deployment files match the current templates")
 	}
+	if local := scaffold.AppVersions(abs).LocalPath; local != "" {
+		fmt.Printf("[gen] go.mod replaces the framework with the local checkout %s, which a container build cannot reach: pin a release (go mod edit -dropreplace %s, then lidza update) before building the image\n", local, version.ModulePath)
+	}
 	return nil
 }

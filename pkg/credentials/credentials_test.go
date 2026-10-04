@@ -208,3 +208,41 @@ func TestGenerateInClone(t *testing.T) {
 		t.Fatalf("read with the variable: %q", v)
 	}
 }
+
+// Write replaces the file in one rename: no temporary file is left, the
+// mode is 0644 (sealed, committed, read by a container's user), and
+// concurrent readers never see a partial file.
+func TestWriteAtomic(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv(EnvMasterKey, strings.Repeat("ab", 32))
+	if err := Write(dir, map[string]string{"A": "1"}); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 0; i < 200; i++ {
+			if err := Set(dir, map[string]string{"A": strings.Repeat("x", i)}); err != nil {
+				t.Error(err)
+				return
+			}
+		}
+	}()
+	for reading := true; reading; {
+		select {
+		case <-done:
+			reading = false
+		default:
+			if _, err := Read(dir); err != nil {
+				t.Fatalf("read during writes: %v", err)
+			}
+		}
+	}
+	entries, _ := os.ReadDir(filepath.Join(dir, "config"))
+	if len(entries) != 1 {
+		t.Fatalf("config holds %d files, want the credentials only", len(entries))
+	}
+	if info, _ := os.Stat(filepath.Join(dir, File)); info.Mode().Perm() != 0o644 {
+		t.Fatalf("mode %v", info.Mode().Perm())
+	}
+}

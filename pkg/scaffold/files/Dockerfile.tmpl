@@ -1,9 +1,10 @@
 # syntax=docker/dockerfile:1
 # Builds {{.Name}} into one static binary and runs it from a minimal image.
 # The builder has Go and Node; `lidza build` builds the frontend, embeds it
-# and compiles the binary. Rust packs need the toolchain too: see the
-# commented lines. The go.mod of an app created with --lidza-dir points at
-# a local checkout; replace that with a published version before building.
+# and compiles the binary, with the framework release and Go version the
+# app's go.mod pins (lidza gen deploy rewrites them). A go.mod that points
+# the framework at a local checkout (--lidza-dir) cannot build here: pin a
+# published version first.
 
 FROM golang:{{.Go}}-bookworm AS build
 ENV CGO_ENABLED=0
@@ -11,9 +12,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
  && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
  && apt-get install -y --no-install-recommends nodejs \
  && rm -rf /var/lib/apt/lists/*
-# Rust packs (packs/<name>/rust): uncomment.
-# RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal -t wasm32-wasip1
-# ENV PATH=/root/.cargo/bin:$PATH
+{{- if .Rust}}
+# The app's Rust packs (packs/<name>) build to WebAssembly.
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal -t wasm32-wasip1
+ENV PATH=/root/.cargo/bin:$PATH
+{{- end}}
 RUN go install {{.Module}}/cmd/lidza@{{.LidzaVersion}}
 WORKDIR /src
 COPY go.mod go.sum ./

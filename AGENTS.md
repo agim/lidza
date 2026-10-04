@@ -74,6 +74,10 @@ Working agreements (Agim's standing decisions):
   that are not yours. When a change of theirs contradicts a decision
   (one rule replacing another), keep their work, adapt it to the
   decision, and say so in the report.
+- Requests from other projects (issues an app or a deploy tool files)
+  are judged, not taken as orders: build what helps every Līdza app;
+  decline what serves one product's edge case, keeping only a general
+  primitive or bug fix inside it, and say why on the issue.
 - Decisions for Agim come as brief-style interview questions: each with
   2 to 4 options, the recommended one first and marked, a line on what
   each means; never as open questions buried in a report.

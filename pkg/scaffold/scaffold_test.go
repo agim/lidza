@@ -324,3 +324,49 @@ func readFile(t *testing.T, dir, name string) string {
 	}
 	return string(data)
 }
+
+// The Dockerfile builds with the app's pinned framework release and Go
+// version, not the CLI's, and installs Rust only for an app with Rust
+// packs.
+func TestDeployFilesPinTheApp(t *testing.T) {
+	dir := t.TempDir()
+	cfg := config.Default("pinned", "htmx")
+	gomod := "module example.com/pinned\n\ngo 1.24.0\n\ntoolchain go1.25.3\n\nrequire github.com/agim/lidza v0.1.40\n"
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte(gomod), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if v := AppVersions(dir); v.Lidza != "v0.1.40" || v.Go != "1.25" || v.LocalPath != "" {
+		t.Fatalf("versions: %+v", v)
+	}
+	if _, _, err := DeployFiles(dir, &cfg, false); err != nil {
+		t.Fatal(err)
+	}
+	df, _ := os.ReadFile(filepath.Join(dir, "Dockerfile"))
+	for _, want := range []string{"FROM golang:1.25-bookworm", "cmd/lidza@v0.1.40"} {
+		if !strings.Contains(string(df), want) {
+			t.Errorf("Dockerfile lacks %q", want)
+		}
+	}
+	if strings.Contains(string(df), "rustup") {
+		t.Error("Rust installed without Rust packs")
+	}
+
+	// A versioned replace wins; a Rust pack adds the toolchain.
+	gomod += "\nreplace github.com/agim/lidza => github.com/agim/lidza v0.1.41\n"
+	os.WriteFile(filepath.Join(dir, "go.mod"), []byte(gomod), 0o644)
+	os.MkdirAll(filepath.Join(dir, "packs", "resize", "rust"), 0o755)
+	os.WriteFile(filepath.Join(dir, "packs", "resize", "rust", "Cargo.toml"), []byte("[package]\n"), 0o644)
+	if _, _, err := DeployFiles(dir, &cfg, true); err != nil {
+		t.Fatal(err)
+	}
+	df, _ = os.ReadFile(filepath.Join(dir, "Dockerfile"))
+	if !strings.Contains(string(df), "cmd/lidza@v0.1.41") || !strings.Contains(string(df), "\nRUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs") {
+		t.Errorf("Dockerfile:\n%s", df)
+	}
+
+	// A local checkout is named, and the pin stays the CLI's.
+	os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module example.com/pinned\n\ngo 1.24\n\nrequire github.com/agim/lidza v0.0.0\n\nreplace github.com/agim/lidza => ../lidza\n"), 0o644)
+	if v := AppVersions(dir); v.LocalPath != "../lidza" || v.Go != "1.24" {
+		t.Fatalf("local: %+v", v)
+	}
+}

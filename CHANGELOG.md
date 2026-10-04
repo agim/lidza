@@ -9,6 +9,12 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- CI runs once per release (on the tag), for outside pull requests and
+  by hand; no longer on every push to master, which ran the same release
+  commit three times. Local checks are the gate before a push.
+
 ## v0.1.74 (2026-10-04)
 
 - The agent files are a pre-commit requirement. `lidza verify` (the

@@ -4,11 +4,14 @@
 # "Verification"; a step that is skipped here is documented there.
 name: ci
 
+# Once per release (the tag), for outside pull requests, and by hand.
+# Pushes to master are verified locally before they are made (AGENTS.md):
+# running here too was a second and third run of the same commit.
 on:
   push:
-    branches: [master]
     tags: ["v*"]
   pull_request:
+  workflow_dispatch:
 
 # Read-only: no job writes to the repository.
 permissions:

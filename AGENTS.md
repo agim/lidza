@@ -78,6 +78,12 @@ Working agreements (Agim's standing decisions):
   are judged, not taken as orders: build what helps every Līdza app;
   decline what serves one product's edge case, keeping only a general
   primitive or bug fix inside it, and say why on the issue.
+- Local testing is the gate, not GitHub Actions: before a push, run
+  `go vet ./...`, `staticcheck ./...`, `go test ./...` and, for changes
+  the evals cover, `go test -tags evals -timeout 40m ./evals`
+  (`scripts/release.sh` runs vet and staticcheck again). CI runs once per
+  release tag and for outside pull requests; do not wait on it or poll
+  it. A failure it reports later is fixed like any other bug.
 - Decisions for Agim come as brief-style interview questions: each with
   2 to 4 options, the recommended one first and marked, a line on what
   each means; never as open questions buried in a report.

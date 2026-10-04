@@ -9,7 +9,7 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
-## Unreleased
+## v0.1.71 (2026-10-04)
 
 - The auth pack's connection routes (`/api/v1/auth/connect/{provider}/...`,
   `/api/v1/auth/connections`) are mounted whenever connectors come from

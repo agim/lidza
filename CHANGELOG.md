@@ -51,6 +51,14 @@ change. A release without one is additive: an app updates with
   an enabled pack needs and no layer sets, and leaves the rest. The db
   pack's start error says `lidza setup` adds the address.
 
+## Unreleased
+
+- `lidza dev` no longer shows a blank page in an app with its own
+  Content-Security-Policy (`App.CSP`): the dev proxy hashes the inline
+  scripts of the pages it passes on into the policy, as built pages
+  already were, so the frontend dev server's inline module (React
+  Refresh's preamble) runs. `TestProxyHashesInlineScripts` checks it.
+
 ## v0.1.64 (2026-10-04)
 
 - The settings Save bar now really covers a secret field's Show button on

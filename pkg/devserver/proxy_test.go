@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+
+	"github.com/agim/lidza/pkg/middleware"
 )
 
 func TestSplitAndProxy(t *testing.T) {
@@ -155,5 +157,49 @@ func TestStatic(t *testing.T) {
 	Static(fstest.MapFS{}).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("empty dist: got %d", rec.Code)
+	}
+}
+
+// TestProxyHashesInlineScripts: under an app's strict policy, the inline
+// module a frontend dev server puts in its pages (React Refresh's
+// preamble) runs: the proxy adds that script's hash to the policy, and
+// only for pages, not for the scripts and API replies it passes on.
+func TestProxyHashesInlineScripts(t *testing.T) {
+	const preamble = `import RefreshRuntime from "/@react-refresh"; RefreshRuntime.injectIntoGlobalHook(window)`
+	front := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/src/main.tsx" {
+			w.Header().Set("Content-Type", "text/javascript")
+			_, _ = io.WriteString(w, `console.log("<script>x</script>")`)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = io.WriteString(w, `<!doctype html><html><head><script type="module">`+preamble+`</script>`+
+			`<script type="module" src="/src/main.tsx"></script></head><body><div id="root"></div></body></html>`)
+	}))
+	defer front.Close()
+	proxy, err := NewProxy(front.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	strict := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Security-Policy", middleware.DefaultCSP)
+		proxy.ServeHTTP(w, r)
+	})
+	get := func(path, accept string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.Header.Set("Accept", accept)
+		rec := httptest.NewRecorder()
+		strict.ServeHTTP(rec, req)
+		return rec
+	}
+	page := get("/", "text/html")
+	if !strings.Contains(page.Body.String(), preamble) {
+		t.Fatalf("page not passed on: %q", page.Body.String())
+	}
+	if csp := page.Header().Get("Content-Security-Policy"); !strings.Contains(csp, "script-src 'self' "+cspHash([]byte(preamble))) {
+		t.Fatalf("page policy without the preamble's hash: %s", csp)
+	}
+	if csp := get("/src/main.tsx", "*/*").Header().Get("Content-Security-Policy"); csp != middleware.DefaultCSP {
+		t.Fatalf("a script's policy changed: %s", csp)
 	}
 }

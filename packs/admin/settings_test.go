@@ -531,3 +531,24 @@ func TestLongSidebar(t *testing.T) {
 		t.Fatal("long menu does not reveal its active item")
 	}
 }
+
+// TestRowGuttersFitPhones: on a phone the page's container has 8px of side
+// padding, so a row's base gutter must be at most 1rem (g-3); a g-4 or g-5
+// row pulls 12px or more out of it and the page scrolls sideways. Wider
+// gutters go on a breakpoint (g-lg-4).
+func TestRowGuttersFitPhones(t *testing.T) {
+	entries, err := files.ReadDir("templates")
+	if err != nil {
+		t.Fatal(err)
+	}
+	row := regexp.MustCompile(`class="row\b[^"]*"`)
+	wide := regexp.MustCompile(`(^|\s)(g|gx)-[45](\s|"|$)`)
+	for _, e := range entries {
+		data, _ := files.ReadFile("templates/" + e.Name())
+		for _, m := range row.FindAllString(string(data), -1) {
+			if wide.MatchString(strings.TrimPrefix(m, "class=")) {
+				t.Errorf("%s: %s overflows a phone's 8px padding; use g-3 g-lg-4", e.Name(), m)
+			}
+		}
+	}
+}

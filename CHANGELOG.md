@@ -9,6 +9,13 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- Admin Settings and pack settings pages no longer scroll sideways on a
+  phone: their grid's gutter is 1rem below the lg breakpoint (it was
+  1.5rem, 4px wider than the page's 8px mobile padding).
+  `TestRowGuttersFitPhones` keeps every admin template's rows within it.
+
 ## v0.1.61 (2026-10-04)
 
 - External accounts (issue #23): a signed-in user connects an account of

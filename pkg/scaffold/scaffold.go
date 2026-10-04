@@ -188,6 +188,9 @@ type templateData struct {
 	LayoutLine, AgentGuidanceLine string
 	// Recipes is the comma-separated list of recipe names from the guide.
 	Recipes string
+	// RoutesFile, PacksFile and ToolsFile are where the app keeps them:
+	// at the root, or in appDir.
+	RoutesFile, PacksFile, ToolsFile string
 	// Release is the framework release that rendered the agent file's
 	// framework block, recorded in its marker: lidza verify passes the
 	// agent files without refreshing them while it is the CLI's.
@@ -210,6 +213,9 @@ func dataFor(cfg *config.Config, lidzaDir string) templateData {
 		BriefLine:         BriefLine,
 		LayoutLine:        LayoutLine,
 		AgentGuidanceLine: AgentGuidanceLine,
+		RoutesFile:        filepath.ToSlash(cfg.AppPath("routes.go")),
+		PacksFile:         filepath.ToSlash(cfg.AppPath(pack.PacksFile)),
+		ToolsFile:         filepath.ToSlash(cfg.AppPath("tools.go")),
 	}
 }
 

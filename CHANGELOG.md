@@ -11,6 +11,12 @@ change. A release without one is additive: an app updates with
 
 ## Unreleased
 
+- The framework block of `AGENTS.md` names the app's own `routes.go`,
+  `packs.go` and `tools.go` where the app keeps them: under `appDir`
+  when `lidza.json` sets one (`app/routes.go`), at the root otherwise.
+  The block also says that the framework writes it and that the app's
+  own instructions go below it.
+
 - CI runs once per release (on the tag), for outside pull requests and
   by hand; no longer on every push to master, which ran the same release
   commit three times. Local checks are the gate before a push.

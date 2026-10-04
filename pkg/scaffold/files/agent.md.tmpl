@@ -5,6 +5,7 @@ Read `docs/lidza-guide.md` before changing anything; it has the layout, the
 commands and the rules.
 
 <!-- lidza:framework{{if .Release}} {{.Release}}{{end}} -->
+<!-- The framework writes this block: lidza gen and lidza update replace it. A wrong line here is a framework bug to report; the app's own instructions go below it. -->
 - {{.BriefLine}}
 - {{.LayoutLine}}
 - {{.AgentGuidanceLine}}
@@ -18,9 +19,9 @@ commands and the rules.
 - MCP server `lidza mcp` (configured in `.mcp.json`, `.gemini/settings.json` and `.codex/config.toml`): `lidza_routes`, `lidza_context`, `lidza_check`, `lidza_logs`, `lidza_config`, `lidza_api` (the framework's Go API; read it before calling a lidza function), `lidza_snippet` (verified code from the reference app; read it before writing a handler, page, test or tool).
 - Task recipes, step by step, in `docs/lidza-guide.md` under "Recipes", as `lidza mcp` prompts, as skills in `.claude/skills/` (Claude Code) and `.agents/skills/` (Codex, `$name`; Gemini CLI, `/name`): <!-- lidza:recipes -->{{.Recipes}}<!-- /lidza:recipes -->. A pattern this app uses twice is a recipe: `lidza recipe add "Title"`.
 - {{.DecisionsLine}}
-- Go owns `/api` (`routes.go`, `router.Route` with typed handlers); the frontend never defines API routes and calls them only through `@lidza/client`.
-- Data shapes live in `schema.lidza`; `schema/`, `db/`, `packs.go`, `packs/*/pack.go` and `.lidza/` are generated, never edited.
-- Add agent-callable functions in `tools.go` (`lidza.ToolFunc`); they show up in `lidza mcp` as `app_<name>`.
+- Go owns `/api` (`{{.RoutesFile}}`, `router.Route` with typed handlers); the frontend never defines API routes and calls them only through `@lidza/client`.
+- Data shapes live in `schema.lidza`; `schema/`, `db/`, `{{.PacksFile}}`, `packs/*/pack.go` and `.lidza/` are generated, never edited.
+- Add agent-callable functions in `{{.ToolsFile}}` (`lidza.ToolFunc`); they show up in `lidza mcp` as `app_<name>`.
 - Go first. Rust lives in packs (`lidza pack scaffold`, Rust to WASM) and is for code that must be contained (user-supplied input), a crate Go lacks, or heap pressure; not for speed (see "Rust: when and how" in the guide, with numbers). `lidza pack add db|auth|jobs|cache|i18n|realtime|analytics|mail|llm|storage|geo|media` enables the official ones. Email goes through the `mail` pack, language models through the `llm` pack (chat, structured output from schema types, the app's tools, embeddings; `LLM_PROVIDER=fake` in tests) and files through the `storage` pack (S3-compatible or local), never a vendor SDK. Operator screens go in the admin pages (`admin.Options.Pages` and `Sections`, recipe "Extend the admin pages"), never a second admin app. Sign-in goes through `auth.Mount` (email and password, plus `AUTH_PROVIDERS` for Google, GitHub, Microsoft or an OIDC issuer), never an OAuth library.
 - Secrets (API keys, SMTP URLs, storage keys) go in the credentials, sealed with the master key: `lidza credentials set NAME=value` (MCP `lidza_credentials_set`), never in code or a committed file; every pack reads them by their environment name.
 <!-- /lidza:framework -->

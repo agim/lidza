@@ -427,3 +427,24 @@ func TestRefreshMCPConfigs(t *testing.T) {
 		t.Fatalf("AGENTS.md:\n%s", agents)
 	}
 }
+
+// The framework block names the app's own files where the app keeps
+// them: in appDir when it has one.
+func TestFrameworkBlockAppDir(t *testing.T) {
+	cfg := config.Default("demo", "react")
+	cfg.AppDir = "app"
+	data := dataFor(&cfg, "")
+	block, err := frameworkBlock(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"(`app/routes.go`, `router.Route`", "`app/packs.go`, `packs/*/pack.go`", "functions in `app/tools.go`"} {
+		if !strings.Contains(block, want) {
+			t.Errorf("block lacks %q", want)
+		}
+	}
+	root := config.Default("demo", "react")
+	if block, _ := frameworkBlock(dataFor(&root, "")); !strings.Contains(block, "(`routes.go`, `router.Route`") {
+		t.Error("root app: routes.go")
+	}
+}

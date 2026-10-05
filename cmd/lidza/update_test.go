@@ -72,3 +72,29 @@ func TestCommitsBehind(t *testing.T) {
 		t.Fatalf("outside git behind by %d", n)
 	}
 }
+
+// Update never moves back: a CLI or an app on a release commit past the
+// newest tag keeps it.
+func TestNoDowngrade(t *testing.T) {
+	pseudo := "v0.1.76-0.20261005203514-35633f34042e"
+	for _, c := range []struct {
+		newest string
+		have   []string
+		want   string
+	}{
+		{"v0.1.75", []string{pseudo, ""}, pseudo},
+		{"v0.1.75", []string{"v0.1.74", "v0.1.73"}, "v0.1.75"},
+		{"v0.1.77", []string{pseudo, pseudo}, "v0.1.77"},
+		{"v0.1.75", []string{"", "dev (../lidza)"}, "v0.1.75"},
+		{"v0.1.75", []string{"v0.1.75", "v0.1.76"}, "v0.1.76"},
+	} {
+		if got := noDowngrade(c.newest, c.have...); got != c.want {
+			t.Errorf("noDowngrade(%s, %v) = %s, want %s", c.newest, c.have, got, c.want)
+		}
+	}
+	for s, want := range map[string]bool{"35633f3": true, "35633f34042e": true, "master": true, "v0.1.77": false, "0.1.77": false, "zzzzzzz": false} {
+		if isCommit(s) != want {
+			t.Errorf("isCommit(%q) != %v", s, want)
+		}
+	}
+}

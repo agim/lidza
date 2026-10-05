@@ -9,6 +9,17 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- `lidza update` never downgrades (issue #31): with the newest tag older
+  than the CLI or the app's module (a release commit not tagged yet), it
+  keeps the newer version and says so; `--to` still names any release.
+- `lidza update --to <commit>` (a hash, or `master`) takes a release
+  that is not tagged yet: the CLI, the app's module and the Dockerfile
+  move to the commit's pseudo-version, read from the repository rather
+  than the proxy. `scripts/release.sh` with `RELEASE_TAG=ci` prints that
+  command, and how a session with tag rights tags the release.
+
 ## v0.1.77 (2026-10-05)
 
 - `lidza update` refuses a branch that is behind its upstream (after a

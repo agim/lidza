@@ -29,6 +29,10 @@ Gotchas:
   `RELEASE_TAG=ci scripts/release.sh vX.Y.Z` pushes master only and
   `.github/workflows/tag.yml` tags the release commit; check the tag exists
   remotely (`git ls-remote --tags origin vX.Y.Z`) before an app updates.
+  Without the tag (no Actions minutes), an app takes the release by
+  commit, `lidza update --to <commit>`, and a session that can push tags
+  tags it (`git tag -a vX.Y.Z <commit> -m vX.Y.Z`). `lidza update` never
+  moves a CLI or an app back to an older tag.
 - Keep docs plain: short headings, facts, no decorative arrows, no taglines.
 
 Working agreements (Agim's standing decisions):

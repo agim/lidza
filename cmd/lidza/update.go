@@ -12,7 +12,10 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/mod/semver"
+
 	"github.com/agim/lidza/pkg/devserver"
+	"github.com/agim/lidza/pkg/scaffold"
 	"github.com/agim/lidza/pkg/version"
 )
 
@@ -26,30 +29,48 @@ import (
 func runUpdate(ctx context.Context, args []string) error {
 	fs := flags("update")
 	dir := fs.String("dir", ".", "project directory")
-	to := fs.String("to", "", "the release to move to (default: the newest)")
+	to := fs.String("to", "", "the release to move to (default: the newest); a commit (hash or master) for a release not tagged yet")
 	cliOnly := fs.Bool("cli-only", false, "the CLI only; leave the project alone")
 	migrate := fs.Bool("migrate", false, "also apply migrations that drop data to the development database")
 	behind := fs.Bool("allow-behind", false, "update even when the branch is behind its upstream")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	target := *to
-	if target == "" {
-		v, err := latestVersion(ctx)
+	current := version.String()
+	var target string
+	switch {
+	case *to != "" && isCommit(*to):
+		// A release commit not tagged yet: its pseudo-version.
+		v, err := commitVersion(ctx, *to)
 		if err != nil {
 			return err
 		}
 		target = v
+		fmt.Printf("[update] CLI %s, moving to %s (commit %s)\n", current, target, *to)
+	case *to != "":
+		target = *to
+		if !strings.HasPrefix(target, "v") {
+			target = "v" + target
+		}
+		fmt.Printf("[update] CLI %s, moving to %s\n", current, target)
+	default:
+		newest, err := latestVersion(ctx)
+		if err != nil {
+			return err
+		}
+		// Never a downgrade: a CLI or an app already past the newest tag
+		// (a release commit not tagged yet) keeps the newer version.
+		target = noDowngrade(newest, version.Module(), scaffold.AppVersions(*dir).Lidza)
+		if target != newest {
+			fmt.Printf("[update] CLI %s; the newest tag is %s, older than %s: keeping %s (--to names a release to move to)\n", current, newest, target, target)
+		} else {
+			fmt.Printf("[update] CLI %s, newest release %s\n", current, target)
+		}
 	}
-	if !strings.HasPrefix(target, "v") {
-		target = "v" + target
-	}
-	current := version.String()
-	fmt.Printf("[update] CLI %s, newest release %s\n", current, target)
 
 	// 1. The CLI.
 	exe, _ := os.Executable()
-	if current == target {
+	if current == target || version.Module() == target {
 		fmt.Println("[update] CLI already there")
 	} else {
 		fmt.Printf("[update] go install %s/cmd/lidza@%s\n", version.ModulePath, target)
@@ -201,6 +222,51 @@ func latestVersion(ctx context.Context) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("update: cannot list releases of %s (network?): %v", version.ModulePath, lastErr)
+}
+
+// noDowngrade is the version to update to: the newest tag, unless the
+// CLI or the app's module is already past it (a release commit not
+// tagged yet), then the newest of those.
+func noDowngrade(newest string, have ...string) string {
+	target := newest
+	for _, v := range have {
+		if semver.IsValid(v) && semver.Compare(v, target) > 0 {
+			target = v
+		}
+	}
+	return target
+}
+
+// isCommit reports whether s names a commit (a hash of 7 to 40 hex
+// characters, or a branch: master) rather than a release.
+func isCommit(s string) bool {
+	if s == "master" || s == "main" {
+		return true
+	}
+	if len(s) < 7 || len(s) > 40 {
+		return false
+	}
+	for _, c := range s {
+		if !strings.ContainsRune("0123456789abcdef", c) {
+			return false
+		}
+	}
+	return true
+}
+
+// commitVersion asks the repository (not the proxy, which may not have
+// it yet) for the pseudo-version of a commit.
+func commitVersion(ctx context.Context, commit string) (string, error) {
+	lctx, cancel := context.WithTimeout(ctx, 45*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(lctx, "go", "list", "-m", "-f", "{{.Version}}", version.ModulePath+"@"+commit)
+	cmd.Env = append(os.Environ(), "GOFLAGS=-mod=mod", "GOPROXY=direct", "GONOSUMDB="+version.ModulePath)
+	cmd.Dir = os.TempDir()
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("update: commit %s of %s: %s", commit, version.ModulePath, strings.TrimSpace(string(out)))
+	}
+	return strings.TrimSpace(string(out)), nil
 }
 
 // newestOf picks the newest release from `go list -m -versions` output

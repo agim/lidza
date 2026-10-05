@@ -45,7 +45,9 @@ git add CHANGELOG.md install.sh
 git commit -q -m "Release $ver"
 if [ "$tagger" = ci ]; then
 	git push -q -u origin master
-	echo "pushed $ver: $(git rev-parse --short HEAD); the tag workflow tags it, then: go install github.com/agim/lidza/cmd/lidza@$ver"
+	commit=$(git rev-parse --short=12 HEAD)
+	echo "pushed $ver: $commit; the tag workflow tags it (a session with tag rights can too: git tag -a $ver $commit -m $ver && git push origin $ver)."
+	echo "Until the tag exists, apps take it by commit: lidza update --to $commit"
 	exit 0
 fi
 git tag -a "$ver" -m "$ver"

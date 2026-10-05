@@ -9,7 +9,7 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
-## Unreleased
+## v0.1.79 (2026-10-05)
 
 - `lidza update` pulls the app's branch first when it is behind its
   upstream and the pull cannot go wrong: nothing uncommitted in tracked

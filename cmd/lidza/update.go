@@ -19,22 +19,40 @@ import (
 	"github.com/agim/lidza/pkg/version"
 )
 
-// runUpdate is `lidza update [--to vX.Y.Z] [--cli-only] [--migrate] [--allow-behind]`: the
+// runUpdate is `lidza update [--to vX.Y.Z] [--cli-only] [--migrate] [--no-pull] [--allow-behind]`: the
 // CLI to the newest release (or the one named), and, in a project, the
 // framework module to the same version, go.mod tidied, the Dockerfile's
 // pin rewritten, everything regenerated with the new CLI, then lidza
 // install (.env, databases migrated, node_modules); --migrate lets a
 // migration that drops data run too. A branch behind its upstream is
-// refused before the project is touched: pull first.
+// pulled first when that is a clean fast-forward, refused otherwise.
 func runUpdate(ctx context.Context, args []string) error {
 	fs := flags("update")
 	dir := fs.String("dir", ".", "project directory")
 	to := fs.String("to", "", "the release to move to (default: the newest); a commit (hash or master) for a release not tagged yet")
 	cliOnly := fs.Bool("cli-only", false, "the CLI only; leave the project alone")
 	migrate := fs.Bool("migrate", false, "also apply migrations that drop data to the development database")
-	behind := fs.Bool("allow-behind", false, "update even when the branch is behind its upstream")
+	behind := fs.Bool("allow-behind", false, "update even when the branch is behind its upstream, without pulling")
+	noPull := fs.Bool("no-pull", false, "do not pull a branch that is behind; stop instead")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	// The app's branch first: a teammate's commits may move go.mod to a
+	// newer framework, and updating a stale checkout regenerates from an
+	// old schema whose migrations collide with the ones the pull brings.
+	// A branch that is only behind, with nothing uncommitted, is
+	// fast-forwarded; any other is left to the developer.
+	if !*cliOnly && !*behind {
+		if abs, _, err := loadProject(*dir); err == nil {
+			if n, upstream := commitsBehind(ctx, abs); n > 0 {
+				if *noPull {
+					return fmt.Errorf("update: this branch is %d commit(s) behind %s; git pull first, then lidza update (--allow-behind updates anyway)", n, upstream)
+				}
+				if err := fastForward(ctx, abs, n, upstream); err != nil {
+					return err
+				}
+			}
+		}
 	}
 	current := version.String()
 	var target string
@@ -90,12 +108,6 @@ func runUpdate(ctx context.Context, args []string) error {
 	if err != nil {
 		fmt.Println("[update] not in a project; the CLI is updated")
 		return nil
-	}
-	// Updating a checkout that is behind its upstream regenerates from a
-	// stale schema: the migrations it writes collide with the ones the
-	// pull brings, and the pull then refuses over the updated files.
-	if n, upstream := commitsBehind(ctx, abs); n > 0 && !*behind {
-		return fmt.Errorf("update: this branch is %d commit(s) behind %s; git pull first, then lidza update (--allow-behind updates anyway)", n, upstream)
 	}
 	have, _ := moduleVersion(ctx, abs)
 	if strings.HasPrefix(have, "dev") || strings.Contains(have, "=>") {
@@ -168,6 +180,32 @@ func runUpdate(ctx context.Context, args []string) error {
 // commitsBehind is how many commits the checkout at dir lacks from its
 // branch's upstream, after a fetch; 0 outside git, without an upstream
 // or when the fetch fails (said, not fatal: offline work goes on).
+// fastForward brings a branch n commits behind upstream up to it, only
+// when that cannot go wrong: nothing uncommitted (tracked files), and no
+// local commit the upstream lacks, so the pull is a fast-forward with no
+// merge and no conflict. Otherwise it says why and what to run.
+func fastForward(ctx context.Context, dir string, n int, upstream string) error {
+	git := func(args ...string) (string, error) {
+		c, cancel := context.WithTimeout(ctx, time.Minute)
+		defer cancel()
+		cmd := exec.CommandContext(c, "git", args...)
+		cmd.Dir = dir
+		out, err := cmd.CombinedOutput()
+		return strings.TrimSpace(string(out)), err
+	}
+	if dirty, err := git("status", "--porcelain", "--untracked-files=no"); err != nil || dirty != "" {
+		return fmt.Errorf("update: this branch is %d commit(s) behind %s and has uncommitted changes; commit or stash them, then lidza update (it pulls), or git pull yourself", n, upstream)
+	}
+	if ahead, _ := git("rev-list", "--count", "@{u}..HEAD"); ahead != "" && ahead != "0" {
+		return fmt.Errorf("update: this branch and %s have diverged (%d behind, %s ahead); git pull (merge or rebase, as the team does), then lidza update", upstream, n, ahead)
+	}
+	if out, err := git("merge", "--ff-only", "@{u}"); err != nil {
+		return fmt.Errorf("update: git merge --ff-only %s failed: %s", upstream, out)
+	}
+	fmt.Printf("[update] pulled %d commit(s) from %s (fast-forward)\n", n, upstream)
+	return nil
+}
+
 func commitsBehind(ctx context.Context, dir string) (int, string) {
 	git := func(timeout time.Duration, args ...string) (string, error) {
 		c, cancel := context.WithTimeout(ctx, timeout)

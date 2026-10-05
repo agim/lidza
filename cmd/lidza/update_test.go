@@ -98,3 +98,69 @@ func TestNoDowngrade(t *testing.T) {
 		}
 	}
 }
+
+// A branch only behind, with nothing uncommitted, is fast-forwarded;
+// uncommitted changes or a diverged branch stop the update untouched.
+func TestFastForward(t *testing.T) {
+	root := t.TempDir()
+	env := append(os.Environ(), "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@example.com", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@example.com")
+	t.Setenv("GIT_AUTHOR_NAME", "t")
+	t.Setenv("GIT_AUTHOR_EMAIL", "t@example.com")
+	t.Setenv("GIT_COMMITTER_NAME", "t")
+	t.Setenv("GIT_COMMITTER_EMAIL", "t@example.com")
+	git := func(dir string, args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir, cmd.Env = dir, env
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	origin, a, b := filepath.Join(root, "origin"), filepath.Join(root, "a"), filepath.Join(root, "b")
+	git(root, "init", "-q", "--bare", "-b", "master", origin)
+	git(root, "clone", "-q", origin, a)
+	os.WriteFile(filepath.Join(a, "schema.lidza"), []byte("v1\n"), 0o644)
+	git(a, "add", ".")
+	git(a, "commit", "-q", "-m", "one")
+	git(a, "push", "-q", "origin", "master")
+	git(root, "clone", "-q", origin, b)
+	push := func(content string) {
+		os.WriteFile(filepath.Join(a, "schema.lidza"), []byte(content), 0o644)
+		git(a, "commit", "-q", "-am", content)
+		git(a, "push", "-q", "origin", "master")
+	}
+	ctx := context.Background()
+
+	// Uncommitted work: stopped, nothing pulled.
+	push("v2\n")
+	os.WriteFile(filepath.Join(b, "schema.lidza"), []byte("mine\n"), 0o644)
+	n, up := commitsBehind(ctx, b)
+	if err := fastForward(ctx, b, n, up); err == nil || !strings.Contains(err.Error(), "uncommitted changes") {
+		t.Fatalf("dirty: %v", err)
+	}
+	if data, _ := os.ReadFile(filepath.Join(b, "schema.lidza")); string(data) != "mine\n" {
+		t.Fatalf("work in progress touched: %q", data)
+	}
+	git(b, "checkout", "--", "schema.lidza")
+
+	// Only behind: fast-forwarded.
+	if err := fastForward(ctx, b, n, up); err != nil {
+		t.Fatal(err)
+	}
+	if data, _ := os.ReadFile(filepath.Join(b, "schema.lidza")); string(data) != "v2\n" {
+		t.Fatalf("not pulled: %q", data)
+	}
+
+	// Diverged: stopped, the local commit kept, no merge made.
+	push("v3\n")
+	git(b, "commit", "-q", "--allow-empty", "-m", "local work")
+	n, up = commitsBehind(ctx, b)
+	if err := fastForward(ctx, b, n, up); err == nil || !strings.Contains(err.Error(), "diverged (1 behind, 1 ahead)") {
+		t.Fatalf("diverged: %v", err)
+	}
+	if msg := git(b, "log", "-1", "--format=%s"); msg != "local work" {
+		t.Fatalf("head moved: %s", msg)
+	}
+}

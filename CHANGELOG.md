@@ -9,6 +9,18 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- `lidza update` pulls the app's branch first when it is behind its
+  upstream and the pull cannot go wrong: nothing uncommitted in tracked
+  files and no local commit the upstream lacks, so it is a fast-forward
+  (`git merge --ff-only`) with no merge and no conflict. Uncommitted
+  changes or a diverged branch stop the update untouched, saying what to
+  run. The pull comes before the framework version is chosen, so a
+  teammate's `go.mod` on a newer release is followed. `--no-pull` stops
+  instead of pulling (the previous behavior); `--allow-behind` still
+  updates without pulling.
+
 ## v0.1.78 (2026-10-05)
 
 - `lidza update` never downgrades (issue #31): with the newest tag older

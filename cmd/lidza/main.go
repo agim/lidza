@@ -30,7 +30,7 @@ Usage:
   lidza test [go test flags] | lidza test --e2e [--install]
   lidza verify [--json] [--no-test] [--strict] | lidza verify --install-hook
   lidza doctor
-  lidza update [--to vX.Y.Z] [--cli-only] [--migrate] [--allow-behind]
+  lidza update [--to vX.Y.Z|<commit>] [--cli-only] [--migrate] [--no-pull] [--allow-behind]
   lidza context [--dir .] [--stdout]
   lidza api [package] [--filter name] [--list]
   lidza snippet [name]
@@ -62,7 +62,7 @@ Commands:
   recipe   add one of this app's conventions to docs/lidza-guide.md as a recipe (prompt, skills, command), or list the recipes
   credentials the app's secrets, sealed in config/credentials.yml.enc with config/master.key; every pack reads them like .env; dev.NAME and production.NAME are for one mode
   admin    who may open the admin pages besides the first account: ADMIN_USERS in the credentials, read within seconds
-  update   the CLI to the newest release and, in a project, the module to the same version: go get, tidy, Dockerfile pin, lidza gen, then lidza install
+  update   in a project, first the branch pulled when it is a clean fast-forward; then the CLI to the newest release and the module to the same version: go get, tidy, Dockerfile pin, lidza gen, then lidza install
   decision record why the app is built a way (a pack, Rust, a dependency, a schema tradeoff) in docs/decisions.md, or list the decisions
   brief    the kickoff interview: what the app is for, who owns the data, the design, the services, the working agreements; answers go to docs/brief.md and where they act
   note     add a lasting fact about this app for the team and every agent (the agent files' Team notes)

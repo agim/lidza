@@ -234,7 +234,7 @@ ship` runs verify, the browser suite and the production build in one go.
 ## Upgrade
 
 ```sh
-lidza update             # the CLI to the newest release, the project to the same one, then lidza install
+lidza update             # the branch pulled, the CLI and the project to the newest release, then lidza install
 lidza update --migrate   # also apply a migration that drops data
 ```
 
@@ -242,10 +242,16 @@ In a project it runs `go get` and `go mod tidy` for the framework module,
 rewrites the Dockerfile's pin, regenerates with the new CLI (pack tables
 that changed become a migration; the guide and the skills refresh), and
 runs `lidza install` with the new CLI. `lidza update --cli-only` leaves the
-project alone; `--to v0.1.9` picks a release. A branch behind its
-upstream is refused before anything changes: `git pull` first, since
-regenerating from a stale schema writes migrations that collide with the
-ones the pull brings (`--allow-behind` updates anyway). `lidza doctor` reports when
+project alone; `--to v0.1.9` picks a release, `--to <commit>` one not
+tagged yet, and it never moves back to an older release on its own.
+
+First it brings the branch up to date, since regenerating from a stale
+schema writes migrations that collide with the ones a pull brings. A
+branch behind its upstream is pulled when that is a clean fast-forward:
+nothing uncommitted, no local commits the upstream lacks. Otherwise the
+update stops before anything changes and says what to run (commit or
+stash, or `git pull` with the team's merge or rebase). `--no-pull` stops
+instead of pulling; `--allow-behind` updates without pulling. `lidza doctor` reports when
 the CLI and the project's module differ. What changed is in the
 framework's `CHANGELOG.md`.
 

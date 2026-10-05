@@ -329,8 +329,8 @@ func generateClient(dir string, cfg *config.Config, out io.Writer) error {
 
 // runGenDeploy is `lidza gen deploy`: the Dockerfile, .dockerignore and
 // deploy/<name>.service from the current templates. A file the app
-// changed is kept and named; --force replaces it (git diff shows what
-// changed).
+// changed is kept and named; --force replaces it, discarding the app's
+// changes (git diff shows them).
 func runGenDeploy(_ context.Context, args []string) error {
 	fs := flags("gen deploy")
 	dir := fs.String("dir", ".", "project directory")
@@ -353,7 +353,10 @@ func runGenDeploy(_ context.Context, args []string) error {
 		fmt.Printf("[gen] wrote %s\n", f)
 	}
 	for _, f := range kept {
-		fmt.Printf("[gen] %s differs from the current template; lidza gen deploy --force replaces it (review with git diff)\n", f)
+		fmt.Printf("[gen] %s keeps the app's changes (it differs from the current template); nothing to do unless CHANGELOG.md names a fix to it\n", f)
+	}
+	if len(kept) > 0 && !*force {
+		fmt.Println("[gen] --force would overwrite them with the templates and discard the app's changes; on a branch with nothing else uncommitted, review with git diff and keep what the app needs")
 	}
 	if len(written)+len(kept) == 0 {
 		fmt.Println("[gen] deployment files match the current templates")

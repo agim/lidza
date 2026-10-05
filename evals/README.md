@@ -5,6 +5,7 @@ What the platform does for an agent, checked end to end on a fresh app:
 | Case | Expectation |
 |---|---|
 | a fresh app | `lidza check` reports nothing |
+| two migrations sharing a number | L019 error on the later name |
 | a hand-written `fetch('/api/...')` | L003 warning naming `@lidza/client` |
 | an import `package.json` does not declare | L004 error with the `npm install` line |
 | a JSX attribute `name="from" value={...}`, a declared import across lines | no L004 |

@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"fmt"
 
 	"github.com/agim/lidza/pkg/brief"
 	"os"
@@ -190,5 +191,53 @@ func TestAddMissingEnv(t *testing.T) {
 	}
 	if added, _ := addMissingEnv(dir, map[string]string{"DATABASE_URL": "other"}); added != nil {
 		t.Fatalf("added again: %v", added)
+	}
+}
+
+// lidza dev's repair applies pending migrations and goes on, but refuses
+// to start the app when one dropping data is held: the code after it
+// would run on a schema it does not match.
+func TestDevRepairRefusesHeldMigration(t *testing.T) {
+	base := os.Getenv("LIDZA_TEST_DATABASE_URL")
+	if base == "" {
+		base = "postgres:///lidza_test?host=/var/run/postgresql"
+	}
+	ctx := context.Background()
+	pool, err := db.Open(ctx, db.Config{URL: base, MaxConns: 2, ConnectTimeout: 2 * time.Second})
+	if err != nil {
+		t.Skipf("no test database: %v", err)
+	}
+	defer pool.Close()
+	name := fmt.Sprintf("lidza_devrepair_%d", time.Now().UnixNano())
+	url := "postgres:///" + name + "?host=/var/run/postgresql"
+	t.Cleanup(func() { pool.Exec(ctx, "DROP DATABASE IF EXISTS "+name+" WITH (FORCE)") })
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "lidza.json"), []byte(`{"name":"demo","frontend":{"template":"htmx"},"packs":["lidza/db"]}`), 0o644)
+	os.WriteFile(filepath.Join(dir, ".env"), []byte("DATABASE_URL="+url+"\n"), 0o600)
+	migrations := filepath.Join(dir, "db", "migrations")
+	os.MkdirAll(migrations, 0o755)
+	os.WriteFile(filepath.Join(migrations, "0001_create_note.up.sql"), []byte("CREATE TABLE note (id int PRIMARY KEY, body text);\n"), 0o644)
+	t.Setenv("LIDZA_DATABASE_URL", url)
+	t.Setenv("DATABASE_URL", url)
+	_, cfg, err := loadProject(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out strings.Builder
+	if err := devRepair(ctx, cfg, &out); err != nil {
+		t.Fatalf("clean migrations refused: %v\n%s", err, out.String())
+	}
+	if !strings.Contains(out.String(), "1 migration(s) applied") {
+		t.Fatalf("not applied:\n%s", out.String())
+	}
+	os.WriteFile(filepath.Join(migrations, "0002_alter_note.up.sql"), []byte("ALTER TABLE note DROP COLUMN body; "+db.DataLoss+"\n"), 0o644)
+	os.WriteFile(filepath.Join(migrations, "0003_create_tag.up.sql"), []byte("CREATE TABLE tag (id int PRIMARY KEY);\n"), 0o644)
+	out.Reset()
+	err = devRepair(ctx, cfg, &out)
+	if err == nil || !strings.Contains(err.Error(), "the app is not started") || !strings.Contains(err.Error(), "lidza install --migrate") {
+		t.Fatalf("held migration not refused: %v\n%s", err, out.String())
+	}
+	if !strings.Contains(out.String(), "0002_alter_note") {
+		t.Fatalf("held migration not named:\n%s", out.String())
 	}
 }

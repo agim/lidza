@@ -129,7 +129,9 @@ func runDev(ctx context.Context, args []string) error {
 	watch := func() []string {
 		return append(append([]string{schema.FileName, config.FileName}, cfg.Frontend.Watch...), packWatch(cfg)...)
 	}
-	devRepair(ctx, cfg, out)
+	if err := devRepair(ctx, cfg, out); err != nil {
+		return err
+	}
 	return devserver.Dev(ctx, cfg, devserver.Options{
 		Addr:    *addr,
 		Out:     out,

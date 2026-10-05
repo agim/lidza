@@ -74,9 +74,11 @@ import (
 //     and literals aside (at least 8 statements and 80 tokens); reuse
 //     the first or extract a function both call;
 //   - L018: a query in db/queries/*.sql on an owned table that neither
-//     filters by nor sets the owner column (owned.go).
+//     filters by nor sets the owner column (owned.go);
+//   - L019 (an error): two migrations in db/migrations share a number,
+//     one generated on a checkout behind its branch (migrations.go).
 //
-// Except for L004 the findings are warnings: they point at the pattern,
+// Except for L004 and L019 the findings are warnings: they point at the pattern,
 // the author decides. A comment "lidza:ignore L001" on the line, or the
 // line before, exempts that line from the rule it names.
 func Rules(ctx context.Context, root string) []Diagnostic {
@@ -129,6 +131,7 @@ func Rules(ctx context.Context, root string) []Diagnostic {
 	out = append(out, undecidedPages(root, pages)...)
 	out = append(out, openBrief(root)...)
 	out = append(out, ownedQueries(root)...)
+	out = append(out, migrationNumbers(root)...)
 	return out
 }
 

@@ -16,18 +16,20 @@ import (
 	"github.com/agim/lidza/pkg/version"
 )
 
-// runUpdate is `lidza update [--to vX.Y.Z] [--cli-only] [--migrate]`: the
+// runUpdate is `lidza update [--to vX.Y.Z] [--cli-only] [--migrate] [--allow-behind]`: the
 // CLI to the newest release (or the one named), and, in a project, the
 // framework module to the same version, go.mod tidied, the Dockerfile's
 // pin rewritten, everything regenerated with the new CLI, then lidza
 // install (.env, databases migrated, node_modules); --migrate lets a
-// migration that drops data run too.
+// migration that drops data run too. A branch behind its upstream is
+// refused before the project is touched: pull first.
 func runUpdate(ctx context.Context, args []string) error {
 	fs := flags("update")
 	dir := fs.String("dir", ".", "project directory")
 	to := fs.String("to", "", "the release to move to (default: the newest)")
 	cliOnly := fs.Bool("cli-only", false, "the CLI only; leave the project alone")
 	migrate := fs.Bool("migrate", false, "also apply migrations that drop data to the development database")
+	behind := fs.Bool("allow-behind", false, "update even when the branch is behind its upstream")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -67,6 +69,12 @@ func runUpdate(ctx context.Context, args []string) error {
 	if err != nil {
 		fmt.Println("[update] not in a project; the CLI is updated")
 		return nil
+	}
+	// Updating a checkout that is behind its upstream regenerates from a
+	// stale schema: the migrations it writes collide with the ones the
+	// pull brings, and the pull then refuses over the updated files.
+	if n, upstream := commitsBehind(ctx, abs); n > 0 && !*behind {
+		return fmt.Errorf("update: this branch is %d commit(s) behind %s; git pull first, then lidza update (--allow-behind updates anyway)", n, upstream)
 	}
 	have, _ := moduleVersion(ctx, abs)
 	if strings.HasPrefix(have, "dev") || strings.Contains(have, "=>") {
@@ -134,6 +142,36 @@ func runUpdate(ctx context.Context, args []string) error {
 		fmt.Println("[update] an agent session with the MCP server open still runs the old server: reconnect it (/mcp in Claude Code) or restart the agent to get the new tools")
 	}
 	return nil
+}
+
+// commitsBehind is how many commits the checkout at dir lacks from its
+// branch's upstream, after a fetch; 0 outside git, without an upstream
+// or when the fetch fails (said, not fatal: offline work goes on).
+func commitsBehind(ctx context.Context, dir string) (int, string) {
+	git := func(timeout time.Duration, args ...string) (string, error) {
+		c, cancel := context.WithTimeout(ctx, timeout)
+		defer cancel()
+		cmd := exec.CommandContext(c, "git", args...)
+		cmd.Dir = dir
+		out, err := cmd.Output()
+		return strings.TrimSpace(string(out)), err
+	}
+	upstream, err := git(5*time.Second, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}")
+	if err != nil || upstream == "" {
+		return 0, ""
+	}
+	remote, _, _ := strings.Cut(upstream, "/")
+	if _, err := git(30*time.Second, "fetch", "--quiet", remote); err != nil {
+		fmt.Printf("[update] git fetch %s failed; not checking whether the branch is behind %s\n", remote, upstream)
+		return 0, upstream
+	}
+	out, err := git(5*time.Second, "rev-list", "--count", "HEAD..@{u}")
+	if err != nil {
+		return 0, upstream
+	}
+	n := 0
+	fmt.Sscan(out, &n)
+	return n, upstream
 }
 
 // latestVersion asks the repository's tags for the newest release, and

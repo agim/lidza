@@ -565,12 +565,15 @@ func packReasons(names []string) string {
 // lidza dev` works: the .env settings of packs enabled since, the
 // development database's pending migrations (one dropping data waits for
 // lidza install --migrate). It reports and goes on; the app's own start
-// says what is still missing. npm install is the dev server's own step.
-func devRepair(ctx context.Context, cfg *config.Config, out io.Writer) {
+// says what is still missing. A held migration is the exception: the
+// migrations after it wait too, and the app would start on a schema its
+// code no longer matches, so dev refuses with the fix. npm install is
+// the dev server's own step.
+func devRepair(ctx context.Context, cfg *config.Config, out io.Writer) error {
 	say := func(format string, a ...any) { fmt.Fprintf(out, "[lidza] "+format+"\n", a...) }
 	if _, err := os.Stat(filepath.Join(cfg.Dir, ".env")); err != nil {
 		say("no .env: lidza install writes it, creates the databases and installs the rest")
-		return
+		return nil
 	}
 	devURL := os.Getenv("LIDZA_DATABASE_URL")
 	if devURL == "" {
@@ -582,7 +585,7 @@ func devRepair(ctx context.Context, cfg *config.Config, out io.Writer) {
 		say(".env: added %s for the enabled packs", strings.Join(added, ", "))
 	}
 	if !slices.Contains(cfg.Packs, pack.OfficialPrefix+"db") {
-		return
+		return nil
 	}
 	mctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
@@ -595,5 +598,7 @@ func devRepair(ctx context.Context, cfg *config.Config, out io.Writer) {
 	}
 	if held != "" {
 		say("%s", heldMessage(held))
+		return fmt.Errorf("the app is not started: its development database is behind the code from migration %s on; run lidza install --migrate (or roll back what you pulled), then lidza dev", held)
 	}
+	return nil
 }

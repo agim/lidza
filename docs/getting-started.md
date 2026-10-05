@@ -242,7 +242,10 @@ In a project it runs `go get` and `go mod tidy` for the framework module,
 rewrites the Dockerfile's pin, regenerates with the new CLI (pack tables
 that changed become a migration; the guide and the skills refresh), and
 runs `lidza install` with the new CLI. `lidza update --cli-only` leaves the
-project alone; `--to v0.1.9` picks a release. `lidza doctor` reports when
+project alone; `--to v0.1.9` picks a release. A branch behind its
+upstream is refused before anything changes: `git pull` first, since
+regenerating from a stale schema writes migrations that collide with the
+ones the pull brings (`--allow-behind` updates anyway). `lidza doctor` reports when
 the CLI and the project's module differ. What changed is in the
 framework's `CHANGELOG.md`.
 

@@ -30,7 +30,7 @@ Usage:
   lidza test [go test flags] | lidza test --e2e [--install]
   lidza verify [--json] [--no-test] [--strict] | lidza verify --install-hook
   lidza doctor
-  lidza update [--to vX.Y.Z] [--cli-only] [--migrate]
+  lidza update [--to vX.Y.Z] [--cli-only] [--migrate] [--allow-behind]
   lidza context [--dir .] [--stdout]
   lidza api [package] [--filter name] [--list]
   lidza snippet [name]

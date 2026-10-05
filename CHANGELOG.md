@@ -9,6 +9,24 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- `lidza update` refuses a branch that is behind its upstream (after a
+  `git fetch`), before it touches the project: regenerating from a stale
+  schema wrote migrations whose numbers the pull then brought too, and
+  the pull refused over the updated `go.mod`, `go.sum` and `Dockerfile`.
+  `git pull` first; `--allow-behind` updates anyway.
+- `lidza check` reports two migrations in `db/migrations` that share a
+  number as an error (L019), so `lidza verify` and the pre-commit hook
+  stop it, with how to renumber the one generated on a stale checkout.
+- `lidza dev` no longer starts the app when a migration that drops data
+  is held: the migrations after it waited too, and the app started on a
+  schema its code did not match (a "column does not exist" at start). It
+  stops with the fix, `lidza install --migrate`.
+- `lidza gen deploy` (and so `lidza update`) says a deployment file that
+  differs from its template keeps the app's changes, and that `--force`
+  would discard them, instead of suggesting `--force`.
+
 ## v0.1.76 (2026-10-05)
 
 - `lidza dev`: a page reloaded in the browser no longer fails under an

@@ -802,3 +802,19 @@ func TestInternalApplicationAPISurfaces(t *testing.T) {
 		}
 	}
 }
+
+// Two migrations sharing a number, one generated on a checkout behind its
+// branch, are an error on the later name (L019).
+func TestDuplicateMigrationNumber(t *testing.T) {
+	if _, err := os.Stat(filepath.Join(app, "db")); err == nil {
+		t.Fatal("the eval app has a db directory; this case assumes none")
+	}
+	t.Cleanup(func() { os.RemoveAll(filepath.Join(app, "db")) })
+	edit(t, map[string]string{
+		"db/migrations/0001_create_note.up.sql":    "CREATE TABLE note (id uuid PRIMARY KEY);\n",
+		"db/migrations/0001_create_note.down.sql":  "DROP TABLE note;\n",
+		"db/migrations/0001_create_label.up.sql":   "CREATE TABLE label (id uuid PRIMARY KEY);\n",
+		"db/migrations/0001_create_label.down.sql": "DROP TABLE label;\n",
+	})
+	expect(t, check(t), expectation{code: "L019", severity: "error", file: "db/migrations/0001_create_note.up.sql", message: "0001_create_label"})
+}

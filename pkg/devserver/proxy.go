@@ -31,6 +31,13 @@ func NewProxy(target string, opts ...Option) (http.Handler, error) {
 		Rewrite: func(r *httputil.ProxyRequest) {
 			r.SetURL(u)
 			r.Out.Host = u.Host
+			// A page is always fetched in full: a 304 from the dev server
+			// would leave the browser running its cached page under a
+			// policy that lacks the hashes of that page's inline scripts.
+			if isPageRequest(r.In) {
+				r.Out.Header.Del("If-None-Match")
+				r.Out.Header.Del("If-Modified-Since")
+			}
 			// The response hook sees the visitor's request, not the one to
 			// the dev server.
 			r.Out = r.Out.WithContext(context.WithValue(r.Out.Context(), inboundKey{}, r.In))

@@ -172,7 +172,12 @@ func TestProxyHashesInlineScripts(t *testing.T) {
 			_, _ = io.WriteString(w, `console.log("<script>x</script>")`)
 			return
 		}
+		if r.Header.Get("If-None-Match") != "" {
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
 		w.Header().Set("Content-Type", "text/html")
+		w.Header().Set("ETag", `W/"page"`)
 		_, _ = io.WriteString(w, `<!doctype html><html><head><script type="module">`+preamble+`</script>`+
 			`<script type="module" src="/src/main.tsx"></script></head><body><div id="root"></div></body></html>`)
 	}))
@@ -198,6 +203,16 @@ func TestProxyHashesInlineScripts(t *testing.T) {
 	}
 	if csp := page.Header().Get("Content-Security-Policy"); !strings.Contains(csp, "script-src 'self' "+cspHash([]byte(preamble))) {
 		t.Fatalf("page policy without the preamble's hash: %s", csp)
+	}
+	// A reload revalidates the page; the dev server's 304 would keep the
+	// cached page under a policy without its hash, so the page comes whole.
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Accept", "text/html")
+	req.Header.Set("If-None-Match", `W/"page"`)
+	again := httptest.NewRecorder()
+	strict.ServeHTTP(again, req)
+	if again.Code != http.StatusOK || !strings.Contains(again.Header().Get("Content-Security-Policy"), cspHash([]byte(preamble))) {
+		t.Fatalf("revalidated page: %d, policy %s", again.Code, again.Header().Get("Content-Security-Policy"))
 	}
 	if csp := get("/src/main.tsx", "*/*").Header().Get("Content-Security-Policy"); csp != middleware.DefaultCSP {
 		t.Fatalf("a script's policy changed: %s", csp)

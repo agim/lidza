@@ -9,6 +9,15 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- `lidza dev`: a page reloaded in the browser no longer fails under an
+  app's Content-Security-Policy (React Refresh's "can't detect preamble").
+  The dev proxy fetched the page conditionally, the frontend dev server
+  answered 304, and the browser kept its cached page under a policy that
+  lacked the hash of the page's inline script. Pages now always come
+  whole through the proxy.
+
 ## v0.1.75 (2026-10-04)
 
 - The framework block of `AGENTS.md` names the app's own `routes.go`,

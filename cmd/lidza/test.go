@@ -14,6 +14,7 @@ import (
 
 	"github.com/agim/lidza/packs/db"
 	"github.com/agim/lidza/pkg/config"
+	"github.com/agim/lidza/pkg/credentials"
 	"github.com/agim/lidza/pkg/devserver"
 	"github.com/agim/lidza/pkg/env"
 	"github.com/agim/lidza/pkg/pack"
@@ -30,6 +31,7 @@ func runTest(ctx context.Context, args []string) error {
 	install := fs.Bool("install", false, "with --e2e: install the browser when it is missing")
 	verbose := fs.Bool("v", false, "go test -v: every test by name as it runs")
 	runOnly := fs.String("run", "", "only the Go tests matching this regexp (go test -run)")
+	fresh := fs.Bool("fresh", false, "drop and recreate the test database first (a migration from another branch left in it)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -45,6 +47,7 @@ func runTest(ctx context.Context, args []string) error {
 		return err
 	}
 	os.Setenv(devserver.EnvMode, "test")
+	freshTestDB = *fresh
 	if *e2e {
 		if cfg == nil {
 			return errors.New("test --e2e needs a lidza.json project")
@@ -70,12 +73,21 @@ func runTest(ctx context.Context, args []string) error {
 	return nil
 }
 
+// freshTestDB is lidza test --fresh: the test database is recreated.
+var freshTestDB bool
+
 // prepareTestDB creates the database named in DATABASE_URL (after .env
 // and .env.test) when it does not exist, and applies the migrations.
 func prepareTestDB(ctx context.Context, dir string) error {
 	var cfg db.Config
 	if err := env.Load(dir, &cfg); err != nil {
 		return fmt.Errorf("test database: %w", err)
+	}
+	if freshTestDB {
+		fmt.Println("[lidza] test database: dropped and created again (--fresh)")
+		if err := db.DropTestDatabase(ctx, cfg.URL); err != nil {
+			return fmt.Errorf("test database: %w", err)
+		}
 	}
 	if err := db.EnsureDatabase(ctx, cfg.URL); err != nil {
 		return err
@@ -87,7 +99,8 @@ func prepareTestDB(ctx context.Context, dir string) error {
 	defer pool.Close()
 	applied, err := db.Migrate(ctx, pool, os.DirFS(filepath.Join(dir, cfg.MigrationsDir)))
 	if err != nil {
-		return fmt.Errorf("test database: migrate: %w", err)
+		// Loud: a run that stops here has run no test.
+		return fmt.Errorf("FAILED, no test ran: the test database could not be migrated: %w. A migration from another branch may be in it: lidza test --fresh drops and recreates it", err)
 	}
 	if len(applied) > 0 {
 		fmt.Printf("[lidza] test database: applied %d migration(s)\n", len(applied))
@@ -155,7 +168,7 @@ func runE2E(ctx context.Context, dir string, cfg *config.Config, install bool, e
 	addr := "127.0.0.1:" + strconv.Itoa(port)
 	app := exec.CommandContext(ctx, bin)
 	app.Dir = dir
-	app.Env = append(os.Environ(), devserver.EnvMode+"=test", devserver.EnvAddr+"="+addr)
+	app.Env = append(testEnv(dir), devserver.EnvMode+"=test", devserver.EnvAddr+"="+addr)
 	// Limits a browser suite signing everyone up from 127.0.0.1 does not
 	// hit, unless .env.test or the environment sets its own.
 	set, _ := env.Values(dir)
@@ -184,7 +197,7 @@ func runE2E(ctx context.Context, dir string, cfg *config.Config, install bool, e
 	fmt.Printf("[lidza] app on %s; npx playwright test\n", base)
 	pw := exec.CommandContext(ctx, "npx", append([]string{"playwright", "test"}, extra...)...)
 	pw.Dir = dir
-	pw.Env = append(os.Environ(), "BASE_URL="+base)
+	pw.Env = append(testEnv(dir), "BASE_URL="+base)
 	pw.Stdout = os.Stdout
 	pw.Stderr = os.Stderr
 	if err := pw.Run(); err != nil {
@@ -223,4 +236,31 @@ func seedTestDB(ctx context.Context, dir string) error {
 	}
 	fmt.Printf("[lidza] test database: %s loaded\n", E2ESeed)
 	return nil
+}
+
+// testEnv is the environment of a test process: this one's without the
+// master key and without any variable named like one of the app's
+// credentials (a production value exported in an agent's shell), and
+// with the key file off, so tests run on the test providers and settings
+// only (.env.test) and never seal or read a real secret. A test that
+// needs a key sets LIDZA_MASTER_KEY itself.
+func testEnv(dir string) []string {
+	drop := map[string]bool{credentials.EnvMasterKey: true}
+	if raw, err := credentials.Read(dir); err == nil {
+		for name := range raw {
+			_, bare, ok := strings.Cut(name, ".")
+			if !ok {
+				bare = name
+			}
+			drop[bare] = true
+		}
+	}
+	var env []string
+	for _, kv := range os.Environ() {
+		name, _, _ := strings.Cut(kv, "=")
+		if !drop[name] {
+			env = append(env, kv)
+		}
+	}
+	return append(env, credentials.EnvKeyOff+"=1")
 }

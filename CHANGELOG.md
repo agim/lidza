@@ -9,6 +9,32 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- Tests never see the app's secrets (issue #34): `lidza test`, the
+  browser suite and `lidza verify` start the test processes without
+  `LIDZA_MASTER_KEY`, without any variable named like one of the app's
+  credentials, and with `LIDZA_MASTER_KEY_OFF=1`, which keeps
+  `config/master.key` unread; a test that needs a key sets one itself.
+  An agent environment with the production key no longer seals real
+  values into the test database, and the hook needs no bypass.
+- A browser whose session the server no longer knows (a reset
+  database, a session ended elsewhere) is signed out, not stuck (issue
+  #39): `auth.Optional()` routes, the session route among them, clear
+  the stale cookies and serve the visitor signed out, `{"user": null}`,
+  where they answered 401 and the page spun forever; `auth.Require()`
+  routes still answer 401 and clear them too; a bad bearer token is
+  still a 401.
+- `lidza update` stops when the files it rewrites (`go.mod`, `go.sum`,
+  the Dockerfile, the schema, generated and agent files) have
+  uncommitted changes, naming them and the `git stash` sequence (issue
+  #32); `--commit` commits the update through the hook; otherwise it
+  ends with the commit command. `--allow-dirty` updates anyway.
+- `lidza test` says a failed test-database migration plainly: "FAILED,
+  no test ran", with `lidza test --fresh`, which drops and recreates the
+  test database (only a local one whose name ends in `_test`).
+  `db.DropTestDatabase` does it.
+
 ## v0.1.80 (2026-10-06)
 
 Breaking: a `date` field in `schema.lidza` is a `civil.Date` in Go

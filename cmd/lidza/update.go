@@ -14,8 +14,10 @@ import (
 
 	"golang.org/x/mod/semver"
 
+	"github.com/agim/lidza/pkg/config"
 	"github.com/agim/lidza/pkg/devserver"
 	"github.com/agim/lidza/pkg/scaffold"
+	"github.com/agim/lidza/pkg/schema"
 	"github.com/agim/lidza/pkg/version"
 )
 
@@ -34,8 +36,20 @@ func runUpdate(ctx context.Context, args []string) error {
 	migrate := fs.Bool("migrate", false, "also apply migrations that drop data to the development database")
 	behind := fs.Bool("allow-behind", false, "update even when the branch is behind its upstream, without pulling")
 	noPull := fs.Bool("no-pull", false, "do not pull a branch that is behind; stop instead")
+	commit := fs.Bool("commit", false, "commit the update when it is done (the pre-commit hook runs lidza verify)")
+	allowDirty := fs.Bool("allow-dirty", false, "update even with uncommitted changes in the files it rewrites")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	// The files the update rewrites must be committed first: left mixed
+	// with the update's changes, they block the next pull (the same
+	// update made and merged elsewhere) and cannot be told apart.
+	if !*cliOnly && !*allowDirty {
+		if abs, cfg, err := loadProject(*dir); err == nil && cfg != nil {
+			if dirty := dirtyFiles(ctx, abs, updatePaths(cfg)); len(dirty) > 0 {
+				return fmt.Errorf("update: uncommitted changes in files the update rewrites: %s. Commit them, or set them aside and bring them back after:\n  git stash push -m \"before lidza update\"\n  lidza update\n  git stash show -p   (check, then git stash pop, or git stash drop when the update made them)\n(--allow-dirty updates anyway)", strings.Join(dirty, ", "))
+			}
+		}
 	}
 	// The app's branch first: a teammate's commits may move go.mod to a
 	// newer framework, and updating a stale checkout regenerates from an
@@ -171,8 +185,75 @@ func runUpdate(ctx context.Context, args []string) error {
 		fmt.Printf("[update] lidza dev (pid %d) still runs %s and would regenerate with it: stop it and run lidza dev again\n", pid, v)
 	}
 	fmt.Printf("[update] done: %s; what changed is in CHANGELOG.md of the framework (https://github.com/agim/lidza/blob/%s/CHANGELOG.md)\n", target, target)
+	if changed := dirtyFiles(ctx, abs, updatePaths(cfg)); len(changed) > 0 {
+		msg := "Līdza " + target
+		if *commit {
+			if err := commitUpdate(ctx, abs, updatePaths(cfg), msg); err != nil {
+				return err
+			}
+			fmt.Printf("[update] committed: %s\n", msg)
+		} else {
+			fmt.Printf("[update] commit it before you pull again: git add -A %s && git commit -m %q (lidza update --commit does it)\n", strings.Join(existingPaths(abs, updatePaths(cfg)), " "), msg)
+		}
+	}
 	if current != target {
 		fmt.Println("[update] an agent session with the MCP server open still runs the old server: reconnect it (/mcp in Claude Code) or restart the agent to get the new tools")
+	}
+	return nil
+}
+
+// updatePaths are the files and directories lidza update rewrites: the
+// module files, the deployment files, the schema and everything
+// generated from it, the agent files.
+func updatePaths(cfg *config.Config) []string {
+	paths := []string{"go.mod", "go.sum", "Dockerfile", ".dockerignore", "deploy", schema.FileName}
+	paths = append(paths, generatedPaths(cfg)...)
+	return append(paths, scaffold.AgentPaths...)
+}
+
+// dirtyFiles lists the tracked files under paths with uncommitted
+// changes, staged or not; none outside git.
+func dirtyFiles(ctx context.Context, dir string, paths []string) []string {
+	cmd := exec.CommandContext(ctx, "git", append([]string{"status", "--porcelain", "--untracked-files=no", "--"}, paths...)...)
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	if err != nil {
+		return nil
+	}
+	var files []string
+	for _, l := range strings.Split(strings.TrimRight(string(out), "\n"), "\n") {
+		if len(l) > 3 {
+			files = append(files, strings.TrimSpace(l[3:]))
+		}
+	}
+	return files
+}
+
+// existingPaths keeps the paths that exist under dir: git add refuses
+// one that does not.
+func existingPaths(dir string, paths []string) []string {
+	var out []string
+	for _, p := range paths {
+		if _, err := os.Stat(filepath.Join(dir, p)); err == nil {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// commitUpdate commits the update's files (new ones too: a migration, a
+// skill) through the pre-commit hook.
+func commitUpdate(ctx context.Context, dir string, paths []string, msg string) error {
+	add := exec.CommandContext(ctx, "git", append([]string{"add", "-A", "--"}, existingPaths(dir, paths)...)...)
+	add.Dir = dir
+	if out, err := add.CombinedOutput(); err != nil {
+		return fmt.Errorf("update: git add: %s", strings.TrimSpace(string(out)))
+	}
+	c := exec.CommandContext(ctx, "git", "commit", "-q", "-m", msg)
+	c.Dir = dir
+	c.Stdout, c.Stderr = os.Stdout, os.Stderr
+	if err := c.Run(); err != nil {
+		return fmt.Errorf("update: the commit did not go through (the pre-commit hook says why, above); the update is done but uncommitted")
 	}
 	return nil
 }
@@ -194,7 +275,7 @@ func fastForward(ctx context.Context, dir string, n int, upstream string) error 
 		return strings.TrimSpace(string(out)), err
 	}
 	if dirty, err := git("status", "--porcelain", "--untracked-files=no"); err != nil || dirty != "" {
-		return fmt.Errorf("update: this branch is %d commit(s) behind %s and has uncommitted changes; commit or stash them, then lidza update (it pulls), or git pull yourself", n, upstream)
+		return fmt.Errorf("update: this branch is %d commit(s) behind %s and has uncommitted changes. Commit them, or set them aside:\n  git stash push -m \"before lidza update\"\n  lidza update   (it pulls, then updates)\n  git stash show -p   (check, then git stash pop)", n, upstream)
 	}
 	if ahead, _ := git("rev-list", "--count", "@{u}..HEAD"); ahead != "" && ahead != "0" {
 		return fmt.Errorf("update: this branch and %s have diverged (%d behind, %s ahead); git pull (merge or rebase, as the team does), then lidza update", upstream, n, ahead)

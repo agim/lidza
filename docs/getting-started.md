@@ -251,7 +251,17 @@ branch behind its upstream is pulled when that is a clean fast-forward:
 nothing uncommitted, no local commits the upstream lacks. Otherwise the
 update stops before anything changes and says what to run (commit or
 stash, or `git pull` with the team's merge or rebase). `--no-pull` stops
-instead of pulling; `--allow-behind` updates without pulling. `lidza doctor` reports when
+instead of pulling; `--allow-behind` updates without pulling. It also
+stops when the files it rewrites (`go.mod`, `go.sum`, the Dockerfile,
+the schema, generated files, `AGENTS.md`, the guide) have uncommitted
+changes, and says how to set them aside (`git stash push`), since
+mixed with the update's they block the next pull. When it is done,
+commit it before pulling again: `lidza update --commit` does, through
+the pre-commit hook.
+
+In a team, one person (or one session) makes the project update and
+merges it; everyone else runs `git pull`, then `lidza update --cli-only`
+for the matching CLI. `lidza doctor` reports when
 the CLI and the project's module differ. What changed is in the
 framework's `CHANGELOG.md`.
 

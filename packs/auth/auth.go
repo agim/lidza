@@ -508,8 +508,10 @@ func Require() func(http.Handler) http.Handler {
 
 // Optional is middleware for routes that serve both visitors and users:
 // a request with a valid token gets its user (CurrentUser), one without
-// a token continues anonymously (CurrentUser is nil), and an invalid
-// token or a cross-site cookie is refused as with Require.
+// a token continues anonymously (CurrentUser is nil), and so does one
+// whose cookie session the server no longer knows (its cookies are
+// cleared: the browser is signed out, never stuck on an error); an
+// invalid bearer token or a cross-site cookie is refused as with Require.
 func Optional() func(http.Handler) http.Handler {
 	return guard(false)
 }
@@ -521,6 +523,24 @@ func guard(required bool) func(http.Handler) http.Handler {
 			token, fromCookie := bearer(r)
 			var u *User
 			var err error
+			// A cookie session the server no longer knows (a reset
+			// database, a session ended elsewhere): the browser cannot
+			// remove its HttpOnly cookies, so they are cleared here. An
+			// optional route then serves the visitor signed out, as the
+			// session route must (or a page waits on it forever); a
+			// required one replies 401. A bearer token is the client's
+			// own to fix: 401 either way.
+			staleCookie := false
+			signedOut := func(status int, msg string) {
+				for _, c := range ClearedCookies() {
+					http.SetCookie(w, c)
+				}
+				if required {
+					router.Error(w, status, msg)
+					return
+				}
+				next.ServeHTTP(w, r)
+			}
 			if token != "" {
 				u, err = a.Verify(token)
 			}
@@ -534,8 +554,14 @@ func guard(required bool) func(http.Handler) http.Handler {
 						a.SetCookies(w, renewed)
 						token, fromCookie = renewed.Access, true
 						u, err = a.Verify(token)
+					} else {
+						staleCookie = true
 					}
 				}
+			}
+			if token == "" && staleCookie {
+				signedOut(http.StatusUnauthorized, "authentication required")
+				return
 			}
 			if token == "" {
 				if required {
@@ -546,10 +572,18 @@ func guard(required bool) func(http.Handler) http.Handler {
 				return
 			}
 			if err != nil {
+				if fromCookie {
+					signedOut(http.StatusUnauthorized, "invalid or expired token")
+					return
+				}
 				router.Error(w, http.StatusUnauthorized, "invalid or expired token")
 				return
 			}
 			if u.SessionID != "" && !a.sessionActive(r.Context(), u.SessionID) {
+				if fromCookie {
+					signedOut(http.StatusUnauthorized, "session ended")
+					return
+				}
 				router.Error(w, http.StatusUnauthorized, "session ended")
 				return
 			}

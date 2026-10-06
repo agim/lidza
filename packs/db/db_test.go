@@ -8,6 +8,8 @@ import (
 	"testing"
 	"testing/fstest"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // testURL is the database the tests use; the framework host's lidza_test
@@ -150,5 +152,37 @@ func TestMigrateHoldsDataLoss(t *testing.T) {
 	}
 	if applied, held, err := MigrateUntil(ctx, pool, fsys, HoldDataLoss); err != nil || len(applied) != 4 || held != "" {
 		t.Fatalf("fresh: %v %q %v", applied, held, err)
+	}
+}
+
+// DropTestDatabase drops only a local database whose name ends in _test.
+func TestDropTestDatabase(t *testing.T) {
+	ctx := context.Background()
+	for _, url := range []string{"postgres:///app_dev?host=/var/run/postgresql", "postgres://u:p@db.example.com:5432/app_test"} {
+		if err := DropTestDatabase(ctx, url); err == nil || !strings.Contains(err.Error(), "refusing") {
+			t.Errorf("%s: %v", url, err)
+		}
+	}
+	base := testURL(t)
+	pc, err := pgxpool.ParseConfig(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(pc.ConnConfig.Host, "/") && pc.ConnConfig.Host != "localhost" && pc.ConnConfig.Host != "127.0.0.1" {
+		t.Skip("test database not on this machine")
+	}
+	url := strings.Replace(base, "/"+pc.ConnConfig.Database, "/lidza_droptest_test", 1)
+	if err := EnsureDatabase(ctx, url); err != nil {
+		t.Skipf("no test database: %v", err)
+	}
+	if err := DropTestDatabase(ctx, url); err != nil {
+		t.Fatal(err)
+	}
+	admin, _ := Open(ctx, Config{URL: base, MaxConns: 1, ConnectTimeout: 2 * time.Second})
+	defer admin.Close()
+	var exists bool
+	admin.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM pg_database WHERE datname = 'lidza_droptest_test')`).Scan(&exists)
+	if exists {
+		t.Fatal("not dropped")
 	}
 }

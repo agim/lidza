@@ -152,6 +152,33 @@ func EnsureDatabase(ctx context.Context, url string) error {
 	return err
 }
 
+// DropTestDatabase drops the database url names, for recreating a test
+// database: only one whose name ends in _test, on this machine (a Unix
+// socket or a loopback address), so no other database can be lost
+// through it. Connections to it are ended first.
+func DropTestDatabase(ctx context.Context, url string) error {
+	pc, err := pgxpool.ParseConfig(url)
+	if err != nil {
+		return fmt.Errorf("DATABASE_URL: %w", err)
+	}
+	name, host := pc.ConnConfig.Database, pc.ConnConfig.Host
+	if !strings.HasSuffix(name, "_test") {
+		return fmt.Errorf("refusing to drop %q: only a database whose name ends in _test", name)
+	}
+	if !strings.HasPrefix(host, "/") && host != "localhost" && host != "127.0.0.1" && host != "::1" {
+		return fmt.Errorf("refusing to drop %q on %s: only a database on this machine", name, host)
+	}
+	admin := pc.ConnConfig.Copy()
+	admin.Database = "postgres"
+	conn, err := pgx.ConnectConfig(ctx, admin)
+	if err != nil {
+		return fmt.Errorf("connect to drop %s: %w", name, err)
+	}
+	defer conn.Close(ctx)
+	_, err = conn.Exec(ctx, `DROP DATABASE IF EXISTS `+pgx.Identifier{name}.Sanitize()+` WITH (FORCE)`)
+	return err
+}
+
 // Open creates a pool from cfg and verifies it with one ping.
 func Open(ctx context.Context, cfg Config) (*pgxpool.Pool, error) {
 	if cfg.URL == "" {

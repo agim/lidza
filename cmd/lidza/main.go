@@ -27,10 +27,10 @@ Usage:
   lidza pack add|scaffold|build|list [name]
   lidza db migrate|rollback|status
   lidza benchmark [scenario] [--vus 500] [--duration 1m]
-  lidza test [go test flags] | lidza test --e2e [--install]
+  lidza test [--fresh] [go test flags] | lidza test --e2e [--install]
   lidza verify [--json] [--no-test] [--strict] | lidza verify --install-hook
   lidza doctor
-  lidza update [--to vX.Y.Z|<commit>] [--cli-only] [--migrate] [--no-pull] [--allow-behind]
+  lidza update [--to vX.Y.Z|<commit>] [--cli-only] [--commit] [--migrate] [--no-pull] [--allow-behind] [--allow-dirty]
   lidza context [--dir .] [--stdout]
   lidza api [package] [--filter name] [--list]
   lidza snippet [name]

@@ -271,6 +271,7 @@ func goTest(ctx context.Context, dir string, cfg *config.Config, extra []string,
 	fmt.Fprintln(out, "[lidza] go test ./...")
 	cmd := exec.CommandContext(ctx, "go", append([]string{"test", "./..."}, extra...)...)
 	cmd.Dir = dir
+	cmd.Env = testEnv(dir)
 	cmd.Stdout = out
 	cmd.Stderr = out
 	if err := cmd.Run(); err != nil {

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/agim/lidza/pkg/config"
+	"github.com/agim/lidza/pkg/credentials"
 	"github.com/agim/lidza/pkg/scaffold"
 	"github.com/agim/lidza/pkg/version"
 )
@@ -81,5 +82,27 @@ func TestAgentFilesStamp(t *testing.T) {
 	lcfg, _ := config.Load(local)
 	if _, err := agentFilesCurrent(local, lcfg); err != nil || scaffold.AgentStamp(local) != "" {
 		t.Fatalf("local checkout: %v, stamp %q", err, scaffold.AgentStamp(local))
+	}
+}
+
+// Test processes never see the master key, the key file, or a variable
+// named like one of the app's credentials.
+func TestTestEnv(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv(credentials.EnvMasterKey, strings.Repeat("cd", 32))
+	if err := credentials.Set(dir, map[string]string{"dev.INVOICE_ISSUER_NAME": "Real Co", "API_TOKEN": "real"}); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("INVOICE_ISSUER_NAME", "Real Co")
+	t.Setenv("API_TOKEN", "real")
+	t.Setenv("UNRELATED_SETTING", "kept")
+	env := strings.Join(testEnv(dir), "\n") + "\n"
+	for _, gone := range []string{credentials.EnvMasterKey + "=", "INVOICE_ISSUER_NAME=", "API_TOKEN="} {
+		if strings.Contains(env, "\n"+gone) || strings.HasPrefix(env, gone) {
+			t.Errorf("test env has %s", gone)
+		}
+	}
+	if !strings.Contains(env, "UNRELATED_SETTING=kept\n") || !strings.Contains(env, credentials.EnvKeyOff+"=1\n") {
+		t.Errorf("test env:\n%s", env)
 	}
 }

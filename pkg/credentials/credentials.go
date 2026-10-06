@@ -41,6 +41,10 @@ const (
 	File = "config/credentials.yml.enc"
 	// EnvMasterKey carries the key where no file should exist: production.
 	EnvMasterKey = "LIDZA_MASTER_KEY"
+	// EnvKeyOff=1 makes config/master.key unreadable to the process: lidza
+	// test and verify set it, so tests never open the app's real
+	// credentials. A test that needs a key sets EnvMasterKey itself.
+	EnvKeyOff = "LIDZA_MASTER_KEY_OFF"
 )
 
 // ErrKeyNotHere is Generate's refusal to make a key for a checkout whose
@@ -54,6 +58,9 @@ var ErrNoKey = errors.New("credentials: no master key: " + MasterKeyFile + " is 
 // Key returns the master key: LIDZA_MASTER_KEY, else config/master.key.
 func Key(dir string) ([]byte, error) {
 	raw := strings.TrimSpace(os.Getenv(EnvMasterKey))
+	if raw == "" && os.Getenv(EnvKeyOff) == "1" {
+		return nil, ErrNoKey
+	}
 	if raw == "" {
 		data, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(MasterKeyFile)))
 		if errors.Is(err, os.ErrNotExist) {

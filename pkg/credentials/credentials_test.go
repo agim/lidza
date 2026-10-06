@@ -246,3 +246,24 @@ func TestWriteAtomic(t *testing.T) {
 		t.Fatalf("mode %v", info.Mode().Perm())
 	}
 }
+
+// With the key file off (lidza test, verify), config/master.key is not
+// read; a key set in the environment still is.
+func TestKeyOff(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv(EnvMasterKey, "")
+	if _, err := Generate(dir); err != nil {
+		t.Fatal(err)
+	}
+	if !HasKey(dir) {
+		t.Fatal("no key from the file")
+	}
+	t.Setenv(EnvKeyOff, "1")
+	if HasKey(dir) {
+		t.Fatal("the key file was read with the key off")
+	}
+	t.Setenv(EnvMasterKey, strings.Repeat("ef", 32))
+	if !HasKey(dir) {
+		t.Fatal("a test's own key is refused")
+	}
+}

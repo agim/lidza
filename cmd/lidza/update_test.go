@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/agim/lidza/pkg/config"
 )
 
 func TestNewestOf(t *testing.T) {
@@ -162,5 +164,53 @@ func TestFastForward(t *testing.T) {
 	}
 	if msg := git(b, "log", "-1", "--format=%s"); msg != "local work" {
 		t.Fatalf("head moved: %s", msg)
+	}
+}
+
+// The update's own files: uncommitted ones are found (staged or not, a
+// file elsewhere ignored), and --commit commits them, new files included.
+func TestUpdateDirtyAndCommit(t *testing.T) {
+	dir := t.TempDir()
+	for k, v := range map[string]string{"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.com", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@example.com"} {
+		t.Setenv(k, v)
+	}
+	git := func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	git("init", "-q", "-b", "master")
+	for _, f := range []string{"go.mod", "Dockerfile", "AGENTS.md", "main.go"} {
+		os.WriteFile(filepath.Join(dir, f), []byte(f+"\n"), 0o644)
+	}
+	git("add", ".")
+	git("commit", "-q", "-m", "init")
+	cfg := config.Default("demo", "react")
+	ctx := context.Background()
+	if d := dirtyFiles(ctx, dir, updatePaths(&cfg)); len(d) != 0 {
+		t.Fatalf("clean tree: %v", d)
+	}
+	os.WriteFile(filepath.Join(dir, "go.mod"), []byte("changed\n"), 0o644)
+	os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte("staged\n"), 0o644)
+	git("add", "AGENTS.md")
+	os.WriteFile(filepath.Join(dir, "main.go"), []byte("app work\n"), 0o644)
+	if d := strings.Join(dirtyFiles(ctx, dir, updatePaths(&cfg)), ","); d != "AGENTS.md,go.mod" {
+		t.Fatalf("dirty: %s", d)
+	}
+	os.MkdirAll(filepath.Join(dir, "db", "migrations"), 0o755)
+	os.WriteFile(filepath.Join(dir, "db", "migrations", "0001_x.up.sql"), []byte("SELECT 1;\n"), 0o644)
+	if err := commitUpdate(ctx, dir, updatePaths(&cfg), "Līdza v9.9.9"); err != nil {
+		t.Fatal(err)
+	}
+	if files := git("show", "--name-only", "--format=%s", "HEAD"); files != "Līdza v9.9.9\n\nAGENTS.md\ndb/migrations/0001_x.up.sql\ngo.mod" {
+		t.Fatalf("commit:\n%s", files)
+	}
+	if st := git("status", "--porcelain"); st != "M main.go" {
+		t.Fatalf("the app's own work was committed or lost: %q", st)
 	}
 }

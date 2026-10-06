@@ -74,7 +74,7 @@ func TestNewReact(t *testing.T) {
 	if read("CLAUDE.md") != "@AGENTS.md\n" || read("GEMINI.md") != "@AGENTS.md\n" {
 		t.Errorf("CLAUDE.md and GEMINI.md should be the line @AGENTS.md: %q %q", read("CLAUDE.md"), read("GEMINI.md"))
 	}
-	if !strings.Contains(read("AGENTS.md"), "<!-- lidza:recipes -->`start-with-brief`, `add-api-route`, `add-resource`, `add-sign-in`, `scope-query-to-signed-in-user`, `add-page`, `set-head-of-page`, `add-pack-capability`, `add-mcp-tool`, `send-email`, `add-background-job`, `publish-live-updates`, `add-llm-feature`, `store-file`, `receive-webhook`, `connect-external-account`, `add-paginated-filterable-list`, `dates-and-time-zones`, `roles-and-permissions`, `record-audit-event`, `add-admin-pages`, `extend-admin-pages`, `add-recipe`, `write-test`, `organize-application-packages`<!-- /lidza:recipes -->") {
+	if !strings.Contains(read("AGENTS.md"), "<!-- lidza:recipes -->`start-with-brief`, `add-api-route`, `add-resource`, `add-sign-in`, `scope-query-to-signed-in-user`, `add-page`, `set-head-of-page`, `add-responsive-image`, `add-pack-capability`, `add-mcp-tool`, `send-email`, `add-background-job`, `publish-live-updates`, `add-llm-feature`, `store-file`, `receive-webhook`, `connect-external-account`, `add-paginated-filterable-list`, `dates-and-time-zones`, `roles-and-permissions`, `record-audit-event`, `add-admin-pages`, `extend-admin-pages`, `add-recipe`, `write-test`, `organize-application-packages`<!-- /lidza:recipes -->") {
 		t.Errorf("AGENTS.md should list the recipes: %s", read("AGENTS.md"))
 	}
 	// An app recipe: added to the guide, generated, listed in the agent files.
@@ -446,5 +446,35 @@ func TestFrameworkBlockAppDir(t *testing.T) {
 	root := config.Default("demo", "react")
 	if block, _ := frameworkBlock(dataFor(&root, "")); !strings.Contains(block, "(`routes.go`, `router.Route`") {
 		t.Error("root app: routes.go")
+	}
+}
+
+// TestAddPageRecipePerTemplate: each template's guide has one "Add a
+// page" recipe, written for that template, so the add-page skill an
+// agent loads matches the app's frontend.
+func TestAddPageRecipePerTemplate(t *testing.T) {
+	for template, want := range map[string]string{
+		"react":  "src/router.tsx",
+		"svelte": "src/App.svelte",
+		"astro":  "src/pages/things.astro",
+		"htmx":   "pageTemplates",
+	} {
+		cfg := config.Default("shop", template)
+		guide, err := renderBytes("lidza-guide.md.tmpl", dataFor(&cfg, ""))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var page []recipes.Recipe
+		for _, r := range recipes.Parse(string(guide)) {
+			if r.Name == "add-page" {
+				page = append(page, r)
+			}
+		}
+		if len(page) != 1 {
+			t.Fatalf("%s: %d add-page recipes", template, len(page))
+		}
+		if body := recipes.Skill(page[0]); !strings.Contains(body, want) {
+			t.Errorf("%s: add-page does not mention %s:\n%s", template, want, body)
+		}
 	}
 }

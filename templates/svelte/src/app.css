@@ -9,6 +9,12 @@ body {
   margin: 0;
 }
 
+/* Images never push the page wider; their height follows the width. */
+img {
+  max-width: 100%;
+  height: auto;
+}
+
 nav {
   display: flex;
   gap: 1rem;

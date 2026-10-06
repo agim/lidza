@@ -89,6 +89,7 @@ app into an importable package and name it in `lidza.json`:
 | `lidza install [--packs db,auth,mail] [--agent claude]` | on an existing app: enables the packs (db added when one needs it), writes `.env` from `.env.example` with a random `AUTH_SECRET` and the app's database, writes `.env.test`, generates, creates and migrates the dev and test databases, installs `node_modules`, installs the agent CLI when asked, makes the first commit. On a clone or after a pull it adds to `.env` what packs enabled since need and applies new migrations; one that drops data (`-- review: data loss`) waits for `--migrate`. `lidza new --packs ...` runs it for a new app; `lidza setup` is its former name. Rerunning is safe. |
 | `lidza ship [--domains a.example.com] [--email ops@example.com] [--no-e2e]` | before a deploy: `lidza verify`, the browser suite against the built binary, the production build, `deploy/production.env`; stops at the first failure. Then it names the settings the enabled packs need in production that neither the credentials nor `deploy.env` hold, or hold with a development-only value (`CACHE_URL`, `APP_URL`, `LLM_PROVIDER=fake`). The app's production settings that are not secrets (`MAIL_PROVIDER`, `STORAGE_BUCKET`, `STORAGE_PREFIX`) go in `lidza.json` under `deploy.env`, which ship writes into `deploy/production.env` on every run; a name that looks like a secret there is refused. |
 | `lidza verify [--json] [--no-test] [--allow-test-changes]` | before a commit: regenerates and requires the generated files to be staged, refuses staged changes that weaken the tests, runs the checks, runs the Go tests. The pre-commit hook in `.githooks/` runs it (`git commit --no-verify` skips once; `lidza verify --install-hook` sets it up again). The test guard compares the staged changes with `HEAD` and names each file and line that deletes a test file (`*_test.go`, `*.spec.ts`, `*.test.ts(x)`), adds `t.Skip`, `t.Skipf`, `t.SkipNow`, `test.skip`, `it.skip`, `describe.skip`, `.only` or `.fixme`, or removes more assertions (`t.Error`, `t.Fatal`, `expect(`, `assert.`) from a file than it adds, or swaps an assertion's matcher for a looser one (`toBe` to `toBeTruthy`, `assert.Equal` to `assert.NotNil`). An assertion whose expected text changes and nothing else (a copy update: `'Security'` to `'Sign-in security'`) passes, and the verify report lists each one, old and new, for the developer to see. A deliberate change is confirmed with `LIDZA_ALLOW_TEST_CHANGES=1 git commit ...` (or `lidza verify --allow-test-changes`); one skip with a stated reason passes with a `// lidza:allow-skip <reason>` comment on its line or the line above. A test is never weakened to make it pass: if it is wrong, the agent says so and the developer confirms. |
+| `lidza gen llms [--force]` | writes a starting `llms.txt` (llmstxt.org) for visiting agents: the app's name as the H1, a summary to write, a link per page the last build prerendered by its title. It goes in `public/` (`static/` in the htmx template) and is served at `/llms.txt` as text. It is public content: what an agent needs to use the site, never the guides, handlers, routes or configuration. Without it `/llms.txt` is a 404. |
 | `lidza audit layout [--viewport 1440x900,390x844] [--theme light,dark] [--routes /a,/b] [--max-scroll -1] [--stability 6s [--trigger JS] [--allow SELECTORS]] [--base-url URL] [--storage-state FILE \| --login FILE] [--json]` | builds and starts the app on the test database (as `lidza test --e2e`), visits every page the build prerenders plus `--routes`, signed in as a throwaway user when the auth pack runs, at each viewport and theme, and reports what scrolls: sideways is a fault (the elements past the edge are named), down is a fault past `--max-scroll` pixels (`-1`, the default, only reports it; an app whose design says no page scrolls sets `0`). Containers that scroll on their own (a wide table in its wrapper) are listed with their sizes, never a fault. `--stability 6s` scrolls them, runs `--trigger` (a refresh call) or waits, and faults one a re-render reset or that lost the focus inside it; a log that follows its tail on purpose is named in `--allow` or carries `data-audit-follow`. `--base-url` audits an app already running (any Go app with Playwright in `node_modules`), signed in with `--storage-state` (a Playwright storage state) or `--login` (a module whose default export, `async (page, baseURL)`, signs in). A hash route is a same-document navigation, without an HTTP status. Exits non-zero on a fault. The same checks for specs: `expectNoSidewaysScroll(page)` and `expectFitsViewport(page)` from `e2e/layout.ts`. |
 | `lidza doctor` | toolchain, services, `node_modules`, pack builds, e2e browser; each missing item with its fix. |
 | `lidza pack scaffold <name>` | creates `packs/<name>` with a crate and an example capability; `lidza pack build` compiles it. |
@@ -710,6 +711,36 @@ SSR sidecar.
    nil).WithContext(srv.Context())` (`srv` from `lidzatest.Start`) and
    check `Title`, `Canonical` and the 404 `Status`. `lidza check`, then
    `lidza test`.
+
+### Add a responsive image
+
+Ship each image at the size the screen needs, in AVIF or WebP, without
+layout shift.
+
+1. Put the image under `src/` (not `public/`, which is copied as it is)
+   and import it with `?responsive`: `import hero from
+   './hero.jpg?responsive'`. The build (`vite-imagetools`, configured in
+   `vite.config.ts`) writes it at 480, 800, 1200, 1600 and 2400 pixels
+   wide (those below its own width, then its own) in AVIF, WebP and the
+   original format, content-hashed in `dist/assets/`, which the binary
+   caches for a year. No encoder to install: `npm install` brings one.
+2. Render it with `<Picture image={hero} alt="..."
+   sizes="(min-width: 768px) 50vw, 100vw" />` from `src/picture.tsx`. `sizes`
+   says how wide the image is drawn, so the browser downloads one
+   variant that fits; the default, `100vw`, is right only for a
+   full-width image. The width and height it carries keep the page from
+   shifting while it loads.
+3. The largest image of the first screen (the LCP element) gets
+   `priority`: loaded eagerly and first. Every other image loads lazily.
+   Never preload the variants by hand.
+4. An app made before `vite-imagetools` was in the template: `npm i -D
+   vite-imagetools`, then copy `vite.config.ts`'s `responsive` lines,
+   the `?responsive` declaration in `src/vite-env.d.ts` and `src/picture.tsx` from
+   a new app (`lidza new tmp --template react`).
+5. Images people upload are the media pack's (resized and converted on
+   upload, "Store a file"); this recipe is for the images the app ships.
+6. `alt` describes the image for someone who cannot see it; an image
+   that only decorates gets `alt=""`.
 
 ### Add a pack capability
 
@@ -2094,7 +2125,10 @@ guard an outbound dependency with `resilience.New(...)`.
 ## Deployment
 
 `lidza build` makes `bin/notes`: the frontend embedded, no Node at
-runtime (except `LIDZA_SSR=1`). `Dockerfile` builds the same into an
+runtime (except `LIDZA_SSR=1`), with a Brotli and a gzip copy of each
+compressible file it serves to browsers that accept one (pages built
+per request are gzipped as they go out; `docs/deploy.md` has the
+details and the proxy alternative). `Dockerfile` builds the same into an
 image that runs as a non-root user on port 3000 (the binary, `db/`,
 `mail/`, `admin/` and the sealed credentials; the master key comes from
 `LIDZA_MASTER_KEY` in the environment, and the local storage provider

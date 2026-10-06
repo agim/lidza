@@ -3,6 +3,7 @@ package devserver
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"testing/fstest"
 )
@@ -83,7 +84,14 @@ func TestStaticLocales(t *testing.T) {
 		if rec.Code != 200 {
 			t.Fatalf("%s: %d", target, rec.Code)
 		}
-		return rec.Body.String(), rec.Header().Get("Vary")
+		// The language variation; every page varies by Accept-Encoding.
+		var vary []string
+		for _, v := range rec.Header().Values("Vary") {
+			if v != "Accept-Encoding" {
+				vary = append(vary, v)
+			}
+		}
+		return rec.Body.String(), strings.Join(vary, ", ")
 	}
 	h := Static(dist)
 	cases := []struct {

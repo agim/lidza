@@ -23,7 +23,7 @@ Usage:
   lidza dev   [--dir .] [--addr 127.0.0.1:3000]
   lidza build [--dir .] [--out bin/<name>]
   lidza check [--dir .] [--json]
-  lidza gen [--dir .] | lidza gen resource <Model> [--force] [--public | --shared]
+  lidza gen [--dir .] | lidza gen resource <Model> [--force] [--public | --shared] | lidza gen llms [--force]
   lidza pack add|scaffold|build|list [name]
   lidza db migrate|rollback|status | lidza db new "<description>"
   lidza benchmark [scenario] [--vus 500] [--duration 1m]
@@ -51,7 +51,8 @@ Commands:
   check    run go vet, staticcheck, cargo check and tsc; one diagnostics list
   gen      generate from schema.lidza (Go, SQL, migrations, Rust), the packs and the handlers (OpenAPI, @lidza/client);
            gen resource <Model>: queries, Create/Update types, handlers and routes for a model,
-             signed-in and scoped to its owner (ownerId, userId, @ref(User)) unless --public
+             signed-in and scoped to its owner (ownerId, userId, @ref(User)) unless --public;
+           gen llms: a public llms.txt to fill in (name, summary, a link per prerendered page)
   pack     add official packs (db, realtime, media, geo), scaffold, build and list local ones
   db       apply, revert and list migrations (lidza/db pack)
   benchmark  run a k6 scenario from benchmarks/ against the running app; heap before and after

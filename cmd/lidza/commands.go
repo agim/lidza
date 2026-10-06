@@ -194,6 +194,11 @@ func runBuild(ctx context.Context, args []string) error {
 		if err := devserver.KeepDist(cfg.Dir, cfg.Frontend.Dist); err != nil {
 			return err
 		}
+		if n, saved, err := compressDist(cfg.Dir, cfg.Frontend.Dist); err != nil {
+			return fmt.Errorf("compressing the build: %w", err)
+		} else if n > 0 {
+			fmt.Printf("[lidza] compressed %d file(s): %d KB less with Brotli\n", n, saved/1024)
+		}
 		if _, err := os.Stat(filepath.Join(cfg.Dir, cfg.Frontend.Dist, "index.html")); err != nil {
 			return fmt.Errorf("frontend build produced no %s/index.html", cfg.Frontend.Dist)
 		}

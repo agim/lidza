@@ -12,7 +12,8 @@ import (
 // of its own.
 const ShellFile = ".server/index.html"
 
-// Static serves a built single-page app from dist: files by path, hashed
+// Static serves a built single-page app from dist: files by path (the
+// .br or .gz copy lidza build stored when the request accepts it), hashed
 // assets under /assets/ with a long cache lifetime, prerendered pages at
 // <path>/index.html, and the shell for every other path (client-side
 // routing). When the build has a page per locale (dist/.locales), pages
@@ -20,8 +21,8 @@ const ShellFile = ".server/index.html"
 // does (WithLocale passes the pack's own negotiation). WithHead sets each
 // page's <head> per request.
 func Static(dist fs.FS, opts ...Option) http.Handler {
-	files := http.FileServerFS(dist)
 	o := collect(opts)
+	tags := &etags{}
 	loc := loadLocales(dist, o.locale)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		name := strings.TrimPrefix(path.Clean("/"+r.URL.Path), "/")
@@ -73,8 +74,7 @@ func Static(dist fs.FS, opts ...Option) http.Handler {
 			} else {
 				w.Header().Set("Cache-Control", "no-cache")
 			}
-			r.URL.Path = "/" + name
-			files.ServeHTTP(w, r)
+			sendFile(w, r, dist, name, tags)
 			return
 		}
 		// Any other path is the app's to route in the browser. It gets the
@@ -91,10 +91,7 @@ func Static(dist fs.FS, opts ...Option) http.Handler {
 		}
 		index, status := withHead(o.head, r, index)
 		allowInline(w.Header(), index)
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Header().Set("Cache-Control", "no-cache")
-		w.WriteHeader(status)
-		_, _ = w.Write(index)
+		writePage(w, r, status, index)
 	})
 }
 
@@ -108,13 +105,10 @@ func servePage(w http.ResponseWriter, r *http.Request, dist fs.FS, file string, 
 	}
 	page, status := withHead(head, r, page)
 	allowInline(w.Header(), page)
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-cache")
 	if varies {
 		w.Header().Add("Vary", "Accept-Language, Cookie")
 	}
-	w.WriteHeader(status)
-	_, _ = w.Write(page)
+	writePage(w, r, status, page)
 	return true
 }
 

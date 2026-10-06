@@ -37,6 +37,11 @@ func pages() http.Handler {
 		panic(err) // static is embedded above: only a mistyped name fails
 	}
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServerFS(static)))
+	// /llms.txt for visiting agents, from static/llms.txt (lidza gen
+	// llms writes it); a 404 until it exists.
+	mux.HandleFunc("GET /llms.txt", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFileFS(w, r, static, "llms.txt")
+	})
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		renderPage(w, "index", map[string]any{"Title": "__LIDZA_APP_NAME__"})
 	})

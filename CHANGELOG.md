@@ -9,6 +9,37 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- Responsive images in the react and svelte templates: `import hero
+  from './hero.jpg?responsive'` builds 480 to 2400 pixel widths (up to
+  the image's own) in AVIF, WebP and the original format, content-hashed
+  in `dist/assets/` (`vite-imagetools`, which brings its encoder with
+  `npm install`), and `<Picture image={hero} alt sizes priority />`
+  (`src/picture.tsx`, `src/Picture.svelte`) renders the sources, the
+  fallback, the intrinsic size and the loading priority. Recipe "Add a
+  responsive image" (Astro's `astro:assets` for the astro template);
+  apps made earlier copy three files, as it says. (#41)
+- The `add-page` skill (and the guide's "Add a page") is written for the
+  app's template: Svelte and Astro apps were given the React recipe
+  (`src/router.tsx`, `useQuery`), and htmx apps had none; each now has
+  its own (a view in `App.svelte`; a page in `src/pages/`; a view,
+  `pageTemplates` entry and route in `pages.go`). `lidza update`
+  refreshes the skills.
+- `lidza gen llms` writes a starting `llms.txt` for visiting agents
+  (the app's name as the H1, a summary to write, a link per prerendered
+  page by its title) in `public/`, served at `/llms.txt` as text; the
+  htmx template serves it from `static/llms.txt`. Opt-in: without it
+  `/llms.txt` is a 404. (#41)
+- `lidza build` stores a Brotli (`.br`) and gzip (`.gz`) copy of each
+  compressible frontend file of 1 KB or more, and the binary serves the
+  one `Accept-Encoding` admits (quality values and exclusions honoured)
+  with the original's type, `Vary: Accept-Encoding`, the copy's length
+  and its own ETag; HEAD, 304 and ranges keep working (a range gets the
+  uncompressed file). Pages built per request (`Head`, locales, the
+  shell) are gzipped as they go out and carry an ETag, so an
+  unchanged page revalidates with a 304. API responses are unchanged.
+  (#41)
 ## v0.1.86 (2026-10-06)
 
 - `lidza audit layout` lists the containers that scroll on their own

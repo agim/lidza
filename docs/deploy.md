@@ -20,6 +20,17 @@ drop it, or copy the checkout into the build context, before building an
 image. Rust packs need the Rust toolchain in the builder: uncomment the
 two lines.
 
+`lidza build` also stores a Brotli (`.br`) and a gzip (`.gz`) copy of
+every compressible file of the frontend build (HTML, CSS, JavaScript,
+JSON, SVG, text) of 1 KB or more, embedded with the rest. The binary
+sends the copy a request accepts (`Accept-Encoding`, quality values
+honoured), with the original's type, `Vary: Accept-Encoding`, its own
+length and ETag; HEAD and 304s work for every representation, and a
+range request gets the uncompressed file. Pages built per request (a
+`Head`, a locale) are gzipped as they go out. API responses are not
+compressed by the binary. A build made with `npm run build` alone has
+no copies and is served uncompressed.
+
 ## Configuration
 
 The binary reads `.env`, then `.env.<mode>`, then the process
@@ -156,7 +167,12 @@ What the server needs, and what `lidza doctor` checks in the project:
 ## In front of it
 
 Or terminate TLS in a reverse proxy (Caddy, nginx, a load balancer) and
-forward `Host`, `X-Forwarded-For` and `X-Forwarded-Proto`. The rate
+forward `Host`, `X-Forwarded-For` and `X-Forwarded-Proto`. A proxy may
+compress too (Caddy `encode zstd gzip`, nginx `gzip on`); it passes an
+already-compressed response through, so the two do not conflict, and it
+is the way to compress API responses. Check what reaches the browser
+through the proxy: `curl -sI -H 'Accept-Encoding: br, gzip'
+https://app.example.com/` shows `Content-Encoding`. The rate
 limiters key on the client address by default; behind a proxy, key on
 the forwarded address (`middleware.RateLimitOptions.Key`,
 `auth.ThrottleBy`). Route `/healthz` (liveness) and `/readyz`

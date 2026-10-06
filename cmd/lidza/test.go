@@ -270,6 +270,11 @@ func startTestApp(ctx context.Context, dir string, cfg *config.Config) (base str
 		if err := devserver.KeepDist(dir, cfg.Frontend.Dist); err != nil {
 			return "", nil, err
 		}
+		if n, saved, err := compressDist(dir, cfg.Frontend.Dist); err != nil {
+			return "", nil, fmt.Errorf("compressing the build: %w", err)
+		} else if n > 0 {
+			fmt.Printf("[lidza] compressed %d file(s): %d KB less with Brotli\n", n, saved/1024)
+		}
 	}
 	fmt.Println("[lidza] go build")
 	if err := run(ctx, dir, "go", "build", "-o", bin, "."); err != nil {

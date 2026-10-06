@@ -35,6 +35,9 @@ func runGen(ctx context.Context, args []string) error {
 	if len(args) > 0 && args[0] == "deploy" {
 		return runGenDeploy(ctx, args[1:])
 	}
+	if len(args) > 0 && args[0] == "llms" {
+		return runGenLLMS(ctx, args[1:])
+	}
 	if len(args) == 4 && args[0] == "--merge-lock" {
 		return mergeLockDriver(args[1], args[2], args[3])
 	}

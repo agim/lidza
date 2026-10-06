@@ -85,6 +85,13 @@ func runAudit(ctx context.Context, args []string) error {
 		schemes = append(schemes, t)
 	}
 	os.Setenv(devserver.EnvMode, "test")
+	// With --json, stdout is the report alone: the build, the app and
+	// the browser write to stderr.
+	stdout := os.Stdout
+	if *asJSON {
+		os.Stdout = os.Stderr
+		defer func() { os.Stdout = stdout }()
+	}
 	if err := devserver.EnsureNodeModules(ctx, abs, os.Stdout); err != nil {
 		return err
 	}
@@ -133,7 +140,7 @@ func runAudit(ctx context.Context, args []string) error {
 	}
 	faults := auditFaults(report.Results, *maxScroll)
 	if *asJSON {
-		e := json.NewEncoder(os.Stdout)
+		e := json.NewEncoder(stdout)
 		e.SetIndent("", "  ")
 		e.Encode(map[string]any{"status": map[bool]string{true: "ok", false: "fault"}[faults == 0], "signedIn": report.SignedIn, "results": report.Results})
 	} else {

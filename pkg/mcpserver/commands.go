@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -229,6 +230,23 @@ func addCommandTools(s *server.MCPServer, dir string, cfg *config.Config, after 
 			}
 			if req.GetBool("no_e2e", false) {
 				args = append(args, "--no-e2e")
+			}
+			return args, nil
+		}},
+		{"lidza_audit_layout", "Build and start the app on the test database, visit every page the frontend build prerenders (plus routes) signed in as a throwaway user, at each viewport and theme, and report what scrolls: sideways is a fault (the elements past the edge are named), down a fault past max_scroll pixels. Run it after a layout change; fix the named elements until status is \"ok\".", []mcp.ToolOption{
+			mcp.WithString("viewport", mcp.Description("Viewports, WIDTHxHEIGHT, comma-separated (default 1440x900,390x844).")),
+			mcp.WithString("theme", mcp.Description("light, dark or light,dark (default light).")),
+			mcp.WithString("routes", mcp.Description("Pages besides the prerendered ones, comma-separated, e.g. /posts/1.")),
+			mcp.WithNumber("max_scroll", mcp.Description("Pixels a page may scroll down before it is a fault; -1 (default) only reports it, 0 when no page may scroll.")),
+		}, 15 * time.Minute, true, false, func(req mcp.CallToolRequest) ([]string, error) {
+			args := []string{"audit", "layout", "--json"}
+			for _, f := range []string{"viewport", "theme", "routes"} {
+				if v := req.GetString(f, ""); v != "" {
+					args = append(args, "--"+f, v)
+				}
+			}
+			if v := req.GetInt("max_scroll", -1); v >= 0 {
+				args = append(args, "--max-scroll", strconv.Itoa(v))
 			}
 			return args, nil
 		}},

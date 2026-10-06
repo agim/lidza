@@ -9,6 +9,13 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- `lidza audit layout` is an MCP tool, `lidza_audit_layout` (viewport,
+  theme, routes, max_scroll), so an agent checks its own layout changes;
+  v0.1.82 shipped the command without it. With `--json` the build and
+  the app write to stderr and stdout is the report alone.
+
 ## v0.1.82 (2026-10-06)
 
 - `lidza audit layout` (issue #38) builds and starts the app on the test

@@ -9,7 +9,7 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
-## Unreleased
+## v0.1.85 (2026-10-06)
 
 - `SECURITY_CONTACT` serves `/.well-known/security.txt` (RFC 9116):
   the contacts (an email becomes `mailto:`; `https://` and `tel:` URLs

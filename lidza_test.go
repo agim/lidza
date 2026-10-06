@@ -159,6 +159,36 @@ func TestHandlerCSP(t *testing.T) {
 	}
 }
 
+// TestHandlerHSTS: an app served over HTTPS (APP_URL) sends DefaultHSTS
+// outside dev mode and none over HTTP or in dev; its own value is sent
+// as set; NoHSTS sends none.
+func TestHandlerHSTS(t *testing.T) {
+	for _, c := range []struct{ mode, url, policy, want string }{
+		{"", "https://example.com", "", middleware.DefaultHSTS},
+		{"test", "https://example.com", "", middleware.DefaultHSTS},
+		{"", "http://localhost:3000", "", ""},
+		{"", "", "", ""},
+		{"dev", "https://example.com", "", ""},
+		{"", "https://example.com", middleware.HSTSSubdomains, middleware.HSTSSubdomains},
+		{"", "https://example.com", middleware.NoHSTS, ""},
+	} {
+		t.Setenv(devserver.EnvMode, c.mode)
+		t.Setenv(devserver.EnvFrontendURL, "")
+		t.Setenv("APP_URL", c.url)
+		h, err := Handler(App{HSTS: c.policy, Dist: fstest.MapFS{"index.html": {Data: []byte("app")}}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, path := range []string{"/", "/api/v1/health"} {
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+			if got := rec.Header().Get("Strict-Transport-Security"); got != c.want {
+				t.Errorf("mode %q, APP_URL %q, HSTS %q, %s: sent %q, want %q", c.mode, c.url, c.policy, path, got, c.want)
+			}
+		}
+	}
+}
+
 func TestHandlerHead(t *testing.T) {
 	t.Setenv(devserver.EnvMode, "")
 	h, err := Handler(App{

@@ -69,6 +69,12 @@ type App struct {
 	// microphone and location off); an app that asks for the visitor's
 	// location sets middleware.AllowGeolocation.
 	PermissionsPolicy string
+	// HSTS is the Strict-Transport-Security value. Empty sends
+	// middleware.DefaultHSTS outside dev mode when APP_URL is https://
+	// (as LIDZA_TLS_DOMAINS sets it), and none otherwise;
+	// middleware.HSTSSubdomains covers the subdomains too, and
+	// middleware.NoHSTS sends none.
+	HSTS string
 	// Head sets the <head> of each page served from Dist (the shell and
 	// the prerendered pages, the SSR sidecar's and, under lidza dev, the
 	// dev server's): title, description, canonical address, social tags
@@ -407,7 +413,7 @@ func handler(app App, services *Services) (http.Handler, *devserver.Sidecar, err
 	}
 	all := devserver.Split(router.APIPrefix, api, opsThenFrontend(ops, mounted(r.Mounts(), frontend), os.Getenv(devserver.EnvMode) == "dev"))
 	mw := append([]middleware.Middleware{
-		middleware.SecureHeaders(middleware.SecureHeadersOptions{CSP: csp(app.CSP), PermissionsPolicy: app.PermissionsPolicy}),
+		middleware.SecureHeaders(middleware.SecureHeadersOptions{CSP: csp(app.CSP), PermissionsPolicy: app.PermissionsPolicy, HSTS: hsts(app.HSTS) != "", HSTSPolicy: hsts(app.HSTS)}),
 		servicesMiddleware(services),
 	}, app.Middleware...)
 	return middleware.Chain(all, mw...), sidecar, nil
@@ -419,6 +425,20 @@ func csp(set string) string {
 		return middleware.DefaultCSP
 	}
 	return set
+}
+
+// hsts is the Strict-Transport-Security an app sends: its own, or
+// DefaultHSTS when it is served over HTTPS outside dev mode; "" for none.
+func hsts(set string) string {
+	switch {
+	case set == middleware.NoHSTS:
+		return ""
+	case set != "":
+		return set
+	case os.Getenv(devserver.EnvMode) != "dev" && strings.HasPrefix(os.Getenv("APP_URL"), "https://"):
+		return middleware.DefaultHSTS
+	}
+	return ""
 }
 
 // mounted serves the router's mounts (the admin pages, a webhook) by path

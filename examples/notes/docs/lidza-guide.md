@@ -1953,6 +1953,13 @@ microphone=(), geolocation=()`. `lidza.App` in `main.go` sets the rest:
   camera and microphone still off); with the default the browser refuses
   without showing the prompt. Name any other feature the same way
   (`camera=(self)`) and keep the rest off.
+- `HSTS`: the Strict-Transport-Security header. Empty sends
+  `middleware.DefaultHSTS` (`max-age=31536000`: browsers keep to HTTPS
+  for a year) wherever `APP_URL` is `https://` outside `lidza dev`, which
+  `LIDZA_TLS_DOMAINS` sets, and a deploy behind a TLS proxy sets in its
+  environment; nothing over HTTP. `middleware.HSTSSubdomains` covers
+  every subdomain too: only when the app owns the whole domain.
+  `middleware.NoHSTS` sends none.
 
 ## Secrets
 

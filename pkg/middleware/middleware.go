@@ -261,8 +261,12 @@ type SecureHeadersOptions struct {
 	// is for production builds; lidza.App sends DefaultCSP there unless
 	// it sets its own.
 	CSP string
-	// HSTS enables Strict-Transport-Security for a year; only behind TLS.
+	// HSTS enables Strict-Transport-Security: HSTSPolicy, or a year with
+	// the subdomains when that is empty. Only for an app served over
+	// HTTPS (browsers ignore it over HTTP).
 	HSTS bool
+	// HSTSPolicy is the Strict-Transport-Security value when HSTS is set.
+	HSTSPolicy string
 	// PermissionsPolicy is the Permissions-Policy value; empty sends
 	// DefaultPermissionsPolicy, which turns off the camera, the
 	// microphone and location. An app that asks for one of them names it
@@ -297,6 +301,19 @@ const (
 	DefaultCSP = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
 	// NoCSP sends no Content-Security-Policy at all.
 	NoCSP = "off"
+)
+
+// Strict-Transport-Security values for lidza.App.HSTS.
+const (
+	// DefaultHSTS is what an app whose APP_URL is https:// sends outside
+	// dev mode: browsers use HTTPS for its host for a year. Subdomains
+	// are left out: they may be other services, so including them is the
+	// domain owner's choice (HSTSSubdomains).
+	DefaultHSTS = "max-age=31536000"
+	// HSTSSubdomains extends the year to every subdomain of the host.
+	HSTSSubdomains = "max-age=31536000; includeSubDomains"
+	// NoHSTS sends no Strict-Transport-Security header.
+	NoHSTS = "off"
 )
 
 // AddCSP returns policy with sources added to one directive. A fetch
@@ -376,7 +393,11 @@ func SecureHeaders(o SecureHeadersOptions) Middleware {
 				h.Set("Content-Security-Policy", o.CSP)
 			}
 			if o.HSTS {
-				h.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+				if o.HSTSPolicy != "" {
+					h.Set("Strict-Transport-Security", o.HSTSPolicy)
+				} else {
+					h.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+				}
 			}
 			next.ServeHTTP(w, r)
 		})

@@ -9,6 +9,14 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- An app whose `APP_URL` is `https://` sends `Strict-Transport-Security:
+  max-age=31536000` outside `lidza dev` (it never sent one: the option
+  existed but nothing turned it on). `App.HSTS` sets the value:
+  `middleware.HSTSSubdomains` for every subdomain, `middleware.NoHSTS`
+  for none.
+
 ## v0.1.83 (2026-10-06)
 
 - `lidza audit layout` is an MCP tool, `lidza_audit_layout` (viewport,

@@ -9,6 +9,18 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- `lidza audit performance` (MCP `lidza_audit_performance`) builds and
+  starts the app, or uses `--base-url`, and loads each page cold on a
+  throttled phone, `--samples` times: median FCP, LCP, CLS and TBT, the
+  bytes by kind, the JavaScript that does not run on load, and advice
+  (uncompressed text, assets cached briefly, oversized or unsized
+  images, a lazy LCP image, missing title, `lang`, viewport or
+  description, an `llms.txt` served as HTML). Pages over a `--budget`
+  are faults. It runs on the app's Playwright; no Lighthouse install.
+  `lidza audit layout` and `performance` share the start-up and the
+  sign-in options. (#41)
 ## v0.1.87 (2026-10-06)
 
 - Responsive images in the react and svelte templates: `import hero

@@ -118,3 +118,69 @@ func TestAuditLayout(t *testing.T) {
 		t.Errorf("--login: %+v", r)
 	}
 }
+
+// TestAuditPerformance runs lidza audit performance against fixture
+// pages at --base-url: a page with JavaScript it never runs, sent
+// uncompressed, an image far larger than drawn and without a size, and
+// no description is reported with each finding and faults on a small
+// JS budget; an llms.txt served as HTML is a fault.
+func TestAuditPerformance(t *testing.T) {
+	unused := "function never" + strings.Repeat("x", 10) + "() { return " + strings.Repeat("'unused code that never runs' + ", 2000) + "'' }\nwindow.ran = true\n"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/app.js":
+			w.Header().Set("Content-Type", "text/javascript")
+			w.Write([]byte(unused))
+		case "/big.svg":
+			w.Header().Set("Content-Type", "image/svg+xml")
+			w.Write([]byte(`<svg xmlns="http://www.w3.org/2000/svg" width="3000" height="2000"><rect width="3000" height="2000" fill="#241821"/></svg>`))
+		case "/llms.txt":
+			w.Header().Set("Content-Type", "text/html")
+			w.Write([]byte("<!doctype html><div id=app></div>"))
+		default:
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Write([]byte(`<!doctype html><html lang="en"><meta name="viewport" content="width=device-width"><title>Fixture</title><body><h1>Fixture</h1><img src="/big.svg" alt="" style="width:100px"><script src="/app.js"></script>`))
+		}
+	}))
+	defer srv.Close()
+	out, _ := command(app, lidza, "audit", "performance", "--json", "--base-url", srv.URL, "--samples", "1", "--budget", "js=10kb,tbt=100000,fcp=100000,lcp=100000")
+	i := strings.Index(string(out), "{\n")
+	var r struct {
+		Status string `json:"status"`
+		LLMs   struct {
+			Problem string `json:"problem"`
+		} `json:"llms"`
+		Results []struct {
+			Route    string `json:"route"`
+			UnusedJS int    `json:"unusedJS"`
+			Over     []string
+			Findings []struct {
+				Check   string `json:"check"`
+				Message string `json:"message"`
+			} `json:"findings"`
+			Bytes map[string]int `json:"bytes"`
+		} `json:"results"`
+	}
+	if i < 0 || json.NewDecoder(bytes.NewReader(out[i:])).Decode(&r) != nil || len(r.Results) != 1 {
+		t.Fatalf("no report:\n%s", out)
+	}
+	res := r.Results[0]
+	if r.Status != "fault" || len(res.Over) != 1 || !strings.HasPrefix(res.Over[0], "js ") {
+		t.Errorf("js budget: status %s, over %v", r.Status, res.Over)
+	}
+	if res.UnusedJS < 20*1024 || res.Bytes["script"] < 50*1024 {
+		t.Errorf("unused JS %d of %d", res.UnusedJS, res.Bytes["script"])
+	}
+	checks := map[string]bool{}
+	for _, f := range res.Findings {
+		checks[f.Check] = true
+	}
+	for _, want := range []string{"compression", "unused-js", "image-size", "image-dimensions", "seo"} {
+		if !checks[want] {
+			t.Errorf("no %s finding: %+v", want, res.Findings)
+		}
+	}
+	if !strings.Contains(r.LLMs.Problem, "HTML") {
+		t.Errorf("llms.txt served as HTML: %+v", r.LLMs)
+	}
+}

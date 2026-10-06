@@ -58,7 +58,8 @@ Commands:
   benchmark  run a k6 scenario from benchmarks/ against the running app; heap before and after
   test     go test ./... with LIDZA_MODE=test, the test database created and migrated, then the frontend check; --e2e runs the Playwright suite against the built binary
   verify   before a commit: regenerate (generated files must be staged), check, go test; the pre-commit hook runs it
-  audit    layout: every page at each viewport and theme, signed in, for what scrolls sideways (a fault) or down
+  audit    layout: every page at each viewport and theme, signed in, for what scrolls sideways (a fault) or down;
+           performance: every page cold on a throttled phone: load times, bytes, unused JS, against budgets
   doctor   report the toolchain, services and the project's prerequisites, each with its fix
   context  write .lidza/context.json: routes, handler signatures, Rust exports
   api      print the framework's public Go API as the project resolves it: the package list, one package, a --filter search, or all

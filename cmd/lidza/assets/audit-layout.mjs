@@ -6,20 +6,13 @@
 // Written into .lidza/ and run with the app's own Playwright; the CLI
 // reads the JSON it prints last.
 import { chromium } from '@playwright/test'
-import { pathToFileURL } from 'node:url'
+import { base, routes, storageState, signIn } from './audit-common.mjs'
 
-const base = process.env.BASE_URL
-const routes = JSON.parse(process.env.AUDIT_ROUTES)
 const viewports = JSON.parse(process.env.AUDIT_VIEWPORTS)
 const themes = JSON.parse(process.env.AUDIT_THEMES)
-const signIn = process.env.AUDIT_SIGN_IN === '1'
-const storageState = process.env.AUDIT_STORAGE_STATE || undefined
-const loginModule = process.env.AUDIT_LOGIN || ''
 const stabilityMs = Number(process.env.AUDIT_STABILITY_MS || 0)
 const trigger = process.env.AUDIT_TRIGGER || ''
 const allow = JSON.parse(process.env.AUDIT_ALLOW || 'null') || []
-
-const login = loginModule ? (await import(pathToFileURL(loginModule).href)).default : null
 
 const browser = await chromium.launch()
 const results = []
@@ -27,28 +20,7 @@ let signedIn = false
 for (const theme of themes) {
   for (const [width, height] of viewports) {
     const context = await browser.newContext({ viewport: { width, height }, colorScheme: theme, storageState })
-    if (storageState) {
-      signedIn = true
-    } else if (login) {
-      // The app's own sign-in: a module whose default export signs the
-      // page in (a fixture user, a test login route).
-      const page = await context.newPage()
-      try {
-        await login(page, base)
-        signedIn = true
-      } catch (e) {
-        console.error('[audit] the login module failed: ' + String(e.message || e).split('\n')[0])
-      }
-      await page.close()
-    } else if (signIn) {
-      // A throwaway user in the test database: the pages behind sign-in
-      // are measured as a user sees them.
-      const email = `audit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`
-      const res = await context.request.post(base + '/api/v1/auth/register', {
-        data: { email, password: 'audit-layout-password', name: 'Layout audit' },
-      })
-      signedIn = res.ok()
-    }
+    signedIn = (await signIn(context)) || signedIn
     const page = await context.newPage()
     for (const route of routes) {
       const result = { route, viewport: `${width}x${height}`, theme }

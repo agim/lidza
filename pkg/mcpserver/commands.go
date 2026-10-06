@@ -256,6 +256,25 @@ func addCommandTools(s *server.MCPServer, dir string, cfg *config.Config, after 
 			}
 			return args, nil
 		}},
+		{"lidza_audit_performance", "Build and start the app, load every prerendered page (plus routes) cold on a throttled phone, samples times, and report the median FCP, LCP, CLS and TBT, the bytes by kind, the JavaScript that does not run on load, and advice (uncompressed text, short caching, oversized or unsized images, a lazy LCP image, missing title, lang, viewport or description, an llms.txt served as HTML). A page over a budget is a fault. Run it after adding pages, images or dependencies to public pages.", []mcp.ToolOption{
+			mcp.WithString("routes", mcp.Description("Pages besides the prerendered ones, comma-separated.")),
+			mcp.WithNumber("samples", mcp.Description("Cold loads per page (default 3); the medians are reported.")),
+			mcp.WithString("budget", mcp.Description("Budgets over the defaults, e.g. lcp=3000,js=250kb (fcp, lcp, cls, tbt, js, css, images, total).")),
+			mcp.WithString("base_url", mcp.Description("Audit the app running at this URL instead of building and starting one.")),
+			mcp.WithString("storage_state", mcp.Description("A Playwright storage state file to visit signed in with.")),
+			mcp.WithString("login", mcp.Description("A JavaScript module whose default export, async (page, baseURL), signs the page in.")),
+		}, 20 * time.Minute, true, false, func(req mcp.CallToolRequest) ([]string, error) {
+			args := []string{"audit", "performance", "--json"}
+			for _, f := range []string{"routes", "budget", "base_url", "storage_state", "login"} {
+				if v := req.GetString(f, ""); v != "" {
+					args = append(args, "--"+strings.ReplaceAll(f, "_", "-"), v)
+				}
+			}
+			if v := req.GetInt("samples", 0); v > 0 {
+				args = append(args, "--samples", strconv.Itoa(v))
+			}
+			return args, nil
+		}},
 		{"lidza_doctor", "Report the toolchain, the services, node_modules, the pack builds and the browser for e2e tests, each missing item with its fix.", nil, 2 * time.Minute, false, false, fixed("doctor")},
 	}
 	for _, t := range tools {

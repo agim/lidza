@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/agim/lidza/pkg/schema"
 	"github.com/agim/lidza/pkg/scaffold"
+	"github.com/agim/lidza/pkg/schema"
 )
 
 // Two branches that each change the schema and record a decision merge

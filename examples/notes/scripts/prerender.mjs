@@ -3,6 +3,10 @@
 // sidecar script in dist/.server for per-request rendering (LIDZA_SSR=1).
 // Run by `npm run build`.
 //
+// A route with staticData.static (src/router.tsx) is written without the
+// client runtime: every script but JSON-LD is dropped, so the page is its
+// HTML and CSS, and the src/enhance scripts it names are added alone.
+//
 // With locales/<lang>.json the pages are rendered in the default locale
 // (I18N_DEFAULT, else en, else the first). With more than one locale each
 // page is also written once per locale under dist/.locales/<lang>/, with
@@ -16,8 +20,27 @@ import { pathToFileURL } from 'node:url'
 const dist = 'dist'
 const server = join(dist, '.server')
 const localesDir = join(dist, '.locales')
-const { render, renderShell, staticPaths, locales } = await import(pathToFileURL(join(process.cwd(), server, 'entry-server.js')).href)
+const { render, renderShell, staticPaths, pageModes, locales } = await import(pathToFileURL(join(process.cwd(), server, 'entry-server.js')).href)
 const template = await readFile(join(dist, 'index.html'), 'utf8')
+const modes = pageModes ? pageModes() : {}
+const manifestFile = join(dist, '.vite', 'manifest.json')
+const manifest = existsSync(manifestFile) ? JSON.parse(readFileSync(manifestFile, 'utf8')) : {}
+
+// lighten is a static page: the scripts (the app, its preloads, the
+// router's hydration payload, the i18n catalog) dropped but JSON-LD, and
+// the page's enhance scripts added.
+const lighten = (html, path) => {
+  const mode = modes[path]
+  if (!mode?.static) return html
+  html = html.replace(/<script\b(?![^>]*type="application\/ld\+json")[^>]*>[\s\S]*?<\/script>/gi, '')
+  html = html.replace(/<link\b[^>]*rel="modulepreload"[^>]*>/gi, '')
+  const tags = (mode.enhance ?? []).map((name) => {
+    const entry = manifest[`src/enhance/${name}.ts`]
+    if (!entry) throw new Error(`${path}: enhance "${name}" has no src/enhance/${name}.ts`)
+    return `<script type="module" src="/${entry.file}"></script>`
+  })
+  return html.replace('</body>', tags.join('') + '</body>')
+}
 
 const langs = locales ? locales() : []
 const fallback = defaultLocale(langs)
@@ -42,9 +65,12 @@ for (const path of staticPaths()) {
       console.log(`not prerendered ${path}: ${String(err.message ?? err).split('\n')[0]} (needs LIDZA_SSR=1 or a loader that works without the API)`)
       break
     }
+    // Outside the try: a static page naming a missing enhance script
+    // fails the build.
+    page = lighten(page, path)
     const base = lang ? join(localesDir, lang) : dist
     await write(path === '/' ? join(base, 'index.html') : join(base, path, 'index.html'), page)
-    console.log(`prerendered ${path}${lang ? ` (${lang})` : ''}`)
+    console.log(`prerendered ${path}${lang ? ` (${lang})` : ''}${modes[path]?.static ? ' (static: no client runtime)' : ''}`)
   }
 }
 if (langs.length > 1) {

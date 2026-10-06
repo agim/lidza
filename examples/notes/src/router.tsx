@@ -13,7 +13,10 @@ import { RouteError } from './ErrorBoundary'
 // Code-based routes. Add a page: create it under src/pages, declare a route
 // here, add it to the tree. Paths under /api are never routed here; they
 // belong to the Go control plane. Routes without parameters are prerendered
-// to static HTML by `npm run build` (scripts/prerender.mjs).
+// to static HTML by `npm run build` (scripts/prerender.mjs). A page that
+// needs no React in the browser (text, links, images) sets
+// `staticData: { static: true }`: its prerendered HTML ships without the
+// client runtime, and `enhance: ['name']` adds src/enhance/name.ts alone.
 export const rootRoute = createRootRoute({
   component: () => (
     <>
@@ -33,7 +36,7 @@ export const rootRoute = createRootRoute({
 })
 
 const homeRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', component: Home })
-const aboutRoute = createRoute({ getParentRoute: () => rootRoute, path: '/about', component: About })
+const aboutRoute = createRoute({ getParentRoute: () => rootRoute, path: '/about', component: About, staticData: { static: true } })
 
 const routeTree = rootRoute.addChildren([homeRoute, aboutRoute])
 
@@ -46,5 +49,15 @@ export function createAppRouter(history?: RouterHistory) {
 declare module '@tanstack/react-router' {
   interface Register {
     router: ReturnType<typeof createAppRouter>
+  }
+  interface StaticDataRouteOption {
+    /**
+     * Prerendered without the client runtime: the page's HTML and CSS,
+     * no React, router or query code, no hydration (scripts/prerender.mjs).
+     * Its links are plain links; it shows what it renders at build time.
+     */
+    static?: boolean
+    /** With static: scripts from src/enhance/ the page loads, by name. */
+    enhance?: string[]
   }
 }

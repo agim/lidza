@@ -256,7 +256,7 @@ func addCommandTools(s *server.MCPServer, dir string, cfg *config.Config, after 
 			}
 			return args, nil
 		}},
-		{"lidza_audit_performance", "Build and start the app, load every prerendered page (plus routes) cold on a throttled phone, samples times, and report the median FCP, LCP, CLS and TBT, the bytes by kind, the JavaScript that does not run on load, and advice (uncompressed text, short caching, oversized or unsized images, a lazy LCP image, missing title, lang, viewport or description, an llms.txt served as HTML). A page over a budget is a fault. Run it after adding pages, images or dependencies to public pages.", []mcp.ToolOption{
+		{"lidza_audit_performance", "Build and start the app, load every prerendered page (plus routes) cold on a throttled phone, samples times, and report the median FCP, LCP, CLS and TBT, the bytes by kind, the JavaScript that does not run on load, and advice (uncompressed text, short caching, oversized or unsized images, a lazy LCP image, missing title, lang, viewport or description, an llms.txt served as HTML). A page over a budget is a fault (sizes and layout shift by default; timings when budget sets them). Run it after adding pages, images or dependencies to public pages.", []mcp.ToolOption{
 			mcp.WithString("routes", mcp.Description("Pages besides the prerendered ones, comma-separated.")),
 			mcp.WithNumber("samples", mcp.Description("Cold loads per page (default 3); the medians are reported.")),
 			mcp.WithString("budget", mcp.Description("Budgets over the defaults, e.g. lcp=3000,js=250kb (fcp, lcp, cls, tbt, js, css, images, total).")),

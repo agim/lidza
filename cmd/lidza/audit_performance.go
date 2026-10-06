@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -22,17 +23,22 @@ the JavaScript that does not run on load, and what costs a visitor time:
 uncompressed text, assets cached briefly, images larger than drawn or
 without a size, a lazy LCP image, a missing title, lang, viewport or
 description, and an llms.txt served as HTML. A page over a budget is a
-fault; the rest are advice. Budgets (defaults): fcp=1800, lcp=2500 (ms),
-cls=0.1, tbt=200 (ms), js=300kb, css=100kb, images=1000kb,
-total=1600kb. Exits non-zero on a fault.
+fault; the rest are advice. Sizes and layout shift are held to budgets
+by default (cls=0.1, js=300kb, css=100kb, images=1000kb, total=1600kb);
+timings, which vary between machines, only when set (--budget
+fcp=1800,lcp=2500,tbt=200, in ms; more --samples steadies them). Exits
+non-zero on a fault.
 `
 
-// perfBudgets are the limits a page is held to: milliseconds, a shift
-// score, and bytes downloaded.
+// perfBudgetDefaults are the limits a page is held to unless --budget
+// sets others: a shift score and bytes downloaded. Timings (fcp, lcp,
+// tbt, in ms) vary between machines and gate only when set.
 var perfBudgetDefaults = map[string]float64{
-	"fcp": 1800, "lcp": 2500, "cls": 0.1, "tbt": 200,
-	"js": 300 * 1024, "css": 100 * 1024, "images": 1000 * 1024, "total": 1600 * 1024,
+	"cls": 0.1, "js": 300 * 1024, "css": 100 * 1024, "images": 1000 * 1024, "total": 1600 * 1024,
 }
+
+// perfBudgetNames are the budgets --budget may set.
+var perfBudgetNames = []string{"fcp", "lcp", "cls", "tbt", "js", "css", "images", "total"}
 
 // parseBudgets reads "lcp=3000,js=250kb" over the defaults.
 func parseBudgets(s string) (map[string]float64, error) {
@@ -43,7 +49,7 @@ func parseBudgets(s string) (map[string]float64, error) {
 	for _, kv := range splitList(s) {
 		k, v, ok := strings.Cut(kv, "=")
 		k = strings.ToLower(strings.TrimSpace(k))
-		if _, known := perfBudgetDefaults[k]; !ok || !known {
+		if !ok || !slices.Contains(perfBudgetNames, k) {
 			return nil, fmt.Errorf("audit performance: budget %q: one of fcp, lcp, cls, tbt, js, css, images, total, as name=value", kv)
 		}
 		v = strings.ToLower(strings.TrimSpace(v))
@@ -92,7 +98,7 @@ type perfFinding struct {
 func (r *perfResult) over(b map[string]float64) []string {
 	var out []string
 	check := func(name string, got float64, unit string) {
-		if got > b[name] {
+		if limit, set := b[name]; set && got > limit {
 			switch unit {
 			case "KB":
 				out = append(out, fmt.Sprintf("%s %.0f KB > %.0f", name, got/1024, b[name]/1024))

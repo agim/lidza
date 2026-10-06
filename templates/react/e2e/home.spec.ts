@@ -33,3 +33,16 @@ test('home fits a phone', async ({ page }) => {
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
   await expectNoSidewaysScroll(page)
 })
+
+// /about is static (staticData.static in src/router.tsx): it arrives with
+// no script at all, no React, router or query code, and reads the same.
+test('about ships without the client runtime', async ({ page }) => {
+  const scripts: string[] = []
+  page.on('request', (request) => {
+    if (request.resourceType() === 'script') scripts.push(request.url())
+  })
+  await page.goto('/about')
+  await expect(page.getByRole('heading', { name: 'About' })).toBeVisible()
+  await expect(page.locator('script:not([type="application/ld+json"])')).toHaveCount(0)
+  expect(scripts).toEqual([])
+})

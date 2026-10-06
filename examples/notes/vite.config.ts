@@ -1,3 +1,4 @@
+import { readdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
@@ -24,7 +25,21 @@ const responsive = async (url: URL, metadata: () => ImageInfo | Promise<ImageInf
   })
 }
 
-export default defineConfig({
+// Each src/enhance/<name>.ts is its own entry: the script a static page
+// (staticData.static in src/router.tsx) loads instead of the app.
+const enhance = Object.fromEntries(
+  (() => {
+    try {
+      return readdirSync('src/enhance')
+    } catch {
+      return []
+    }
+  })()
+    .filter((f) => /\.ts$/.test(f) && !f.endsWith('.d.ts'))
+    .map((f) => [`enhance-${f.replace(/\.ts$/, '')}`, `src/enhance/${f}`]),
+)
+
+export default defineConfig(({ isSsrBuild }) => ({
   plugins: [react(), tailwindcss(), imagetools({ defaultDirectives: responsive })],
   resolve: {
     alias: {
@@ -39,10 +54,14 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    // dist/.vite/manifest.json: where each entry was built, for the
+    // prerender to find the enhance scripts.
+    manifest: !isSsrBuild,
+    rollupOptions: isSsrBuild ? undefined : { input: { index: 'index.html', ...enhance } },
   },
   // The SSR bundle carries its dependencies, so the sidecar needs only
   // Node and the files under dist/.server.
   ssr: {
     noExternal: true,
   },
-})
+}))

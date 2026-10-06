@@ -39,5 +39,18 @@ Add a client-side route rendered by React, prerendered at build time.
    serves the visitor's, with `<html lang>` and its catalog, so the first
    paint and hydration are in that language. Format numbers and dates
    with `Intl` and `locale()`; a language switch calls `setLocale('sq')`.
-10. Add a browser test in `e2e/things.spec.ts` (see "Write a test"), then
+10. A public page that needs no React in the browser (text, links,
+   images, a form that posts or a `mailto:`) sets `staticData: { static:
+   true }` on its route: `npm run build` writes its HTML without the
+   client runtime (no React, router or query code, no hydration), so a
+   visitor landing on it downloads its HTML and CSS only (`lidza audit
+   performance` shows the difference). It shows what it renders at build
+   time: no `useQuery`, no loader that needs the API, no state. Its
+   links are plain links. A little behaviour (a menu toggle, a form's
+   checks) goes in `src/enhance/<name>.ts`, plain DOM code the page works
+   without, named on the route: `staticData: { static: true, enhance:
+   ['disclosure'] }` (`src/enhance/disclosure.ts` is the example). The
+   app's pages keep hydrating as before; choose static per page. A site
+   that is all content is the astro template's job.
+11. Add a browser test in `e2e/things.spec.ts` (see "Write a test"), then
    `lidza check` and `lidza test --e2e`.

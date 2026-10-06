@@ -83,3 +83,16 @@ export function staticPaths(): string[] {
   const byPath = (router as unknown as { routesByPath: Record<string, unknown> }).routesByPath ?? {}
   return Object.keys(byPath).filter((p) => !p.includes('$') && !p.includes('*'))
 }
+
+// pageModes lists the routes that ship without the client runtime
+// (staticData.static) and the src/enhance scripts each one loads.
+export function pageModes(): Record<string, { static?: boolean; enhance?: string[] }> {
+  const router = createAppRouter(createMemoryHistory({ initialEntries: ['/'] }))
+  const byPath = (router as unknown as { routesByPath: Record<string, { options: { staticData?: { static?: boolean; enhance?: string[] } } }> }).routesByPath ?? {}
+  const modes: Record<string, { static?: boolean; enhance?: string[] }> = {}
+  for (const [path, route] of Object.entries(byPath)) {
+    const data = route.options.staticData
+    if (data?.static) modes[path] = { static: true, enhance: data.enhance ?? [] }
+  }
+  return modes
+}

@@ -11,14 +11,25 @@ change. A release without one is additive: an app updates with
 
 ## Unreleased
 
+- Static pages in the react template: a route with `staticData: {
+  static: true }` is prerendered without the client runtime (no React,
+  router or query code, no hydration payload; JSON-LD kept), so a
+  visitor landing on it downloads its HTML and CSS only; `enhance:
+  ['name']` adds `src/enhance/name.ts` alone, built as its own entry
+  (`src/enhance/disclosure.ts` is the example), and a missing one fails
+  the build. The template's About page is static. Apps made earlier copy
+  `scripts/prerender.mjs`, `vite.config.ts`, `pageModes` in
+  `src/entry-server.tsx` and the `StaticDataRouteOption` declaration in
+  `src/router.tsx` from a new app ("Add a page", step 10). (#41)
 - `lidza audit performance` (MCP `lidza_audit_performance`) builds and
   starts the app, or uses `--base-url`, and loads each page cold on a
   throttled phone, `--samples` times: median FCP, LCP, CLS and TBT, the
   bytes by kind, the JavaScript that does not run on load, and advice
   (uncompressed text, assets cached briefly, oversized or unsized
   images, a lazy LCP image, missing title, `lang`, viewport or
-  description, an `llms.txt` served as HTML). Pages over a `--budget`
-  are faults. It runs on the app's Playwright; no Lighthouse install.
+  description, an `llms.txt` served as HTML). Pages over a budget are
+  faults: sizes and layout shift by default, timings (FCP, LCP, TBT)
+  when `--budget` sets them. It runs on the app's Playwright; no Lighthouse install.
   `lidza audit layout` and `performance` share the start-up and the
   sign-in options. (#41)
 ## v0.1.87 (2026-10-06)

@@ -62,8 +62,8 @@ func TestGenerateOwned(t *testing.T) {
 	}
 	sql := read(t, root, "db/queries/product.sql")
 	for _, want := range []string{
-		"-- name: ListProducts :many\nSELECT * FROM product WHERE owner_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3;",
-		"-- name: CountProducts :one\nSELECT count(*) FROM product WHERE owner_id = $1;",
+		"-- name: ListProducts :many\nSELECT * FROM product\nWHERE owner_id = sqlc.arg('owner_id')\n",
+		"-- name: CountProducts :one\nSELECT count(*) FROM product\nWHERE owner_id = sqlc.arg('owner_id')\n",
 		"-- name: GetProduct :one\nSELECT * FROM product WHERE id = $1 AND owner_id = $2;",
 		"-- name: CreateProduct :one\nINSERT INTO product (owner_id, name, price) VALUES ($1, $2, $3) RETURNING *;",
 		"WHERE id = sqlc.arg('id') AND owner_id = sqlc.arg('owner_id') RETURNING *;",
@@ -80,8 +80,8 @@ func TestGenerateOwned(t *testing.T) {
 	for _, want := range []string{
 		`"github.com/agim/lidza/packs/auth"`,
 		"owner := auth.CurrentUser(ctx).ID",
-		"q.ListProducts(ctx, queries.ListProductsParams{OwnerID: owner, Limit: limit, Offset: offset})",
-		"q.CountProducts(ctx, owner)",
+		"q.ListProducts(ctx, queries.ListProductsParams{OwnerID: owner, Q: p.Search(), Since: p.Since, Until: p.Until, Sort: p.Sort, Desc: p.Desc, Lim: p.Limit, Off: p.Offset})",
+		"q.CountProducts(ctx, queries.CountProductsParams{OwnerID: owner, Q: p.Search(), Since: p.Since, Until: p.Until})",
 		"GetProduct(ctx, queries.GetProductParams{ID: id, OwnerID: auth.CurrentUser(ctx).ID})",
 		"DeleteProduct(ctx, queries.DeleteProductParams{ID: id, OwnerID: auth.CurrentUser(ctx).ID})",
 		"CreateProductParams{\n\t\tOwnerID: auth.CurrentUser(ctx).ID,\n",

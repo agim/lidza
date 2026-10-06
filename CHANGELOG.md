@@ -9,6 +9,24 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- Lists with search, filters, a date range, sorting and pages (issue
+  #37). `pkg/list`: `list.Read(req, list.Options{Sorts, Desc, Filters})`
+  reads `limit` (50, at most 200), `offset`, `q`, `since`, `until`,
+  `sort`, `order` and the filters, a 422 by parameter for anything else.
+  `lidza gen resource` uses it: the list query searches the model's text
+  fields (`position`, so a `%` is a plain character), filters on its
+  enums, booleans and references, bounds its time (`createdAt` first),
+  sorts by its plain fields (newest first by default) and pages, and the
+  count query takes the same conditions; checked against Postgres. The
+  react template gains `src/list.tsx`: `useListState` and `listQuery`
+  keep the state in the address and send it, `ListToolbar`,
+  `FilterSelect`, `SortHead` and `Pager` draw it, `pageRows` pages a list
+  already in the browser. Recipe "Add a paginated, filterable list".
+  The routes an older `gen resource` wrote keep working; regenerate one
+  (`--force`) to get the new list.
+
 ## v0.1.81 (2026-10-06)
 
 - Git worktrees get their own databases and setup (issue #35): `lidza

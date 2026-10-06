@@ -17,6 +17,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/agim/lidza/pkg/pack"
@@ -210,13 +211,163 @@ func (r *Resource) creatable() []*schema.Field {
 	return out
 }
 
-func (r *Resource) orderBy() string {
+// listShape is what the list route offers, from the model: a search over
+// its text fields, a range over its time (createdAt first), sorts over
+// its plain fields (createdAt, newest first, by default; else the id),
+// and equality filters on its enums, booleans and references.
+type listShape struct {
+	search  []*schema.Field
+	span    *schema.Field
+	sorts   []*schema.Field
+	desc    bool
+	filters []*schema.Field
+}
+
+func (r *Resource) listShape() listShape {
+	var l listShape
+	id := r.Model.IDField()
+	var created *schema.Field
 	for _, f := range r.Model.Fields {
-		if f.Name == "createdAt" {
-			return "created_at DESC"
+		if f.Array || f == r.Owner {
+			continue
+		}
+		enum := r.Schema.Enum(f.Type) != nil
+		switch {
+		case (f.Type == "string" || f.Type == "text") && !f.ID && f.Ref == "":
+			l.search = append(l.search, f)
+		}
+		if f.Type == "time" && (l.span == nil || f.Name == "createdAt") {
+			l.span = f
+		}
+		if f.Name == "createdAt" && f.Type == "time" {
+			created = f
+		}
+		switch f.Type {
+		case "string", "int", "bigint", "float", "decimal", "time", "date", "bool", "uuid":
+			if f.Type != "uuid" || f.ID {
+				l.sorts = append(l.sorts, f)
+			}
+		default:
+			if enum {
+				l.sorts = append(l.sorts, f)
+			}
+		}
+		if !f.ID && (enum || f.Type == "bool" || f.Ref != "") {
+			l.filters = append(l.filters, f)
 		}
 	}
-	return col(r.Model.IDField())
+	first := id
+	if created != nil {
+		first, l.desc = created, true
+	}
+	sorts := []*schema.Field{first}
+	for _, f := range l.sorts {
+		if f != first {
+			sorts = append(sorts, f)
+		}
+	}
+	l.sorts = sorts
+	return l
+}
+
+// listConds are the WHERE conditions of the list and count queries.
+func (r *Resource) listConds(l listShape) []string {
+	var conds []string
+	if o := r.Owner; o != nil {
+		conds = append(conds, fmt.Sprintf("%s = sqlc.arg('%s')", col(o), snake(o.Name)))
+	}
+	if len(l.search) > 0 {
+		cols := make([]string, len(l.search))
+		for i, f := range l.search {
+			cols[i] = col(f)
+		}
+		// position, not LIKE: a % or _ in the search is just a character.
+		conds = append(conds, fmt.Sprintf("(sqlc.narg('q')::text IS NULL OR position(lower(sqlc.narg('q')::text) in lower(concat_ws(' ', %s))) > 0)", strings.Join(cols, ", ")))
+	}
+	if f := l.span; f != nil {
+		conds = append(conds,
+			fmt.Sprintf("(sqlc.narg('since')::timestamptz IS NULL OR %s >= sqlc.narg('since')::timestamptz)", col(f)),
+			fmt.Sprintf("(sqlc.narg('until')::timestamptz IS NULL OR %s < sqlc.narg('until')::timestamptz)", col(f)))
+	}
+	for _, f := range l.filters {
+		conds = append(conds, fmt.Sprintf("(sqlc.narg('%s')::text IS NULL OR %s::text = sqlc.narg('%s')::text)", snake(f.Name), col(f), snake(f.Name)))
+	}
+	return conds
+}
+
+// listSQL renders the list and count queries.
+func (r *Resource) listSQL(table string) string {
+	l := r.listShape()
+	conds := r.listConds(l)
+	where := ""
+	if len(conds) > 0 {
+		where = "\nWHERE " + strings.Join(conds, "\n  AND ")
+	}
+	var order []string
+	for _, f := range l.sorts {
+		order = append(order,
+			fmt.Sprintf("CASE WHEN sqlc.arg('sort')::text = '%s' AND NOT sqlc.arg('desc')::bool THEN %s END ASC", f.Name, col(f)),
+			fmt.Sprintf("CASE WHEN sqlc.arg('sort')::text = '%s' AND sqlc.arg('desc')::bool THEN %s END DESC", f.Name, col(f)))
+	}
+	order = append(order, col(r.Model.IDField()))
+	var b strings.Builder
+	b.WriteString("-- The list: search, range and filters are optional (NULL for none), sort\n-- one of the CASE keys; list.Read in the handler validates them.\n")
+	fmt.Fprintf(&b, "-- name: List%s :many\nSELECT * FROM %s%s\nORDER BY\n  %s\nLIMIT sqlc.arg('lim')::int OFFSET sqlc.arg('off')::int;\n\n", r.Plural(), table, where, strings.Join(order, ",\n  "))
+	fmt.Fprintf(&b, "-- name: Count%s :one\nSELECT count(*) FROM %s%s;\n\n", r.Plural(), table, where)
+	return b.String()
+}
+
+// listHandler renders the body of the list handler.
+func (r *Resource) listHandler(owner string) string {
+	l := r.listShape()
+	quote := func(fs []*schema.Field) string {
+		q := make([]string, len(fs))
+		for i, f := range fs {
+			q[i] = strconv.Quote(f.Name)
+		}
+		return strings.Join(q, ", ")
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "\tp, err := list.Read(req, list.Options{Sorts: []string{%s}, Desc: %v", quote(l.sorts), l.desc)
+	if len(l.filters) > 0 {
+		fmt.Fprintf(&b, ", Filters: []string{%s}", quote(l.filters))
+	}
+	b.WriteString("})\n\tif err != nil {\n\t\treturn schema." + r.Name() + "List{}, err\n\t}\n")
+	// The arguments both queries share, in sqlc's order of first use.
+	type arg struct{ field, value string }
+	var shared []arg
+	if o := r.Owner; o != nil {
+		shared = append(shared, arg{sqlcName(o), owner})
+	}
+	if len(l.search) > 0 {
+		shared = append(shared, arg{"Q", "p.Search()"})
+	}
+	if l.span != nil {
+		shared = append(shared, arg{"Since", "p.Since"}, arg{"Until", "p.Until"})
+	}
+	for _, f := range l.filters {
+		shared = append(shared, arg{sqlcName(f), fmt.Sprintf("p.Filter(%q)", f.Name)})
+	}
+	fields := func(args []arg) string {
+		out := make([]string, len(args))
+		for i, a := range args {
+			out[i] = a.field + ": " + a.value
+		}
+		return strings.Join(out, ", ")
+	}
+	listArgs := append(append([]arg{}, shared...), arg{"Sort", "p.Sort"}, arg{"Desc", "p.Desc"}, arg{"Lim", "p.Limit"}, arg{"Off", "p.Offset"})
+	fmt.Fprintf(&b, "\tq := queries.New(db.From(ctx))\n\trows, err := q.List%s(ctx, queries.List%sParams{%s})\n\tif err != nil {\n\t\treturn schema.%sList{}, err\n\t}\n", r.Plural(), r.Plural(), fields(listArgs), r.Name())
+	// sqlc passes a lone parameter bare, several in a Params struct.
+	var countArgs string
+	switch len(shared) {
+	case 0:
+	case 1:
+		countArgs = ", " + shared[0].value
+	default:
+		countArgs = fmt.Sprintf(", queries.Count%sParams{%s}", r.Plural(), fields(shared))
+	}
+	fmt.Fprintf(&b, "\ttotal, err := q.Count%s(ctx%s)\n\tif err != nil {\n\t\treturn schema.%sList{}, err\n\t}\n", r.Plural(), countArgs, r.Name())
+	return b.String()
 }
 
 // SQL renders db/queries/<table>.sql.
@@ -229,13 +380,11 @@ func (r *Resource) SQL() string {
 		// Owned: every statement filters by, or sets, the owner column.
 		oc := col(o)
 		fmt.Fprintf(&b, "-- Scoped to the signed-in user: every statement takes the owner (%s).\n\n", oc)
-		fmt.Fprintf(&b, "-- name: List%s :many\nSELECT * FROM %s WHERE %s = $1 ORDER BY %s LIMIT $2 OFFSET $3;\n\n", r.Plural(), t, oc, r.orderBy())
-		fmt.Fprintf(&b, "-- name: Count%s :one\nSELECT count(*) FROM %s WHERE %s = $1;\n\n", r.Plural(), t, oc)
+		b.WriteString(r.listSQL(t))
 		fmt.Fprintf(&b, "-- name: Get%s :one\nSELECT * FROM %s WHERE %s = $1 AND %s = $2;\n\n", r.Name(), t, col(id), oc)
 	} else {
 		b.WriteString("\n")
-		fmt.Fprintf(&b, "-- name: List%s :many\nSELECT * FROM %s ORDER BY %s LIMIT $1 OFFSET $2;\n\n", r.Plural(), t, r.orderBy())
-		fmt.Fprintf(&b, "-- name: Count%s :one\nSELECT count(*) FROM %s;\n\n", r.Plural(), t)
+		b.WriteString(r.listSQL(t))
 		fmt.Fprintf(&b, "-- name: Get%s :one\nSELECT * FROM %s WHERE %s = $1;\n\n", r.Name(), t, col(id))
 	}
 	var cols, vals []string
@@ -294,7 +443,7 @@ func (r *Resource) Handlers() string {
 	if r.Owner != nil {
 		b.WriteString("\t\"github.com/agim/lidza/packs/auth\"\n")
 	}
-	b.WriteString("\t\"github.com/agim/lidza/packs/db\"\n\t\"github.com/agim/lidza/pkg/router\"\n\n")
+	b.WriteString("\t\"github.com/agim/lidza/packs/db\"\n\t\"github.com/agim/lidza/pkg/list\"\n\t\"github.com/agim/lidza/pkg/router\"\n\n")
 	fmt.Fprintf(&b, "\t\"%s/db/queries/gen\"\n\t\"%s/schema\"\n)\n\n", r.Module, r.Module)
 
 	fmt.Fprintf(&b, "// %sRoutes registers the %s resource under %s.\nfunc %sRoutes(r *router.Router) {\n", name, name, r.Path(), name)
@@ -326,11 +475,9 @@ func (r *Resource) Handlers() string {
 	fmt.Fprintf(&b, "func list%s(ctx context.Context, req *router.Request[router.None]) (schema.%sList, error) {\n", plural, name)
 	if r.Owner != nil {
 		fmt.Fprintf(&b, "\towner := %s\n", owner)
-		fmt.Fprintf(&b, "\tlimit, offset := PageParams(req, 50, 200)\n\tq := queries.New(db.From(ctx))\n\trows, err := q.List%s(ctx, queries.List%sParams{%s: owner, Limit: limit, Offset: offset})\n\tif err != nil {\n\t\treturn schema.%sList{}, err\n\t}\n", plural, plural, sqlcName(r.Owner), name)
-		fmt.Fprintf(&b, "\ttotal, err := q.Count%s(ctx, owner)\n\tif err != nil {\n\t\treturn schema.%sList{}, err\n\t}\n", plural, name)
+		b.WriteString(r.listHandler("owner"))
 	} else {
-		fmt.Fprintf(&b, "\tlimit, offset := PageParams(req, 50, 200)\n\tq := queries.New(db.From(ctx))\n\trows, err := q.List%s(ctx, queries.List%sParams{Limit: limit, Offset: offset})\n\tif err != nil {\n\t\treturn schema.%sList{}, err\n\t}\n", plural, plural, name)
-		fmt.Fprintf(&b, "\ttotal, err := q.Count%s(ctx)\n\tif err != nil {\n\t\treturn schema.%sList{}, err\n\t}\n", plural, name)
+		b.WriteString(r.listHandler(""))
 	}
 	fmt.Fprintf(&b, "\titems := make([]schema.%s, len(rows))\n\tfor i, row := range rows {\n\t\titems[i] = to%s(row)\n\t}\n\treturn schema.%sList{Items: items, Total: int(total)}, nil\n}\n\n", name, name, name)
 

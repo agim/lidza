@@ -74,7 +74,7 @@ app into an importable package and name it in `lidza.json`:
 | `lidza gen` | `schema.lidza` to `schema/schema.go`, `db/schema.sql`, a migration in `db/migrations` when models changed; handlers to `.lidza/openapi.json` and the client in `.lidza/client`. `lidza dev` runs it on every change. |
 | `lidza context` | writes `.lidza/context.json`: routes, handler signatures, Rust exports. |
 | `lidza mcp` | MCP server on stdio; see "Agent interface". |
-| `lidza gen resource <Model> [--public \| --shared]` | queries, `Create/Update/<Model>List` types, `handlers/<table>.go` with list, get, create, patch, delete under `/api/v1/<plural>`, registered in `routes.go` (in `appDir` when set) behind `auth.Require()`. An owned model (`ownerId`, or a field with `@ref(User)`) is scoped to the signed-in user. `--public` marks the model `@public`: open routes, no owner. `--shared` marks it `@shared`: behind sign-in, rows not scoped. Needs the `db` and `auth` packs (`auth` not with `--public`). |
+| `lidza gen resource <Model> [--public \| --shared]` | queries, `Create/Update/<Model>List` types, `handlers/<table>.go` with list, get, create, patch, delete under `/api/v1/<plural>` (the list with search, filters, a date range, sorting and pages through `list.Read`: recipe "Add a paginated, filterable list"), registered in `routes.go` (in `appDir` when set) behind `auth.Require()`. An owned model (`ownerId`, or a field with `@ref(User)`) is scoped to the signed-in user. `--public` marks the model `@public`: open routes, no owner. `--shared` marks it `@shared`: behind sign-in, rows not scoped. Needs the `db` and `auth` packs (`auth` not with `--public`). |
 | `lidza update [--migrate]` | brings the app's branch and the framework up to date together: a branch behind its upstream is pulled first when that is a clean fast-forward (nothing uncommitted, no local commits the upstream lacks), otherwise the update stops and says what to run (`--no-pull` stops instead of pulling); then the CLI and this app's framework module move to the newest release (never back to an older one; `--to <commit>` takes a release not tagged yet), it regenerates, refreshes the deployment files, then runs `lidza install`. It stops when the files it rewrites have uncommitted changes (`git stash push` sets them aside); `--commit` commits the update when done. In a team, one person makes the update and merges it; the others `git pull`, then `lidza update --cli-only`. |
 | `lidza gen deploy [--force]` | the `Dockerfile`, `.dockerignore` and `deploy/notes.service` from the current templates; a file the app changed is kept and named unless `--force`. |
 | `lidza pack add <name>` | enables an official pack: `db`, `auth`, `jobs`, `mail`, `llm`, `storage`, `cache`, `i18n`, `realtime`, `analytics`, `geo`, `media`. |
@@ -1242,6 +1242,39 @@ the browser.
    to an app from before connections; then `lidza db migrate`.
    Test with a fake provider (`httptest.NewServer`) and
    `auth.OAuth2Connect` pointed at it.
+
+### Add a paginated, filterable list
+
+Give a list search, filters, a date range, sorting and pages, so no page
+shows an endless table.
+
+1. `lidza gen resource <Model>` writes it for a model: the list route
+   reads its parameters with `list.Read` (`pkg/list`) and the queries
+   search the model's text fields, filter on its enums, booleans and
+   references, bound its time (`createdAt` first), sort by its plain
+   fields (newest first by default), and count the same rows. For a
+   list of your own, the same: `p, err := list.Read(req,
+   list.Options{Sorts: []string{"createdAt", "title"}, Desc: true,
+   Filters: []string{"status"}})` (an unknown sort or a bad date is a
+   422 naming the parameter), and the SQL in `db/queries/<table>.sql`
+   as the generator writes it: `sqlc.narg('q')` and the filters `NULL`
+   for none, `position(lower(...))` for the search (a `%` is just a
+   character), one `CASE` per sort key in `ORDER BY`, `LIMIT
+   sqlc.arg('lim')::int OFFSET sqlc.arg('off')::int`, and a `Count*`
+   query with the same conditions.
+2. The query string: `limit` (50, at most 200), `offset`, `q`, `since`
+   and `until` (instants; until is exclusive), `sort`, `order` (`asc`,
+   `desc`), and one parameter per filter.
+3. The page (react template), from `src/list.tsx`: `useListState({
+   filters: ['status'] })` keeps the state in the address,
+   `api.listPosts({ query: listQuery(state) })` sends it (the date
+   inputs' days become instants in the visitor's zone, until the end of
+   the last day), and `ListToolbar` (the search, the range labelled by
+   its field, the filters in one row), `FilterSelect` ("Status: Draft"),
+   `SortHead` and `Pager` ("51–100 of 230") draw it. A list already in
+   the browser pages with `pageRows(rows, state)`.
+4. Test the route with `lidzatest`: a search, a filter, a range, a sort
+   both ways and the last page, and a 422 for an unknown sort.
 
 ### Dates and time zones
 

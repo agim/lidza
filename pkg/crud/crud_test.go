@@ -59,7 +59,12 @@ func TestGenerate(t *testing.T) {
 	}
 	sql, _ := os.ReadFile(filepath.Join(root, "db/queries/posts.sql"))
 	for _, want := range []string{
-		"-- name: ListPosts :many\nSELECT * FROM posts ORDER BY created_at DESC LIMIT $1 OFFSET $2;",
+		// The list: search over the text fields, filter on the enum, sort
+		// by createdAt (newest first) unless asked otherwise.
+		"-- name: ListPosts :many\nSELECT * FROM posts\nWHERE (sqlc.narg('q')::text IS NULL OR position(lower(sqlc.narg('q')::text) in lower(concat_ws(' ', title, body))) > 0)",
+		"(sqlc.narg('status')::text IS NULL OR status::text = sqlc.narg('status')::text)",
+		"CASE WHEN sqlc.arg('sort')::text = 'createdAt' AND sqlc.arg('desc')::bool THEN created_at END DESC,",
+		"LIMIT sqlc.arg('lim')::int OFFSET sqlc.arg('off')::int;",
 		"-- name: GetPost :one\nSELECT * FROM posts WHERE id = $1;",
 		"INSERT INTO posts (title, body, status, views, tags, meta) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *;",
 		"title = COALESCE(sqlc.narg('title'), title)",
@@ -76,6 +81,8 @@ func TestGenerate(t *testing.T) {
 		`router.Route(r, "GET /api/v1/posts", listPosts)`,
 		`router.Route(r, "PATCH /api/v1/posts/{id}", updatePost)`,
 		"func listPosts(ctx context.Context, req *router.Request[router.None]) (schema.PostList, error) {",
+		`p, err := list.Read(req, list.Options{Sorts: []string{"createdAt", "id", "title", "status", "views"}, Desc: true`,
+		`Filters: []string{"status"}})`,
 		"Status: queries.Status(in.Status),",
 		"Views: int32(in.Views),",
 		"Meta: []byte(in.Meta),",

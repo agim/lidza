@@ -9,6 +9,13 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- The Līdza wordmark: Inter Bold, −1px at 26px, `#eee7e3` on `#241821`
+  and `#241821` on `#f6f2ed`; outlined SVGs and the `lī` icon in
+  `docs/brand/`, the spec in `docs/brand.md`. The admin sidebar shows it
+  beside the version.
+
 ## v0.1.85 (2026-10-06)
 
 - `SECURITY_CONTACT` serves `/.well-known/security.txt` (RFC 9116):

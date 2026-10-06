@@ -9,7 +9,7 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
-## Unreleased
+## v0.1.87 (2026-10-06)
 
 - Responsive images in the react and svelte templates: `import hero
   from './hero.jpg?responsive'` builds 480 to 2400 pixel widths (up to

@@ -9,7 +9,7 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
-## Unreleased
+## v0.1.86 (2026-10-06)
 
 - `lidza audit layout` lists the containers that scroll on their own
   (a wide table in its wrapper: selector, sizes, range), which the

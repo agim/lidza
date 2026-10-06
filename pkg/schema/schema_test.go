@@ -1,6 +1,7 @@
 package schema
 
 import (
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -663,5 +664,44 @@ func TestNextStamp(t *testing.T) {
 	sort.Strings(names)
 	if names[2] != "20261006150001_new" {
 		t.Fatalf("order %v", names)
+	}
+}
+
+// Two branches' lock files merge model by model: one adds a model (and
+// shifts every line below), the other changes another; both land. Two
+// different changes to one model are a conflict.
+func TestMergeLocks(t *testing.T) {
+	lock := func(src string) []byte {
+		t.Helper()
+		s, err := Parse(src)
+		if err != nil {
+			t.Fatal(err)
+		}
+		data, _ := json.Marshal(Schema{Enums: s.Enums, Models: s.Models})
+		return data
+	}
+	base := lock("model Post {\n  id int @id\n}\n\nmodel Tag {\n  id int @id\n}\n")
+	ours := lock("model Comment {\n  id int @id\n}\n\nmodel Post {\n  id int @id\n}\n\nmodel Tag {\n  id int @id\n}\n")
+	theirs := lock("model Post {\n  id int @id\n}\n\nmodel Tag {\n  id int @id\n  name string\n}\n")
+	merged, conflicts, err := MergeLocks(base, ours, theirs)
+	if err != nil || len(conflicts) != 0 {
+		t.Fatal(conflicts, err)
+	}
+	var s Schema
+	json.Unmarshal(merged, &s)
+	if s.Model("Comment") == nil || s.Model("Post") == nil || s.Model("Tag") == nil || len(s.Model("Tag").Fields) != 2 {
+		t.Fatalf("merged: %s", merged)
+	}
+	// Removed on one side, untouched on the other: removed.
+	theirs2 := lock("model Post {\n  id int @id\n}\n")
+	merged, _, _ = MergeLocks(base, base, theirs2)
+	json.Unmarshal(merged, &s)
+	if s.Model("Tag") != nil {
+		t.Fatalf("removal lost: %s", merged)
+	}
+	// Both changed Tag, differently.
+	ours3 := lock("model Post {\n  id int @id\n}\n\nmodel Tag {\n  id int @id\n  slug string\n}\n")
+	if _, conflicts, _ := MergeLocks(base, ours3, theirs); strings.Join(conflicts, ",") != "model Tag" {
+		t.Fatalf("conflicts: %v", conflicts)
 	}
 }

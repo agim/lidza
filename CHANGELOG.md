@@ -11,6 +11,25 @@ change. A release without one is additive: an app updates with
 
 ## Unreleased
 
+- Git worktrees get their own databases and setup (issue #35): `lidza
+  install` in a linked worktree copies `.env` and `config/master.key`
+  from the main checkout, links `node_modules` when `package-lock.json`
+  is the same, and writes the worktree's databases
+  (`<app>_<worktree>_dev`, `_test`) into `.env.local` and
+  `.env.test.local`; `lidza test` writes the test one by itself.
+  `LIDZA_DB_SUFFIX` names any checkout's databases apart. The settings
+  files gain `.env.local` and `.env.<mode>.local` (`env.Files`): never
+  committed, over the committed ones.
+- Merges of parallel branches stop conflicting in the mechanical files
+  (issue #36): `.gitattributes` (written by `lidza new` and `lidza gen`)
+  merges `docs/decisions.md` and `CHANGELOG.md` with git's union driver,
+  keeping both branches' entries, and `db/schema.lock.json` with `lidza
+  gen --merge-lock`, which `lidza gen` registers in each clone's git
+  configuration: model by model, line numbers ignored (an edit higher up
+  moved them in every entry, the source of a thousand conflict hunks);
+  two different changes to one model still stop the merge.
+  `schema.MergeLocks` does it.
+
 - New migrations are named by the UTC time they were written
   (`20261006140512_create_post`), always after the newest one there, so
   two branches that each change the schema no longer pick the same

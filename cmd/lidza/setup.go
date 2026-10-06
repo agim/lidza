@@ -147,6 +147,17 @@ func setup(ctx context.Context, dir string, cfg *config.Config, opt setupOptions
 	hasDB := slices.Contains(cfg.Packs, pack.OfficialPrefix+"db")
 	hasMail := slices.Contains(cfg.Packs, pack.OfficialPrefix+"mail")
 
+	// A git worktree beside the main checkout (parallel agents, a second
+	// branch) gets what git does not carry: the main checkout's .env and
+	// master key, its node_modules when the lockfile matches, and
+	// databases of its own, so two worktrees never migrate one database.
+	wt := worktreeOf(dir)
+	if wt.suffix != "" {
+		for _, f := range wt.prepare(dir) {
+			step("%s", f)
+		}
+	}
+
 	// 2. The master key for the credentials, kept out of git.
 	if created, err := credentials.Generate(dir); errors.Is(err, credentials.ErrKeyNotHere) {
 		// A clone: the app runs and tests without the credentials; the
@@ -163,9 +174,20 @@ func setup(ctx context.Context, dir string, cfg *config.Config, opt setupOptions
 	if devURL == "" {
 		// Where this machine's Postgres listens: its socket directory
 		// differs between Linux and macOS, TCP when there is none.
-		devURL = db.LocalURL(dbName(cfg.Name, "dev"))
+		devURL = db.LocalURL(dbName(cfg.Name+wt.suffix, "dev"))
 	}
-	testURL := withDatabase(devURL, dbName(cfg.Name, "test"))
+	testURL := withDatabase(devURL, dbName(cfg.Name+wt.suffix, "test"))
+	if wt.suffix != "" && hasDB {
+		// The committed .env.test names the shared test database: this
+		// worktree's own go in its .local files, which win over it.
+		for name, url := range map[string]string{".env.local": devURL, ".env.test.local": testURL} {
+			if changed, err := setEnvValue(filepath.Join(dir, name), "DATABASE_URL", url); err != nil {
+				return err
+			} else if changed {
+				step("%s: DATABASE_URL is this worktree's own, %s", name, url)
+			}
+		}
+	}
 	if _, err := os.Stat(filepath.Join(dir, ".env")); err != nil {
 		written, err := writeEnvFromExample(dir, envDefaults(cfg.Name, devURL))
 		if err != nil {
@@ -227,7 +249,14 @@ func setup(ctx context.Context, dir string, cfg *config.Config, opt setupOptions
 			// to keep.
 			applied, held, err := migrate(ctx, dir, m, opt.AllowDataLoss || m == "test")
 			if err != nil {
-				problem("database (%s): %v; is Postgres running (lidza doctor)? Then lidza install again", m, err)
+				hint := "is Postgres running (lidza doctor)? Then lidza install again"
+				if strings.Contains(err.Error(), "already exists") {
+					hint = "the database already holds these tables under other migration names (an earlier app of this name, or one reset by hand): drop it and lidza install again"
+					if m == "test" {
+						hint = "the test database already holds these tables under other migration names: lidza test --fresh recreates it"
+					}
+				}
+				problem("database (%s): %v; %s", m, err, hint)
 				continue
 			}
 			step("database %s: created if missing, %d migration(s) applied", dbName(cfg.Name, m), applied)

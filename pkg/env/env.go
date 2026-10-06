@@ -9,7 +9,8 @@
 //		Origins     []string      `env:"CORS_ORIGINS"`
 //	}
 //
-// Load reads, in order of increasing precedence: .env, .env.<mode>, the
+// Load reads, in order of increasing precedence: the settings files
+// (Files: .env, .env.local, .env.<mode>, .env.<mode>.local), the
 // app's credentials (config/credentials.yml.enc, decrypted with the
 // master key, plus the values saved at runtime), the process
 // environment. Mode is LIDZA_MODE ("dev" under lidza dev, "test" under
@@ -56,7 +57,7 @@ func sealed(dir string) map[string]string {
 // are reported together in one error.
 func Load(dir string, dst any) error {
 	values := map[string]string{}
-	for _, name := range []string{".env", ".env." + Mode()} {
+	for _, name := range Files() {
 		if err := readFile(filepath.Join(dir, name), values); err != nil {
 			return err
 		}
@@ -76,7 +77,7 @@ func Load(dir string, dst any) error {
 // the credentials, the process environment.
 func Values(dir string) (map[string]string, error) {
 	values := map[string]string{}
-	for _, name := range []string{".env", ".env." + Mode()} {
+	for _, name := range Files() {
 		if err := readFile(filepath.Join(dir, name), values); err != nil {
 			return nil, err
 		}
@@ -92,6 +93,15 @@ func Values(dir string) (map[string]string, error) {
 	return values, nil
 }
 
+// Files are the settings files, lowest precedence first: .env, then
+// .env.local, then .env.<mode> (.env.test is committed), then
+// .env.<mode>.local. The .local ones are this checkout's own and never
+// committed: a git worktree's databases (lidza install writes them), a
+// developer's one-off value.
+func Files() []string {
+	return []string{".env", ".env.local", ".env." + Mode(), ".env." + Mode() + ".local"}
+}
+
 // Origin layers, lowest precedence first, as Origins reports them.
 const (
 	OriginDotEnv      = ".env"
@@ -101,12 +111,12 @@ const (
 )
 
 // Origins reports, for every name Values returns, the layer its value
-// comes from: OriginDotEnv (".env" or ".env.<mode>", reported as the
+// comes from: OriginDotEnv (one of Files, reported as the
 // file's name), OriginCredentials, OriginSaved or OriginProcess. A value
 // from the process environment wins over everything the app can save.
 func Origins(dir string) (map[string]string, error) {
 	out := map[string]string{}
-	for _, name := range []string{".env", ".env." + Mode()} {
+	for _, name := range Files() {
 		values := map[string]string{}
 		if err := readFile(filepath.Join(dir, name), values); err != nil {
 			return nil, err

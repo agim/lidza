@@ -153,6 +153,9 @@ func New(ctx context.Context, opt Options) error {
 			return err
 		}
 	}
+	if _, err := EnsureMerging(opt.Dir); err != nil {
+		return err
+	}
 	// The generated schema package must exist before the app compiles.
 	parsed, err := schema.Load(opt.Dir)
 	if err != nil {
@@ -372,6 +375,13 @@ func Refresh(dir string, cfg *config.Config) ([]string, error) {
 			return nil, err
 		}
 		changed = append(changed, name)
+	}
+	// The merge rules, for an app from before them, and this clone's
+	// registration of the lock's merge driver.
+	if merging, err := EnsureMerging(dir); err != nil {
+		return nil, err
+	} else {
+		changed = append(changed, merging...)
 	}
 	// Each agent's MCP configuration, for an app from before it.
 	for _, f := range mcpConfigs {

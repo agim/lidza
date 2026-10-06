@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -353,3 +354,108 @@ func sortedMigrations(dir string) []string {
 	sort.Strings(out)
 	return out
 }
+
+// MergeLocks merges two branches' lock files with their common ancestor,
+// model by model and enum by enum: an entry one branch changed (or added,
+// or removed) and the other left as it was takes the change; the same
+// change on both is taken once. Line numbers are ignored: an edit higher
+// up in schema.lidza moves them in every entry below it. Conflicts name
+// the entries both branches changed differently; the result then keeps
+// ours for them, and the developer merges schema.lidza and runs lidza gen.
+func MergeLocks(base, ours, theirs []byte) (merged []byte, conflicts []string, err error) {
+	var o, a, b Schema
+	for _, x := range []struct {
+		data []byte
+		into *Schema
+	}{{base, &o}, {ours, &a}, {theirs, &b}} {
+		if len(x.data) == 0 {
+			continue
+		}
+		if err := json.Unmarshal(x.data, x.into); err != nil {
+			return nil, nil, fmt.Errorf("%s: %w", LockFile, err)
+		}
+	}
+	key := func(v any) string {
+		data, _ := json.Marshal(v)
+		return lineless.ReplaceAllString(string(data), "")
+	}
+	type entry struct {
+		name string
+		val  any
+	}
+	merge := func(kind string, base, ours, theirs []entry) []entry {
+		find := func(list []entry, name string) (any, bool) {
+			for _, e := range list {
+				if e.name == name {
+					return e.val, true
+				}
+			}
+			return nil, false
+		}
+		var out []entry
+		take := func(name string) {
+			ov, inO := find(base, name)
+			av, inA := find(ours, name)
+			bv, inB := find(theirs, name)
+			same := func(x, y any, inX, inY bool) bool { return inX == inY && (!inX || key(x) == key(y)) }
+			switch {
+			case same(av, bv, inA, inB):
+				if inA {
+					out = append(out, entry{name, av})
+				}
+			case same(av, ov, inA, inO): // only theirs changed it
+				if inB {
+					out = append(out, entry{name, bv})
+				}
+			case same(bv, ov, inB, inO): // only ours changed it
+				if inA {
+					out = append(out, entry{name, av})
+				}
+			default:
+				conflicts = append(conflicts, kind+" "+name)
+				if inA {
+					out = append(out, entry{name, av})
+				}
+			}
+		}
+		seen := map[string]bool{}
+		for _, list := range [][]entry{ours, theirs, base} {
+			for _, e := range list {
+				if !seen[e.name] {
+					seen[e.name] = true
+					take(e.name)
+				}
+			}
+		}
+		return out
+	}
+	models := func(s Schema) []entry {
+		out := make([]entry, len(s.Models))
+		for i, m := range s.Models {
+			out[i] = entry{m.Name, m}
+		}
+		return out
+	}
+	enums := func(s Schema) []entry {
+		out := make([]entry, len(s.Enums))
+		for i, e := range s.Enums {
+			out[i] = entry{e.Name, e}
+		}
+		return out
+	}
+	var result Schema
+	for _, e := range merge("enum", enums(o), enums(a), enums(b)) {
+		result.Enums = append(result.Enums, e.val.(*Enum))
+	}
+	for _, e := range merge("model", models(o), models(a), models(b)) {
+		result.Models = append(result.Models, e.val.(*Model))
+	}
+	data, err := json.MarshalIndent(result, "", "  ")
+	if err != nil {
+		return nil, nil, err
+	}
+	return append(data, '\n'), conflicts, nil
+}
+
+// lineless drops the "Line" fields from a lock entry's JSON.
+var lineless = regexp.MustCompile(`"Line":\d+,?`)

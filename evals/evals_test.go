@@ -25,6 +25,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/mcp"
 
@@ -712,6 +713,9 @@ func TestSetup(t *testing.T) {
 	if out, err := command(app, "pg_isready"); err != nil {
 		t.Skipf("postgres not reachable: %s", out)
 	}
+	// Each run starts from no databases: an earlier run's would hold its
+	// own migrations, named by the time it ran.
+	dropDatabases(t, "setupapp_dev", "setupapp_test")
 	tmp := t.TempDir()
 	if out, err := command(tmp, lidza, "new", "setupapp", "--no-setup", "--lidza-dir", root); err != nil {
 		t.Fatalf("lidza new: %v\n%s", err, out)
@@ -817,4 +821,31 @@ func TestDuplicateMigrationNumber(t *testing.T) {
 		"db/migrations/0001_create_label.down.sql": "DROP TABLE label;\n",
 	})
 	expect(t, check(t), expectation{code: "L019", severity: "error", file: "db/migrations/0001_create_note.up.sql", message: "0001_create_label"})
+}
+
+// dropDatabases drops databases an earlier run left, on the server
+// DATABASE_URL names (the local socket by default).
+func dropDatabases(t *testing.T, names ...string) {
+	t.Helper()
+	url := os.Getenv("DATABASE_URL")
+	if url == "" {
+		url = "postgres:///postgres?host=/var/run/postgresql"
+	}
+	cfg, err := pgx.ParseConfig(url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Database = "postgres"
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	conn, err := pgx.ConnectConfig(ctx, cfg)
+	if err != nil {
+		t.Skipf("postgres not reachable: %v", err)
+	}
+	defer conn.Close(ctx)
+	for _, n := range names {
+		if _, err := conn.Exec(ctx, "DROP DATABASE IF EXISTS "+pgx.Identifier{n}.Sanitize()+" WITH (FORCE)"); err != nil {
+			t.Fatal(err)
+		}
+	}
 }

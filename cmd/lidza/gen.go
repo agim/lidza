@@ -35,6 +35,9 @@ func runGen(ctx context.Context, args []string) error {
 	if len(args) > 0 && args[0] == "deploy" {
 		return runGenDeploy(ctx, args[1:])
 	}
+	if len(args) == 4 && args[0] == "--merge-lock" {
+		return mergeLockDriver(args[1], args[2], args[3])
+	}
 	fs := flags("gen")
 	dir := fs.String("dir", ".", "project directory")
 	if err := fs.Parse(args); err != nil {
@@ -363,6 +366,26 @@ func runGenDeploy(_ context.Context, args []string) error {
 	}
 	if local := scaffold.AppVersions(abs).LocalPath; local != "" {
 		fmt.Printf("[gen] go.mod replaces the framework with the local checkout %s, which a container build cannot reach: pin a release (go mod edit -dropreplace %s, then lidza update) before building the image\n", local, version.ModulePath)
+	}
+	return nil
+}
+
+// mergeLockDriver is git's merge driver for db/schema.lock.json (lidza
+// gen --merge-lock %O %A %B, registered by lidza gen): the two branches'
+// locks merged model by model into %A. Entries both branches changed
+// differently fail the merge for the developer, who merges schema.lidza
+// and runs lidza gen.
+func mergeLockDriver(base, ours, theirs string) error {
+	read := func(p string) []byte { data, _ := os.ReadFile(p); return data }
+	merged, conflicts, err := schema.MergeLocks(read(base), read(ours), read(theirs))
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(ours, merged, 0o644); err != nil {
+		return err
+	}
+	if len(conflicts) > 0 {
+		return fmt.Errorf("%s: both branches changed %s: merge schema.lidza, then lidza gen (it writes the migration and the lock), then git add %s", schema.LockFile, strings.Join(conflicts, ", "), schema.LockFile)
 	}
 	return nil
 }

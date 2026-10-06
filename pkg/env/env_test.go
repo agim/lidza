@@ -124,3 +124,21 @@ func TestTestModeSkipsSealedFile(t *testing.T) {
 		t.Fatalf("dev reads the sealed file: %v", v["T_URL"])
 	}
 }
+
+// The .local files are a checkout's own: .env.local over .env, and
+// .env.<mode>.local over everything committed for the mode.
+func TestLocalFiles(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("LIDZA_MODE", "test")
+	os.WriteFile(filepath.Join(dir, ".env"), []byte("A=env\nB=env\nC=env\nD=env\n"), 0o644)
+	os.WriteFile(filepath.Join(dir, ".env.local"), []byte("B=local\nC=local\nD=local\n"), 0o644)
+	os.WriteFile(filepath.Join(dir, ".env.test"), []byte("C=test\nD=test\n"), 0o644)
+	os.WriteFile(filepath.Join(dir, ".env.test.local"), []byte("D=test-local\n"), 0o644)
+	v, err := Values(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v["A"] != "env" || v["B"] != "local" || v["C"] != "test" || v["D"] != "test-local" {
+		t.Fatalf("%v", v)
+	}
+}

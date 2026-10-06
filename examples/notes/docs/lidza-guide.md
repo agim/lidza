@@ -218,6 +218,28 @@ What each frontend template ships; the API contract, `lidza check`,
 
 This app uses the **react** template.
 
+## Parallel work
+
+Several agents or branches at once, each in its own git worktree
+(`git worktree add ../app-feature feature`), run `lidza install` there
+first. It copies what git does not carry from the main checkout (`.env`,
+`config/master.key`), links `node_modules` when `package-lock.json` is the
+same, and gives the worktree databases of its own (`<app>_feature_dev`,
+`<app>_feature_test`) in `.env.local` and `.env.test.local`, the
+checkout's own settings files that win over the committed ones, so one
+worktree's migrations never land in another's database. `lidza test`
+does the test database part by itself. `LIDZA_DB_SUFFIX` names any
+checkout's databases apart.
+
+Merging the branches back: migrations are named by time, so two never
+share a name; `docs/decisions.md` and `CHANGELOG.md` keep both branches'
+entries (git's union merge, in `.gitattributes`); `db/schema.lock.json`
+merges model by model through the driver `lidza gen` registers in the
+clone (`merge.lidza-lock`). Two branches that changed the same model
+differently stop the merge on the lock: merge `schema.lidza`, then
+`lidza gen`. After any merge, `lidza gen` (or `lidza dev`) regenerates
+the rest.
+
 ## Tests
 
 `routes_test.go` shows the shape: `srv := lidzatest.Start(t, app())`

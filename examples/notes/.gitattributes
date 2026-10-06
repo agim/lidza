@@ -1,0 +1,4 @@
+# lidza: decisions and the changelog keep both branches' entries; the schema lock merges model by model.
+docs/decisions.md merge=union
+CHANGELOG.md merge=union
+db/schema.lock.json merge=lidza-lock

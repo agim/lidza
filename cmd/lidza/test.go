@@ -79,6 +79,7 @@ var freshTestDB bool
 // prepareTestDB creates the database named in DATABASE_URL (after .env
 // and .env.test) when it does not exist, and applies the migrations.
 func prepareTestDB(ctx context.Context, dir string) error {
+	ensureWorktreeTestDB(dir)
 	var cfg db.Config
 	if err := env.Load(dir, &cfg); err != nil {
 		return fmt.Errorf("test database: %w", err)
@@ -263,4 +264,38 @@ func testEnv(dir string) []string {
 		}
 	}
 	return append(env, credentials.EnvKeyOff+"=1")
+}
+
+// ensureWorktreeTestDB gives a git worktree its own test database when
+// lidza install has not: the committed .env.test names the shared one,
+// which another worktree's migrations would change under this one.
+func ensureWorktreeTestDB(dir string) {
+	wt := worktreeOf(dir)
+	if wt.suffix == "" {
+		return
+	}
+	local := filepath.Join(dir, ".env.test.local")
+	existing := map[string]string{}
+	if data, err := os.ReadFile(local); err == nil {
+		for _, l := range strings.Split(string(data), "\n") {
+			if k, v, ok := strings.Cut(strings.TrimSpace(l), "="); ok {
+				existing[k] = v
+			}
+		}
+	}
+	if existing["DATABASE_URL"] != "" {
+		return
+	}
+	values, err := env.Values(dir)
+	if err != nil || values["DATABASE_URL"] == "" {
+		return
+	}
+	cfg, err := config.Load(dir)
+	if err != nil {
+		return
+	}
+	url := withDatabase(values["DATABASE_URL"], dbName(cfg.Name+wt.suffix, "test"))
+	if changed, err := setEnvValue(local, "DATABASE_URL", url); err == nil && changed {
+		fmt.Printf("[lidza] test database: this worktree's own, %s (.env.test.local)\n", url)
+	}
 }

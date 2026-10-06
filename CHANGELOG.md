@@ -9,7 +9,7 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
-## Unreleased
+## v0.1.88 (2026-10-06)
 
 - Static pages in the react template: a route with `staticData: {
   static: true }` is prerendered without the client runtime (no React,

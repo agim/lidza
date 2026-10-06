@@ -30,6 +30,7 @@ Usage:
   lidza test [--fresh] [go test flags] | lidza test --e2e [--install]
   lidza verify [--json] [--no-test] [--strict] | lidza verify --install-hook
   lidza doctor
+  lidza audit layout [--viewport 1440x900,390x844] [--theme light,dark] [--max-scroll -1]
   lidza update [--to vX.Y.Z|<commit>] [--cli-only] [--commit] [--migrate] [--no-pull] [--allow-behind] [--allow-dirty]
   lidza context [--dir .] [--stdout]
   lidza api [package] [--filter name] [--list]
@@ -56,6 +57,7 @@ Commands:
   benchmark  run a k6 scenario from benchmarks/ against the running app; heap before and after
   test     go test ./... with LIDZA_MODE=test, the test database created and migrated, then the frontend check; --e2e runs the Playwright suite against the built binary
   verify   before a commit: regenerate (generated files must be staged), check, go test; the pre-commit hook runs it
+  audit    layout: every page at each viewport and theme, signed in, for what scrolls sideways (a fault) or down
   doctor   report the toolchain, services and the project's prerequisites, each with its fix
   context  write .lidza/context.json: routes, handler signatures, Rust exports
   api      print the framework's public Go API as the project resolves it: the package list, one package, a --filter search, or all
@@ -112,6 +114,8 @@ func main() {
 		err = runTest(ctx, args)
 	case "verify":
 		err = runVerify(ctx, args)
+	case "audit":
+		err = runAudit(ctx, args)
 	case "doctor":
 		err = runDoctor(ctx, args)
 	case "context":

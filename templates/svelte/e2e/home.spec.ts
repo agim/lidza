@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { expectNoSidewaysScroll } from './layout'
 
 // The page is prerendered, hydrates without discarding the markup, and
 // shows data from /api. Hydration mismatches surface through window's
@@ -20,4 +21,13 @@ test('home renders and loads data from the API', async ({ page }) => {
   const windowErrors = await page.evaluate(() => (window as unknown as { __errors: string[] }).__errors)
   expect(errors).toEqual([])
   expect(windowErrors).toEqual([])
+})
+
+// Nothing scrolls sideways on a phone: lidza audit layout checks every
+// page this way.
+test('home fits a phone', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/')
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+  await expectNoSidewaysScroll(page)
 })

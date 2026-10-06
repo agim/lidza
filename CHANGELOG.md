@@ -11,6 +11,19 @@ change. A release without one is additive: an app updates with
 
 ## Unreleased
 
+- `lidza audit layout` (issue #38) builds and starts the app on the test
+  database, visits every page the frontend build prerenders plus
+  `--routes`, signed in as a throwaway user when the auth pack runs, at
+  each `--viewport` (1440x900 and 390x844 by default) and `--theme`
+  (light, dark), and reports what scrolls: sideways is a fault, with the
+  elements past the edge named; down is a fault past `--max-scroll`
+  pixels (`0` for an app whose design says no page scrolls; `-1`, the
+  default, only reports). Non-zero exit on a fault; `--json` for a
+  report. The react, svelte and astro templates gain `e2e/layout.ts`
+  (`expectNoSidewaysScroll`, `expectFitsViewport`, `overflow`) and a home
+  spec that checks a phone's width. `lidza test --e2e` and the audit
+  share `startTestApp`.
+
 - Lists with search, filters, a date range, sorting and pages (issue
   #37). `pkg/list`: `list.Read(req, list.Options{Sorts, Desc, Filters})`
   reads `limit` (50, at most 200), `offset`, `q`, `since`, `until`,

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { expectNoSidewaysScroll } from './layout'
 
 // Static pages from the build, data from /api in the browser, navigation
 // between pages; no console or window errors.
@@ -21,4 +22,13 @@ test('home loads data from the API and links to About', async ({ page }) => {
   const windowErrors = await page.evaluate(() => (window as unknown as { __errors: string[] }).__errors)
   expect(errors).toEqual([])
   expect(windowErrors).toEqual([])
+})
+
+// Nothing scrolls sideways on a phone: lidza audit layout checks every
+// page this way.
+test('home fits a phone', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/')
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+  await expectNoSidewaysScroll(page)
 })

@@ -25,7 +25,7 @@ Usage:
   lidza check [--dir .] [--json]
   lidza gen [--dir .] | lidza gen resource <Model> [--force] [--public | --shared]
   lidza pack add|scaffold|build|list [name]
-  lidza db migrate|rollback|status
+  lidza db migrate|rollback|status | lidza db new "<description>"
   lidza benchmark [scenario] [--vus 500] [--duration 1m]
   lidza test [--fresh] [go test flags] | lidza test --e2e [--install]
   lidza verify [--json] [--no-test] [--strict] | lidza verify --install-hook

@@ -228,3 +228,63 @@ func TestIsTestFile(t *testing.T) {
 		}
 	}
 }
+
+// An approved copy update (the expected text of an assertion changes)
+// passes and is reported; a matcher swapped for a loose one is refused
+// even though one assertion replaces another.
+func TestParseTestDiffTextAndMatchers(t *testing.T) {
+	copyUpdate := `diff --git a/e2e/home.spec.ts b/e2e/home.spec.ts
+--- a/e2e/home.spec.ts
++++ b/e2e/home.spec.ts
+@@ -12 +12 @@
+-  await expect(page.getByRole('button', { name: 'Work in this client' })).toBeVisible()
++  await expect(page.getByRole('button', { name: 'Show only this client' })).toBeVisible()
+@@ -20 +20 @@
+-  await expect(page.getByText(/Security/)).toBeVisible()
++  await expect(page.getByText(/Sign-in security/)).toBeVisible()
+`
+	findings, notes := parseTestDiffNotes([]byte(copyUpdate))
+	if len(findings) != 0 {
+		t.Fatalf("copy update refused: %v", findings)
+	}
+	if len(notes) != 2 || !strings.Contains(notes[0], "e2e/home.spec.ts:12 expected text changed: 'button', 'Work in this client' → 'button', 'Show only this client'") || !strings.Contains(notes[1], "/Security/ → /Sign-in security/") {
+		t.Fatalf("notes: %q", notes)
+	}
+
+	loosened := `diff --git a/e2e/home.spec.ts b/e2e/home.spec.ts
+--- a/e2e/home.spec.ts
++++ b/e2e/home.spec.ts
+@@ -12 +12 @@
+-  expect(total).toBe(42)
++  expect(total).toBeTruthy()
+diff --git a/routes_test.go b/routes_test.go
+--- a/routes_test.go
++++ b/routes_test.go
+@@ -30 +30 @@
+-	assert.Equal(t, "ada", got.Name)
++	assert.NotNil(t, got.Name)
+`
+	findings, _ = parseTestDiffNotes([]byte(loosened))
+	if len(findings) != 2 || !strings.Contains(findings[0].Message, "matcher loosened: expect(total).toBe(42) → expect(total).toBeTruthy()") || !strings.Contains(findings[1].Message, "assert.NotNil") {
+		t.Fatalf("loosened: %v", findings)
+	}
+
+	// A check removed for good is still a removed assertion, whatever
+	// text changes beside it.
+	removed := `diff --git a/e2e/home.spec.ts b/e2e/home.spec.ts
+--- a/e2e/home.spec.ts
++++ b/e2e/home.spec.ts
+@@ -12,2 +12 @@
+-  await expect(page.getByText('Saved')).toBeVisible()
+-  await expect(page.getByText('3 notes')).toBeVisible()
++  await expect(page.getByText('Stored')).toBeVisible()
+`
+	findings, notes = parseTestDiffNotes([]byte(removed))
+	if len(findings) != 1 || !strings.Contains(findings[0].Message, "assertion removed") || len(notes) != 1 {
+		t.Fatalf("removed: %v %v", findings, notes)
+	}
+	// A different check in place of the old one is not a copy update.
+	if s1, s2 := shape(`expect(a).toBe('x')`), shape(`expect(b).toBe('y')`); s1 == s2 {
+		t.Fatal("different subjects share a shape")
+	}
+}

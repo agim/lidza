@@ -86,10 +86,10 @@ app into an importable package and name it in `lidza.json`:
 | `lidza test --e2e [--install]` | builds the app, starts the binary with `.env.test`, runs the Playwright suite in `e2e/`; `--install` fetches the browser when missing. The sign-in and analytics rate limits are raised for the run (every account signs up from 127.0.0.1) unless `.env.test` sets them; the Go tests keep the real limits. Rows the suite needs that no page creates (data a sync job would fetch) go in `e2e/seed.sql`, loaded into the test database before each run; write it to be rerun (`ON CONFLICT DO NOTHING`). |
 | `lidza install [--packs db,auth,mail] [--agent claude]` | on an existing app: enables the packs (db added when one needs it), writes `.env` from `.env.example` with a random `AUTH_SECRET` and the app's database, writes `.env.test`, generates, creates and migrates the dev and test databases, installs `node_modules`, installs the agent CLI when asked, makes the first commit. On a clone or after a pull it adds to `.env` what packs enabled since need and applies new migrations; one that drops data (`-- review: data loss`) waits for `--migrate`. `lidza new --packs ...` runs it for a new app; `lidza setup` is its former name. Rerunning is safe. |
 | `lidza ship [--domains a.example.com] [--email ops@example.com] [--no-e2e]` | before a deploy: `lidza verify`, the browser suite against the built binary, the production build, `deploy/production.env`; stops at the first failure. Then it names the settings the enabled packs need in production that neither the credentials nor `deploy.env` hold, or hold with a development-only value (`CACHE_URL`, `APP_URL`, `LLM_PROVIDER=fake`). The app's production settings that are not secrets (`MAIL_PROVIDER`, `STORAGE_BUCKET`, `STORAGE_PREFIX`) go in `lidza.json` under `deploy.env`, which ship writes into `deploy/production.env` on every run; a name that looks like a secret there is refused. |
-| `lidza verify [--json] [--no-test] [--allow-test-changes]` | before a commit: regenerates and requires the generated files to be staged, refuses staged changes that weaken the tests, runs the checks, runs the Go tests. The pre-commit hook in `.githooks/` runs it (`git commit --no-verify` skips once; `lidza verify --install-hook` sets it up again). The test guard compares the staged changes with `HEAD` and names each file and line that deletes a test file (`*_test.go`, `*.spec.ts`, `*.test.ts(x)`), adds `t.Skip`, `t.Skipf`, `t.SkipNow`, `test.skip`, `it.skip`, `describe.skip`, `.only` or `.fixme`, or removes more assertions (`t.Error`, `t.Fatal`, `expect(`, `assert.`) from a file than it adds. A deliberate change is confirmed with `LIDZA_ALLOW_TEST_CHANGES=1 git commit ...` (or `lidza verify --allow-test-changes`); one skip with a stated reason passes with a `// lidza:allow-skip <reason>` comment on its line or the line above. A test is never weakened to make it pass: if it is wrong, the agent says so and the developer confirms. |
+| `lidza verify [--json] [--no-test] [--allow-test-changes]` | before a commit: regenerates and requires the generated files to be staged, refuses staged changes that weaken the tests, runs the checks, runs the Go tests. The pre-commit hook in `.githooks/` runs it (`git commit --no-verify` skips once; `lidza verify --install-hook` sets it up again). The test guard compares the staged changes with `HEAD` and names each file and line that deletes a test file (`*_test.go`, `*.spec.ts`, `*.test.ts(x)`), adds `t.Skip`, `t.Skipf`, `t.SkipNow`, `test.skip`, `it.skip`, `describe.skip`, `.only` or `.fixme`, or removes more assertions (`t.Error`, `t.Fatal`, `expect(`, `assert.`) from a file than it adds, or swaps an assertion's matcher for a looser one (`toBe` to `toBeTruthy`, `assert.Equal` to `assert.NotNil`). An assertion whose expected text changes and nothing else (a copy update: `'Security'` to `'Sign-in security'`) passes, and the verify report lists each one, old and new, for the developer to see. A deliberate change is confirmed with `LIDZA_ALLOW_TEST_CHANGES=1 git commit ...` (or `lidza verify --allow-test-changes`); one skip with a stated reason passes with a `// lidza:allow-skip <reason>` comment on its line or the line above. A test is never weakened to make it pass: if it is wrong, the agent says so and the developer confirms. |
 | `lidza doctor` | toolchain, services, `node_modules`, pack builds, e2e browser; each missing item with its fix. |
 | `lidza pack scaffold <name>` | creates `packs/<name>` with a crate and an example capability; `lidza pack build` compiles it. |
-| `lidza db migrate\|rollback\|status [--production]` | applies `db/migrations` (db pack, `DATABASE_URL` from `.env`). `migrate` and `rollback` refuse a database on another host (not a Unix socket, `localhost` or a loopback address) unless `--production` is given; the MCP tools never pass it. |
+| `lidza db migrate\|rollback\|status [--production]`, `lidza db new "<description>"` | applies `db/migrations` (db pack, `DATABASE_URL` from `.env`); `new` writes a hand-written (data) migration that `lidza gen` never touches. `migrate` and `rollback` refuse a database on another host (not a Unix socket, `localhost` or a loopback address) unless `--production` is given; the MCP tools never pass it. |
 | `lidza benchmark [--vus 500] [--duration 1m]` | runs `benchmarks/scale_test.js` with k6 against the running app; heap and goroutines must stay flat. |
 | `lidza version` | prints the framework version. |
 | `go test ./...` | Go tests. |
@@ -1984,9 +1984,20 @@ renames in `sqlc.yaml` between two `# lidza gen` comments.
 
 `lidza gen` writes the full DDL to
 `db/schema.sql` and, when models changed since `db/schema.lock.json`, a
-numbered pair in `db/migrations/` (`NNNN_name.up.sql`, `.down.sql`).
+pair in `db/migrations/` named by the UTC time it was written
+(`20261006140512_create_post.up.sql`, `.down.sql`), always after the
+newest one there; migrations of older releases (`0105_x`) keep their
+numbers and sort first. Two branches that each change the schema write
+two names, never one, and both apply after the merge.
 Statements that lose data or can fail on existing rows carry a
 `-- review` comment. Applying migrations is the `db` pack's job.
+
+A step the schema cannot say (a data backfill, a hand-tuned index) is a
+migration of its own, never SQL appended to a generated file:
+`lidza db new "backfill post slugs"` (MCP `lidza_db_new`) writes an empty
+pair named after the newest migration, which `lidza gen` never touches;
+write its SQL, then `lidza db migrate`. Make a backfill safe to run
+twice (`UPDATE post SET slug = ... WHERE slug IS NULL`).
 ## Operations
 
 The binary serves `/healthz` (liveness), `/readyz` (503 while a pack's

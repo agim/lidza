@@ -63,3 +63,25 @@ func TestDBMissingURLNamesSetup(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+// A data migration is a hand-written file named after the newest
+// migration, which lidza gen leaves alone.
+func TestDBNew(t *testing.T) {
+	dir := t.TempDir()
+	migrations := filepath.Join(dir, "db", "migrations")
+	os.MkdirAll(migrations, 0o755)
+	os.WriteFile(filepath.Join(migrations, "29991231235959_ahead.up.sql"), nil, 0o644)
+	if err := runDB(context.Background(), []string{"new", "--dir", dir, "Backfill post slugs!"}); err != nil {
+		t.Fatal(err)
+	}
+	up, err := os.ReadFile(filepath.Join(migrations, "30000101000000_backfill_post_slugs.up.sql"))
+	if err != nil || !strings.Contains(string(up), "lidza gen never changes it") {
+		t.Fatalf("%s %v", up, err)
+	}
+	if _, err := os.Stat(filepath.Join(migrations, "30000101000000_backfill_post_slugs.down.sql")); err != nil {
+		t.Fatal(err)
+	}
+	if err := runDB(context.Background(), []string{"new", "--dir", dir}); err == nil {
+		t.Fatal("no description accepted")
+	}
+}

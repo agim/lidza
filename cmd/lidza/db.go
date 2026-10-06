@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgconn"
@@ -14,12 +15,16 @@ import (
 	"github.com/agim/lidza/packs/db"
 	"github.com/agim/lidza/pkg/devserver"
 	"github.com/agim/lidza/pkg/env"
+	"github.com/agim/lidza/pkg/schema"
 )
 
 const dbUsage = `usage:
   lidza db migrate            apply pending migrations from db/migrations
   lidza db rollback [--steps 1]  revert the last applied migration(s)
   lidza db status             list migrations and whether they are applied
+  lidza db new "backfill x"   write a hand-written (data) migration that
+                              lidza gen never touches; it runs after the
+                              migrations before it
 DATABASE_URL comes from .env, .env.<mode> or the environment. migrate and
 rollback refuse a database on another host (not a Unix socket, localhost
 or a loopback address) unless --production is given.
@@ -41,6 +46,14 @@ func runDB(ctx context.Context, args []string) error {
 	abs, err := filepath.Abs(*dir)
 	if err != nil {
 		return err
+	}
+	if sub == "new" {
+		name, err := newDataMigration(abs, strings.Join(fs.Args(), " "))
+		if err != nil {
+			return err
+		}
+		fmt.Printf("wrote %s/%s.up.sql and .down.sql: write the SQL; it runs after the migrations before it (lidza db migrate, lidza test)\n", schema.MigrationsDir, name)
+		return nil
 	}
 	var cfg db.Config
 	if err := env.Load(abs, &cfg); err != nil {
@@ -140,3 +153,31 @@ func localDBHost(host string) bool {
 	ip := net.ParseIP(strings.Trim(host, "[]"))
 	return ip != nil && ip.IsLoopback()
 }
+
+// newDataMigration writes a hand-written migration named by the time,
+// after every migration there: a data backfill, an SQL step the schema
+// cannot say. lidza gen writes only new files, so it never touches it.
+func newDataMigration(dir, description string) (string, error) {
+	slug := strings.Trim(nonSlug.ReplaceAllString(strings.ToLower(description), "_"), "_")
+	if slug == "" {
+		return "", errors.New(`db new: describe the migration: lidza db new "backfill post slugs"`)
+	}
+	if len(slug) > 60 {
+		slug = strings.TrimRight(slug[:60], "_")
+	}
+	migrations := filepath.Join(dir, schema.MigrationsDir)
+	if err := os.MkdirAll(migrations, 0o755); err != nil {
+		return "", err
+	}
+	name := schema.NextStamp(migrations, schema.Clock()) + "_" + slug
+	up := "-- " + name + ": hand-written, not generated; lidza gen never changes it.\n" +
+		"-- It runs after the migrations before it, in its own transaction. A backfill\n" +
+		"-- that can run twice harmlessly (UPDATE ... WHERE x IS NULL) is the safest.\n\n"
+	down := "-- " + name + ": what undoes it, if anything (empty for a backfill).\n"
+	if err := os.WriteFile(filepath.Join(migrations, name+".up.sql"), []byte(up), 0o644); err != nil {
+		return "", err
+	}
+	return name, os.WriteFile(filepath.Join(migrations, name+".down.sql"), []byte(down), 0o644)
+}
+
+var nonSlug = regexp.MustCompile(`[^a-z0-9]+`)

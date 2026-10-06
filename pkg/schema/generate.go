@@ -5,6 +5,7 @@ import (
 	"go/format"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // Gofmt formats generated Go source. On a syntax error the source is
@@ -61,7 +62,8 @@ func Generate(root string, s *Schema, cargoDir, tsFile string) (*Result, error) 
 		if err != nil {
 			return nil, err
 		}
-		if m := Diff(prev, s, NextSeq(filepath.Join(root, MigrationsDir))); m != nil {
+		if m := Diff(prev, s, 1); m != nil {
+			m.Name = NextStamp(filepath.Join(root, MigrationsDir), Clock()) + strings.TrimPrefix(m.Name, "0001")
 			up, down := m.Files()
 			if err := write(filepath.Join(MigrationsDir, m.Name+".up.sql"), up); err != nil {
 				return nil, err

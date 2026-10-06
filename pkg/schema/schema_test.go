@@ -4,8 +4,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
+	"time"
 )
 
 const example = `// blog
@@ -263,15 +265,18 @@ func TestDiff(t *testing.T) {
 
 func TestGenerateEndToEnd(t *testing.T) {
 	dir := t.TempDir()
+	prev := Clock
+	t.Cleanup(func() { Clock = prev })
+	Clock = func() time.Time { return time.Date(2026, 10, 6, 14, 5, 12, 0, time.UTC) }
 	s, _ := Parse(example)
 	res, err := Generate(dir, s, "", "types.ts")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Migration != "0001_init" || len(res.Files) != 6 {
+	if res.Migration != "20261006140512_init" || len(res.Files) != 6 {
 		t.Fatalf("first run: %+v", res)
 	}
-	for _, f := range []string{GoFile, SQLFile, LockFile, "db/migrations/0001_init.up.sql", "db/migrations/0001_init.down.sql", "types.ts"} {
+	for _, f := range []string{GoFile, SQLFile, LockFile, "db/migrations/20261006140512_init.up.sql", "db/migrations/20261006140512_init.down.sql", "types.ts"} {
 		if _, err := os.Stat(filepath.Join(dir, f)); err != nil {
 			t.Errorf("missing %s", f)
 		}
@@ -280,12 +285,13 @@ func TestGenerateEndToEnd(t *testing.T) {
 	if err != nil || len(res.Files) != 0 || res.Migration != "" {
 		t.Fatalf("second run should be a no-op: %+v %v", res, err)
 	}
+	// The same second (a fast second run): the next name is still later.
 	v2, _ := Parse(strings.Replace(example, "  meta      json?\n", "  meta      json?\n  score     float?\n", 1))
 	res, err = Generate(dir, v2, "", "types.ts")
-	if err != nil || res.Migration != "0002_alter_posts" {
+	if err != nil || res.Migration != "20261006140513_alter_posts" {
 		t.Fatalf("third run: %+v %v", res, err)
 	}
-	if got := Migrations(dir); len(got) != 2 || got[1] != "0002_alter_posts" {
+	if got := Migrations(dir); len(got) != 2 || got[1] != "20261006140513_alter_posts" {
 		t.Fatalf("migrations: %v", got)
 	}
 	lock, _ := LoadLock(dir)
@@ -635,5 +641,27 @@ type CreateNote {
 func TestPublicSharedExclusive(t *testing.T) {
 	if _, err := Parse("model Tag @public @shared {\n  id uuid @id\n}\n"); err == nil || !strings.Contains(err.Error(), "exclude each other") {
 		t.Fatalf("both: %v", err)
+	}
+}
+
+// A new migration sorts after every existing one: after the numbered
+// ones of older releases, and after a later stamp another machine wrote
+// (its clock ahead of this one).
+func TestNextStamp(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Date(2026, 10, 6, 14, 0, 0, 0, time.UTC)
+	if got := NextStamp(dir, now); got != "20261006140000" {
+		t.Fatal(got)
+	}
+	for _, f := range []string{"0108_old.up.sql", "20261006150000_ahead.up.sql", "20261006150000_ahead.down.sql"} {
+		os.WriteFile(filepath.Join(dir, f), nil, 0o644)
+	}
+	if got := NextStamp(dir, now); got != "20261006150001" {
+		t.Fatal(got)
+	}
+	names := []string{"0108_old", "20261006150001_new", "0109_older"}
+	sort.Strings(names)
+	if names[2] != "20261006150001_new" {
+		t.Fatalf("order %v", names)
 	}
 }

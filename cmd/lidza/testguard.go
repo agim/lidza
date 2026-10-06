@@ -101,7 +101,8 @@ func weakenedTests(ctx context.Context, dir string) ([]testFinding, string, erro
 	if err != nil {
 		return nil, "", fmt.Errorf("git diff --cached: %w", err)
 	}
-	return parseTestDiff(out), "", nil
+	findings, notes := parseTestDiffNotes(out)
+	return findings, strings.Join(notes, "; "), nil
 }
 
 // fileDiff collects one file's changes while the diff is read.
@@ -113,12 +114,82 @@ type fileDiff struct {
 	addedSkipText   []string
 	removedAsserts  []testFinding
 	addedAssertions int
+	// The assertion lines themselves, to pair a removed one with an
+	// added one: the same check with other expected text is a copy
+	// update; the same check with a looser matcher weakens it.
+	removedAssertText []string
+	addedAssert       []assertLine
+}
+
+type assertLine struct {
+	line int
+	text string
+}
+
+// literal matches a string, template or regex literal in a test line: a
+// quoted string (", ', `) or a /regex/ after ( , = : or a space.
+var literal = regexp.MustCompile("\"(?:\\\\.|[^\"\\\\])*\"|'(?:\\\\.|[^'\\\\])*'|`[^`]*`|([(,=:\\s])/(?:\\\\.|[^/\\\\\\n])+/[dgimsuy]*")
+
+// shape is a line with its literals blanked: two assertions with one
+// shape check the same thing against other text.
+func shape(line string) string {
+	return literal.ReplaceAllStringFunc(strings.TrimSpace(line), func(m string) string {
+		if strings.HasSuffix(m, "/") || strings.ContainsAny(m[:1], "(,=: \t") {
+			return m[:1] + "/…/"
+		}
+		return "\"…\""
+	})
+}
+
+// literals lists a line's literals, for the report of a copy update.
+func literals(line string) string {
+	var out []string
+	for _, m := range literal.FindAllString(strings.TrimSpace(line), -1) {
+		if strings.ContainsAny(m[:1], "(,=: \t") {
+			m = m[1:]
+		}
+		out = append(out, m)
+	}
+	return strings.Join(out, ", ")
+}
+
+// looseMatchers are matchers that accept almost anything: replacing a
+// precise one with one of these weakens the test.
+var looseMatchers = regexp.MustCompile(`\.(toBeTruthy|toBeDefined|toBeFalsy|toBeUndefined|not\.toBeNull|toBeNull|anything)\(|\b(assert|require)\.(NotNil|NotEmpty|NotZero|True|False|Nil|Empty|Zero)\(`)
+
+var (
+	jsMatcher = regexp.MustCompile(`\.(not\.)?to[A-Z]\w*\(`)
+	goMatcher = regexp.MustCompile(`\b(assert|require)\.\w+\((.*)\)\s*$`)
+)
+
+// subject is what an assertion checks: in JavaScript the expression
+// before the matcher (expect(total)), in testify the last argument
+// (got.Name); "" when neither reads.
+func subject(line string) string {
+	line = strings.TrimSpace(line)
+	if m := goMatcher.FindStringSubmatch(line); m != nil {
+		args := strings.Split(m[2], ",")
+		return strings.TrimSpace(args[len(args)-1])
+	}
+	if loc := jsMatcher.FindStringIndex(line); loc != nil {
+		return line[:loc[0]]
+	}
+	return ""
 }
 
 // parseTestDiff reads `git diff -U0` output and returns the findings in
 // the order of the diff.
 func parseTestDiff(diff []byte) []testFinding {
+	findings, _ := parseTestDiffNotes(diff)
+	return findings
+}
+
+// parseTestDiffNotes is parseTestDiff with the notes for the report: each
+// assertion whose expected text changed, old and new, so a copy update
+// passes in plain sight.
+func parseTestDiffNotes(diff []byte) ([]testFinding, []string) {
 	var findings []testFinding
+	var notes []string
 	var cur *fileDiff
 	var oldLine, newLine int
 	var inHunk bool
@@ -140,6 +211,43 @@ func parseTestDiff(diff []byte) []testFinding {
 				continue
 			}
 			findings = append(findings, f)
+		}
+		// Pair each removed assertion with an added one of the same shape
+		// (only the expected text changed: reported, allowed), or with one
+		// that swapped its matcher for a loose one (refused).
+		used := make([]bool, len(cur.addedAssert))
+		var kept []testFinding
+		for i, f := range cur.removedAsserts {
+			old := cur.removedAssertText[i]
+			paired := false
+			for j, a := range cur.addedAssert {
+				if used[j] {
+					continue
+				}
+				switch {
+				case shape(a.text) == shape(old):
+					used[j], paired = true, true
+					if a.text != strings.TrimSpace(old) {
+						notes = append(notes, fmt.Sprintf("%s:%d expected text changed: %s → %s", cur.path, a.line, literals(old), literals(a.text)))
+					}
+				case looseMatchers.MatchString(a.text) && !looseMatchers.MatchString(old) && subject(a.text) != "" && subject(a.text) == subject(old):
+					used[j], paired = true, true
+					findings = append(findings, testFinding{File: cur.path, Line: a.line, Message: "matcher loosened: " + strings.TrimSpace(old) + " → " + strings.TrimSpace(a.text)})
+				}
+				if paired {
+					break
+				}
+			}
+			if !paired {
+				kept = append(kept, f)
+			}
+		}
+		cur.removedAsserts = kept
+		cur.addedAssertions = 0
+		for j := range cur.addedAssert {
+			if !used[j] {
+				cur.addedAssertions++
+			}
 		}
 		if n := len(cur.removedAsserts); n > cur.addedAssertions {
 			for _, f := range cur.removedAsserts {
@@ -201,6 +309,7 @@ func parseTestDiff(diff []byte) []testFinding {
 				}
 				if assert.MatchString(text) {
 					cur.removedAsserts = append(cur.removedAsserts, testFinding{File: cur.path, Line: oldLine, Old: true})
+					cur.removedAssertText = append(cur.removedAssertText, strings.TrimSpace(text))
 				}
 			}
 			oldLine++
@@ -216,6 +325,7 @@ func parseTestDiff(diff []byte) []testFinding {
 				}
 				if assert.MatchString(text) {
 					cur.addedAssertions++
+					cur.addedAssert = append(cur.addedAssert, assertLine{newLine, strings.TrimSpace(text)})
 				}
 			}
 			prevAdded = text
@@ -223,15 +333,15 @@ func parseTestDiff(diff []byte) []testFinding {
 		}
 	}
 	flush()
-	return findings
+	return findings, notes
 }
 
 // testGuard is the verify step: the findings fail it unless the change
 // is confirmed with the flag or the environment.
 func testGuard(ctx context.Context, dir string, allowFlag bool) (string, error) {
-	findings, reason, err := weakenedTests(ctx, dir)
+	findings, notes, err := weakenedTests(ctx, dir)
 	if err != nil || len(findings) == 0 {
-		return reason, err
+		return notes, err
 	}
 	switch {
 	case allowFlag:

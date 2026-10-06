@@ -174,6 +174,15 @@ func addCommandTools(s *server.MCPServer, dir string, cfg *config.Config, after 
 		{"lidza_db_migrate", "Apply the pending migrations in db/migrations to DATABASE_URL from .env (db pack). A migration marked -- review can drop data. Refused when DATABASE_URL is on another host: the developer migrates a production database, never this tool.", destructive, 5 * time.Minute, false, true, fixed("db", "migrate")},
 		{"lidza_db_rollback", "Revert the last applied migration: its down script drops what the migration added, with the data in it. Refused when DATABASE_URL is on another host.", destructive, 5 * time.Minute, false, true, fixed("db", "rollback")},
 		{"lidza_db_status", "List the migrations and whether each is applied.", nil, time.Minute, false, false, fixed("db", "status")},
+		{"lidza_db_new", "Write a hand-written migration (a data backfill, an SQL step the schema cannot say) named after the newest migration; lidza gen never touches it. Then write its SQL and run lidza_db_migrate.", []mcp.ToolOption{
+			mcp.WithString("description", mcp.Required(), mcp.Description("What it does, e.g. \"backfill post slugs\"; it names the file.")),
+		}, time.Minute, false, true, func(req mcp.CallToolRequest) ([]string, error) {
+			d := req.GetString("description", "")
+			if d == "" {
+				return nil, errors.New("description is required")
+			}
+			return []string{"db", "new", d}, nil
+		}},
 		{"lidza_test", "Run the Go tests (the test database is created and migrated, LIDZA_MODE=test), then the frontend check; or the browser suite with e2e.", []mcp.ToolOption{
 			mcp.WithBoolean("e2e", mcp.Description("Build the app and run the Playwright suite instead of the Go tests.")),
 			mcp.WithBoolean("install", mcp.Description("With e2e: install the browser when it is missing.")),

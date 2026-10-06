@@ -11,6 +11,28 @@ change. A release without one is additive: an app updates with
 
 ## Unreleased
 
+- New migrations are named by the UTC time they were written
+  (`20261006140512_create_post`), always after the newest one there, so
+  two branches that each change the schema no longer pick the same
+  number and both apply after the merge (issue #33). Migrations of older
+  releases keep their numbers (`0105_x`) and sort before every new one.
+  `schema.NextStamp` names them; `schema.Clock` sets the time in tests.
+- `lidza db new "backfill post slugs"` (MCP `lidza_db_new`) writes a
+  hand-written migration for a step the schema cannot say: a data
+  backfill, a hand-tuned index. It is named after the newest migration
+  and `lidza gen` never touches it, so the SQL no longer gets appended to
+  a generated file and lost in the next merge.
+
+- The test guard of `lidza verify` tells a copy update from a weakened
+  test (issue #40): an assertion replaced by one of the same shape whose
+  string or regex literals changed (`'Work in this client'` to `'Show
+  only this client'`) passes, and the verify report lists each, old and
+  new; an assertion whose matcher becomes a loose one (`toBe` to
+  `toBeTruthy`, `toBeDefined`, `assert.Equal` to `assert.NotNil`,
+  `NotEmpty`) on the same subject is refused even though one assertion
+  replaces another. Removed tests, removed assertions, skip and only are
+  refused as before.
+
 - Tests never see the app's secrets (issue #34): `lidza test`, the
   browser suite and `lidza verify` start the test processes without
   `LIDZA_MASTER_KEY`, without any variable named like one of the app's

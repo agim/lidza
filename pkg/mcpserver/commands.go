@@ -233,16 +233,22 @@ func addCommandTools(s *server.MCPServer, dir string, cfg *config.Config, after 
 			}
 			return args, nil
 		}},
-		{"lidza_audit_layout", "Build and start the app on the test database, visit every page the frontend build prerenders (plus routes) signed in as a throwaway user, at each viewport and theme, and report what scrolls: sideways is a fault (the elements past the edge are named), down a fault past max_scroll pixels. Run it after a layout change; fix the named elements until status is \"ok\".", []mcp.ToolOption{
+		{"lidza_audit_layout", "Build and start the app on the test database, visit every page the frontend build prerenders (plus routes) signed in as a throwaway user, at each viewport and theme, and report what scrolls: sideways is a fault (the elements past the edge are named), down a fault past max_scroll pixels; containers that scroll on their own are listed, not faults. stability (e.g. \"6s\") scrolls them, runs trigger or waits, and faults the ones a refresh reset. base_url audits an app already running (with storage_state or login to sign in). Run it after a layout change; fix the named elements until status is \"ok\".", []mcp.ToolOption{
 			mcp.WithString("viewport", mcp.Description("Viewports, WIDTHxHEIGHT, comma-separated (default 1440x900,390x844).")),
 			mcp.WithString("theme", mcp.Description("light, dark or light,dark (default light).")),
 			mcp.WithString("routes", mcp.Description("Pages besides the prerendered ones, comma-separated, e.g. /posts/1.")),
 			mcp.WithNumber("max_scroll", mcp.Description("Pixels a page may scroll down before it is a fault; -1 (default) only reports it, 0 when no page may scroll.")),
+			mcp.WithString("stability", mcp.Description("A wait, e.g. 6s: scroll the nested scrollers, wait (after trigger), fault the ones that lost their position or focus.")),
+			mcp.WithString("trigger", mcp.Description("With stability: a JavaScript expression run in the page before the wait, such as a refresh call.")),
+			mcp.WithString("allow", mcp.Description("With stability: CSS selectors of scrollers that move on purpose (a log following its tail), comma-separated.")),
+			mcp.WithString("base_url", mcp.Description("Audit the app running at this URL instead of building and starting one.")),
+			mcp.WithString("storage_state", mcp.Description("A Playwright storage state file to visit signed in with.")),
+			mcp.WithString("login", mcp.Description("A JavaScript module whose default export, async (page, baseURL), signs the page in.")),
 		}, 15 * time.Minute, true, false, func(req mcp.CallToolRequest) ([]string, error) {
 			args := []string{"audit", "layout", "--json"}
-			for _, f := range []string{"viewport", "theme", "routes"} {
+			for _, f := range []string{"viewport", "theme", "routes", "stability", "trigger", "allow", "base_url", "storage_state", "login"} {
 				if v := req.GetString(f, ""); v != "" {
-					args = append(args, "--"+f, v)
+					args = append(args, "--"+strings.ReplaceAll(f, "_", "-"), v)
 				}
 			}
 			if v := req.GetInt("max_scroll", -1); v >= 0 {

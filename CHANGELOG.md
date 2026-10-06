@@ -11,6 +11,18 @@ change. A release without one is additive: an app updates with
 
 ## Unreleased
 
+- `lidza audit layout` lists the containers that scroll on their own
+  (a wide table in its wrapper: selector, sizes, range), which the
+  document's overflow never showed; they are not faults. `--stability
+  6s` scrolls them, runs `--trigger` (a refresh) or only waits, and
+  faults a container a re-render reset or that lost the focus inside
+  it, with the nodes it replaced and the layout shift; `--allow` or
+  `data-audit-follow` exempts one that moves on purpose. `--base-url`
+  audits an app already running, with no `lidza.json` frontend needed
+  (only `@playwright/test`), signed in with `--storage-state` or a
+  `--login` module instead of a throwaway registration. A hash route
+  reports `navigation: "same-document"` instead of status 0. The MCP
+  tool takes the same options. (#42)
 - The Līdza wordmark: Inter Bold, −1px at 26px, `#eee7e3` on `#241821`
   and `#241821` on `#f6f2ed`; outlined SVGs and the `lī` icon in
   `docs/brand/`, the spec in `docs/brand.md`. The admin sidebar shows it

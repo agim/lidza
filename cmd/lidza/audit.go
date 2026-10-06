@@ -15,7 +15,9 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/agim/lidza/pkg/config"
 	"github.com/agim/lidza/pkg/devserver"
 	"github.com/agim/lidza/pkg/pack"
 )
@@ -26,25 +28,63 @@ var auditLayoutScript []byte
 const auditUsage = `usage:
   lidza audit layout [--viewport 1440x900,390x844] [--theme light,dark]
                      [--routes /posts/1,/settings] [--max-scroll -1]
-                     [--no-sign-in] [--json]
-Builds and starts the app on the test database (as lidza test --e2e),
-visits every page the build prerenders plus --routes, signed in as a
-throwaway user when the auth pack runs, at each viewport and theme, and
-reports what scrolls: sideways (always a fault; the elements past the
-edge are named) and down (a fault past --max-scroll pixels; -1, the
-default, only reports it). Exits non-zero on a fault.
+                     [--base-url URL] [--storage-state FILE | --login FILE | --no-sign-in]
+                     [--stability 6s [--trigger JS] [--allow SELECTORS]] [--json]
+Builds and starts the app on the test database (as lidza test --e2e), or
+uses the one at --base-url, visits every page the build prerenders plus
+--routes, signed in as a throwaway user when the auth pack runs (or with
+--storage-state, a Playwright storage state, or --login, a module whose
+default export signs a page in), at each viewport and theme, and reports
+what scrolls: sideways (always a fault; the elements past the edge are
+named), down (a fault past --max-scroll pixels; -1, the default, only
+reports it), and the containers inside the page that scroll on their own
+(listed, never a fault). --stability scrolls those containers, runs
+--trigger (a JavaScript expression, such as a refresh call) or only
+waits that long, and faults a container that lost its position or the
+focus inside it; --allow names the ones that move on purpose (a log that
+follows its tail; data-audit-follow on the element does the same).
+Exits non-zero on a fault.
 `
 
 // auditResult is one page at one viewport and theme.
 type auditResult struct {
-	Route     string   `json:"route"`
-	Viewport  string   `json:"viewport"`
-	Theme     string   `json:"theme"`
-	Status    int      `json:"status"`
-	Sideways  int      `json:"sideways"`
-	Vertical  int      `json:"vertical"`
-	Offenders []string `json:"offenders,omitempty"`
-	Error     string   `json:"error,omitempty"`
+	Route    string `json:"route"`
+	Viewport string `json:"viewport"`
+	Theme    string `json:"theme"`
+	// Status is the HTTP status of the page; none for a same-document
+	// navigation (a hash route), which has no response.
+	Status int `json:"status,omitempty"`
+	// Navigation is "document", "same-document" or "failed".
+	Navigation string          `json:"navigation"`
+	Sideways   int             `json:"sideways"`
+	Vertical   int             `json:"vertical"`
+	Offenders  []string        `json:"offenders,omitempty"`
+	Scrollers  []auditScroller `json:"scrollers,omitempty"`
+	Stability  *auditStability `json:"stability,omitempty"`
+	Error      string          `json:"error,omitempty"`
+}
+
+// auditScroller is a container inside the page that scrolls on its own.
+type auditScroller struct {
+	Selector string `json:"selector"`
+	Client   [2]int `json:"client"`
+	Scroll   [2]int `json:"scroll"`
+	Sideways int    `json:"sideways"`
+	Vertical int    `json:"vertical"`
+	Allowed  bool   `json:"allowed,omitempty"`
+}
+
+// auditStability is what moved during the stability wait.
+type auditStability struct {
+	Resets []struct {
+		Selector string `json:"selector"`
+		From     [2]int `json:"from"`
+		To       [2]int `json:"to"`
+	} `json:"resets,omitempty"`
+	Replaced    []string `json:"replaced,omitempty"`
+	FocusLost   bool     `json:"focusLost,omitempty"`
+	LayoutShift float64  `json:"layoutShift"`
+	Error       string   `json:"error,omitempty"`
 }
 
 func runAudit(ctx context.Context, args []string) error {
@@ -59,19 +99,51 @@ func runAudit(ctx context.Context, args []string) error {
 	extra := fs.String("routes", "", "routes to visit besides the prerendered pages (ones with parameters), comma-separated")
 	maxScroll := fs.Int("max-scroll", -1, "pixels a page may scroll down before it is a fault; -1 only reports it")
 	noSignIn := fs.Bool("no-sign-in", false, "visit signed out even when the auth pack runs")
+	baseURL := fs.String("base-url", "", "audit the app running here instead of building and starting one")
+	storageState := fs.String("storage-state", "", "a Playwright storage state file to visit signed in with")
+	login := fs.String("login", "", "a JavaScript module whose default export, async (page, baseURL), signs the page in")
+	stabilityWait := fs.Duration("stability", 0, "scroll the nested scrollers, wait this long (after --trigger), and fault the ones that lost their position")
+	trigger := fs.String("trigger", "", "with --stability: a JavaScript expression run in the page before the wait (a refresh)")
+	allow := fs.String("allow", "", "with --stability: CSS selectors of scrollers that move on purpose, comma-separated")
 	asJSON := fs.Bool("json", false, "print one JSON report")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
-	abs, cfg, err := loadProject(*dir)
+	abs, err := filepath.Abs(*dir)
 	if err != nil {
 		return err
 	}
-	if cfg == nil || cfg.Frontend.Dist == "" {
-		return errors.New("audit layout needs a lidza.json app with a built frontend (react, svelte, astro)")
+	var cfg *config.Config
+	if fileExists(filepath.Join(abs, config.FileName)) {
+		if abs, cfg, err = loadProject(*dir); err != nil {
+			return err
+		}
 	}
-	if _, err := os.Stat(filepath.Join(abs, "playwright.config.ts")); err != nil {
-		return errors.New("audit layout runs the app's Playwright: no playwright.config.ts here")
+	if *baseURL == "" && (cfg == nil || cfg.Frontend.Dist == "") {
+		return errors.New("audit layout builds and starts a lidza.json app with a built frontend (react, svelte, astro); for any other app, start it and pass --base-url")
+	}
+	if !fileExists(filepath.Join(abs, "node_modules", "@playwright", "test", "package.json")) {
+		return errors.New("audit layout runs the app's Playwright: no node_modules/@playwright/test here (npm install -D @playwright/test)")
+	}
+	if *storageState != "" && *login != "" {
+		return errors.New("audit layout: --storage-state or --login, not both")
+	}
+	for _, f := range []*string{storageState, login} {
+		if *f == "" {
+			continue
+		}
+		if !filepath.IsAbs(*f) {
+			*f = filepath.Join(abs, *f)
+		}
+		if !fileExists(*f) {
+			return fmt.Errorf("audit layout: %s does not exist", *f)
+		}
+	}
+	if (*trigger != "" || *allow != "") && *stabilityWait == 0 {
+		return errors.New("audit layout: --trigger and --allow go with --stability")
+	}
+	if *stabilityWait < 0 || *stabilityWait > 2*time.Minute {
+		return errors.New("audit layout: --stability is a wait of up to 2m, e.g. 6s")
 	}
 	vps, err := parseViewports(*viewports)
 	if err != nil {
@@ -84,7 +156,6 @@ func runAudit(ctx context.Context, args []string) error {
 		}
 		schemes = append(schemes, t)
 	}
-	os.Setenv(devserver.EnvMode, "test")
 	// With --json, stdout is the report alone: the build, the app and
 	// the browser write to stderr.
 	stdout := os.Stdout
@@ -92,18 +163,26 @@ func runAudit(ctx context.Context, args []string) error {
 		os.Stdout = os.Stderr
 		defer func() { os.Stdout = stdout }()
 	}
-	if err := devserver.EnsureNodeModules(ctx, abs, os.Stdout); err != nil {
-		return err
-	}
 	if exe, err := browserPath(ctx, abs); err != nil || !fileExists(exe) {
 		return errors.New("the browser for e2e tests is missing: npx playwright install --with-deps chromium (or lidza test --e2e --install)")
 	}
-	base, stop, err := startTestApp(ctx, abs, cfg)
-	if err != nil {
-		return err
+	base := strings.TrimRight(*baseURL, "/")
+	if base == "" {
+		os.Setenv(devserver.EnvMode, "test")
+		if err := devserver.EnsureNodeModules(ctx, abs, os.Stdout); err != nil {
+			return err
+		}
+		b, stop, err := startTestApp(ctx, abs, cfg)
+		if err != nil {
+			return err
+		}
+		defer stop()
+		base = b
 	}
-	defer stop()
-	routes := prerenderedRoutes(filepath.Join(abs, cfg.Frontend.Dist))
+	var routes []string
+	if cfg != nil && cfg.Frontend.Dist != "" {
+		routes = prerenderedRoutes(filepath.Join(abs, cfg.Frontend.Dist))
+	}
 	for _, r := range splitList(*extra) {
 		if !strings.HasPrefix(r, "/") {
 			r = "/" + r
@@ -115,7 +194,10 @@ func runAudit(ctx context.Context, args []string) error {
 	if len(routes) == 0 {
 		routes = []string{"/"}
 	}
-	signIn := !*noSignIn && slices.Contains(cfg.Packs, pack.OfficialPrefix+"auth")
+	signIn := *storageState == "" && *login == "" && !*noSignIn && *baseURL == "" && slices.Contains(cfg.Packs, pack.OfficialPrefix+"auth")
+	if err := os.MkdirAll(filepath.Join(abs, devserver.BuildDir), 0o755); err != nil {
+		return err
+	}
 	script := filepath.Join(abs, devserver.BuildDir, "audit-layout.mjs")
 	if err := os.WriteFile(script, auditLayoutScript, 0o644); err != nil {
 		return err
@@ -124,7 +206,10 @@ func runAudit(ctx context.Context, args []string) error {
 	fmt.Printf("[audit] %d page(s) × %d viewport(s) × %d theme(s) on %s\n", len(routes), len(vps), len(schemes), base)
 	cmd := exec.CommandContext(ctx, "node", script)
 	cmd.Dir = abs
-	cmd.Env = append(testEnv(abs), "BASE_URL="+base, "AUDIT_ROUTES="+enc(routes), "AUDIT_VIEWPORTS="+enc(vps), "AUDIT_THEMES="+enc(schemes), "AUDIT_SIGN_IN="+map[bool]string{true: "1", false: "0"}[signIn])
+	cmd.Env = append(testEnv(abs), "BASE_URL="+base, "AUDIT_ROUTES="+enc(routes), "AUDIT_VIEWPORTS="+enc(vps), "AUDIT_THEMES="+enc(schemes),
+		"AUDIT_SIGN_IN="+map[bool]string{true: "1", false: "0"}[signIn],
+		"AUDIT_STORAGE_STATE="+*storageState, "AUDIT_LOGIN="+*login,
+		"AUDIT_STABILITY_MS="+strconv.FormatInt(stabilityWait.Milliseconds(), 10), "AUDIT_TRIGGER="+*trigger, "AUDIT_ALLOW="+enc(splitList(*allow)))
 	var out bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, os.Stderr
 	if err := cmd.Run(); err != nil {
@@ -138,13 +223,14 @@ func runAudit(ctx context.Context, args []string) error {
 	if err := json.Unmarshal([]byte(lines[len(lines)-1]), &report); err != nil {
 		return fmt.Errorf("audit layout: unreadable report: %v\n%s", err, out.String())
 	}
+	wanted := signIn || *storageState != "" || *login != ""
 	faults := auditFaults(report.Results, *maxScroll)
 	if *asJSON {
 		e := json.NewEncoder(stdout)
 		e.SetIndent("", "  ")
 		e.Encode(map[string]any{"status": map[bool]string{true: "ok", false: "fault"}[faults == 0], "signedIn": report.SignedIn, "results": report.Results})
 	} else {
-		printAudit(report.Results, *maxScroll, signIn, report.SignedIn)
+		printAudit(report.Results, *maxScroll, wanted, report.SignedIn)
 	}
 	if faults > 0 {
 		return fmt.Errorf("audit layout: %d fault(s)", faults)
@@ -196,28 +282,33 @@ func prerenderedRoutes(dist string) []string {
 	return routes
 }
 
-// auditFaults counts the pages that scroll sideways, fail to load, or
-// scroll down past maxScroll (when it is 0 or more).
+// auditFaults counts the pages that scroll sideways, fail to load,
+// scroll down past maxScroll (when it is 0 or more), or, under the
+// stability check, lost a scroller's position or the focus.
 func auditFaults(results []auditResult, maxScroll int) int {
 	n := 0
 	for _, r := range results {
-		if r.Error != "" || r.Sideways > 0 || (maxScroll >= 0 && r.Vertical > maxScroll) {
+		if pageFault(r, maxScroll) {
 			n++
 		}
 	}
 	return n
 }
 
+func pageFault(r auditResult, maxScroll int) bool {
+	if r.Error != "" || r.Sideways > 0 || (maxScroll >= 0 && r.Vertical > maxScroll) {
+		return true
+	}
+	return r.Stability != nil && (len(r.Stability.Resets) > 0 || r.Stability.FocusLost || r.Stability.Error != "")
+}
+
 func printAudit(results []auditResult, maxScroll int, wanted, signedIn bool) {
 	if wanted && !signedIn {
-		fmt.Println("[audit] signing up a throwaway user failed: the pages were visited signed out")
+		fmt.Println("[audit] signing in failed: the pages were visited signed out")
 	}
 	for _, r := range results {
 		mark := "ok   "
-		switch {
-		case r.Error != "":
-			mark = "FAULT"
-		case r.Sideways > 0 || (maxScroll >= 0 && r.Vertical > maxScroll):
+		if pageFault(r, maxScroll) {
 			mark = "FAULT"
 		}
 		line := fmt.Sprintf("%s %-24s %-9s %-5s", mark, r.Route, r.Viewport, r.Theme)
@@ -234,10 +325,40 @@ func printAudit(results []auditResult, maxScroll int, wanted, signedIn bool) {
 			if r.Status >= 400 {
 				line += fmt.Sprintf(" (HTTP %d)", r.Status)
 			}
+			if r.Navigation == "same-document" {
+				line += " (same-document navigation)"
+			}
 		}
 		fmt.Println(line)
 		for _, o := range r.Offenders {
 			fmt.Println("        past the edge: " + o)
+		}
+		for _, sc := range r.Scrollers {
+			var dims []string
+			if sc.Sideways > 0 {
+				dims = append(dims, fmt.Sprintf("sideways %dpx", sc.Sideways))
+			}
+			if sc.Vertical > 0 {
+				dims = append(dims, fmt.Sprintf("down %dpx", sc.Vertical))
+			}
+			fmt.Printf("        scroller: %s scrolls %s (%dx%d in %dx%d)\n", sc.Selector, strings.Join(dims, ", "), sc.Scroll[0], sc.Scroll[1], sc.Client[0], sc.Client[1])
+		}
+		if st := r.Stability; st != nil {
+			if st.Error != "" {
+				fmt.Println("        stability: " + st.Error)
+			}
+			for _, rs := range st.Resets {
+				fmt.Printf("        lost its position: %s (%d,%d to %d,%d)\n", rs.Selector, rs.From[0], rs.From[1], rs.To[0], rs.To[1])
+			}
+			for _, rp := range st.Replaced {
+				fmt.Println("        replaced: " + rp)
+			}
+			if st.FocusLost {
+				fmt.Println("        lost the focus inside the first scroller")
+			}
+			if st.LayoutShift > 0 {
+				fmt.Printf("        layout shift %.3f during the wait\n", st.LayoutShift)
+			}
 		}
 	}
 }

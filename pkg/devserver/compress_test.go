@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
 )
 
 func TestAcceptable(t *testing.T) {

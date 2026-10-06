@@ -26,8 +26,15 @@ func Static(dist fs.FS, opts ...Option) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		name := strings.TrimPrefix(path.Clean("/"+r.URL.Path), "/")
 		// Dot directories (dist/.server, dist/.locales) are build
-		// internals, never pages.
-		if strings.HasPrefix(name, ".") || strings.Contains(name, "/.") {
+		// internals, never pages; .well-known/ (security.txt, app links)
+		// is served as any file.
+		if (strings.HasPrefix(name, ".") && !strings.HasPrefix(name, ".well-known/")) || strings.Contains(name, "/.") {
+			http.NotFound(w, r)
+			return
+		}
+		// A missing file is a 404, not the shell: a stale hashed asset
+		// after a deploy, /robots.txt, an icon. Other paths are routes.
+		if missingFile(name) && !exists(dist, name) {
 			http.NotFound(w, r)
 			return
 		}
@@ -114,4 +121,25 @@ func servePage(w http.ResponseWriter, r *http.Request, dist fs.FS, file string, 
 func exists(fsys fs.FS, name string) bool {
 	info, err := fs.Stat(fsys, name)
 	return err == nil && !info.IsDir()
+}
+
+// fileExts are the extensions that name a file rather than a route, so
+// a missing one is a 404. A route may hold a dot (/u/jane.doe); these
+// endings are files.
+var fileExts = map[string]bool{
+	".avif": true, ".css": true, ".csv": true, ".gif": true, ".htm": true, ".html": true,
+	".ico": true, ".jpeg": true, ".jpg": true, ".js": true, ".json": true, ".map": true,
+	".md": true, ".mjs": true, ".mp3": true, ".mp4": true, ".otf": true, ".pdf": true,
+	".png": true, ".svg": true, ".ttf": true, ".txt": true, ".wasm": true, ".webm": true,
+	".webmanifest": true, ".webp": true, ".woff": true, ".woff2": true, ".xml": true, ".zip": true,
+}
+
+// missingFile tells a request for a file the build lacks (anything under
+// assets/ or .well-known/, or a name with a file's extension) from a
+// client-side route.
+func missingFile(name string) bool {
+	if strings.HasPrefix(name, "assets/") || strings.HasPrefix(name, ".well-known/") {
+		return true
+	}
+	return fileExts[strings.ToLower(path.Ext(name))]
 }

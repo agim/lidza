@@ -35,6 +35,20 @@ func TestStaticShell(t *testing.T) {
 	if code, _, _ := get("/.server/index.html"); code != 404 {
 		t.Fatalf("dot directory served: %d", code)
 	}
+	// A missing file is a 404; a route with a dot is still a route.
+	for _, path := range []string{"/assets/app-old.js", "/assets/chunk", "/llms.txt", "/robots.txt", "/favicon.ico", "/.well-known/security.txt", "/missing.html"} {
+		if code, body, _ := get(path); code != 404 {
+			t.Errorf("missing file %s: %d %s", path, code, body)
+		}
+	}
+	if code, body, _ := get("/u/jane.doe"); code != 200 || body != "<html>shell</html>" {
+		t.Fatalf("route with a dot: %d %s", code, body)
+	}
+	// .well-known/ is served from the build; other dot directories are not.
+	dist[".well-known/security.txt"] = &fstest.MapFile{Data: []byte("Contact: mailto:a@example.com")}
+	if code, body, _ := get("/.well-known/security.txt"); code != 200 || body != "Contact: mailto:a@example.com" {
+		t.Fatalf(".well-known file: %d %s", code, body)
+	}
 	// Without a kept shell, the prerendered home is the fallback.
 	delete(dist, ".server/index.html")
 	if code, body, _ := get("/posts/42"); code != 200 || body != "<html>home prerendered</html>" {
@@ -108,6 +122,11 @@ func TestStaticLocales(t *testing.T) {
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/.locales/sq/index.html", nil))
 	if rec.Code != 404 {
 		t.Errorf("variant served by path: %d", rec.Code)
+	}
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/robots.txt", nil))
+	if rec.Code != 404 {
+		t.Errorf("missing file gets a locale's shell: %d %s", rec.Code, rec.Body)
 	}
 
 	// The i18n pack's negotiation wins; an empty answer (not started) falls

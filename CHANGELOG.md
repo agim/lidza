@@ -9,6 +9,24 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- `SECURITY_CONTACT` serves `/.well-known/security.txt` (RFC 9116):
+  the contacts (an email becomes `mailto:`; `https://` and `tel:` URLs
+  as they are), `SECURITY_POLICY` as `Policy`, `Canonical` when
+  `APP_URL` is `https://`, and an `Expires` always half a year ahead.
+  A contact that is not an address stops the start with the setting
+  named. Unset, the build's own `.well-known/` files are served (they
+  were refused with the other dot directories).
+- A built frontend answers a missing file with 404 instead of the app
+  shell: anything under `assets/` (a stale hashed chunk after a deploy
+  now fails as a 404, not as HTML parsed as JavaScript), `.well-known/`,
+  or a name with a file's extension (`/robots.txt`, `/llms.txt`,
+  `/favicon.ico`). Routes with a dot (`/u/jane.doe`) still get the
+  shell.
+- The HSTS default reads `APP_URL` as the packs do (`.env` files and
+  credentials too), not the process environment alone.
+
 ## v0.1.84 (2026-10-06)
 
 - An app whose `APP_URL` is `https://` sends `Strict-Transport-Security:

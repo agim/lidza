@@ -8,7 +8,9 @@ line `@AGENTS.md`, which Claude Code and Gemini CLI expand; Codex reads
 ## What this is
 
 A Līdza app is one Go binary. In production it serves the API under `/api`
-and the built frontend for every other path. In development, `lidza dev`
+and the built frontend for every other path: a file the build lacks
+(`/robots.txt`, a stale hashed asset) is a 404, and any other path is a
+client-side route. In development, `lidza dev`
 runs the same binary with the frontend proxied from its dev server, so the
 app is always at one address: http://127.0.0.1:3000.
 
@@ -2128,7 +2130,9 @@ scrape `/metrics`. Production settings: `LIDZA_MODE` unset,
 |---|---|---|
 | `LIDZA_ADDR` | listen address (ignored when TLS is on) | `127.0.0.1:3000` |
 | `AUTH_PROVIDERS` | sign-in providers `auth.Mount` serves: `google`, `github`, `microsoft`, or a name with `AUTH_<NAME>_ISSUER`; each with `AUTH_<NAME>_CLIENT_ID` and `AUTH_<NAME>_CLIENT_SECRET` in the credentials | unset |
-| `APP_URL` | the public origin: mail links and the providers' callback URL | from `LIDZA_TLS_DOMAINS`, else the request |
+| `APP_URL` | the public origin: mail links and the providers' callback URL; `https://` also sends Strict-Transport-Security (`App.HSTS`) | from `LIDZA_TLS_DOMAINS`, else the request |
+| `SECURITY_CONTACT` | where to report a vulnerability, served as `/.well-known/security.txt` (RFC 9116, with `Expires` kept ahead): emails or `https://`/`tel:` URLs, comma-separated; unset serves the build's own `.well-known/security.txt`, if any | unset |
+| `SECURITY_POLICY` | an `https://` page on how reports are handled, the file's `Policy` | unset |
 | `LIDZA_TLS_DOMAINS` | domains to serve over HTTPS with Let's Encrypt certificates; the first is the public name (`APP_URL` when unset; `AUTH_COOKIE_SECURE` becomes true) | unset (plain HTTP) |
 | `LIDZA_TLS_EMAIL` | ACME account contact | unset |
 | `LIDZA_TLS_ADDR`, `LIDZA_TLS_HTTP_ADDR` | the HTTPS and HTTP (redirect) listen addresses | `:443`, `:80` |

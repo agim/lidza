@@ -22,6 +22,7 @@ import (
 
 	"github.com/agim/lidza/pkg/credentials"
 	"github.com/agim/lidza/pkg/devserver"
+	"github.com/agim/lidza/pkg/env"
 	"github.com/agim/lidza/pkg/middleware"
 	"github.com/agim/lidza/pkg/router"
 	"github.com/agim/lidza/pkg/telemetry"
@@ -411,9 +412,16 @@ func handler(app App, services *Services) (http.Handler, *devserver.Sidecar, err
 	if os.Getenv(devserver.EnvMode) == "dev" && app.Dist == nil {
 		frontend = devserver.AgentFiles(frontend)
 	}
+	settings := appSettings()
+	var err error
+	frontend, err = securityTxt(settings("SECURITY_CONTACT"), settings("SECURITY_POLICY"), settings("APP_URL"), frontend)
+	if err != nil {
+		return nil, nil, err
+	}
 	all := devserver.Split(router.APIPrefix, api, opsThenFrontend(ops, mounted(r.Mounts(), frontend), os.Getenv(devserver.EnvMode) == "dev"))
+	policy := hsts(app.HSTS, settings("APP_URL"))
 	mw := append([]middleware.Middleware{
-		middleware.SecureHeaders(middleware.SecureHeadersOptions{CSP: csp(app.CSP), PermissionsPolicy: app.PermissionsPolicy, HSTS: hsts(app.HSTS) != "", HSTSPolicy: hsts(app.HSTS)}),
+		middleware.SecureHeaders(middleware.SecureHeadersOptions{CSP: csp(app.CSP), PermissionsPolicy: app.PermissionsPolicy, HSTS: policy != "", HSTSPolicy: policy}),
 		servicesMiddleware(services),
 	}, app.Middleware...)
 	return middleware.Chain(all, mw...), sidecar, nil
@@ -427,15 +435,28 @@ func csp(set string) string {
 	return set
 }
 
+// appSettings reads a setting as the packs do: the .env files, the
+// credentials, the process environment (env.Values); the process
+// environment alone when those cannot be read.
+func appSettings() func(string) string {
+	values, err := env.Values(".")
+	return func(key string) string {
+		if err != nil {
+			return os.Getenv(key)
+		}
+		return values[key]
+	}
+}
+
 // hsts is the Strict-Transport-Security an app sends: its own, or
-// DefaultHSTS when it is served over HTTPS outside dev mode; "" for none.
-func hsts(set string) string {
+// DefaultHSTS when appURL is https:// outside dev mode; "" for none.
+func hsts(set, appURL string) string {
 	switch {
 	case set == middleware.NoHSTS:
 		return ""
 	case set != "":
 		return set
-	case os.Getenv(devserver.EnvMode) != "dev" && strings.HasPrefix(os.Getenv("APP_URL"), "https://"):
+	case os.Getenv(devserver.EnvMode) != "dev" && strings.HasPrefix(appURL, "https://"):
 		return middleware.DefaultHSTS
 	}
 	return ""

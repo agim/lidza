@@ -74,7 +74,7 @@ func TestNewReact(t *testing.T) {
 	if read("CLAUDE.md") != "@AGENTS.md\n" || read("GEMINI.md") != "@AGENTS.md\n" {
 		t.Errorf("CLAUDE.md and GEMINI.md should be the line @AGENTS.md: %q %q", read("CLAUDE.md"), read("GEMINI.md"))
 	}
-	if !strings.Contains(read("AGENTS.md"), "<!-- lidza:recipes -->`start-with-brief`, `add-api-route`, `add-resource`, `add-sign-in`, `scope-query-to-signed-in-user`, `add-page`, `set-head-of-page`, `add-pack-capability`, `add-mcp-tool`, `send-email`, `add-background-job`, `publish-live-updates`, `add-llm-feature`, `store-file`, `receive-webhook`, `connect-external-account`, `roles-and-permissions`, `record-audit-event`, `add-admin-pages`, `extend-admin-pages`, `add-recipe`, `write-test`, `organize-application-packages`<!-- /lidza:recipes -->") {
+	if !strings.Contains(read("AGENTS.md"), "<!-- lidza:recipes -->`start-with-brief`, `add-api-route`, `add-resource`, `add-sign-in`, `scope-query-to-signed-in-user`, `add-page`, `set-head-of-page`, `add-pack-capability`, `add-mcp-tool`, `send-email`, `add-background-job`, `publish-live-updates`, `add-llm-feature`, `store-file`, `receive-webhook`, `connect-external-account`, `dates-and-time-zones`, `roles-and-permissions`, `record-audit-event`, `add-admin-pages`, `extend-admin-pages`, `add-recipe`, `write-test`, `organize-application-packages`<!-- /lidza:recipes -->") {
 		t.Errorf("AGENTS.md should list the recipes: %s", read("AGENTS.md"))
 	}
 	// An app recipe: added to the guide, generated, listed in the agent files.

@@ -21,8 +21,11 @@ func GenerateGo(s *Schema) string {
 	b.WriteString("package " + GoPackage + "\n\n")
 
 	imports := []string{`"github.com/agim/lidza/pkg/validate"`}
-	if usesGo(s, "time", "date") {
+	if usesGo(s, "time") {
 		imports = append(imports, `"time"`)
+	}
+	if usesGo(s, "date", "localtime") {
+		imports = append(imports, `"github.com/agim/lidza/pkg/civil"`)
 	}
 	if usesGo(s, "json") {
 		imports = append(imports, `"encoding/json"`)
@@ -105,8 +108,12 @@ func goType(s *Schema, f *Field) string {
 		t = "decimal.Decimal"
 	case "bool":
 		t = "bool"
-	case "time", "date":
+	case "time":
 		t = "time.Time"
+	case "date":
+		t = "civil.Date"
+	case "localtime":
+		t = "civil.DateTime"
 	case "json":
 		t = "json.RawMessage"
 	case "bytes":
@@ -191,6 +198,11 @@ func writeGoValidate(b *strings.Builder, s *Schema, m *Model) {
 			if f.Pattern != "" {
 				rule(fmt.Sprintf(`%s != "" && !validate.Pattern(%s, %s)`, val, strconv.Quote(f.Pattern), val), "pattern", "does not match "+f.Pattern)
 			}
+			if f.Timezone {
+				rule(fmt.Sprintf(`%s != "" && !validate.Timezone(%s)`, val, val), "timezone", "not a time zone (an IANA name, e.g. Europe/Paris)")
+			}
+		case (f.Type == "date" || f.Type == "localtime") && !f.Optional:
+			rule(val+".IsZero()", "required", "required")
 		case isNum:
 			if f.Min != nil {
 				rule(fmt.Sprintf("%s < %s", val, fnum(*f.Min)), "min", "at least "+fnum(*f.Min))

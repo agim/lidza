@@ -49,6 +49,12 @@ func tsValidators(c *inspect.Context) string {
 	if strings.Contains(funcs.String(), "isURL(") {
 		b.WriteString("function isURL(s: string): boolean {\n  try {\n    const u = new URL(s)\n    return (u.protocol === 'http:' || u.protocol === 'https:') && u.host !== ''\n  } catch {\n    return false\n  }\n}\n\n")
 	}
+	if strings.Contains(funcs.String(), "isDate(") {
+		b.WriteString("function isDate(s: string): boolean {\n  const d = new Date(s + 'T00:00:00Z')\n  return /^\\d{4}-\\d{2}-\\d{2}$/.test(s) && !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s\n}\n\n")
+	}
+	if strings.Contains(funcs.String(), "isTimeZone(") {
+		b.WriteString("function isTimeZone(s: string): boolean {\n  try {\n    new Intl.DateTimeFormat('en', { timeZone: s })\n    return true\n  } catch {\n    return false\n  }\n}\n\n")
+	}
 	if strings.Contains(funcs.String(), "DECIMAL.test(") || strings.Contains(funcs.String(), "decimalFits(") {
 		b.WriteString(tsDecimalRe)
 	}
@@ -155,6 +161,12 @@ func validatorBody(def map[string]any, all map[string]any) string {
 			}
 			if p["format"] == "uri" {
 				add(fmt.Sprintf("%s !== '' && !isURL(%s)", acc, acc), "url", "not an http(s) URL")
+			}
+			if p["format"] == "date" {
+				add(fmt.Sprintf("%s !== '' && !isDate(%s)", acc, acc), "date", "not a date (YYYY-MM-DD)")
+			}
+			if p["x-format"] == "timezone" {
+				add(fmt.Sprintf("%s !== '' && !isTimeZone(%s)", acc, acc), "timezone", "not a time zone (an IANA name, e.g. Europe/Paris)")
 			}
 			if pat, ok := p["pattern"].(string); ok {
 				add(fmt.Sprintf("%s !== '' && !new RegExp(%q).test(%s)", acc, "^(?:"+pat+")$", acc), "pattern", "does not match "+pat)

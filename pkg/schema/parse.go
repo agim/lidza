@@ -277,6 +277,8 @@ func (p *parser) field(line string) (*Field, error) {
 			f.Email = true
 		case "url":
 			f.URL = true
+		case "timezone":
+			f.Timezone = true
 		case "pattern":
 			f.Pattern = strings.Trim(arg, `"`)
 		default:

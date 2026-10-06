@@ -359,7 +359,7 @@ func TestGuidanceSurfaces(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(app, ".gemini", "commands")); !os.IsNotExist(err) {
 		t.Errorf(".gemini/commands written: %v", err)
 	}
-	for _, skill := range []string{"start-with-brief", "add-api-route", "add-resource", "scope-query-to-signed-in-user", "add-page", "set-head-of-page", "add-pack-capability", "add-mcp-tool", "send-email", "add-background-job", "publish-live-updates", "add-llm-feature", "store-file", "receive-webhook", "connect-external-account", "roles-and-permissions", "record-audit-event", "add-admin-pages", "extend-admin-pages", "add-recipe", "write-test", "organize-application-packages"} {
+	for _, skill := range []string{"start-with-brief", "add-api-route", "add-resource", "scope-query-to-signed-in-user", "add-page", "set-head-of-page", "add-pack-capability", "add-mcp-tool", "send-email", "add-background-job", "publish-live-updates", "add-llm-feature", "store-file", "receive-webhook", "connect-external-account", "dates-and-time-zones", "roles-and-permissions", "record-audit-event", "add-admin-pages", "extend-admin-pages", "add-recipe", "write-test", "organize-application-packages"} {
 		for _, p := range []string{filepath.Join(".claude", "skills", skill, "SKILL.md"), filepath.Join(".agents", "skills", skill, "SKILL.md")} {
 			if _, err := os.Stat(filepath.Join(app, p)); err != nil {
 				t.Errorf("%s missing", p)
@@ -443,7 +443,7 @@ func TestGuidanceSurfaces(t *testing.T) {
 		t.Fatal(err)
 	}
 	prompts, err := c.ListPrompts(ctx, mcp.ListPromptsRequest{})
-	if err != nil || len(prompts.Prompts) != 23 {
+	if err != nil || len(prompts.Prompts) != 24 {
 		t.Errorf("prompts: %v %d", err, len(prompts.Prompts))
 	}
 	tools, err := c.ListTools(ctx, mcp.ListToolsRequest{})

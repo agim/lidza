@@ -117,8 +117,10 @@ type Field struct {
 	Scale     int `json:",omitempty"`
 	Email     bool
 	URL       bool
-	Pattern   string
-	Line      int
+	// Timezone requires an IANA zone name ("Europe/Paris").
+	Timezone bool
+	Pattern  string
+	Line     int
 }
 
 // Index is a block-level @@index or @@unique.
@@ -131,6 +133,9 @@ type Index struct {
 var Scalars = map[string]bool{
 	"string": true, "text": true, "int": true, "bigint": true, "float": true,
 	"decimal": true, "bool": true, "time": true, "date": true, "uuid": true, "json": true, "bytes": true,
+	// localtime is a wall-clock date and time with no zone, for API
+	// types: the server reads it in the visitor's zone (i18n At).
+	"localtime": true,
 }
 
 // Enum returns the enum called name, or nil.
@@ -258,8 +263,11 @@ func (s *Schema) validate() error {
 					}
 				}
 			}
-			if (f.Email || f.URL || f.Pattern != "") && f.Type != "string" && f.Type != "text" {
-				return fmt.Errorf("line %d: %s.%s: @email, @url and @pattern need a string field", f.Line, m.Name, f.Name)
+			if (f.Email || f.URL || f.Pattern != "" || f.Timezone) && f.Type != "string" && f.Type != "text" {
+				return fmt.Errorf("line %d: %s.%s: @email, @url, @pattern and @timezone need a string field", f.Line, m.Name, f.Name)
+			}
+			if f.Type == "localtime" && m.Persisted {
+				return fmt.Errorf("line %d: %s.%s: localtime is for API types (what a form sends); a model stores the instant as time, from i18n.From(ctx).At(ctx, value)", f.Line, m.Name, f.Name)
 			}
 			if !m.Persisted && (f.ID || f.Unique || f.Index || f.Ref != "") {
 				return fmt.Errorf("line %d: %s.%s: @id, @unique, @index and @ref apply to models only", f.Line, m.Name, f.Name)

@@ -15,6 +15,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	_ "time/tzdata" // zones load on any host, a minimal image included
 
 	"golang.org/x/text/currency"
 	"golang.org/x/text/language"
@@ -22,6 +23,7 @@ import (
 	"golang.org/x/text/number"
 
 	"github.com/agim/lidza"
+	"github.com/agim/lidza/pkg/civil"
 	"github.com/agim/lidza/pkg/env"
 	"github.com/agim/lidza/pkg/middleware"
 	"github.com/agim/lidza/pkg/router"
@@ -329,6 +331,80 @@ func (i *I18n) format(ctx context.Context, t time.Time, key, fallback string) st
 		layout = fallback
 	}
 	return t.In(i.Timezone(ctx)).Format(layout)
+}
+
+// At is the instant a local date and time (a form's datetime-local
+// value, a schema localtime field) names in the request's zone: the
+// signed-in user's when the app set it (WithTimezone), else the
+// browser's. Store the result (UTC); format it back with DateTime. A time
+// a daylight-saving change skips (02:30 when clocks jump to 03:00) moves
+// past the change, and skipped says so, so a form can tell the person; a
+// time the change repeats is the first of the two.
+func (i *I18n) At(ctx context.Context, dt civil.DateTime) (t time.Time, skipped bool) {
+	return dt.In(i.Timezone(ctx))
+}
+
+// Today is the date in the request's zone, by lidza.Now (a test's clock).
+func (i *I18n) Today(ctx context.Context) civil.Date {
+	return civil.Today(lidza.Now(ctx), i.Timezone(ctx))
+}
+
+// relativeUnits are the units Relative counts in, largest first.
+var relativeUnits = []struct {
+	name string
+	size time.Duration
+}{
+	{"year", 365 * 24 * time.Hour},
+	{"month", 30 * 24 * time.Hour},
+	{"week", 7 * 24 * time.Hour},
+	{"day", 24 * time.Hour},
+	{"hour", time.Hour},
+	{"minute", time.Minute},
+	{"second", time.Second},
+}
+
+// Relative says how far t is from now, by lidza.Now: "3 hours ago", "in 2
+// days", "just now" within 45 seconds. It counts in the largest whole unit.
+// The words come from the catalog, English when it has none:
+// "_relative.now", "_relative.past" ("%s ago"), "_relative.future" ("in
+// %s") and per unit "_relative.<unit>.one" ("%d hour") and
+// "_relative.<unit>.other" ("%d hours"), unit one of second, minute,
+// hour, day, week, month, year. One and other suit languages with those
+// two forms; pages format with Intl (formatRelative in src/i18n.ts),
+// which knows every language's.
+func (i *I18n) Relative(ctx context.Context, t time.Time) string {
+	d := t.Sub(lidza.Now(ctx))
+	future := d > 0
+	if !future {
+		d = -d
+	}
+	if d < 45*time.Second {
+		return i.tr(ctx, "_relative.now", "just now")
+	}
+	unit, n := "second", int(d/time.Second)
+	for _, u := range relativeUnits {
+		if d >= u.size {
+			unit, n = u.name, int(d/u.size)
+			break
+		}
+	}
+	form := "other"
+	if n == 1 {
+		form = "one"
+	}
+	amount := fmt.Sprintf(i.tr(ctx, "_relative."+unit+"."+form, "%d "+unit+map[string]string{"one": "", "other": "s"}[form]), n)
+	if future {
+		return fmt.Sprintf(i.tr(ctx, "_relative.future", "in %s"), amount)
+	}
+	return fmt.Sprintf(i.tr(ctx, "_relative.past", "%s ago"), amount)
+}
+
+// tr is the catalog's text for key, or fallback.
+func (i *I18n) tr(ctx context.Context, key, fallback string) string {
+	if s := i.T(ctx, key); s != key {
+		return s
+	}
+	return fallback
 }
 
 // Handler serves the catalog of a locale for the frontend:

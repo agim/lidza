@@ -23,8 +23,13 @@ func GenerateTS(s *Schema) string {
 	for _, m := range append(append([]*Model{}, s.Models...), s.Types...) {
 		fmt.Fprintf(&b, "export interface %s {\n", m.Name)
 		for _, f := range m.Fields {
-			if f.Type == "decimal" {
+			switch f.Type {
+			case "decimal":
 				fmt.Fprintf(&b, "  /** Exact decimal as a string, \"12.50\" (%d digits, %d after the point). */\n", f.Precision, f.Scale)
+			case "date":
+				b.WriteString("  /** Calendar day, \"2026-10-06\": no time zone, never shift it. */\n")
+			case "localtime":
+				b.WriteString("  /** Local date and time as typed, \"2026-10-06T10:30\" (no zone): the server reads it in the visitor's zone. */\n")
 			}
 			fmt.Fprintf(&b, "  %s: %s\n", f.Name, tsType(f))
 		}
@@ -36,7 +41,7 @@ func GenerateTS(s *Schema) string {
 func tsType(f *Field) string {
 	var t string
 	switch f.Type {
-	case "string", "text", "uuid", "time", "date", "bytes", "decimal":
+	case "string", "text", "uuid", "time", "date", "localtime", "bytes", "decimal":
 		t = "string"
 	case "int", "bigint", "float":
 		t = "number"
@@ -85,6 +90,10 @@ func JSONSchema(s *Schema) map[string]any {
 	return defs
 }
 
+// LocalTimePattern is the JSON Schema pattern of a localtime field: what
+// an HTML datetime-local input sends, with optional seconds.
+const LocalTimePattern = `^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$`
+
 // DecimalPattern is the JSON Schema pattern of a decimal field: plain
 // notation, an optional sign and fraction.
 const DecimalPattern = `^[+-]?[0-9]+(\.[0-9]+)?$`
@@ -109,12 +118,18 @@ func jsonSchemaType(s *Schema, f *Field) map[string]any {
 		if f.Pattern != "" {
 			t["pattern"] = f.Pattern
 		}
+		if f.Timezone {
+			t["x-format"] = "timezone"
+		}
 	case "uuid":
 		t = map[string]any{"type": "string", "format": "uuid"}
 	case "time":
 		t = map[string]any{"type": "string", "format": "date-time"}
 	case "date":
 		t = map[string]any{"type": "string", "format": "date"}
+	case "localtime":
+		// A wall-clock time with no offset: not RFC 3339's date-time.
+		t = map[string]any{"type": "string", "pattern": LocalTimePattern, "x-format": "local-date-time"}
 	case "bytes":
 		t = map[string]any{"type": "string", "contentEncoding": "base64"}
 	case "int":

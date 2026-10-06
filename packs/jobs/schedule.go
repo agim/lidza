@@ -1,6 +1,8 @@
 package jobs
 
 import (
+	_ "time/tzdata" // schedule zones load on any host
+
 	"context"
 	"encoding/json"
 	"errors"

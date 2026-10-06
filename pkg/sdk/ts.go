@@ -123,6 +123,14 @@ func objectBody(def map[string]any, depth int) string {
 			}
 			fmt.Fprintf(&b, "%s/** Exact decimal as a string, \"12.50\"%s. */\n", pad, digits)
 		}
+		switch {
+		case p["format"] == "date":
+			fmt.Fprintf(&b, "%s/** Calendar day, \"2026-10-06\": no time zone, never shift it. */\n", pad)
+		case p["x-format"] == "local-date-time":
+			fmt.Fprintf(&b, "%s/** Local date and time as typed, \"2026-10-06T10:30\" (no zone): the server reads it in the visitor's zone. */\n", pad)
+		case p["format"] == "date-time":
+			fmt.Fprintf(&b, "%s/** Instant in UTC, \"2026-10-06T14:30:00Z\": format it in the visitor's zone (src/datetime.ts). */\n", pad)
+		}
 		fmt.Fprintf(&b, "%s%s%s: %s\n", pad, tsKey(n), opt, tsType(p, depth+1))
 	}
 	b.WriteString(strings.Repeat("  ", depth) + "}")

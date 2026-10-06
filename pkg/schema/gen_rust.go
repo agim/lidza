@@ -56,7 +56,7 @@ func GenerateRust(s *Schema) string {
 func rustType(f *Field) string {
 	var t string
 	switch f.Type {
-	case "string", "text", "uuid", "time", "date", "decimal":
+	case "string", "text", "uuid", "time", "date", "localtime", "decimal":
 		t = "String"
 	case "int":
 		t = "i32"

@@ -9,6 +9,43 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+Breaking: a `date` field in `schema.lidza` is a `civil.Date` in Go
+(`github.com/agim/lidza/pkg/civil`), not a `time.Time`, in `schema/` and,
+through an override `lidza gen` writes into `sqlc.yaml`, in
+`db/queries/gen`. Code that used it as a `time.Time` converts:
+`civil.DateOf(t)` from a time, `d.In(loc)` for the start of the day in a
+zone, `d.String()` for `"2026-10-06"`. `go build ./...` after `lidza
+update` names each place. A required `date` field now fails validation
+when empty.
+
+- Calendar days are days (a bug every app with a `date` field had): the
+  API took only full timestamps, so `"2026-10-06"`, what a date input
+  sends and what the OpenAPI document declared, was refused; and it sent
+  `"2026-10-06T00:00:00Z"`, which a browser west of UTC shows as the day
+  before. A `date` is now `"2026-10-06"` both ways (an old timestamp is
+  still read, by its date as written) and a Postgres `date` through pgx.
+- `localtime` (in API types) is a date and time as typed, with no zone:
+  `"2026-10-06T10:30"`, Go `civil.DateTime`.
+  `i18n.From(ctx).At(ctx, value)` makes it the instant in the request's
+  zone; a time a daylight-saving change skips moves past the change
+  (and says so), one it repeats is the first of the two.
+- `@timezone` validates an IANA zone name on a string field, on the
+  server (`validate.Timezone`) and in `validators.ts`, for an app that
+  stores a user's zone; `validators.ts` also checks a `date` field.
+- The `i18n` pack: `Today(ctx)` in the request's zone, `Relative(ctx, t)`
+  ("3 hours ago", "in 2 days", with catalog keys `_relative.*` for other
+  languages). The zone database is embedded (`time/tzdata`) in the
+  `i18n` and `jobs` packs and `pkg/validate`, so a zone loads on any
+  host and in the minimal image instead of falling back to UTC.
+- `src/datetime.ts` in the react, svelte and astro templates:
+  `formatDate`, `formatTime`, `formatDateTime`, `formatRelative` in the
+  page's language and the visitor's zone (or `setTimeZone(user.zone)`),
+  `toLocalInput` for a datetime-local input, `today()`. The generated
+  client types document each date and time field.
+- Recipe "Dates and time zones".
+
 ## v0.1.79 (2026-10-05)
 
 - `lidza update` pulls the app's branch first when it is behind its

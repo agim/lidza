@@ -1236,6 +1236,52 @@ the browser.
    Test with a fake provider (`httptest.NewServer`) and
    `auth.OAuth2Connect` pointed at it.
 
+### Dates and time zones
+
+Store instants in UTC, keep calendar days as days, and show both in the
+visitor's language and zone.
+
+1. Pick the field type in `schema.lidza`:
+   - `time` is an instant (`timestamptz`): a post's `createdAt`, a
+     meeting's start. JSON carries it in UTC, `"2026-10-06T14:30:00Z"`.
+   - `date` is a calendar day with no zone (`date`, Go `civil.Date`): a
+     birthday, a due date, a booking night. JSON carries
+     `"2026-10-06"`, which no client shifts to another day.
+   - `localtime` (API types only) is a date and time as a person typed
+     it, with no zone: what `<input type="datetime-local">` sends,
+     `"2026-10-06T10:30"`. The handler turns it into the instant:
+
+     ```go
+     start, skipped := i18n.From(ctx).At(ctx, req.Body.StartAt)
+     if skipped { // 02:30 on the night clocks jump to 03:00 is 03:30
+     	return out, router.Errorf(http.StatusUnprocessableEntity, "that time does not exist there; it would be %s", i18n.From(ctx).Time(ctx, start))
+     }
+     ```
+
+2. The zone is the request's: the `i18n` pack reads the `tz` cookie the
+   page sets from the browser, or `X-Timezone` from other clients, with
+   `I18N_TIMEZONE` as the default. An app that stores a user's zone (a
+   `zone string @timezone` field on its profile) applies it in its own
+   middleware after sign-in, `ctx = i18n.WithTimezone(ctx, loc)` (with
+   `loc, _ := time.LoadLocation(profile.Zone)`), and jobs and mail do the
+   same with the user's stored zone, since they run outside a request.
+   The zone data is built into the binary.
+3. On the server: `i18n.From(ctx).Today(ctx)` is today in that zone,
+   `Date`, `Time` and `DateTime` format an instant in it, `Relative` says
+   "3 hours ago". `civil.Date` has `AddDays`, `DaysUntil`, `Before`,
+   `In(loc)` (the start of that day there); compare instants as
+   `time.Time` in UTC, and read the time with `lidza.Now(ctx)` so a test
+   can set it.
+4. In pages, `src/datetime.ts`: `formatDate`, `formatTime`,
+   `formatDateTime`, `formatRelative` in the page's language and the
+   visitor's zone (`setTimeZone(user.zone)` for a stored one),
+   `toLocalInput(instant)` to fill a datetime-local input, `today()` for
+   a date input. Format after the page loads, never while it is
+   prerendered.
+5. Test the edges with a fixed clock (`srv.Clock` in `lidzatest`) and a
+   zone with daylight saving (`America/New_York`): the day after 23:00,
+   the night the clocks change, a date near midnight UTC.
+
 ### Roles and permissions
 
 Let the app decide who may do what, per team, beyond signed in or not.
@@ -1660,9 +1706,10 @@ Official Go packs, configured from `.env` (see `.env.example` after
   atomically (a Lua script on Valkey) and returns the new value; the
   increment that creates the key sets the ttl, later ones keep it.
 - `i18n`: `i18n.From(ctx).T(ctx, "key", args...)`, `Number`, `Currency`,
-  `Date`, `Time`, `DateTime` (in the visitor's zone: the template sets a
-  `tz` cookie, API clients send `X-Timezone`; `I18N_TIMEZONE` is the
-  default); catalogs in `locales/<lang>.json` (nested keys join with
+  `Date`, `Time`, `DateTime`, `Relative`, `Today` and `At` (a typed local
+  time to its instant) in the visitor's zone (the template sets a `tz`
+  cookie, API clients send `X-Timezone`; `I18N_TIMEZONE` is the default;
+  recipe "Dates and time zones"); catalogs in `locales/<lang>.json` (nested keys join with
   dots); serve them to other clients with
   `r.Handle("GET /api/v1/i18n/{lang}", i18n.Handler())`. Store and send
   times in UTC; format at the edge. The mail pack writes in the
@@ -1875,14 +1922,14 @@ A `model` in `schema.lidza` is a table; a `type` is an API shape only;
 an `enum Status { todo doing done }` is a Postgres enum type and a string
 union in the clients. Field types: `string`, `text`, `int`, `bigint`,
 `float`, `decimal(p, s)`, `bool`, `time`, `date`, `uuid`, `json`,
-`bytes`; `?` makes a field optional (nullable), `[]` an array. Field
+`bytes`, and in types only `localtime`; `?` makes a field optional (nullable), `[]` an array. Field
 attributes: `@id`, `@default(uuid())` / `@default(now())` /
 `@default(autoincrement())` / `@default(value)`, `@unique`,
 `@index`, `@ref(Model)` for a foreign key, the field typed as the
 model's id (`categoryId int @ref(Category)` when `Category` has
 `id int @id`; `@ref(Model, cascade)` deletes the row with the
 referenced one, `@ref(Model, setnull)` clears an optional field), `@min(n)` / `@max(n)` (length or value), `@email`,
-`@url`, `@pattern("re")`. Block attributes inside a model:
+`@url`, `@pattern("re")`, `@timezone` (an IANA zone name). Block attributes inside a model:
 `@@unique(a, b)`, `@@index(a, b)`; `@table("name")` after the model name.
 
 Numbered rows and exact amounts:

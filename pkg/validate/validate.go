@@ -3,6 +3,9 @@
 package validate
 
 import (
+	"time"
+	_ "time/tzdata" // zone names validate on any host
+
 	"encoding/json"
 	"net/mail"
 	"net/url"
@@ -96,4 +99,15 @@ func Pattern(re, s string) bool {
 	}
 	patternsMu.Unlock()
 	return rx.MatchString(s)
+}
+
+// Timezone reports whether s names an IANA time zone ("Europe/Paris",
+// "UTC"). The zone database is embedded (time/tzdata), so the answer does
+// not depend on the host.
+func Timezone(s string) bool {
+	if s == "" || s == "Local" {
+		return false
+	}
+	_, err := time.LoadLocation(s)
+	return err == nil
 }

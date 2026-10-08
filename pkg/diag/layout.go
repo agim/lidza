@@ -60,7 +60,8 @@ func allowedRootFile(name, appDir string) bool {
 		"index.html", "sqlc.yaml", "sqlc.yml", "Dockerfile", "Makefile", "LICENSE", "LICENSE.md", "LICENSE.txt",
 		"README.md", "CHANGELOG.md", "AGENTS.md", "CLAUDE.md", "GEMINI.md",
 		".gitignore", ".gitattributes", ".gitmodules", ".dockerignore", ".mcp.json", ".editorconfig", ".npmrc", ".nvmrc", ".node-version",
-		".prettierrc", ".prettierrc.json", ".prettierignore",
+		".prettierrc", ".prettierrc.json", ".prettierrc.yaml", ".prettierrc.yml", ".prettierignore",
+		".golangci.yml", ".golangci.yaml", ".golangci.toml", ".golangci.json",
 		".env", ".env.local", ".env.example", ".env.test", ".env.test.local", ".env.development", ".env.development.local", ".env.production", ".env.production.local":
 		return true
 	case "routes.go", "start.go", "tools.go", "packs.go", "head.go", "pages.go":

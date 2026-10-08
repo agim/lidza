@@ -24,7 +24,7 @@ the browser.
    `repo admin:repo_hook` (repositories, private ones included, and
    their webhooks); `AUTH_CONNECT_GITHUB_SCOPES` asks for others. A
    grant missing a scope is refused and withdrawn.
-2. Other providers go in the options, in `routes.go`:
+2. Other providers go in the options, in `app/routes.go`:
 
    ```go
    auth.Mount(r, auth.Options{Connectors: []auth.Connector{

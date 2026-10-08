@@ -18,7 +18,7 @@ verified.
    production). Without the setting every delivery is refused with 503
    and the log names it; an endpoint never runs unverified. A value
    saved from the admin pages applies within a minute.
-2. Register the endpoint in `routes.go`, on `r` and not in a group
+2. Register the endpoint in `app/routes.go`, on `r` and not in a group
    behind `auth.Require()` (the provider has no session):
 
    ```go

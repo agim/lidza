@@ -35,7 +35,7 @@ backed by Postgres. Needs the `db` and `auth` packs (`lidza pack add db`,
    `model: "Post"`): it writes `db/queries/post.sql`, the
    `CreatePost`, `UpdatePost` and `PostList` types in `schema.lidza`,
    `handlers/post.go` with the routes under `/api/v1/posts`, and in
-   `routes.go` a group behind `auth.Require()` with the routes on it:
+   `app/routes.go` a group behind `auth.Require()` with the routes on it:
 
    ```go
    posts := r.Group("/api/v1/posts", auth.Require())

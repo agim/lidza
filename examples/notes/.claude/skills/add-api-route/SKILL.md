@@ -21,7 +21,7 @@ is validated on the server and callable from the client by name.
    }
    ```
 
-2. Register the handler in `routes.go`:
+2. Register the handler in `app/routes.go`:
 
    ```go
    router.Route(r, "POST /api/v1/things", createThing)

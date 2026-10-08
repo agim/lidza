@@ -9,7 +9,7 @@ description: "Let an agent call a function of this app, with its packs, from `li
 Let an agent call a function of this app, with its packs, from
 `lidza mcp` (as `app_<name>`) and from the running binary at `/mcp`.
 
-1. In `tools.go` add to the list returned by `tools()`:
+1. In `app/tools.go` add to the list returned by `tools()`:
 
    ```go
    lidza.ToolFunc("count_posts", "Number of posts.", func(ctx context.Context, _ struct{}) (int, error) {

@@ -11,7 +11,7 @@ without writing a page.
 
 1. `lidza pack add auth` if the app has no accounts yet; the pages are
    behind `auth.Require()`.
-2. In `routes.go`: `admin.Mount(r, admin.Options{Title: "notes"})`
+2. In `app/routes.go`: `admin.Mount(r, admin.Options{Title: "notes"})`
    (import `github.com/agim/lidza/packs/admin`). Once `admin/` holds a
    file (the theme of step 5, a page template), embed it so the binary
    carries it and needs no `admin/` folder beside it: `//go:embed admin`

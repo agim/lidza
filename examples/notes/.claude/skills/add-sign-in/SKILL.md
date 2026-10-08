@@ -12,7 +12,7 @@ OIDC issuer) when configured. The app writes no login handler and no
 OAuth flow.
 
 1. `lidza pack add auth` (MCP: `lidza_pack_add`; needs `db`, and `mail`
-   for the verification and reset links). In `routes.go`:
+   for the verification and reset links). In `app/routes.go`:
    `auth.Mount(r, auth.Options{Title: "notes"})`. `lidza gen` then
    writes the client: `api.authRegister`, `authLogin`, `authLogout`,
    `authSession`, `authMe`, `authVerify`, `authForgot`, `authReset`,

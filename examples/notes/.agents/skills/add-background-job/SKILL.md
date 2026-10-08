@@ -25,7 +25,7 @@ the handler later with retries, on this node or another. Recurring work
    finish, then cancels its context and puts it back to pending for the
    next node or the restart. Stop when `ctx` is done and make a rerun
    harmless (upserts, a done marker per item).
-4. Register it in `start.go`:
+4. Register it in `app/start.go`:
 
    ```go
    jobs.FromServices(s).Handle("notify.task", handlers.NotifyTask)
@@ -49,7 +49,7 @@ the handler later with retries, on this node or another. Recurring work
    `jobs.Existed(&found)` says whether it was already there. Once the
    job is done or failed, the key queues new work again.
 6. Work on a timetable (a weekly digest, a sync every 15 minutes) is a
-   schedule in `start.go`, not a job that enqueues its next run:
+   schedule in `app/start.go`, not a job that enqueues its next run:
 
    ```go
    q := jobs.FromServices(s)

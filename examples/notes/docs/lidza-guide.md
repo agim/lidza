@@ -91,7 +91,7 @@ import package `main`. Preserve its tests and behavior during the move:
 | `lidza gen` | `schema.lidza` to `schema/schema.go`, `db/schema.sql`, a migration in `db/migrations` when models changed; handlers to `.lidza/openapi.json` and the client in `.lidza/client`. `lidza dev` runs it on every change. |
 | `lidza context` | writes `.lidza/context.json`: routes, handler signatures, Rust exports. |
 | `lidza mcp` | MCP server on stdio; see "Agent interface". |
-| `lidza gen resource <Model> [--public \| --shared]` | queries, `Create/Update/<Model>List` types, `handlers/<table>.go` with list, get, create, patch, delete under `/api/v1/<plural>` (the list with search, filters, a date range, sorting and pages through `list.Read`: recipe "Add a paginated, filterable list"), registered in `routes.go` (in `appDir` when set) behind `auth.Require()`. An owned model (`ownerId`, or a field with `@ref(User)`) is scoped to the signed-in user. `--public` marks the model `@public`: open routes, no owner. `--shared` marks it `@shared`: behind sign-in, rows not scoped. Needs the `db` and `auth` packs (`auth` not with `--public`). |
+| `lidza gen resource <Model> [--public \| --shared]` | queries, `Create/Update/<Model>List` types, `handlers/<table>.go` with list, get, create, patch, delete under `/api/v1/<plural>` (the list with search, filters, a date range, sorting and pages through `list.Read`: recipe "Add a paginated, filterable list"), registered in `app/routes.go` (in `appDir` when set) behind `auth.Require()`. An owned model (`ownerId`, or a field with `@ref(User)`) is scoped to the signed-in user. `--public` marks the model `@public`: open routes, no owner. `--shared` marks it `@shared`: behind sign-in, rows not scoped. Needs the `db` and `auth` packs (`auth` not with `--public`). |
 | `lidza update [--migrate]` | brings the app's branch and the framework up to date together: a branch behind its upstream is pulled first when that is a clean fast-forward (nothing uncommitted, no local commits the upstream lacks), otherwise the update stops and says what to run (`--no-pull` stops instead of pulling); then the CLI and this app's framework module move to the newest release (never back to an older one; `--to <commit>` takes a release not tagged yet), it regenerates, refreshes the deployment files, then runs `lidza install`. It stops when the files it rewrites have uncommitted changes (`git stash push` sets them aside); `--commit` commits the update when done. In a team, one person makes the update and merges it; the others `git pull`, then `lidza update --cli-only`. |
 | `lidza gen deploy [--force]` | the `Dockerfile`, `.dockerignore` and `deploy/notes.service` from the current templates; a file the app changed is kept and named unless `--force`. |
 | `lidza pack add <name>` | enables an official pack: `db`, `auth`, `jobs`, `mail`, `llm`, `storage`, `cache`, `i18n`, `realtime`, `analytics`, `geo`, `media`. |
@@ -146,7 +146,7 @@ Its prompts are the recipes of this guide (`add-api-route`,
 invoked as `$add-api-route` in Codex and `/add-api-route` in Gemini);
 `lidza gen` rewrites them from this file.
 
-The app adds its own tools in `tools.go` with
+The app adds its own tools in `app/tools.go` with
 `lidza.ToolFunc("name", "what it does", func(ctx, In) (Out, error))`;
 they appear as `app_name` in `lidza mcp` (running inside the app, with
 its packs) and, when the binary runs with `LIDZA_MCP_TOKEN`, at `/mcp`
@@ -160,7 +160,7 @@ are also at /llms.txt and /llms-full.txt until the app serves its own
 there (a product's llms.txt for crawlers), which then wins.
 
 The lists are live: a pack added to `lidza.json`, a recipe recorded in
-the guide or a tool added to `tools.go` appears in this server's tools
+the guide or a tool added to `app/tools.go` appears in this server's tools
 and prompts within seconds, and at once after `lidza_pack_add` and
 `lidza_recipe_add`; no restart. Only a newer CLI binary (`lidza update`)
 needs the server reconnected (`/mcp` in Claude Code), and every command
@@ -170,7 +170,7 @@ result says so while that is the case.
 
 1. Go owns `/api`. The frontend never defines an API route and never proxies
    one; it calls `/api/...` on the same origin.
-2. Add an API route in `routes.go` with `router.Route(r, "GET /api/v1/things/{id}", handler)`
+2. Add an API route in `app/routes.go` with `router.Route(r, "GET /api/v1/things/{id}", handler)`
    where `handler` is `func(ctx context.Context, req *router.Request[In]) (Out, error)`.
    `In` is the JSON body type (`router.None` without one) and `Out` the reply
    (`router.None` for 204). Put the shapes in `schema.lidza` so they get
@@ -355,7 +355,7 @@ is validated on the server and callable from the client by name.
    }
    ```
 
-2. Register the handler in `routes.go`:
+2. Register the handler in `app/routes.go`:
 
    ```go
    router.Route(r, "POST /api/v1/things", createThing)
@@ -447,7 +447,7 @@ backed by Postgres. Needs the `db` and `auth` packs (`lidza pack add db`,
    `model: "Post"`): it writes `db/queries/post.sql`, the
    `CreatePost`, `UpdatePost` and `PostList` types in `schema.lidza`,
    `handlers/post.go` with the routes under `/api/v1/posts`, and in
-   `routes.go` a group behind `auth.Require()` with the routes on it:
+   `app/routes.go` a group behind `auth.Require()` with the routes on it:
 
    ```go
    posts := r.Group("/api/v1/posts", auth.Require())
@@ -480,7 +480,7 @@ OIDC issuer) when configured. The app writes no login handler and no
 OAuth flow.
 
 1. `lidza pack add auth` (MCP: `lidza_pack_add`; needs `db`, and `mail`
-   for the verification and reset links). In `routes.go`:
+   for the verification and reset links). In `app/routes.go`:
    `auth.Mount(r, auth.Options{Title: "notes"})`. `lidza gen` then
    writes the client: `api.authRegister`, `authLogin`, `authLogout`,
    `authSession`, `authMe`, `authVerify`, `authForgot`, `authReset`,
@@ -797,7 +797,7 @@ pressure. Read "Rust: when and how" first; it is not for speed.
 Let an agent call a function of this app, with its packs, from
 `lidza mcp` (as `app_<name>`) and from the running binary at `/mcp`.
 
-1. In `tools.go` add to the list returned by `tools()`:
+1. In `app/tools.go` add to the list returned by `tools()`:
 
    ```go
    lidza.ToolFunc("count_posts", "Number of posts.", func(ctx context.Context, _ struct{}) (int, error) {
@@ -928,7 +928,7 @@ the handler later with retries, on this node or another. Recurring work
    finish, then cancels its context and puts it back to pending for the
    next node or the restart. Stop when `ctx` is done and make a rerun
    harmless (upserts, a done marker per item).
-4. Register it in `start.go`:
+4. Register it in `app/start.go`:
 
    ```go
    jobs.FromServices(s).Handle("notify.task", handlers.NotifyTask)
@@ -952,7 +952,7 @@ the handler later with retries, on this node or another. Recurring work
    `jobs.Existed(&found)` says whether it was already there. Once the
    job is done or failed, the key queues new work again.
 6. Work on a timetable (a weekly digest, a sync every 15 minutes) is a
-   schedule in `start.go`, not a job that enqueues its next run:
+   schedule in `app/start.go`, not a job that enqueues its next run:
 
    ```go
    q := jobs.FromServices(s)
@@ -1152,7 +1152,7 @@ verified.
    production). Without the setting every delivery is refused with 503
    and the log names it; an endpoint never runs unverified. A value
    saved from the admin pages applies within a minute.
-2. Register the endpoint in `routes.go`, on `r` and not in a group
+2. Register the endpoint in `app/routes.go`, on `r` and not in a group
    behind `auth.Require()` (the provider has no session):
 
    ```go
@@ -1264,7 +1264,7 @@ the browser.
    `repo admin:repo_hook` (repositories, private ones included, and
    their webhooks); `AUTH_CONNECT_GITHUB_SCOPES` asks for others. A
    grant missing a scope is refused and withdrawn.
-2. Other providers go in the options, in `routes.go`:
+2. Other providers go in the options, in `app/routes.go`:
 
    ```go
    auth.Mount(r, auth.Options{Connectors: []auth.Connector{
@@ -1495,7 +1495,7 @@ without writing a page.
 
 1. `lidza pack add auth` if the app has no accounts yet; the pages are
    behind `auth.Require()`.
-2. In `routes.go`: `admin.Mount(r, admin.Options{Title: "notes"})`
+2. In `app/routes.go`: `admin.Mount(r, admin.Options{Title: "notes"})`
    (import `github.com/agim/lidza/packs/admin`). Once `admin/` holds a
    file (the theme of step 5, a page template), embed it so the binary
    carries it and needs no `admin/` folder beside it: `//go:embed admin`
@@ -1564,7 +1564,7 @@ instead of a separate admin screen.
    `badge`, `btn`), the functions `icon`, `since`, `num`, `bytes`,
    `dict`, and `{{template "admin-empty" (dict "Icon" "inbox"
    "Title" "..." "Text" "...")}}` for an empty list. Embed it so it
-   ships in the binary: `//go:embed admin` in `routes.go` and
+   ships in the binary: `//go:embed admin` in `app/routes.go` and
    `Templates: lidza.Sub(adminFiles, "admin")` (the folder, so the
    theme ships too). No inline `<script>` or
    `style=`: the pages hold under a strict Content-Security-Policy; a
@@ -1818,7 +1818,7 @@ Official Go packs, configured from `.env` (see `.env.example` after
   email, 0)` makes the token the app mails, `ConsumeToken` redeems it
   once; `RevokeAll` after a reset. Working code: the snippets `routes`
   and `auth-handlers`.
-- `jobs`: register handlers in `start.go` (`onStart`) with
+- `jobs`: register handlers in `app/start.go` (`onStart`) with
   `jobs.FromServices(s).Handle("kind", fn)`; enqueue with
   `jobs.From(ctx).Enqueue(ctx, "kind", payload, jobs.RunAt(t))`, or
   `EnqueueTx(ctx, tx, ...)` inside a transaction; recurring work with
@@ -1933,7 +1933,7 @@ the `lidza_client` Dart package there with the same operations as
 
 ## Admin pages
 
-`admin.Mount(r, admin.Options{Title: "notes"})` in `routes.go` serves
+`admin.Mount(r, admin.Options{Title: "notes"})` in `app/routes.go` serves
 `/admin` for the app's first account (the first user ever to sign in is
 an admin; `Options.NoFirstUserAdmin` turns that off) and for the users
 `ADMIN_USERS` names (ids or emails, comma separated, in `.env` or added

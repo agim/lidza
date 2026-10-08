@@ -22,12 +22,12 @@ What to read, in order:
 | File | Shows |
 |---|---|
 | `schema.lidza` | models (`User`, `Note`), API types with rules (`Credentials`, `CreateNote`) |
-| `routes.go` | public routes, a group behind `auth.Require()`, the resource mounted on a group |
+| `app/routes.go` | public routes, a group behind `auth.Require()`, the resource mounted on a group |
 | `handlers/auth.go` | register, login, logout, me: cookies for browsers, a bearer token for other clients |
 | `handlers/note.go` | the generated resource scoped to the owner |
 | `db/queries/note.sql` | sqlc queries with owner checks |
-| `routes_test.go` | `lidzatest.Start`, cookies across calls, validation and authorization failures |
-| `tools.go` | an MCP tool that runs inside the app |
+| `tests/routes_test.go` | `lidzatest.Start`, cookies across calls, validation and authorization failures |
+| `app/tools.go` | an MCP tool that runs inside the app |
 | `packs/stats/` | a Rust pack: `rust/src/lib.rs` is the capability, `pack.lidza.json` the manifest; `noteStats` in `handlers/note.go` calls it |
 | `src/pages/Home.tsx` | `api.*` and `validators.*` from `@lidza/client`, sign-in and notes |
 | `e2e/notes.spec.ts` | a Playwright test that also asserts no window errors |

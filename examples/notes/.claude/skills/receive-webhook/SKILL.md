@@ -75,12 +75,12 @@ verified.
    production refuses (503) unless `webhook.WithStore` names a store.
    The provider may still send two events about the same object, out
    of order: write with upserts keyed by the object's id.
-5. Test it in `routes_test.go`, signing as the provider does:
+5. Test it in `tests/routes_test.go`, signing as the provider does:
 
    ```go
    func TestPaymentWebhook(t *testing.T) {
    	t.Setenv("PAYMENTS_WEBHOOK_SECRET", "whsec_test")
-   	srv := lidzatest.Start(t, app())
+       srv := lidzatest.Start(t, app.New(nil))
    	body := `{"id":"evt_1","type":"checkout.session.completed","data":{"object":{"id":"cs_1","client_reference_id":"42"}}}`
    	sig := webhook.StripeSignature("whsec_test", srv.Clock.Now(), []byte(body))
    	res := srv.JSON(t, "POST", "/api/v1/webhooks/payments", json.RawMessage(body), nil, lidzatest.Header("Stripe-Signature", sig))

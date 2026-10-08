@@ -83,7 +83,7 @@ mail pack, never through a vendor SDK.
    returns the newest message to that address whose subject contains the
    text, waiting for one a job sends; `Outbox(ctx, 5)` lists them newest
    first. Both have `Status`, `Text` and `HTML`; read the link out of the
-   text. The snippet `auth-handlers` and `routes_test.go` in the
+   text. The snippet `auth-handlers` and `tests/routes_test.go` in the
    reference app show both sides. For `SendTx`, also assert that rolling
    back leaves neither the app write, the outbox row nor the delivery job.
 5. `lidza check`, then `lidza test`. In dev, `lidza_mail` (MCP) shows the

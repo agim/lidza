@@ -99,6 +99,10 @@ func New(ctx context.Context, opt Options) error {
 	}
 
 	cfg := config.Default(opt.Name, opt.Template)
+	cfg.AppDir = "app"
+	if opt.Template == "htmx" {
+		cfg.Frontend.Watch = []string{"app/views", "app/static"}
+	}
 
 	if err := copyTemplate(opt.Template, opt.Dir, opt.Name); err != nil {
 		return err
@@ -116,10 +120,11 @@ func New(ctx context.Context, opt Options) error {
 	for _, f := range []struct{ src, dst string }{
 		{"go.mod.tmpl", "go.mod"},
 		{"main.go.tmpl", "main.go"},
-		{"start.go.tmpl", "start.go"},
-		{"routes.go.tmpl", "routes.go"},
-		{"routes_test.go.tmpl", "routes_test.go"},
-		{"tools.go.tmpl", "tools.go"},
+		{"app.go.tmpl", "app/app.go"},
+		{"start.go.tmpl", "app/start.go"},
+		{"routes.go.tmpl", "app/routes.go"},
+		{"routes_test.go.tmpl", "tests/routes_test.go"},
+		{"tools.go.tmpl", "app/tools.go"},
 		{"lidza-guide.md.tmpl", filepath.FromSlash(recipes.GuideFile)},
 		{"decisions.md.tmpl", filepath.FromSlash(decisions.File)},
 		{"README.md.tmpl", "README.md"},
@@ -164,7 +169,7 @@ func New(ctx context.Context, opt Options) error {
 	if _, err := schema.Generate(opt.Dir, parsed, "", ""); err != nil {
 		return err
 	}
-	if _, err := pack.Generate(opt.Dir, opt.Name, "", nil, parsed); err != nil {
+	if _, err := pack.Generate(opt.Dir, opt.Name, cfg.AppDir, nil, parsed); err != nil {
 		return err
 	}
 	fmt.Fprintf(opt.Out, "created %s (%s template)\n", opt.Dir, opt.Template)
@@ -194,6 +199,7 @@ type templateData struct {
 	// RoutesFile, PacksFile and ToolsFile are where the app keeps them:
 	// at the root, or in appDir.
 	RoutesFile, PacksFile, ToolsFile string
+	AppDir, AppImport                string
 	// Release is the framework release that rendered the agent file's
 	// framework block, recorded in its marker: lidza verify passes the
 	// agent files without refreshing them while it is the CLI's.
@@ -202,8 +208,14 @@ type templateData struct {
 
 // dataFor builds the template data for an app from its configuration.
 func dataFor(cfg *config.Config, lidzaDir string) templateData {
+	appDir := cfg.AppDir
+	if appDir == "" {
+		appDir = "app"
+	}
 	return templateData{
 		Name:              cfg.Name,
+		AppDir:            cfg.AppDir,
+		AppImport:         cfg.Name + "/" + appDir,
 		Module:            Module,
 		LidzaDir:          lidzaDir,
 		Template:          cfg.Frontend.Template,
@@ -243,7 +255,7 @@ const BriefLine = "Read `" + brief.File + "` first: what the app is for, who own
 const DecisionsLine = "Why the app is built a way (a pack added, Rust for a module, a dependency, a schema tradeoff) is recorded in `docs/decisions.md`: read it before working in those areas, and record yours in the same commit with `lidza decision add \"Title\" --why \"...\"` (MCP `lidza_decision_add`)."
 
 // LayoutLine places app-owned Go code without moving generated contracts.
-const LayoutLine = "App-owned Go packages: business logic in `internal/<feature>/`, vendor clients in `internal/providers/<vendor>/`, shared infrastructure in `internal/platform/<name>/`. Keep handlers in `handlers/`; `appDir` holds application wiring and embedded assets. Models and API shapes stay in `schema.lidza`, SQL in `db/queries/*.sql`; generated `schema/` and `db/queries/gen/` are never moved or edited. Recipe: Organize application packages."
+const LayoutLine = "App-owned Go packages: business logic in `internal/<feature>/`, vendor clients in `internal/providers/<vendor>/`, shared infrastructure in `internal/platform/<name>/`. Keep handlers in `handlers/`; `appDir` holds application wiring and embedded assets. Keep the root clean: integration tests in `tests/`, unit tests beside their non-root package, browser specs in `e2e/`, documentation in `docs/`, scripts in `scripts/`, scratch/build output in `.lidza/` or `bin/`. Root tests and stray files fail L020; use the importable app factory, never import package main. Models and API shapes stay in `schema.lidza`, SQL in `db/queries/*.sql`; generated `schema/` and `db/queries/gen/` are never moved or edited. Recipe: Organize application packages."
 
 // AgentGuidanceLine says where durable instructions go: one file every
 // agent reads.
@@ -658,7 +670,17 @@ func copyTemplate(name, dst, appName string) error {
 			return err
 		}
 		rel, _ := filepath.Rel(root, p)
-		target := filepath.Join(dst, strings.TrimSuffix(rel, ".tmpl"))
+		rel = filepath.ToSlash(rel)
+		rel = strings.TrimSuffix(rel, ".tmpl")
+		if name == "htmx" {
+			switch {
+			case rel == "pages_test.go":
+				rel = "tests/pages_test.go"
+			case rel == "pages.go" || rel == "views" || rel == "static" || strings.HasPrefix(rel, "views/") || strings.HasPrefix(rel, "static/"):
+				rel = filepath.Join("app", rel)
+			}
+		}
+		target := filepath.Join(dst, rel)
 		if d.IsDir() {
 			return os.MkdirAll(target, 0o755)
 		}
@@ -668,6 +690,9 @@ func copyTemplate(name, dst, appName string) error {
 		}
 		if utf8.Valid(data) && !bytes.ContainsRune(data, 0) {
 			data = bytes.ReplaceAll(data, []byte(namePlaceholder), []byte(appName))
+		}
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			return err
 		}
 		return os.WriteFile(target, data, 0o644)
 	})

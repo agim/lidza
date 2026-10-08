@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/agim/lidza/pkg/config"
 )
 
 // llmsFile is where `lidza gen llms` writes the app's public llms.txt:
@@ -16,6 +18,9 @@ import (
 // /llms.txt), or the htmx template's static directory, which its pages
 // serve at /llms.txt.
 func llmsFile(abs string) string {
+	if cfg, err := config.Load(abs); err == nil && cfg.Frontend.Template == "htmx" {
+		return filepath.Join(abs, cfg.AppPath("static"), "llms.txt")
+	}
 	if fileExists(filepath.Join(abs, "static", "htmx.min.js")) {
 		return filepath.Join(abs, "static", "llms.txt")
 	}

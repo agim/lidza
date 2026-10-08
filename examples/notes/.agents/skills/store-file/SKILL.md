@@ -47,5 +47,5 @@ pack, with the app deciding who may read them.
 4. Test with the local provider: `.env.test` sets `STORAGE_PROVIDER=local`
    and a `STORAGE_DIR`; upload through the API, read it back, delete the
    row and check `Stat` returns `storage.ErrNotFound`. The snippet
-   `storage-handler` and `routes_test.go` in the reference app show it.
+   `storage-handler` and `tests/routes_test.go` in the reference app show it.
 5. `lidza check`, then `lidza test`.

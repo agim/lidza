@@ -9,11 +9,11 @@ description: "Cover a handler with a Go test that boots the app, or a page with 
 Cover a handler with a Go test that boots the app, or a page with a
 browser test.
 
-1. Handler: in `routes_test.go` (or `handlers/<name>_test.go`):
+1. Handler: in `tests/<name>_test.go` (`package tests`, importing `notes/app`) or a unit test beside its non-root package:
 
    ```go
    func TestCreateThing(t *testing.T) {
-   	srv := lidzatest.Start(t, app())
+       srv := lidzatest.Start(t, app.New(nil))
    	var out schema.Thing
    	res := srv.JSON(t, "POST", "/api/v1/things", schema.CreateThing{Title: "x"}, &out)
    	if res.StatusCode != http.StatusCreated || out.Title != "x" {

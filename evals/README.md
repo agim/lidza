@@ -36,7 +36,7 @@ Add a case for every new rule or guidance surface.
 on a fresh copy of the scaffolded app and scores the result: `lidza
 verify --json` must pass and a probe per task must find what was asked
 (a typed `GET /api/v1/time` with output `ServerTime`; a `/time` route in
-`src/router.tsx`; a `word_count` tool in `tools.go`). The agent command
+`src/router.tsx`; a `word_count` tool in `app/tools.go`). The agent command
 comes from `LIDZA_EVAL_AGENT`, run in the app directory with the task on
 stdin (or in place of `{prompt}`); the permission mode is the operator's
 choice, the runner adds none:

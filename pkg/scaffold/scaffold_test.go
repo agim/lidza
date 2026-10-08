@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/agim/lidza/pkg/config"
+	"github.com/agim/lidza/pkg/diag"
 	"github.com/agim/lidza/pkg/recipes"
 )
 
@@ -20,11 +21,11 @@ func TestNewReact(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, f := range []string{
-		"go.mod", "main.go", "routes.go", "routes_test.go", "tools.go", "lidza.json",
+		"go.mod", "main.go", "app/app.go", "app/start.go", "app/routes.go", "tests/routes_test.go", "app/tools.go", "lidza.json",
 		"CLAUDE.md", "AGENTS.md", "GEMINI.md", "docs/lidza-guide.md", "docs/decisions.md", "docs/brief.md", "README.md", ".github/workflows/ci.yml", ".github/dependabot.yml",
 		".mcp.json", ".gemini/settings.json",
 		"package.json", "index.html", "vite.config.ts", "tsconfig.json",
-		"src/main.tsx", "src/router.tsx", "src/pages/Home.tsx", "src/ErrorBoundary.tsx", "playwright.config.ts", "e2e/home.spec.ts", "schema.lidza", "schema/schema.go", ".env.example", "packs.go", "benchmarks/scale_test.js",
+		"src/main.tsx", "src/router.tsx", "src/pages/Home.tsx", "src/ErrorBoundary.tsx", "playwright.config.ts", "e2e/home.spec.ts", "schema.lidza", "schema/schema.go", ".env.example", "app/packs.go", "benchmarks/scale_test.js",
 		".gitignore", "dist/.gitkeep", "Dockerfile", ".dockerignore", "deploy/demo.service",
 		".claude/skills/add-api-route/SKILL.md", ".claude/skills/add-resource/SKILL.md", ".claude/skills/add-page/SKILL.md",
 		".claude/skills/add-pack-capability/SKILL.md", ".claude/skills/add-mcp-tool/SKILL.md", ".claude/skills/write-test/SKILL.md", ".claude/skills/add-recipe/SKILL.md",
@@ -38,7 +39,7 @@ func TestNewReact(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Name != "demo" || cfg.Frontend.Template != "react" || cfg.Frontend.Dist != "dist" {
+	if cfg.AppDir != "app" || cfg.Name != "demo" || cfg.Frontend.Template != "react" || cfg.Frontend.Dist != "dist" {
 		t.Fatalf("config %+v", cfg)
 	}
 	read := func(name string) string {
@@ -147,7 +148,7 @@ func TestNewEveryTemplate(t *testing.T) {
 			t.Errorf("%s: template %q", tpl, cfg.Frontend.Template)
 		}
 		if tpl == "htmx" {
-			for _, f := range []string{"pages.go", "pages_test.go", "views/layout.html", "views/partials/hello.html", "static/htmx.min.js", "static/analytics.js"} {
+			for _, f := range []string{"app/pages.go", "tests/pages_test.go", "app/views/layout.html", "app/views/partials/hello.html", "app/static/htmx.min.js", "app/static/analytics.js"} {
 				if _, err := os.Stat(filepath.Join(dir, f)); err != nil {
 					t.Errorf("htmx: missing %s", f)
 				}
@@ -155,11 +156,11 @@ func TestNewEveryTemplate(t *testing.T) {
 			if _, err := os.Stat(filepath.Join(dir, "pages.go.tmpl")); err == nil {
 				t.Error("htmx: .tmpl suffix not stripped")
 			}
-			main, _ := os.ReadFile(filepath.Join(dir, "main.go"))
+			main, _ := os.ReadFile(filepath.Join(dir, "app/app.go"))
 			if !regexp.MustCompile(`Frontend:\s+pages\(\)`).MatchString(string(main)) || strings.Contains(string(main), "go:embed") {
 				t.Errorf("htmx main.go:\n%s", main)
 			}
-			pages, _ := os.ReadFile(filepath.Join(dir, "pages.go"))
+			pages, _ := os.ReadFile(filepath.Join(dir, "app/pages.go"))
 			if strings.Contains(string(pages), namePlaceholder) {
 				t.Error("htmx: placeholder left in pages.go")
 			}
@@ -476,5 +477,51 @@ func TestAddPageRecipePerTemplate(t *testing.T) {
 		if body := recipes.Skill(page[0]); !strings.Contains(body, want) {
 			t.Errorf("%s: add-page does not mention %s:\n%s", template, want, body)
 		}
+	}
+}
+
+func TestNewAppsKeepRootClean(t *testing.T) {
+	for _, template := range []string{"react", "svelte", "astro", "htmx"} {
+		t.Run(template, func(t *testing.T) {
+			dir := filepath.Join(t.TempDir(), "demo")
+			if err := New(context.Background(), Options{Name: "demo", Dir: dir, Template: template, SkipModTidy: true}); err != nil {
+				t.Fatal(err)
+			}
+			cfg, err := config.Load(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cfg.AppDir != "app" {
+				t.Fatalf("appDir: %q", cfg.AppDir)
+			}
+			entries, err := os.ReadDir(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, e := range entries {
+				if strings.HasSuffix(e.Name(), ".go") && e.Name() != "main.go" {
+					t.Errorf("root Go file: %s", e.Name())
+				}
+			}
+			for _, d := range diag.Rules(context.Background(), dir) {
+				if d.Code == "L020" {
+					t.Errorf("scaffold violates layout: %+v", d)
+				}
+			}
+			for _, name := range []string{"app/app.go", "app/start.go", "app/routes.go", "app/packs.go", "app/tools.go", "tests/routes_test.go"} {
+				if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
+					t.Error(err)
+				}
+			}
+			for _, name := range []string{".agents/skills/write-test/SKILL.md", ".claude/skills/write-test/SKILL.md", "AGENTS.md"} {
+				b, err := os.ReadFile(filepath.Join(dir, name))
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !strings.Contains(string(b), "tests/") {
+					t.Errorf("%s lacks test placement", name)
+				}
+			}
+		})
 	}
 }

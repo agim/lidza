@@ -12,8 +12,10 @@ contracts and keep the same instructions available to every agent.
 1. Read the brief, decisions and layout in this guide. With `appDir`, keep
    the application factory, routes, startup, tools and embedded assets there;
    `main.go` stays the entrypoint. Keep HTTP and job handlers in `handlers/`,
-   where `lidza gen resource` writes them. Integration tests live in `tests/`
-   when the app has an importable factory; unit tests stay beside their package.
+   where `lidza gen resource` writes them. Integration tests live in `tests/` and use the importable factory; unit tests
+   stay beside their non-root package. Root tests and stray files fail L020.
+   Keep docs in `docs/`, scripts in `scripts/`, fixtures in `testdata/`, and
+   scratch/build output in `.lidza/` or `bin/`.
 2. Put business behavior in `internal/<feature>/` (for example
    `internal/orders/`), vendor clients in `internal/providers/<vendor>/` and
    shared infrastructure in `internal/platform/<name>/`. Create packages as

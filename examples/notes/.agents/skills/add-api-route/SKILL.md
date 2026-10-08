@@ -79,5 +79,5 @@ is validated on the server and callable from the client by name.
    loop or aborting the signal closes the request. The Dart client
    returns a `Stream`.
 
-5. Add a test in `routes_test.go` (see "Write a test") and run
+5. Add a test in `tests/routes_test.go` (see "Write a test") and run
    `lidza check`, then `lidza test`.

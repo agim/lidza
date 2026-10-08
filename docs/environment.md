@@ -220,8 +220,10 @@ lidza/
 
 An app created by `lidza new` is a separate Go module that requires
 `github.com/agim/lidza`: `main.go` embeds `dist/` and calls `lidza.Run`,
-`routes.go` registers `/api` handlers, `packs.go` (generated) lists the
-packs, and the frontend lives at the app root (`package.json`, `src/`).
+`app/app.go` exports `New(dist fs.FS)`, `app/routes.go` registers `/api`
+handlers, `app/packs.go` (generated) lists the packs, and integration
+tests live in `tests/`. The frontend lives at the app root
+(`package.json`, `src/`). Root tests and unexpected files fail L020.
 Packs live under `packs/<name>` with their Rust crate and built module;
 official Go packs are imported from this repo. `lidza dev` builds that
 module into `.lidza/app` and runs it with `LIDZA_MODE=dev`, so dev and

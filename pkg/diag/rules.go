@@ -28,57 +28,76 @@ import (
 //   - L001: a package-level variable of map or slice type is state that
 //     grows with traffic and lives on one node; keep it in Postgres or
 //     Valkey, or make it a bounded, guarded structure;
+//
 //   - L002: a goroutine started inside a request handler is unbounded
 //     work; use the jobs pack or a worker pool with a size;
+//
 //   - L004: an import under the framework's module path that names no
 //     package of the framework version the app uses (an error: it will
 //     not compile, and `go get` cannot help);
+//
 //   - L005: a typed handler whose input, output or stream event type is
 //     not declared in schema.lidza, so it is neither validated nor known
 //     to the client;
+//
 //   - L006: an import of an email vendor SDK; the mail pack speaks those
 //     APIs already, with the outbox, templates and retries;
+//
 //   - L007: an import of a language-model vendor SDK or client library;
 //     the llm pack speaks those APIs already, with structured output,
 //     tools, retries and a fake for tests;
+//
 //   - L008: an import of an object-storage SDK; the storage pack speaks
 //     the S3 API already, with a local provider for tests;
+//
 //   - L009: a file written to the local disk (os.WriteFile, os.Create,
 //     os.OpenFile, os.MkdirAll); a node's disk is neither shared nor
 //     kept, so uploads and generated files go through the storage pack;
+//
 //   - L010: a string literal shaped like an API key or token (AWS,
 //     OpenAI, Anthropic, Google, SendGrid, Mailgun, Resend, Slack,
 //     GitHub, Stripe secret and webhook keys, a JSON Web Token, a private
 //     key) or a database URL with its password; secrets go in the
 //     credentials, never in source (WebRules applies it to the frontend);
+//
 //   - L011 (a note): a pack enabled in lidza.json that no app code
 //     imports; use it or remove it, so the next reader is not misled;
+//
 //   - L012: a pack or a direct dependency (one the framework does not
 //     bring itself) with no entry in docs/decisions.md naming it; the
 //     why of every such choice is recorded there;
+//
 //   - L013: an import of an OAuth or OpenID Connect client library; the
 //     auth pack's sign-in speaks those flows already (auth.Mount with
 //     AUTH_PROVIDERS: Google, GitHub, Microsoft, any OIDC issuer), with
 //     the identities linked to accounts and the admin pages;
+//
 //   - L014: an app admin page (admin.Page) whose name no entry in
 //     docs/decisions.md mentions; a page lets admins act across
 //     accounts, so what it may do is recorded;
+//
 //   - L015 (a note, not a warning): the brief (docs/brief.md) has
 //     required questions open; the agent runs the interview with the
 //     developer before building much. A note never fails --strict;
+//
 //   - L016: a call whose error result is dropped, as a statement or
 //     assigned to _ (type-checked; deferred calls, a Close on the way
 //     out of a failure, printing to the terminal and writes to a buffer
 //     or a hash are exempt);
+//
 //   - L017: a run of statements that repeats another in the app, names
 //     and literals aside (at least 8 statements and 80 tokens); reuse
 //     the first or extract a function both call;
+//
 //   - L018: a query in db/queries/*.sql on an owned table that neither
 //     filters by nor sets the owner column (owned.go);
+//
 //   - L019 (an error): two migrations in db/migrations share a number,
 //     one generated on a checkout behind its branch (migrations.go).
 //
-// Except for L004 and L019 the findings are warnings: they point at the pattern,
+//   - L020 (an error): tests, application code or noise files at an app root.
+//
+// Except for L004, L019 and L020 the findings are warnings: they point at the pattern,
 // the author decides. A comment "lidza:ignore L001" on the line, or the
 // line before, exempts that line from the rule it names.
 func Rules(ctx context.Context, root string) []Diagnostic {
@@ -132,6 +151,7 @@ func Rules(ctx context.Context, root string) []Diagnostic {
 	out = append(out, openBrief(root)...)
 	out = append(out, ownedQueries(root)...)
 	out = append(out, migrationNumbers(root)...)
+	out = append(out, rootLayout(root)...)
 	return out
 }
 

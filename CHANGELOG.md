@@ -9,6 +9,19 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- Breaking: app roots now fail `lidza check` and `lidza verify` (L020) for
+  test files, extra application Go files and unexpected noise, including
+  untracked and ignored files. Existing root wiring remains supported;
+  move it into an importable package and set `appDir` before moving its
+  integration tests to `tests/`. Preserve unit tests beside their non-root
+  package. Keep docs in `docs/`, scripts in `scripts/`, fixtures in
+  `testdata/`, and scratch/build output in `.lidza/` or `bin/`.
+- New apps put wiring and an exported `New` factory in `app/`, integration
+  tests in `tests/`, and only the Go entrypoint at the root. All four
+  templates, the reference app, snippets and agent recipes follow it.
+
 ## v0.1.88 (2026-10-06)
 
 - Static pages in the react template: a route with `staticData: {

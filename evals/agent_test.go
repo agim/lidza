@@ -39,7 +39,7 @@ var tasks = []task{
 	{
 		name: "add-route",
 		prompt: "Add GET /api/v1/time to this app: it replies with the server's current time as a type ServerTime " +
-			"{ now datetime } declared in schema.lidza, using lidza.Now(ctx). Cover it in routes_test.go. " +
+			"{ now datetime } declared in schema.lidza, using lidza.Now(ctx). Cover it in tests/routes_test.go. " +
 			"Run lidza check and lidza test until both pass. Do not touch the frontend.",
 		probe: func(dir string) string {
 			cx, err := inspect.Project(dir, nil)
@@ -85,10 +85,10 @@ var tasks = []task{
 	},
 	{
 		name: "add-tool",
-		prompt: "Add an MCP tool named word_count to tools.go that takes { text string } and returns the number of words. " +
+		prompt: "Add an MCP tool named word_count to app/tools.go that takes { text string } and returns the number of words. " +
 			"Run lidza check until it passes.",
 		probe: func(dir string) string {
-			tools, _ := os.ReadFile(filepath.Join(dir, "tools.go"))
+			tools, _ := os.ReadFile(filepath.Join(dir, "app/tools.go"))
 			if !strings.Contains(string(tools), `"word_count"`) || !strings.Contains(string(tools), "lidza.ToolFunc") {
 				return "tools.go has no lidza.ToolFunc named word_count"
 			}

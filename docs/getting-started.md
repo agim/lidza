@@ -324,7 +324,7 @@ and `@lidza/client` exports `validators` with the schema rules for forms.
 in `.env.test` is created and migrated first, then `go test ./...`, then
 the frontend check. A test boots the whole app with
 `lidzatest.Start(t, app())` and talks to it over HTTP with a JSON client
-that keeps cookies; `lidza new` writes `routes_test.go` as the example.
+that keeps cookies; `lidza new` writes `tests/routes_test.go` as the example.
 `CACHE_URL=memory` in `.env.test` keeps the cache in-process. In handlers,
 read time with `lidza.Now(ctx)` and call other services with
 `lidza.HTTPClient(ctx)`: the test then freezes the clock

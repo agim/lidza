@@ -1,4 +1,4 @@
-package main
+package tests
 
 import (
 	"io"
@@ -7,13 +7,15 @@ import (
 	"testing"
 
 	"github.com/agim/lidza/pkg/lidzatest"
+
+	"__LIDZA_APP_NAME__/app"
 )
 
 // The pages are Go templates served by the binary: a browser is not
 // needed to test them. lidzatest.Start boots the app; `lidza test` runs
 // this.
 func TestPages(t *testing.T) {
-	srv := lidzatest.Start(t, app())
+	srv := lidzatest.Start(t, app.New(nil))
 	get := func(path string) (int, string) {
 		t.Helper()
 		res, err := srv.Client().Get(srv.URL + path)

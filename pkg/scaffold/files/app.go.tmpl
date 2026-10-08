@@ -1,0 +1,24 @@
+package app
+
+import (
+	"io/fs"
+
+	"github.com/agim/lidza"
+)
+
+// New describes the application; main supplies the built frontend and tests
+// pass nil to exercise the API without the frontend build.
+func New(dist fs.FS) lidza.App {
+	return lidza.App{
+		Name: "{{.Name}}",
+		Dist: dist,
+{{- if eq .Template "htmx"}}
+		Frontend: pages(),
+{{- end}}
+		Routes: routes,
+		Packs: packs(),
+		Tools: tools(),
+		OnStart: onStart,
+		Middleware: appMiddleware(),
+	}
+}

@@ -191,18 +191,18 @@ func TestInventedFrameworkPackage(t *testing.T) {
 }
 
 func TestHandlerTypesOutsideSchema(t *testing.T) {
-	edit(t, map[string]string{"+routes.go": `
+	edit(t, map[string]string{"+app/routes.go": `
 type adHoc struct{ N int }
 
 func leak(ctx context.Context, req *router.Request[adHoc]) (map[string]any, error) { return nil, nil }
 `})
 	expect(t, check(t),
-		expectation{code: "L005", severity: "warning", file: "routes.go", message: "adHoc"},
-		expectation{code: "L005", severity: "warning", file: "routes.go", message: "map[string]any"})
+		expectation{code: "L005", severity: "warning", file: "app/routes.go", message: "adHoc"},
+		expectation{code: "L005", severity: "warning", file: "app/routes.go", message: "map[string]any"})
 }
 
 func TestGlobalStateAndGoroutines(t *testing.T) {
-	edit(t, map[string]string{"+routes.go": `
+	edit(t, map[string]string{"+app/routes.go": `
 var seen = map[string]int{}
 
 func spawn(ctx context.Context, req *router.Request[router.None]) (router.None, error) {
@@ -211,8 +211,8 @@ func spawn(ctx context.Context, req *router.Request[router.None]) (router.None, 
 }
 `})
 	expect(t, check(t),
-		expectation{code: "L001", severity: "warning", file: "routes.go"},
-		expectation{code: "L002", severity: "warning", file: "routes.go"})
+		expectation{code: "L001", severity: "warning", file: "app/routes.go"},
+		expectation{code: "L002", severity: "warning", file: "app/routes.go"})
 }
 
 // An app admin page without a decision naming it: an agent that adds one
@@ -338,7 +338,7 @@ func TestSchemaChangeReachesTheFrontend(t *testing.T) {
 	// Renaming a field in schema.lidza regenerates the Go struct and the
 	// client: the page that reads the old name fails the check.
 	replaceIn(t, "schema.lidza", "message string", "text    string")
-	replaceIn(t, "routes.go", "Message: ", "Text: ")
+	replaceIn(t, "app/routes.go", "Message: ", "Text: ")
 	r := check(t)
 	if r.Status != "error" {
 		t.Errorf("status %s", r.Status)
@@ -391,8 +391,8 @@ func TestGuidanceSurfaces(t *testing.T) {
 		t.Error("pre-commit hook missing")
 	}
 	// The app owns its start hook; main.go stays generated.
-	start, _ := os.ReadFile(filepath.Join(app, "start.go"))
-	mainGo, _ := os.ReadFile(filepath.Join(app, "main.go"))
+	start, _ := os.ReadFile(filepath.Join(app, "app/start.go"))
+	mainGo, _ := os.ReadFile(filepath.Join(app, "app/app.go"))
 	if !strings.Contains(string(start), "func onStart(") || !regexp.MustCompile(`OnStart:\s+onStart`).MatchString(string(mainGo)) {
 		t.Error("start.go with onStart, wired in main.go, missing")
 	}
@@ -847,5 +847,25 @@ func dropDatabases(t *testing.T, names ...string) {
 		if _, err := conn.Exec(ctx, "DROP DATABASE IF EXISTS "+pgx.Identifier{n}.Sanitize()+" WITH (FORCE)"); err != nil {
 			t.Fatal(err)
 		}
+	}
+}
+
+// Layout errors reach CLI, verify and MCP through the shared diagnostic report.
+func TestRootNoiseFailsCheckAndVerify(t *testing.T) {
+	edit(t, map[string]string{
+		"api_test.go":  "package main\n",
+		"page.spec.ts": "// browser test belongs in e2e\n",
+		"scratch.md":   "temporary notes\n",
+	})
+	r := check(t)
+	if r.Status != "error" {
+		t.Fatalf("root noise passed:\n%s", dump(r))
+	}
+	for _, name := range []string{"api_test.go", "page.spec.ts", "scratch.md"} {
+		expect(t, r, expectation{code: "L020", severity: "error", file: name})
+	}
+	out, err := command(app, lidza, "verify", "--no-test", "--json")
+	if err == nil || !strings.Contains(string(out), "L020") {
+		t.Fatalf("verify accepted root noise: %v\n%s", err, out)
 	}
 }

@@ -74,7 +74,7 @@ app's tools. The llm pack speaks the providers; the app never does.
    `llm.From(srv.Context()).Fake().ReplyJSON(schema.NoteTags{Tags:
    []string{"go"}})` scripts the next reply and `Fake().Calls()` shows
    the prompt the handler sent. Assert on both. The snippet
-   `llm-handler` and `routes_test.go` in the reference app show it. The
+   `llm-handler` and `tests/routes_test.go` in the reference app show it. The
    fake embeds too, the same vector for the same text. `.env.test` has
    `LLM_PROVIDER=fake` and `EMBED_PROVIDER=fake` (setup writes them,
    `lidza update` adds them), so a provider set in `.env` never reaches

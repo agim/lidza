@@ -6,6 +6,8 @@ import (
 
 {{- end}}
 	"github.com/agim/lidza"
+
+	"{{.Name}}/app"
 )
 {{if .Dist}}
 // The production binary carries the frontend build. `lidza build` fills
@@ -14,22 +16,4 @@ import (
 //go:embed all:{{.Dist}}
 var dist embed.FS
 {{end}}
-func main() { lidza.Run(app()) }
-
-// app describes the application; tests start it with lidzatest.Start.
-func app() lidza.App {
-	return lidza.App{
-		Name:   "{{.Name}}",
-{{- if .Dist}}
-		Dist:   lidza.Sub(dist, "{{.Dist}}"),
-{{- end}}
-{{- if eq .Template "htmx"}}
-		Frontend: pages(),
-{{- end}}
-		Routes:  routes,
-		Packs:   packs(),
-		Tools:   tools(),
-		OnStart: onStart,
-		Middleware: appMiddleware(),
-	}
-}
+func main() { lidza.Run(app.New({{if .Dist}}lidza.Sub(dist, "{{.Dist}}"){{else}}nil{{end}})) }

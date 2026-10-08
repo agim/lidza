@@ -1,4 +1,4 @@
-package main
+package tests
 
 import (
 	"context"
@@ -15,6 +15,7 @@ import (
 	"github.com/agim/lidza/packs/storage"
 	"github.com/agim/lidza/pkg/lidzatest"
 
+	"notes/app"
 	"notes/schema"
 )
 
@@ -23,7 +24,7 @@ import (
 // to the calls after it. `lidza test` creates and migrates the database
 // first, then runs this.
 func TestNotes(t *testing.T) {
-	srv := lidzatest.Start(t, app())
+	srv := lidzatest.Start(t, app.New(nil))
 	creds := schema.Credentials{Email: fmt.Sprintf("u%d@example.com", time.Now().UnixNano()), Password: "correct horse battery"}
 
 	if res := srv.JSON(t, http.MethodGet, "/api/v1/notes", nil, nil); res.StatusCode != http.StatusUnauthorized {
@@ -220,7 +221,7 @@ func TestNotes(t *testing.T) {
 
 // TestThrottle: the credential routes are rate limited per client.
 func TestThrottle(t *testing.T) {
-	srv := lidzatest.Start(t, app())
+	srv := lidzatest.Start(t, app.New(nil))
 	var last int
 	for i := 0; i < 12; i++ {
 		last = srv.JSON(t, http.MethodPost, "/api/v1/auth/login", schema.Credentials{Email: "x@example.com", Password: "wrong password"}, nil).StatusCode
@@ -242,7 +243,7 @@ func body(res *http.Response) string {
 // TestAdmin: the admin pages open for a user ADMIN_USERS names, refuse
 // another user, and ask a visitor to sign in.
 func TestAdmin(t *testing.T) {
-	srv := lidzatest.Start(t, app())
+	srv := lidzatest.Start(t, app.New(nil))
 	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	if res, err := client.Get(srv.URL + "/admin/"); err != nil || res.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("visitor: %v %v", err, res)

@@ -117,6 +117,12 @@ htmx.
 
 ## Application package placement
 
+New apps use `app/` with an exported `New(dist fs.FS)` factory and
+integration tests in `tests/`; only `main.go` remains at the root.
+L020 rejects root tests, extra Go files and stray files, including ignored
+and untracked ones. Standard tool configuration and manifests remain there;
+docs, scripts, fixtures and scratch output belong in their directories.
+Older root-package apps migrate wiring before moving their integration tests.
 Application wiring lives in the configured `appDir`; HTTP and job handlers
 stay in `handlers/`. App-owned business packages use `internal/<feature>/`,
 vendor clients `internal/providers/<vendor>/`, and shared infrastructure

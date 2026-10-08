@@ -38,7 +38,7 @@ SSR sidecar.
    sidecar renders and, under `lidza dev`, the dev server's. Setting
    `document.title` in the browser on navigation stays the client's job;
    the server's head is for the first load and for crawlers.
-6. Test it in `routes_test.go`: call `head` with
+6. Test it beside the package that defines `head` (outside the root): call `head` with
    `httptest.NewRequest("GET", "/products/"+id,
    nil).WithContext(srv.Context())` (`srv` from `lidzatest.Start`) and
    check `Title`, `Canonical` and the 404 `Status`. `lidza check`, then

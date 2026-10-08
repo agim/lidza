@@ -53,4 +53,11 @@ func TestGenLLMS(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, "static", "llms.txt")); err != nil {
 		t.Errorf("htmx app: %v", err)
 	}
+	write("lidza.json", `{"name":"shop","frontend":{"template":"htmx"},"appDir":"app"}`)
+	if err := runGenLLMS(ctx, []string{"--dir", dir}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "app", "static", "llms.txt")); err != nil {
+		t.Fatal(err)
+	}
 }

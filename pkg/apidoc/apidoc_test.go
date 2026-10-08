@@ -78,7 +78,7 @@ func TestRender(t *testing.T) {
 		t.Fatalf("app source: %+v %v", src, ok)
 	}
 	pkgs, _ = Packages(src.Dir)
-	if strings.Join(pkgs, ",") != ",db/queries/gen,handlers,packs/stats,schema" {
+	if strings.Join(pkgs, ",") != ",app,db/queries/gen,handlers,packs/stats,schema" {
 		t.Errorf("app packages: %v", pkgs)
 	}
 	for _, p := range []string{"notes/handlers", "./handlers", "handlers/"} {

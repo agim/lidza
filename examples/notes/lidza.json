@@ -14,5 +14,6 @@
     "lidza/llm",
     "lidza/storage"
   ],
-  "sdk": {}
+  "sdk": {},
+  "appDir": "app"
 }

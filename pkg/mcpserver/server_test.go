@@ -189,10 +189,10 @@ func TestAgentDocs(t *testing.T) {
 		t.Fatalf("missing package: %v %+v", err, r)
 	}
 
-	if got := call("lidza_snippet", map[string]any{"name": "routes"}); !strings.HasPrefix(got, "From examples/notes/routes.go") || !strings.Contains(got, "auth.Require()") {
+	if got := call("lidza_snippet", map[string]any{"name": "routes"}); !strings.HasPrefix(got, "From examples/notes/app/routes.go") || !strings.Contains(got, "auth.Require()") {
 		t.Fatalf("lidza_snippet: %s", got)
 	}
-	if got := call("lidza_snippet", nil); !strings.Contains(got, "handler-test (routes_test.go)") {
+	if got := call("lidza_snippet", nil); !strings.Contains(got, "handler-test (tests/routes_test.go)") {
 		t.Fatalf("snippet catalog: %s", got)
 	}
 

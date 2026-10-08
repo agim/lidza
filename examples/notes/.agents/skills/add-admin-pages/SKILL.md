@@ -38,5 +38,5 @@ without writing a page.
    file is read from `Options.Templates` (embedded, step 2), else from
    `admin/` on disk.
 6. Test it: an admin gets 200 on `/admin/`, another user 403, a visitor
-   401; the reference app's `routes_test.go` shows it.
+   401; the reference app's `tests/routes_test.go` shows it.
 7. `lidza check`, then `lidza test`.

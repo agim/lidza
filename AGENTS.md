@@ -105,6 +105,8 @@ Working agreements (Agim's standing decisions):
   in `handlers/`, and models and API shapes in `schema.lidza`. Generated paths
   stay fixed. Framework APIs that applications import stay outside `internal/`.
 
+- Keep app roots clean: tests in `tests/` or beside a non-root package, browser specs in `e2e/`, documentation in `docs/`, scripts in `scripts/`, and scratch/build output in `.lidza/` or `bin/`. New apps wire an importable `app.New` in `app/`; root tests and stray files fail rule L020.
+
 - Queue mail that follows database writes with `mail.SendTx` in the same
   transaction, with db and jobs enabled; roll back on any error. Ordinary
   `Send` owns its transaction and must run outside an app transaction.

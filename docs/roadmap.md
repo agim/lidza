@@ -255,8 +255,8 @@ its data once; an `img` without `alt` fails `lidza check`.
 
 ## Phase 8: Teams, search, outbound webhooks, payments
 
-Started 2026-10-10. Built and released one part at a time, in this order.
-Teams and invitations: done 2026-10-10. Full-text search: done 2026-10-10. Outbound webhooks: done 2026-10-10. Payments: done 2026-10-10.
+Done 2026-10-10: teams and invitations (v0.1.92), full-text search
+(v0.1.93), outbound webhooks and payments (v0.1.94).
 
 - Teams and invitations: workspaces as `auth.Roles` scopes. Create a
   workspace (its creator an owner), invite by email (a signed one-time
@@ -642,4 +642,4 @@ build, stopping at the first failure.
 
 ### Next
 
-Phase 8.
+Nothing queued.

@@ -97,7 +97,7 @@ import package `main`. Preserve its tests and behavior during the move:
 | `lidza gen resource <Model> [--public \| --shared]` | queries, `Create/Update/<Model>List` types, `handlers/<table>.go` with list, get, create, patch, delete under `/api/v1/<plural>` (the list with search, filters, a date range, sorting and pages through `list.Read`: recipe "Add a paginated, filterable list"), registered in `app/routes.go` (in `appDir` when set) behind `auth.Require()`. An owned model (`ownerId`, or a field with `@ref(User)`) is scoped to the signed-in user. `--public` marks the model `@public`: open routes, no owner. `--shared` marks it `@shared`: behind sign-in, rows not scoped. Needs the `db` and `auth` packs (`auth` not with `--public`). |
 | `lidza update [--migrate]` | brings the app's branch and the framework up to date together: a branch behind its upstream is pulled first when that is a clean fast-forward (nothing uncommitted, no local commits the upstream lacks), otherwise the update stops and says what to run (`--no-pull` stops instead of pulling); then the CLI and this app's framework module move to the newest release (never back to an older one; `--to <commit>` takes a release not tagged yet), it regenerates, refreshes the deployment files, then runs `lidza install`. It stops when the files it rewrites have uncommitted changes (`git stash push` sets them aside); `--commit` commits the update when done. In a team, one person makes the update and merges it; the others `git pull`, then `lidza update --cli-only`. |
 | `lidza gen deploy [--force]` | the `Dockerfile`, `.dockerignore` and `deploy/notes.service` from the current templates; a file the app changed is kept and named unless `--force`. |
-| `lidza pack add <name>` | enables an official pack: `db`, `auth`, `jobs`, `mail`, `llm`, `storage`, `cache`, `i18n`, `realtime`, `analytics`, `audit`, `hooks`, `geo`, `media`. |
+| `lidza pack add <name>` | enables an official pack: `db`, `auth`, `jobs`, `mail`, `llm`, `storage`, `cache`, `i18n`, `realtime`, `analytics`, `audit`, `hooks`, `billing`, `geo`, `media`. |
 | `lidza credentials set NAME=value` | seals a secret into `config/credentials.yml.enc` with `config/master.key`; `list` (names), `show` (every value, decrypted) or `show NAME`, `edit` (the whole file in `$EDITOR`), `unset`, `init`. |
 | `lidza admin add EMAIL...` | lets these users (emails or ids) open `/admin` besides the first account: `ADMIN_USERS` in the sealed credentials, read within seconds; in production after a commit and deploy of `config/credentials.yml.enc`. Admins added on the Users page, in the file and in the environment all count. `remove`, `list`. |
 | `lidza admin owner status\|rotate [--production]` | with `AUTH_OWNER_CLAIM=true`: whether the app waits for its owner and where the one-time token file is (never the token); `rotate` replaces an unclaimed token at once on every node. |
@@ -1564,6 +1564,57 @@ data to the workspace.
    (`audit.Record`). The admin pages list the workspaces.
 6. Test it with two accounts: invite, accept, a stranger's 404, a
    member's 403 on an admin route. `lidza test`, then `lidza test --e2e`.
+
+### Add payments
+
+Sell subscriptions: plans in code, Stripe Checkout to subscribe, Stripe's
+portal to manage, and the app checking what a plan includes.
+
+1. `lidza pack add billing` (MCP: `lidza_pack_add`; after `db`), then
+   `lidza gen` and `lidza db migrate` (`billing_customer`,
+   `billing_subscription`). The keys go in the credentials: `lidza
+   credentials set STRIPE_SECRET_KEY=sk_test_...
+   STRIPE_WEBHOOK_SECRET=whsec_...` (test mode in development, the live
+   keys in `production.`). `APP_URL` is where Stripe sends customers
+   back.
+2. Define the plans once, in the app package; each paid plan names its
+   Stripe price, and `billing.FreePlan` ("free") what an owner without a
+   subscription gets:
+
+   ```go
+   var plans = billing.Plans{
+   	billing.FreePlan: {Name: "Free", Features: []string{"projects:3"}},
+   	"pro":            {Name: "Pro", Price: "price_...", Features: []string{"projects:50", "exports"}},
+   }
+   ```
+
+3. In `app/routes.go`: `plans.Mount(r, billing.Options{})`. It serves
+   `GET /api/v1/billing` (the plan, its status and renewal, the
+   features, the plans to choose from), `POST /api/v1/billing/checkout
+   {plan}` and `POST /api/v1/billing/portal` (each returns a Stripe URL
+   to send the browser to), and Stripe's `POST /api/v1/billing/webhook`.
+   Who is billed is the request's workspace (`auth.WorkspaceID`), else
+   the signed-in user; `Options{Guard: auth.RequireWorkspace()}` or a
+   permission (`roles.Require("billing.manage", ...)`) to restrict who
+   may pay. The client gets `api.billingAccount`, `api.billingCheckout`
+   and `api.billingPortal`.
+4. In Stripe's dashboard: a webhook endpoint at
+   `https://<app>/api/v1/billing/webhook` for
+   `checkout.session.completed` and `customer.subscription.created`,
+   `.updated` and `.deleted`; its signing secret is
+   `STRIPE_WEBHOOK_SECRET`. Locally, `stripe listen --forward-to
+   localhost:3000/api/v1/billing/webhook` prints a secret for
+   development. Events update `billing_subscription`; an older event
+   never overwrites a newer one.
+5. Check in handlers, never by calling Stripe: `ok, err :=
+   plans.Has(ctx, owner, "exports")`, or `plans.Require(ctx, owner,
+   "exports")` (a 402 with code `upgrade` the page turns into an upgrade
+   prompt). Active, trialing and past-due subscriptions grant their plan;
+   canceled and unpaid ones fall back to the free plan.
+6. Test with a fake Stripe (`STRIPE_API_URL` points the pack at an
+   `httptest` server) and events signed with
+   `webhook.StripeSignature(secret, time, body)`: checkout, the
+   completed event, an upgrade, a cancellation, a forged event's 401.
 
 ### Record an audit event
 

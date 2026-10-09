@@ -1,0 +1,20 @@
+
+// An owner's Stripe customer (lidza/billing): a workspace or a user.
+model BillingCustomer @table("billing_customer") {
+  owner     string @id
+  customer  string @unique
+  createdAt time   @default(now())
+}
+
+// A Stripe subscription as of the latest event about it.
+model BillingSubscription @table("billing_subscription") {
+  id                string  @id
+  owner             string  @index
+  customer          string
+  price             string
+  status            string
+  currentPeriodEnd  time?
+  cancelAtPeriodEnd bool    @default(false)
+  eventAt           time
+  updatedAt         time    @default(now())
+}

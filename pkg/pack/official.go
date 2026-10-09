@@ -184,6 +184,22 @@ var Officials = []Official{
 		},
 	},
 	{
+		Name:        "billing",
+		Description: "Subscriptions on Stripe: the app's plans in code, Checkout and the customer portal, subscriptions synced from Stripe's signed webhooks, feature checks without calling Stripe.",
+		Env: []string{
+			"# lidza/billing (needs lidza/db; the keys go in the credentials)",
+			"# lidza credentials set STRIPE_SECRET_KEY=sk_test_... STRIPE_WEBHOOK_SECRET=whsec_...",
+		},
+		Notes: []string{
+			"plans in code: var plans = billing.Plans{\"pro\": {Name: \"Pro\", Price: \"price_...\", Features: []string{\"exports\"}}}",
+			"routes: plans.Mount(r, billing.Options{}) serves /api/v1/billing, /checkout, /portal and Stripe's /webhook",
+			"check: plans.Has(ctx, owner, \"exports\") or plans.Require(ctx, owner, \"exports\") (402)",
+			"in Stripe: a webhook endpoint at /api/v1/billing/webhook for checkout.session.completed and customer.subscription.*",
+			"run `lidza gen` and `lidza db migrate`: billing_customer and billing_subscription come from schema.lidza",
+		},
+		Production: []Setting{{Name: "STRIPE_SECRET_KEY", Why: "Stripe's live secret key (sk_live_...)", Dev: []string{}}, {Name: "STRIPE_WEBHOOK_SECRET", Why: "the signing secret of the live webhook endpoint"}, {Name: "APP_URL", Why: "where Checkout and the portal send customers back"}},
+	},
+	{
 		Name:        "hooks",
 		Description: "Outbound webhooks: events sent to the URLs an app's users subscribe, signed (Standard Webhooks), delivered through the jobs pack with retries over about eleven hours, a delivery log with replay, failing endpoints disabled, internal addresses refused.",
 		Env: []string{

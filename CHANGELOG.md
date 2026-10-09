@@ -11,6 +11,15 @@ change. A release without one is additive: an app updates with
 
 ## Unreleased
 
+- Payments (Phase 8): the billing pack (`lidza pack add billing`), on
+  Stripe's HTTP API without an SDK. `billing.Plans` in code (a Stripe
+  price and features per plan, `billing.FreePlan` for owners without a
+  subscription); `plans.Mount` serves the account, Checkout and portal
+  routes and Stripe's signed webhook, which keeps `billing_subscription`
+  current (an older event never overwrites a newer one);
+  `plans.Has(ctx, owner, feature)` and `plans.Require` (402) check
+  without calling Stripe. The owner is the workspace, else the user;
+  return addresses are paths on `APP_URL` only. Recipe "Add payments".
 - Outbound webhooks (Phase 8): the hooks pack (`lidza pack add hooks`,
   with db and jobs). `hooks.From(ctx).Send(ctx, owner, event, data)`
   and `SendTx` queue a delivery to each enabled endpoint of the owner

@@ -1,4 +1,9 @@
-# Līdza
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/brand/lidza-wordmark-dark.svg">
+    <img src="docs/brand/lidza-wordmark-light.svg" alt="Līdza" height="64">
+  </picture>
+</h1>
 
 Līdza is a web framework with a Go control plane (HTTP routing, dev proxy,
 CLI, MCP server), an optional Rust compute plane (packs compiled to WASM,

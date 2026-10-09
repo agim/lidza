@@ -25,6 +25,11 @@ without the font installed:
   favicons, app icons and avatars; the mulberry tile is the accent,
   `oklch(47% 0.13 345)` (`#8b376b`).
 
+- `lidza-social.png`: the 1280×640 social preview card (the wordmark on
+  `#241821`), uploaded in the GitHub repository's settings.
+
+The README shows the wordmark, dark or light with the reader's theme.
+
 The admin pack draws the same outline in its sidebar
 (`lidza-wordmark` in `packs/admin/templates/partials.html`, coloured by
 `currentColor`).

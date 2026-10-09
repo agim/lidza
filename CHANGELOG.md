@@ -9,6 +9,30 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- Client identity behind proxies (#46): `LIDZA_TRUSTED_PROXIES` (IPs,
+  CIDRs, `loopback`, `private`) names the proxies whose
+  `X-Forwarded-For` or `Forwarded` counts. Every request's client is
+  resolved once (`middleware.ClientIdentity`, installed by `lidza.App`
+  in front of every route): from a trusted peer the forwarded chain is
+  read from the right, trusted hops skipped, the first other address
+  taken, a malformed entry stopping the walk; headers are bounded.
+  `middleware.ClientIP` returns it, so `RateLimit`, the auth throttles
+  and sign-in events key on each visitor instead of the proxy (behind a
+  local proxy every visitor shared one bucket: one client could lock
+  everyone out of sign-in). Unset, no forwarded header is trusted.
+- The request log adds `client_ip` (the resolved client only), cuts the
+  path at 512 bytes and escapes control characters in it; the query,
+  headers, cookies and body are never logged (now tested).
+- The storage pack's local provider works through an `os.Root`: a
+  symlink inside `STORAGE_DIR` pointing outside it is refused, not
+  followed. `lidza.DirFS(dir)` serves a build from disk the same way;
+  `os.DirFS` follows symlinks out of the directory. Regression tests
+  pin the static server against encoded, double-encoded, backslash and
+  NUL traversal, dotfiles, build internals and off-origin redirects
+  (the 307s scanners see are Go's same-origin path cleaning).
+
 ## v0.1.90 (2026-10-09)
 
 - `lidza check` (L020) no longer reports a linked directory at the

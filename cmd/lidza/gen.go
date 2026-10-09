@@ -91,6 +91,8 @@ func runGenResource(_ context.Context, args []string) error {
 		fmt.Printf("resource %s: public (@public): open to visitors, rows not scoped to a user\n", model)
 	case res.Shared:
 		fmt.Printf("resource %s: shared (@shared): routes behind auth.Require(), every signed-in user sees every row\n", model)
+	case res.Workspace:
+		fmt.Printf("resource %s: scoped to the request's workspace (%s, auth.WorkspaceID); routes behind auth.RequireWorkspace() (X-Workspace or the current-workspace cookie, members only); another workspace's row is a 404\n", model, res.Owner)
 	case res.Owner != "":
 		fmt.Printf("resource %s: owned by %s, the signed-in user; routes behind auth.Require(); another user's row is a 404\n", model, res.Owner)
 	default:

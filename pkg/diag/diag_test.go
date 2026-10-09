@@ -1,11 +1,11 @@
 package diag
 
 import (
-	"strings"
 	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 

@@ -9,7 +9,7 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
-## Unreleased
+## v0.1.90 (2026-10-09)
 
 - `lidza check` (L020) no longer reports a linked directory at the
   project root as a stray file: a git worktree's `node_modules`, which

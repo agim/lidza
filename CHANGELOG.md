@@ -9,7 +9,7 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
-## Unreleased
+## v0.1.93 (2026-10-09)
 
 - Full-text search (Phase 8): `@search` on string fields (weights
   `@search(A)` to `D`) and `@@search("english")` for the language make

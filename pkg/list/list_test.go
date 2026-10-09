@@ -53,3 +53,25 @@ func TestRead(t *testing.T) {
 		t.Fatalf("sort without Sorts: %q", p.Sort)
 	}
 }
+
+func TestSplit(t *testing.T) {
+	got := Split("post \x02running\x03 <b>x</b> \x02databases\x03")
+	want := []Part{{Text: "post "}, {Text: "running", Hit: true}, {Text: " <b>x</b> "}, {Text: "databases", Hit: true}}
+	if len(got) != len(want) {
+		t.Fatalf("%+v", got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("%d: %+v, want %+v", i, got[i], want[i])
+		}
+	}
+	if p := Split("plain"); len(p) != 1 || p[0].Hit {
+		t.Fatalf("plain: %+v", p)
+	}
+	if p := Split("\x02open"); len(p) != 1 || !p[0].Hit || p[0].Text != "open" {
+		t.Fatalf("unclosed: %+v", p)
+	}
+	if p := Split(""); len(p) != 0 {
+		t.Fatalf("empty: %+v", p)
+	}
+}

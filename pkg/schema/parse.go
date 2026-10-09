@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -162,6 +163,13 @@ func (p *parser) block(rest string, persisted bool) (*Model, error) {
 			continue
 		case line == "}":
 			return m, nil
+		case strings.HasPrefix(line, "@@search"):
+			_, arg := attr(line[1:])
+			cfg := strings.Trim(strings.TrimSpace(arg), `"`)
+			if !searchConfig.MatchString(cfg) {
+				return nil, fmt.Errorf("line %d: %s: @@search(\"english\") names a Postgres text search configuration (simple, english, german, ...)", p.i, name)
+			}
+			m.SearchConfig = cfg
 		case strings.HasPrefix(line, "@@"):
 			an, arg := attr(line[1:])
 			ix := Index{Fields: fields(arg)}
@@ -281,6 +289,17 @@ func (p *parser) field(line string) (*Field, error) {
 			f.Timezone = true
 		case "pattern":
 			f.Pattern = strings.Trim(arg, `"`)
+		case "search":
+			f.Search = true
+			switch w := strings.ToUpper(strings.TrimSpace(arg)); w {
+			case "", "A", "B", "C", "D":
+				f.SearchWeight = w
+			default:
+				return nil, fmt.Errorf("line %d: %s: @search(%s): the weight is A (most), B, C or D", p.i, f.Name, arg)
+			}
+			if (f.Type != "string" && f.Type != "text") || f.Array {
+				return nil, fmt.Errorf("line %d: %s: @search is for a string field", p.i, f.Name)
+			}
 		default:
 			return nil, fmt.Errorf("line %d: %s: unknown attribute @%s", p.i, f.Name, name)
 		}
@@ -382,3 +401,6 @@ func ident(s string) bool {
 	}
 	return true
 }
+
+// searchConfig is a Postgres text search configuration name.
+var searchConfig = regexp.MustCompile(`^[a-z_]{1,63}$`)

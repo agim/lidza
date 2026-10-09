@@ -84,6 +84,9 @@ type Model struct {
 	// Shared is the model attribute @shared: the rows are not owned and
 	// the generated routes are behind sign-in.
 	Shared bool `json:",omitempty"`
+	// SearchConfig is @@search("english"): the text search configuration
+	// of the model's @search fields; "simple" when empty.
+	SearchConfig string `json:",omitempty"`
 }
 
 // Field is one line of a block.
@@ -116,7 +119,11 @@ type Field struct {
 	Precision int `json:",omitempty"`
 	Scale     int `json:",omitempty"`
 	Email     bool
-	URL       bool
+	// Search is @search: the field is part of the model's full-text
+	// search, with SearchWeight (A to D; by position when empty).
+	Search       bool   `json:",omitempty"`
+	SearchWeight string `json:",omitempty"`
+	URL          bool
 	// Timezone requires an IANA zone name ("Europe/Paris").
 	Timezone bool
 	Pattern  string

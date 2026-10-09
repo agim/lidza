@@ -231,7 +231,10 @@ func (r *Resource) creatable() []*schema.Field {
 // its plain fields (createdAt, newest first, by default; else the id),
 // and equality filters on its enums, booleans and references.
 type listShape struct {
-	search  []*schema.Field
+	search []*schema.Field
+	// fts is true when the search is the model's full-text search
+	// (@search fields): ranked, indexed, highlighted.
+	fts     bool
 	span    *schema.Field
 	sorts   []*schema.Field
 	desc    bool
@@ -282,7 +285,36 @@ func (r *Resource) listShape() listShape {
 		}
 	}
 	l.sorts = sorts
+	if fs := r.Model.SearchFields(); len(fs) > 0 {
+		l.search, l.fts = fs, true
+	}
 	return l
+}
+
+// highlights reports whether the list replies with the search's
+// highlights: a model with @search fields whose List type has (or will
+// get) the highlights field. A List type written before the model was
+// searchable keeps its shape; the search still ranks.
+func (r *Resource) highlights() bool {
+	if len(r.Model.SearchFields()) == 0 {
+		return false
+	}
+	t := r.Schema.Model(r.Name() + "List")
+	if t == nil {
+		return true
+	}
+	for _, f := range t.Fields {
+		if f.Name == "highlights" {
+			return true
+		}
+	}
+	return false
+}
+
+// tsquery is the request's search as a text search query, in the
+// model's configuration: websearch syntax ("quoted phrases", or, -not).
+func (r *Resource) tsquery() string {
+	return fmt.Sprintf("websearch_to_tsquery('%s'::regconfig, coalesce(sqlc.narg('q')::text, ''))", r.Model.SearchLanguage())
 }
 
 // listConds are the WHERE conditions of the list and count queries.
@@ -291,7 +323,11 @@ func (r *Resource) listConds(l listShape) []string {
 	if o := r.Owner; o != nil {
 		conds = append(conds, fmt.Sprintf("%s = sqlc.arg('%s')", col(o), snake(o.Name)))
 	}
-	if len(l.search) > 0 {
+	if l.fts {
+		// The model's search document against the request's query; the
+		// GIN index from schema.lidza covers this exact expression.
+		conds = append(conds, fmt.Sprintf("(sqlc.narg('q')::text IS NULL OR %s @@ %s)", r.Model.SearchVector(), r.tsquery()))
+	} else if len(l.search) > 0 {
 		cols := make([]string, len(l.search))
 		for i, f := range l.search {
 			cols[i] = col(f)
@@ -319,6 +355,9 @@ func (r *Resource) listSQL(table string) string {
 		where = "\nWHERE " + strings.Join(conds, "\n  AND ")
 	}
 	var order []string
+	if l.fts {
+		order = append(order, fmt.Sprintf("CASE WHEN sqlc.arg('sort')::text = 'relevance' THEN ts_rank(%s, %s) END DESC", r.Model.SearchVector(), r.tsquery()))
+	}
 	for _, f := range l.sorts {
 		order = append(order,
 			fmt.Sprintf("CASE WHEN sqlc.arg('sort')::text = '%s' AND NOT sqlc.arg('desc')::bool THEN %s END ASC", f.Name, col(f)),
@@ -329,6 +368,13 @@ func (r *Resource) listSQL(table string) string {
 	b.WriteString("-- The list: search, range and filters are optional (NULL for none), sort\n-- one of the CASE keys; list.Read in the handler validates them.\n")
 	fmt.Fprintf(&b, "-- name: List%s :many\nSELECT * FROM %s%s\nORDER BY\n  %s\nLIMIT sqlc.arg('lim')::int OFFSET sqlc.arg('off')::int;\n\n", r.Plural(), table, where, strings.Join(order, ",\n  "))
 	fmt.Fprintf(&b, "-- name: Count%s :one\nSELECT count(*) FROM %s%s;\n\n", r.Plural(), table, where)
+	if l.fts {
+		// Highlights for one page of rows: the matched words marked with
+		// list.HighlightStart and list.HighlightStop, split by list.Split;
+		// never HTML, so a title holding markup stays text.
+		fmt.Fprintf(&b, "-- The search's highlights for the rows of one page.\n-- name: Highlight%s :many\nSELECT %s::text AS id, ts_headline('%s'::regconfig, %s, %s, %s)::text AS headline\nFROM %s WHERE %s::text = ANY(sqlc.arg('ids')::text[]);\n\n",
+			r.Plural(), col(r.Model.IDField()), r.Model.SearchLanguage(), r.Model.SearchDocument(), r.tsquery(), "'StartSel=' || chr(2) || ', StopSel=' || chr(3) || ', MaxFragments=2, MaxWords=24, MinWords=6, FragmentDelimiter=\" ... \"'", table, col(r.Model.IDField()))
+	}
 	return b.String()
 }
 
@@ -343,11 +389,18 @@ func (r *Resource) listHandler(owner string) string {
 		return strings.Join(q, ", ")
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "\tp, err := list.Read(req, list.Options{Sorts: []string{%s}, Desc: %v", quote(l.sorts), l.desc)
+	sorts := quote(l.sorts)
+	if l.fts {
+		sorts += `, "relevance"`
+	}
+	fmt.Fprintf(&b, "\tp, err := list.Read(req, list.Options{Sorts: []string{%s}, Desc: %v", sorts, l.desc)
 	if len(l.filters) > 0 {
 		fmt.Fprintf(&b, ", Filters: []string{%s}", quote(l.filters))
 	}
 	b.WriteString("})\n\tif err != nil {\n\t\treturn schema." + r.Name() + "List{}, err\n\t}\n")
+	if l.fts {
+		b.WriteString("\t// A search without a chosen sort ranks by relevance.\n\tif p.Q != \"\" && req.Query(\"sort\") == \"\" {\n\t\tp.Sort, p.Desc = \"relevance\", true\n\t}\n")
+	}
 	// The arguments both queries share, in sqlc's order of first use.
 	type arg struct{ field, value string }
 	var shared []arg
@@ -454,7 +507,11 @@ func (r *Resource) Handlers() string {
 		fmt.Fprintf(&b, "// Scoped to the signed-in user: every query takes %s from\n// auth.CurrentUser, so another user's row is a 404.\n", r.Owner.Name)
 	}
 	b.WriteString("\npackage handlers\n\n")
-	b.WriteString("import (\n\t\"context\"\n\t\"errors\"\n\t\"net/http\"\n")
+	b.WriteString("import (\n\t\"context\"\n\t\"errors\"\n")
+	if r.highlights() {
+		b.WriteString("\t\"fmt\"\n")
+	}
+	b.WriteString("\t\"net/http\"\n")
 	if r.usesJSON() {
 		b.WriteString("\t\"encoding/json\"\n")
 	}
@@ -504,7 +561,13 @@ func (r *Resource) Handlers() string {
 	} else {
 		b.WriteString(r.listHandler(""))
 	}
-	fmt.Fprintf(&b, "\titems := make([]schema.%s, len(rows))\n\tfor i, row := range rows {\n\t\titems[i] = to%s(row)\n\t}\n\treturn schema.%sList{Items: items, Total: int(total)}, nil\n}\n\n", name, name, name)
+	if r.highlights() {
+		id := sqlcName(r.Model.IDField())
+		fmt.Fprintf(&b, "\titems := make([]schema.%s, len(rows))\n\tids := make([]string, len(rows))\n\tfor i, row := range rows {\n\t\titems[i] = to%s(row)\n\t\tids[i] = fmt.Sprint(row.%s)\n\t}\n\tout := schema.%sList{Items: items, Total: int(total)}\n", name, name, id, name)
+		fmt.Fprintf(&b, "\t// The matched words of each row, as parts the page marks up.\n\tif p.Q != \"\" && len(rows) > 0 {\n\t\ths, err := q.Highlight%s(ctx, queries.Highlight%sParams{Q: p.Search(), IDs: ids})\n\t\tif err != nil {\n\t\t\treturn schema.%sList{}, err\n\t\t}\n\t\tfor _, h := range hs {\n\t\t\thl := schema.SearchHighlight{ID: h.ID}\n\t\t\tfor _, part := range list.Split(h.Headline) {\n\t\t\t\thl.Parts = append(hl.Parts, schema.HighlightPart{Text: part.Text, Hit: part.Hit})\n\t\t\t}\n\t\t\tout.Highlights = append(out.Highlights, hl)\n\t\t}\n\t}\n\treturn out, nil\n}\n\n", plural, plural, name)
+	} else {
+		fmt.Fprintf(&b, "\titems := make([]schema.%s, len(rows))\n\tfor i, row := range rows {\n\t\titems[i] = to%s(row)\n\t}\n\treturn schema.%sList{Items: items, Total: int(total)}, nil\n}\n\n", name, name, name)
+	}
 
 	fmt.Fprintf(&b, "func get%s(ctx context.Context, req *router.Request[router.None]) (schema.%s, error) {\n\tvar out schema.%s\n\t%s", name, name, name, idParse)
 	fmt.Fprintf(&b, "\trow, err := queries.New(db.From(ctx)).Get%s(ctx, %s)\n\tif errors.Is(err, pgx.ErrNoRows) {\n\t\treturn out, router.NotFound(\"%s\")\n\t}\n\tif err != nil {\n\t\treturn out, err\n\t}\n\treturn to%s(row), nil\n}\n\n", name, byID, lower, name)
@@ -696,8 +759,16 @@ func appendTypes(root string, s *schema.Schema, r *Resource) (bool, error) {
 		}
 		b.WriteString("}\n")
 	}
+	fts := len(r.Model.SearchFields()) > 0
 	if s.Model(name+"List") == nil {
-		fmt.Fprintf(&b, "\n// Reply of GET %s.\ntype %sList {\n  items %s[]\n  total int\n}\n", r.Path(), name, name)
+		if fts {
+			fmt.Fprintf(&b, "\n// Reply of GET %s; highlights for a search (?q=).\ntype %sList {\n  items %s[]\n  total int\n  highlights SearchHighlight[]?\n}\n", r.Path(), name, name)
+		} else {
+			fmt.Fprintf(&b, "\n// Reply of GET %s.\ntype %sList {\n  items %s[]\n  total int\n}\n", r.Path(), name, name)
+		}
+	}
+	if fts && s.Model("SearchHighlight") == nil {
+		b.WriteString("\n// A search's matched words in one row: its text in parts, the hits marked.\ntype SearchHighlight {\n  id string\n  parts HighlightPart[]\n}\n\n// A piece of a highlight: text, and whether the search matched it.\ntype HighlightPart {\n  text string\n  hit bool\n}\n")
 	}
 	if b.Len() == 0 {
 		return false, nil

@@ -34,5 +34,19 @@ shows an endless table.
    its field, the filters in one row), `FilterSelect` ("Status: Draft"),
    `SortHead` and `Pager` ("51–100 of 230") draw it. A list already in
    the browser pages with `pageRows(rows, state)`.
-4. Test the route with `lidzatest`: a search, a filter, a range, a sort
+4. Full-text search: mark the fields to search `@search` in
+   `schema.lidza` (`title string @search`, `body text? @search`, and
+   `@@search("english")` for stemming) and run `lidza gen`: the
+   migration adds a GIN index on their weighted text. `lidza gen
+   resource` then searches with it instead of `position()`: words in any
+   form ("running" finds "run"), `"quoted phrases"`, `or`, `-excluded`
+   (websearch syntax); a search without a chosen sort is ranked by
+   relevance (`sort=relevance`), title matches before body matches; and
+   the reply's `highlights` (`[{id, parts: [{text, hit}]}]`, for the
+   page's rows) mark the matched words. Show them with `<Highlight
+   parts={highlightOf(posts.data, post.id)} fallback={post.title} />`
+   from `src/list.tsx`: the hits in `<mark>`, everything escaped. For a
+   query of your own, use the model's expression from the generated
+   `db/queries/<table>.sql` unchanged, or the index is not used.
+5. Test the route with `lidzatest`: a search, a filter, a range, a sort
    both ways and the last page, and a 422 for an unknown sort.

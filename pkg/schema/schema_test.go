@@ -705,3 +705,51 @@ func TestMergeLocks(t *testing.T) {
 		t.Fatalf("conflicts: %v", conflicts)
 	}
 }
+
+// TestSearchIndex: @search fields make one weighted GIN index in the
+// model's configuration; a field added to the search recreates it in the
+// next migration; @search on a non-string field and a bad weight or
+// configuration are refused.
+func TestSearchIndex(t *testing.T) {
+	s, err := Parse(`model Post {
+  id    uuid   @id @default(uuid())
+  title string @search
+  body  string? @search
+  slug  string
+  @@search("english")
+}
+`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := s.Model("Post")
+	want := `CREATE INDEX post_search_idx ON post USING gin ((setweight(to_tsvector('english'::regconfig, coalesce(title, '')), 'A') || setweight(to_tsvector('english'::regconfig, coalesce(body, '')), 'B')));`
+	if got := createIndexes(m); len(got) != 1 || got[0] != want {
+		t.Fatalf("indexes:\n%v\nwant\n%s", got, want)
+	}
+	next, err := Parse(`model Post {
+  id    uuid   @id @default(uuid())
+  title string @search(A)
+  body  string? @search(C)
+  slug  string @search(D)
+  @@search("english")
+}
+`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mig := Diff(s, next, 2)
+	up := strings.Join(mig.Up, "\n")
+	if !strings.Contains(up, "DROP INDEX post_search_idx;") || !strings.Contains(up, "coalesce(slug, '')), 'D')") || !strings.Contains(up, "coalesce(body, '')), 'C')") {
+		t.Fatalf("search index not recreated:\n%s", up)
+	}
+	for _, bad := range []string{
+		"model A {\n  id uuid @id\n  n int @search\n}\n",
+		"model A {\n  id uuid @id\n  n string @search(E)\n}\n",
+		"model A {\n  id uuid @id\n  n string @search\n  @@search(\"en glish\")\n}\n",
+	} {
+		if _, err := Parse(bad); err == nil {
+			t.Errorf("accepted:\n%s", bad)
+		}
+	}
+}

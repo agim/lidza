@@ -193,6 +193,15 @@ func Diff(prev, cur *Schema, seq int) *Migration {
 				changed = true
 			}
 		}
+		// The same name with another definition (a field added to the
+		// search): drop and create it again.
+		for _, name := range sortedFields(newIdx) {
+			if before, ok := oldIdx[name]; ok && before != newIdx[name] {
+				m.Up = append(m.Up, fmt.Sprintf("DROP INDEX %s;", name), newIdx[name])
+				m.Down = append([]string{fmt.Sprintf("DROP INDEX %s;", name), before}, m.Down...)
+				changed = true
+			}
+		}
 		if changed {
 			desc = append(desc, "alter_"+t.Table)
 		}

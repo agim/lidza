@@ -179,3 +179,45 @@ type Page[T any] struct {
 	Limit  int `json:"limit"`
 	Offset int `json:"offset"`
 }
+
+// HighlightStart and HighlightStop mark the matched words in the
+// headline the generated highlight queries return (ts_headline's
+// StartSel and StopSel): control characters, never markup, so the text
+// of a row stays text.
+const (
+	HighlightStart = "\x02"
+	HighlightStop  = "\x03"
+)
+
+// Part is a piece of a highlighted text: the matched words have Hit.
+type Part struct {
+	Text string `json:"text"`
+	Hit  bool   `json:"hit"`
+}
+
+// Split cuts a headline marked with HighlightStart and HighlightStop
+// into parts; the page renders a hit in <mark>, escaped like any text.
+func Split(headline string) []Part {
+	var out []Part
+	for headline != "" {
+		start := strings.Index(headline, HighlightStart)
+		if start < 0 {
+			out = append(out, Part{Text: headline})
+			break
+		}
+		if start > 0 {
+			out = append(out, Part{Text: headline[:start]})
+		}
+		rest := headline[start+len(HighlightStart):]
+		stop := strings.Index(rest, HighlightStop)
+		if stop < 0 {
+			out = append(out, Part{Text: rest, Hit: true})
+			break
+		}
+		if stop > 0 {
+			out = append(out, Part{Text: rest[:stop], Hit: true})
+		}
+		headline = rest[stop+len(HighlightStop):]
+	}
+	return out
+}

@@ -12,6 +12,9 @@
 //   <Pager total={posts.data?.total ?? 0} state={state} set={set} />
 //
 // A list already in the browser pages the same way with pageRows.
+// A model with @search fields searches by full text: ranked by
+// relevance unless a sort is chosen, with highlights to show:
+//   <Highlight parts={highlightOf(posts.data, post.id)} fallback={post.title} />
 
 import { useEffect, useState, type ReactNode } from 'react'
 
@@ -224,4 +227,37 @@ export function pageRows<T extends object>(rows: T[], state: ListState): { items
     })
   }
   return { items: out.slice(state.offset, state.offset + state.limit), total: out.length }
+}
+
+/** One piece of a search highlight; the hits are the matched words. */
+export interface HighlightPart {
+  text: string
+  hit: boolean
+}
+
+/** highlightOf finds a row's highlight in a list reply, if the search matched it. */
+export function highlightOf(reply: { highlights?: { id: string; parts: HighlightPart[] }[] } | undefined, id: string | number): HighlightPart[] | undefined {
+  return reply?.highlights?.find((h) => h.id === String(id))?.parts
+}
+
+/**
+ * Highlight shows a search's matched words in <mark>, the rest as text:
+ * both escaped like any text, so a row's markup never renders. Without
+ * parts (no search, or no match) it shows the fallback.
+ */
+export function Highlight(props: { parts?: HighlightPart[]; fallback?: ReactNode }) {
+  if (!props.parts?.length) return <>{props.fallback}</>
+  return (
+    <>
+      {props.parts.map((p, i) =>
+        p.hit ? (
+          <mark key={i} className="rounded bg-brand/15 px-0.5 text-inherit">
+            {p.text}
+          </mark>
+        ) : (
+          <span key={i}>{p.text}</span>
+        ),
+      )}
+    </>
+  )
 }

@@ -9,6 +9,17 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- Full-text search (Phase 8): `@search` on string fields (weights
+  `@search(A)` to `D`) and `@@search("english")` for the language make
+  a weighted GIN index in the migration. `lidza gen resource` searches
+  a model with them by full text instead of `position()`: stemmed words,
+  quoted phrases, `or`, `-not` (websearch syntax), ranked by relevance
+  when no sort is chosen, and the reply's `highlights` mark the matched
+  words of the page's rows as parts (never markup; `list.Split`).
+  `<Highlight>` and `highlightOf` in `src/list.tsx` show them. A changed
+  index definition is now dropped and recreated by the next migration.
 ## v0.1.92 (2026-10-09)
 
 - Teams and invitations (Phase 8): `auth.Teams` on `auth.Roles`, a

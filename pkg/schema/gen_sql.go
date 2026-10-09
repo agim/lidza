@@ -174,6 +174,9 @@ func createIndexes(m *Model) []string {
 		}
 		out = append(out, fmt.Sprintf("CREATE %s %s ON %s (%s);", kind, indexName(m, ix.Fields, ix.Unique), qid(m.Table), strings.Join(cols, ", ")))
 	}
+	if v := m.SearchVector(); v != "" {
+		out = append(out, fmt.Sprintf("CREATE INDEX %s_search_idx ON %s USING gin (%s);", m.Table, qid(m.Table), v))
+	}
 	return out
 }
 
@@ -210,4 +213,58 @@ func references(s *Schema, f *Field) string {
 		ref += " ON DELETE SET NULL"
 	}
 	return ref
+}
+
+// SearchFields are the model's @search fields, in order.
+func (m *Model) SearchFields() []*Field {
+	var out []*Field
+	for _, f := range m.Fields {
+		if f.Search {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+// SearchLanguage is the model's text search configuration: @@search's,
+// else "simple" (no stemming: right for names, codes and mixed
+// languages).
+func (m *Model) SearchLanguage() string {
+	if m.SearchConfig != "" {
+		return m.SearchConfig
+	}
+	return "simple"
+}
+
+// SearchVector is the expression of the model's search document: each
+// @search field weighted (its @search(A) weight, else A, B, C, then D
+// by position) and joined. The GIN index and every search query use
+// this exact text, so the planner matches them; "" without @search
+// fields.
+func (m *Model) SearchVector() string {
+	fs := m.SearchFields()
+	if len(fs) == 0 {
+		return ""
+	}
+	cfg := quoteLit(m.SearchLanguage())
+	parts := make([]string, len(fs))
+	for i, f := range fs {
+		w := f.SearchWeight
+		if w == "" {
+			w = string("ABCD"[min(i, 3)])
+		}
+		parts[i] = fmt.Sprintf("setweight(to_tsvector(%s::regconfig, coalesce(%s, '')), '%s')", cfg, col(f), w)
+	}
+	return "(" + strings.Join(parts, " || ") + ")"
+}
+
+// SearchDocument is the plain text the highlights come from: the @search
+// fields joined.
+func (m *Model) SearchDocument() string {
+	fs := m.SearchFields()
+	cols := make([]string, len(fs))
+	for i, f := range fs {
+		cols[i] = col(f)
+	}
+	return "concat_ws(' ', " + strings.Join(cols, ", ") + ")"
 }

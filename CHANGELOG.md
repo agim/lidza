@@ -11,6 +11,11 @@ change. A release without one is additive: an app updates with
 
 ## Unreleased
 
+- Go 1.27.2: the module's toolchain. Go 1.27.2 writes export data that
+  staticcheck 2026.2.1 (its pinned `golang.org/x/tools`) cannot read:
+  staticcheck printed internal errors and checked nothing. `lidza check`
+  now reports that as one error with the fix (rebuild staticcheck
+  against a newer `x/tools`), and `lidza doctor` probes for it.
 - Client identity behind proxies (#46): `LIDZA_TRUSTED_PROXIES` (IPs,
   CIDRs, `loopback`, `private`) names the proxies whose
   `X-Forwarded-For` or `Forwarded` counts. Every request's client is

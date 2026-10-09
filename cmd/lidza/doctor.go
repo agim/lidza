@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/agim/lidza/packs/db"
+	"github.com/agim/lidza/pkg/diag"
 	"github.com/agim/lidza/pkg/env"
 	"github.com/agim/lidza/pkg/pack"
 	"github.com/agim/lidza/pkg/version"
@@ -73,6 +74,9 @@ func runDoctor(ctx context.Context, args []string) error {
 		}
 	}
 	tool("staticcheck", "-version", "go install honnef.co/go/tools/cmd/staticcheck@latest", false)
+	if _, err := exec.LookPath("staticcheck"); err == nil && staticcheckTooOld(ctx) {
+		todo("staticcheck cannot read this Go version's packages (lidza check fails it)", diag.StaticcheckTooOldFix)
+	}
 	tool("sqlc", "version", "go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest", false)
 	tool("wasm-tools", "--version", "cargo install wasm-tools --locked", false)
 	tool("k6", "version", "see docs/environment.md (needed by lidza benchmark)", false)
@@ -298,4 +302,23 @@ func serviceHint(service string) string {
 func lookPath(name string) bool {
 	_, err := exec.LookPath(name)
 	return err == nil
+}
+
+// staticcheckTooOld runs staticcheck on a one-file module that imports
+// the standard library: a staticcheck built with an older
+// golang.org/x/tools than the installed Go cannot read its export data.
+func staticcheckTooOld(ctx context.Context) bool {
+	dir, err := os.MkdirTemp("", "lidza-doctor-staticcheck")
+	if err != nil {
+		return false
+	}
+	defer os.RemoveAll(dir)
+	os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module probe\n"), 0o644)
+	os.WriteFile(filepath.Join(dir, "p.go"), []byte("package probe\n\nimport \"fmt\"\n\nvar _ = fmt.Sprint\n"), 0o644)
+	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "staticcheck", "./...")
+	cmd.Dir = dir
+	out, _ := cmd.CombinedOutput()
+	return diag.StaticcheckTooOld(string(out))
 }

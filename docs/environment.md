@@ -13,7 +13,7 @@ under "Verification" passes.
 
 | Tool | Version | Path / notes |
 |---|---|---|
-| go | 1.27.1 | `/usr/local/go/bin/go`; `GOPATH=/home/agim/go` |
+| go | 1.27.2 | `/usr/local/go/bin/go`; `GOPATH=/home/agim/go` |
 | rustc, cargo | 1.98.1 | rustup, `stable`; `~/.cargo/bin`; targets `wasm32-wasip1`, `wasm32-unknown-unknown` |
 | staticcheck | 2026.2.1 | `~/go/bin` |
 | golangci-lint | 2.14.0 | `~/go/bin` |
@@ -98,15 +98,29 @@ Check: `cargo --version`, `rustc --version`,
 
 ### Helper tools
 
+Go 1.27.2 writes export data (version 5) that staticcheck 2026.2.1's
+pinned `golang.org/x/tools` cannot read: it reports "export data version
+5 is greater than maximum supported version 4" and checks nothing. Until
+a staticcheck release carries a newer `x/tools`, build that release
+against `x/tools` v0.51.0:
+
 ```sh
-go install honnef.co/go/tools/cmd/staticcheck@2026.2.1
+d=$(mktemp -d) && cd "$d" && go mod init scbuild
+go get honnef.co/go/tools/cmd/staticcheck@v0.8.1 golang.org/x/tools@v0.51.0
+go build -o "$(go env GOPATH)/bin/staticcheck" honnef.co/go/tools/cmd/staticcheck
+cd - && rm -rf "$d"
+```
+
+```sh
 go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0
 go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1
 cargo install wasm-tools --version 1.259.0 --locked
 ```
 
 Check: `staticcheck -version`, `golangci-lint --version`, `sqlc version`,
-`wasm-tools --version`.
+`wasm-tools --version`; `go version -m $(which staticcheck) | grep x/tools`
+shows v0.51.0, and `staticcheck ./...` in this repository prints no
+"internal error".
 
 ### k6
 

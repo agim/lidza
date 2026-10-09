@@ -1,6 +1,7 @@
 package diag
 
 import (
+	"strings"
 	"context"
 	"os"
 	"os/exec"
@@ -81,5 +82,20 @@ func TestDropSuperseded(t *testing.T) {
 	out := dropSuperseded(in)
 	if len(out) != 2 || out[0].Code != "L004" || out[1].Tool != "go vet" {
 		t.Fatalf("got %+v", out)
+	}
+}
+
+// A staticcheck that cannot read the installed Go's export data is a
+// failed tool with the fix, not a list of the app's errors.
+func TestStaticcheckTooOld(t *testing.T) {
+	out := `{"code":"compile","severity":"error","location":{"file":"-"},"message":"internal error in importing \"cmp\" (cannot decode \"cmp\", export data version 5 is greater than maximum supported version 4); please report an issue"}`
+	if !StaticcheckTooOld(out) {
+		t.Fatal("not recognised")
+	}
+	if StaticcheckTooOld(`{"code":"SA4006","message":"this value is never used"}`) {
+		t.Fatal("an ordinary finding taken for it")
+	}
+	if !strings.Contains(StaticcheckTooOldFix, "golang.org/x/tools@latest") {
+		t.Fatal("fix does not say how")
 	}
 }

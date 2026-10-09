@@ -299,10 +299,28 @@ func runStaticcheck(ctx context.Context, l Layers) ([]Diagnostic, ToolRun) {
 	}
 	stdout, stderr, err := command(ctx, l.Dir, "staticcheck", "-f", "json", "./...")
 	diags := parseStaticcheck(l.Dir, stdout)
+	if StaticcheckTooOld(string(stdout) + string(stderr)) {
+		// Not the app's errors: the tool cannot read this Go's packages
+		// and checked nothing. One error with the fix, so the check does
+		// not pass unchecked.
+		return []Diagnostic{{Layer: "go", Tool: "staticcheck", Severity: "error", Message: StaticcheckTooOldFix}},
+			ToolRun{Failed: true, Reason: "cannot read this Go version's packages"}
+	}
 	if err != nil && len(diags) == 0 && len(stdout) == 0 {
 		return nil, ToolRun{Failed: true, Reason: firstLine(stderr, err)}
 	}
 	return diags, ToolRun{}
+}
+
+// StaticcheckTooOldFix says what to do when staticcheck was built with a
+// golang.org/x/tools older than the installed Go's export data.
+const StaticcheckTooOldFix = "staticcheck cannot read this Go version's compiled packages (\"export data version ... greater than maximum supported\") and checked nothing: " +
+	"rebuild it against a newer golang.org/x/tools: in an empty directory, go mod init scbuild && go get honnef.co/go/tools/cmd/staticcheck@latest golang.org/x/tools@latest && go build -o \"$(go env GOPATH)/bin/staticcheck\" honnef.co/go/tools/cmd/staticcheck"
+
+// StaticcheckTooOld reports staticcheck's output when it cannot decode
+// the installed Go's export data.
+func StaticcheckTooOld(out string) bool {
+	return strings.Contains(out, "export data version") && strings.Contains(out, "greater than maximum supported")
 }
 
 func runCargo(ctx context.Context, l Layers) ([]Diagnostic, ToolRun) {

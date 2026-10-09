@@ -11,6 +11,9 @@ change. A release without one is additive: an app updates with
 
 ## Unreleased
 
+- `lidza check` (L020) no longer reports a linked directory at the
+  project root as a stray file: a git worktree's `node_modules`, which
+  `lidza install` links to the main checkout's, failed `lidza verify`.
 - The owner claim (`AUTH_OWNER_CLAIM=true`, #45): on a deployment
   anyone can reach first, the app's first account (`FirstSubject`, the
   automatic admin) is the signed-in account that presents a one-time

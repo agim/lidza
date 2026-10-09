@@ -30,6 +30,13 @@ func rootLayout(root string) []Diagnostic {
 		if e.IsDir() {
 			continue
 		}
+		// A link to a directory is one (lidza install links a worktree's
+		// node_modules to the main checkout's).
+		if e.Type()&os.ModeSymlink != 0 {
+			if info, err := os.Stat(filepath.Join(root, e.Name())); err == nil && info.IsDir() {
+				continue
+			}
+		}
 		name := e.Name()
 		message := ""
 		switch {

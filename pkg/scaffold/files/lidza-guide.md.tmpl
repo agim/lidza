@@ -1641,7 +1641,11 @@ instead of a separate admin screen.
 2. A page: add an `admin.Page` to `admin.Options.Pages` from a function
    in `handlers/admin.go` (snippet `admin-page`): `Name`, `Path`
    (`orders` serves `/admin/orders`), an `Icon` from the admin pack's
-   `assets/icons.txt`, `Template`, `Data` (sqlc queries; the page is
+   `assets/icons.txt`, a `Group` (the sidebar section, "Billing": pages
+   with the same Group are listed together, the groups in the order
+   their first page comes; none is "App"; with many pages set
+   `admin.Options.FoldGroups` so only the current page's group is
+   open), `Template`, `Data` (sqlc queries; the page is
    admin-only, so a query may cross accounts) and `Actions` (a form
    posts to `<Path>/<action>`; return the message the page shows, or an
    error). A form inside a detail view (`?order=1001`) adds

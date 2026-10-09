@@ -108,3 +108,43 @@ func TestAppPageUploadsAndDownloads(t *testing.T) {
 	}()
 	New(Options{Pages: []Page{{Name: "X", Path: "x", Template: "x.html", Downloads: map[string]http.HandlerFunc{"a/b": func(http.ResponseWriter, *http.Request) {}}}}})
 }
+
+// App pages are listed in their groups, the groups in first-seen order,
+// pages without one under "App"; the page shown is marked current and
+// its group stays open when FoldGroups folds the others.
+func TestAppPageGroups(t *testing.T) {
+	tmpl := fstest.MapFS{"p.html": {Data: []byte(`{{define "content"}}page{{end}}`)}}
+	pages := []Page{
+		{Name: "Accounts", Path: "accounts", Template: "p.html", Group: "Customers"},
+		{Name: "Invoices", Path: "invoices", Template: "p.html", Group: "Billing"},
+		{Name: "Teams", Path: "teams", Template: "p.html", Group: "Customers"},
+		{Name: "Reports", Path: "reports", Template: "p.html"},
+	}
+	for _, fold := range []bool{false, true} {
+		srv := serve(t, Options{Auth: noAuth, Allow: func(context.Context) bool { return true }, CredentialsDir: t.TempDir(), Templates: tmpl, Pages: pages, FoldGroups: fold}, lidza.NewServices())
+		_, body := get(t, srv, "/admin/invoices")
+		nav := body[strings.Index(body, `id="admin-nav"`):]
+		order := []string{`<summary class="nav-group">Customers</summary>`, ">Accounts<", ">Teams<", `<summary class="nav-group">Billing</summary>`, ">Invoices<", `<summary class="nav-group">App</summary>`, ">Reports<"}
+		at := 0
+		for _, want := range order {
+			i := strings.Index(nav[at:], want)
+			if i < 0 {
+				t.Fatalf("fold %v: %q not after position %d in\n%s", fold, want, at, nav)
+			}
+			at += i
+		}
+		if !strings.Contains(nav, `href="/admin/invoices" aria-current="page"`) || strings.Count(nav, `aria-current="page"`) != 1 {
+			t.Errorf("fold %v: aria-current not on Invoices alone", fold)
+		}
+		section := func(label string) string {
+			i := strings.Index(nav, `<summary class="nav-group">`+label+`</summary>`)
+			return nav[strings.LastIndex(nav[:i], "<details"):i]
+		}
+		if !strings.Contains(section("Billing"), "open") {
+			t.Errorf("fold %v: the active page's group is folded", fold)
+		}
+		if open := strings.Contains(section("Customers"), "open"); open == fold {
+			t.Errorf("fold %v: Customers open %v", fold, open)
+		}
+	}
+}

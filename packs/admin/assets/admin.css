@@ -28,6 +28,15 @@ body { background: var(--tblr-body-bg); color: var(--tblr-body-color); }
 .admin-sidebar .navbar-brand { font-weight: 600; letter-spacing: .01em; }
 .admin-sidebar .nav-group { color: var(--tblr-navbar-color); opacity: .55; font-size: .6875rem;
   text-transform: uppercase; letter-spacing: .06em; padding: 1rem 1rem .25rem; }
+/* Labelled groups fold (<details>): the label is the toggle. */
+.admin-sidebar .nav-section { list-style: none; }
+.admin-sidebar .nav-section summary { cursor: pointer; display: flex; align-items: center; justify-content: space-between; list-style: none; }
+.admin-sidebar .nav-section summary::-webkit-details-marker { display: none; }
+.admin-sidebar .nav-section summary::after { content: ""; width: .4rem; height: .4rem; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(-45deg); transition: transform .15s; margin-right: .25rem; }
+.admin-sidebar .nav-section details[open] > summary::after { transform: rotate(45deg); }
+.admin-sidebar .nav-section summary:hover, .admin-sidebar .nav-section summary:focus-visible { opacity: .9; }
+.admin-sidebar .nav-section .navbar-nav { margin: 0; padding: 0; }
+@media (prefers-reduced-motion: reduce) { .admin-sidebar .nav-section summary::after { transition: none; } }
 .admin-sidebar .admin-version { opacity: .55; font-size: .75rem; padding: 1rem; display: flex; align-items: center; gap: .4rem; }
 .admin-sidebar .lidza-wordmark { height: .9rem; width: auto; }
 

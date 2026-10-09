@@ -37,6 +37,11 @@ type Page struct {
 	// Icon is one of the vendored Tabler icons (assets/icons.txt in the
 	// admin pack); "layout-dashboard" when empty.
 	Icon string
+	// Group is the sidebar section the page is listed in ("Billing").
+	// Pages with the same Group are listed together, the groups in the
+	// order their first page appears in Options.Pages; pages without one
+	// are under "App", with the app's settings.
+	Group string
 	// Template names the page's file in Options.Templates (else in
 	// Options.Dir on disk). It defines "content" and reads .Data.
 	Template string

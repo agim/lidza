@@ -9,6 +9,15 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- Admin sidebar groups: `admin.Page.Group` lists an app's pages under
+  labelled sections, in the order their first page comes; pages without
+  one stay under "App" with the app's settings. Every labelled section
+  (Services too) is a `<details>`, so it folds without a script; with
+  `admin.Options.FoldGroups` only the section of the page shown starts
+  open, so a long list fits the screen. (#43)
+
 ## v0.1.89 (2026-10-08)
 
 - Breaking: app roots now fail `lidza check` and `lidza verify` (L020) for

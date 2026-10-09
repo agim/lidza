@@ -20,14 +20,18 @@
       <div class="collapse navbar-collapse" id="admin-nav">
         <ul class="navbar-nav pt-lg-3">
           {{range .Sections}}
-          {{if .Group}}<li class="nav-group" aria-hidden="true">{{.Group}}</li>{{end}}
-          <li class="nav-item{{if eq .Name $.Active}} active{{end}}">
-            <a class="nav-link" href="{{.Href}}"{{if eq .Name $.Active}} aria-current="page"{{end}}>
-              <span class="nav-link-icon d-md-none d-lg-inline-block">{{icon .Icon}}</span>
-              <span class="nav-link-title">{{.Name}}</span>
-              {{if .Status}}<span class="status-dot status-{{.Status}} ms-auto" title="Settings need a look"></span><span class="visually-hidden">Settings need a look</span>{{end}}
-            </a>
+          {{if .Label}}
+          <li class="nav-section">
+            <details{{if .Open}} open{{end}}>
+              <summary class="nav-group">{{.Label}}</summary>
+              <ul class="navbar-nav">
+                {{range .Items}}{{template "admin-nav-item" (navItemOf . $.Active)}}{{end}}
+              </ul>
+            </details>
           </li>
+          {{else}}
+          {{range .Items}}{{template "admin-nav-item" (navItemOf . $.Active)}}{{end}}
+          {{end}}
           {{end}}
         </ul>
         <div class="mt-auto admin-version">{{template "lidza-wordmark"}} {{.Version}}</div>
@@ -81,3 +85,11 @@
 {{template "admin-scripts" .}}
 </body>
 </html>{{end}}
+
+{{define "admin-nav-item"}}<li class="nav-item{{if .Active}} active{{end}}">
+  <a class="nav-link" href="{{.Href}}"{{if .Active}} aria-current="page"{{end}}>
+    <span class="nav-link-icon d-md-none d-lg-inline-block">{{icon .Icon}}</span>
+    <span class="nav-link-title">{{.Name}}</span>
+    {{if .Status}}<span class="status-dot status-{{.Status}} ms-auto" title="Settings need a look"></span><span class="visually-hidden">Settings need a look</span>{{end}}
+  </a>
+</li>{{end}}

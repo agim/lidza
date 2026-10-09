@@ -75,6 +75,10 @@ type Options struct {
 	FirstUser func(ctx context.Context) string
 	// NoFirstUserAdmin turns that rule off: only listed users get in.
 	NoFirstUserAdmin bool
+	// FoldGroups folds the sidebar's labelled groups (Services and the
+	// app's Page.Group sections) but the one holding the page shown; a
+	// click opens one. For an app with many pages, so the list fits.
+	FoldGroups bool
 	// CredentialsDir is where config/credentials.yml.enc lives when no
 	// db pack holds the runtime values; "." by default.
 	CredentialsDir string
@@ -291,7 +295,7 @@ type page struct {
 	Path     string
 	Version  string
 	Active   string
-	Sections []navItem
+	Sections []navGroup
 	Flash    string
 	Error    string
 	// Problem is an app page's Data error, shown instead of its content.
@@ -311,6 +315,15 @@ type page struct {
 // colours a dot when the page's settings need a look.
 type navItem struct {
 	Name, Href, Icon, Group, Status string
+}
+
+// navGroup is one labelled section of the sidebar (none for the first:
+// Overview and Users), folded with <details> when Options.FoldGroups
+// asks and it does not hold the page shown.
+type navGroup struct {
+	Label string
+	Items []navItem
+	Open  bool
 }
 
 // tab is one tab of a pack page.
@@ -344,7 +357,6 @@ func (h *Handler) nav(ctx context.Context) []navItem {
 	group := "Services"
 	add := func(name, page, icon string) {
 		items = append(items, navItem{Name: name, Href: h.path + "/" + page, Icon: icon, Group: group, Status: status[page]})
-		group = ""
 	}
 	if _, ok := lidza.Optional[mailService](ctx); ok {
 		add("Mail", "mail", "mail")
@@ -358,15 +370,50 @@ func (h *Handler) nav(ctx context.Context) []navItem {
 	if _, ok := lidza.Optional[jobsService](ctx); ok {
 		add("Jobs", "jobs", "list-check")
 	}
-	appGroup := "App"
-	for _, it := range h.appNav(ctx) {
-		it.Group, appGroup = appGroup, ""
-		items = append(items, it)
+	// The app's pages, in their groups in first-seen order; those without
+	// a group, and the app's settings, under "App".
+	var order []string
+	byGroup := map[string][]navItem{}
+	for i, it := range h.appNav(ctx) {
+		g := h.opt.Pages[i].Group
+		if g == "" {
+			g = "App"
+		}
+		if _, seen := byGroup[g]; !seen {
+			order = append(order, g)
+		}
+		it.Group = g
+		byGroup[g] = append(byGroup[g], it)
 	}
 	if appSections {
-		items = append(items, navItem{Name: "Settings", Href: h.path + "/settings", Icon: "adjustments-horizontal", Group: appGroup, Status: status[""]})
+		if _, seen := byGroup["App"]; !seen {
+			order = append(order, "App")
+		}
+		byGroup["App"] = append(byGroup["App"], navItem{Name: "Settings", Href: h.path + "/settings", Icon: "adjustments-horizontal", Group: "App", Status: status[""]})
+	}
+	for _, g := range order {
+		items = append(items, byGroup[g]...)
 	}
 	return items
+}
+
+// groups lays the sidebar out in labelled sections, each open unless
+// Options.FoldGroups folds it; the section of the active page is open.
+func (h *Handler) groups(items []navItem, active string) []navGroup {
+	var out []navGroup
+	label := ""
+	for i, it := range items {
+		if it.Group != "" && it.Group != label || i == 0 {
+			label = it.Group
+			out = append(out, navGroup{Label: label, Open: !h.opt.FoldGroups || label == ""})
+		}
+		g := &out[len(out)-1]
+		g.Items = append(g.Items, it)
+		if it.Name == active {
+			g.Open = true
+		}
+	}
+	return out
 }
 
 // tabsFor returns the tabs of a pack page; name is the page template.
@@ -431,6 +478,10 @@ func (h *Handler) funcs() template.FuncMap {
 			return *s
 		},
 		"icon": icon,
+		// navItemOf pairs a sidebar entry with whether it is the page shown.
+		"navItemOf": func(it navItem, active string) map[string]any {
+			return map[string]any{"Name": it.Name, "Href": it.Href, "Icon": it.Icon, "Status": it.Status, "Active": it.Name == active}
+		},
 		"dict": func(kv ...any) map[string]any {
 			m := map[string]any{}
 			for i := 0; i+1 < len(kv); i += 2 {
@@ -512,7 +563,7 @@ func (h *Handler) renderWith(w http.ResponseWriter, r *http.Request, status int,
 		}
 	}
 	if name != "denied" {
-		p.Sections = h.nav(ctx)
+		p.Sections = h.groups(h.nav(ctx), active)
 		p.Tabs = h.tabsFor(ctx, name)
 		if name == "packsettings" {
 			if d, ok := data.(map[string]any); ok {

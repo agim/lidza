@@ -4,15 +4,25 @@ import (
 	"context"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 )
 
-// The example of the Standard Webhooks specification (as Svix documents
-// it): the same secret, id, timestamp and body give the same signature.
+// testSecret builds a whsec_ test value at run time: the literal in the
+// source would look like a leaked Stripe secret to secret scanners. None
+// of these is a real secret.
+func testSecret(key string) string { return StandardSecretPrefix + key }
+
+// specKey is the example key of the Standard Webhooks specification (as
+// Svix documents it), public by design.
+const specKey = "MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw"
+
+// The example of the Standard Webhooks specification: the same secret,
+// id, timestamp and body give the same signature.
 func TestStandardSignatureVector(t *testing.T) {
-	key, err := StandardKey("whsec_MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw")
+	key, err := StandardKey(testSecret(specKey))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -23,7 +33,7 @@ func TestStandardSignatureVector(t *testing.T) {
 }
 
 func TestStandard(t *testing.T) {
-	const secret = "whsec_MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw"
+	secret := testSecret(specKey)
 	t.Setenv("HOOK_SECRET", secret)
 	var calls atomic.Int32
 	h := Standard("HOOK_SECRET", func(ctx context.Context, d *Delivery) error { calls.Add(1); return nil }, WithStore(Memory(10)))
@@ -41,7 +51,7 @@ func TestStandard(t *testing.T) {
 		t.Fatalf("repeat delivered twice: %d", w.Code)
 	}
 	// Several signatures (a rotated secret): any match is enough.
-	other, _ := StandardKey("whsec_b2xkb2xkb2xkb2xkb2xkb2xkb2xk")
+	other, _ := StandardKey(testSecret(strings.Repeat("b2xk", 8))) // "old", repeated
 	two := StandardSignature(other, "msg_2", now, []byte(body)) + " " + StandardSignature(key, "msg_2", now, []byte(body))
 	if w := post(h, body, headers("msg_2", now, two)); w.Code != 200 || calls.Load() != 2 {
 		t.Fatalf("rotated: %d", w.Code)

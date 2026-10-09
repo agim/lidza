@@ -9,7 +9,7 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
-## Unreleased
+## v0.1.91 (2026-10-09)
 
 - Go 1.27.2: the module's toolchain. Go 1.27.2 writes export data that
   staticcheck 2026.2.1 (its pinned `golang.org/x/tools`) cannot read:

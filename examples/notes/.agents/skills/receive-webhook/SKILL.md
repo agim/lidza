@@ -26,7 +26,10 @@ verified.
    r.Handle("POST /api/v1/webhooks/mail", webhook.Mailgun("MAIL_WEBHOOK_SIGNING_KEY", handlers.MailEvent))
    ```
 
-   Other providers: `webhook.HMAC("NAME", "X-Hub-Signature-256", h,
+   Other providers: `webhook.Standard("NAME", h)` for the Standard
+   Webhooks headers (`webhook-id`, `webhook-timestamp`,
+   `webhook-signature`, a `whsec_` secret) that Svix, Resend and another
+   Līdza app's hooks pack send; `webhook.HMAC("NAME", "X-Hub-Signature-256", h,
    webhook.Prefix("sha256="), webhook.IDHeader("X-GitHub-Delivery"))`
    for an HMAC-SHA256 of the body in a header (`webhook.Base64()` when
    it is base64); `webhook.Token("NAME", "Authorization", h,

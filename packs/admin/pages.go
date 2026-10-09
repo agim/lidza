@@ -13,6 +13,7 @@ import (
 
 	"github.com/agim/lidza"
 	"github.com/agim/lidza/packs/auth"
+	"github.com/agim/lidza/packs/hooks"
 	"github.com/agim/lidza/packs/jobs"
 	"github.com/agim/lidza/packs/llm"
 	"github.com/agim/lidza/packs/mail"
@@ -27,6 +28,7 @@ type (
 	mailService    = *mail.Mail
 	jobsService    = *jobs.Queue
 	storageService = *storage.Storage
+	hooksService   = *hooks.Hooks
 )
 
 // store is where saved values go: the db pack's sealed table when it
@@ -533,4 +535,61 @@ func (h *Handler) workspaces(w http.ResponseWriter, r *http.Request) {
 		data["Error"] = err.Error()
 	}
 	h.render(w, r, "workspaces", "Workspaces", data)
+}
+
+// webhooks lists every owner's outbound webhook endpoints (the disabled
+// first) and the latest deliveries, filtered by ?status=.
+func (h *Handler) webhooks(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	hk, ok := lidza.Optional[hooksService](ctx)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	status := r.URL.Query().Get("status")
+	switch status {
+	case "", hooks.Pending, hooks.Delivered, hooks.Failed:
+	default:
+		status = ""
+	}
+	data := map[string]any{"Status": status}
+	if eps, err := hk.AdminEndpoints(ctx, 200); err == nil {
+		data["Endpoints"] = eps
+	} else {
+		data["Error"] = err.Error()
+	}
+	if ds, err := hk.AdminDeliveries(ctx, status, 100); err == nil {
+		data["Deliveries"] = ds
+	} else {
+		data["Error"] = err.Error()
+	}
+	h.render(w, r, "webhooks", "Webhooks", data)
+}
+
+func (h *Handler) replayDelivery(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	hk, ok := lidza.Optional[hooksService](ctx)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	if err := hk.AdminReplay(ctx, r.PathValue("id")); err != nil {
+		h.redirect(w, r, "/webhooks", "", err.Error())
+		return
+	}
+	h.redirect(w, r, "/webhooks", "delivery queued again", "")
+}
+
+func (h *Handler) enableEndpoint(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	hk, ok := lidza.Optional[hooksService](ctx)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	if err := hk.AdminEnable(ctx, r.PathValue("id")); err != nil {
+		h.redirect(w, r, "/webhooks", "", err.Error())
+		return
+	}
+	h.redirect(w, r, "/webhooks", "endpoint enabled", "")
 }

@@ -1,0 +1,33 @@
+
+// An outbound webhook endpoint (lidza/hooks): a subscriber URL of an
+// owner (a workspace, a user, or "" for the app), the events it takes,
+// and its signing secret sealed with the master key.
+model HookEndpoint @table("hook_endpoint") {
+  id             uuid     @id @default(uuid())
+  owner          string   @index
+  url            string
+  events         string[]
+  description    string   @default("")
+  secretSealed   string
+  failures       int      @default(0)
+  disabledAt     time?
+  disabledReason string?
+  createdAt      time     @default(now())
+  updatedAt      time     @default(now())
+}
+
+// One event sent to one endpoint: the body every attempt sends, and the
+// last attempt's outcome.
+model HookDelivery @table("hook_delivery") {
+  id          uuid   @id @default(uuid())
+  endpoint    uuid   @index
+  owner       string
+  event       string
+  body        string
+  status      string
+  attempts    int    @default(0)
+  lastStatus  int?
+  lastError   string?
+  deliveredAt time?
+  createdAt   time   @default(now())
+}

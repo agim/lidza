@@ -109,9 +109,13 @@ func setup(ctx context.Context, dir string, cfg *config.Config, opt setupOptions
 
 	// 1. Packs, db first when any pack needs it.
 	packs := opt.Packs
+	// hooks delivers through the jobs pack: jobs first.
+	if i := slices.Index(packs, "hooks"); i >= 0 && !slices.Contains(packs, "jobs") && !slices.Contains(cfg.Packs, pack.OfficialPrefix+"jobs") {
+		packs = append(packs[:i:i], append([]string{"jobs"}, packs[i:]...)...)
+	}
 	needsDB := false
 	for _, p := range packs {
-		if o, ok := pack.FindOfficial(p); ok && !o.Rust && slices.Contains([]string{"auth", "jobs", "mail", "analytics", "audit"}, o.Name) {
+		if o, ok := pack.FindOfficial(p); ok && !o.Rust && slices.Contains([]string{"auth", "jobs", "mail", "analytics", "audit", "hooks"}, o.Name) {
 			needsDB = true
 		}
 	}

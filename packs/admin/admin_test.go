@@ -19,6 +19,8 @@ import (
 	"github.com/agim/lidza"
 	"github.com/agim/lidza/packs/auth"
 	"github.com/agim/lidza/packs/db"
+	"github.com/agim/lidza/packs/hooks"
+	"github.com/agim/lidza/packs/jobs"
 	"github.com/agim/lidza/packs/llm"
 	"github.com/agim/lidza/pkg/credentials"
 	"github.com/agim/lidza/pkg/middleware"
@@ -507,5 +509,83 @@ func TestWorkspacesPage(t *testing.T) {
 	code, body := get(t, srv, "/admin/workspaces")
 	if code != 200 || !strings.Contains(body, "Acme") || !strings.Contains(body, "ann@example.com") || !strings.Contains(body, `<td class="text-end">2</td>`) || !strings.Contains(body, `<td class="text-end">1</td>`) {
 		t.Fatalf("workspaces page: %d %s", code, body)
+	}
+}
+
+// TestWebhooksPage: with the hooks pack, the sidebar lists Webhooks; the
+// page shows the endpoints (a disabled one with Enable) and the
+// deliveries (a failed one with Replay), and both actions work.
+func TestWebhooksPage(t *testing.T) {
+	dbURL := os.Getenv("LIDZA_TEST_DATABASE_URL")
+	if dbURL == "" {
+		dbURL = "postgres:///lidza_test?host=/var/run/postgresql"
+	}
+	ctx := context.Background()
+	shared, err := db.Open(ctx, db.Config{URL: dbURL, MaxConns: 1, ConnectTimeout: 2 * time.Second})
+	if err != nil {
+		t.Skipf("no test database: %v", err)
+	}
+	t.Cleanup(shared.Close)
+	schema := fmt.Sprintf("admin_hooks_%d", os.Getpid())
+	if _, err := shared.Exec(ctx, "DROP SCHEMA IF EXISTS "+schema+" CASCADE; CREATE SCHEMA "+schema); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { shared.Exec(ctx, "DROP SCHEMA IF EXISTS "+schema+" CASCADE") })
+	sep := "?"
+	if strings.Contains(dbURL, "?") {
+		sep = "&"
+	}
+	pool, err := db.Open(ctx, db.Config{URL: dbURL + sep + "search_path=" + schema, MaxConns: 2, ConnectTimeout: 2 * time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(pool.Close)
+	if _, err := pool.Exec(ctx, hooks.EndpointTable+hooks.DeliveryTable+jobs.JobTable+jobs.ScheduleTable); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("LIDZA_MASTER_KEY", strings.Repeat("cd", 32))
+	q := jobs.New(jobs.Config{}, pool)
+	hk := hooks.New(hooks.Config{AllowPrivate: true}, pool, q)
+	e, _, err := hk.Create(ctx, "ws1", hooks.EndpointInput{URL: "https://hooks.example.com/in", Description: "orders"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pool.Exec(ctx, `UPDATE hook_endpoint SET disabled_at = now(), disabled_reason = '20 deliveries in a row failed'`)
+	var delivery string
+	pool.QueryRow(ctx, `INSERT INTO hook_delivery (endpoint, owner, event, body, status, attempts, last_status, last_error) VALUES ($1, 'ws1', 'order.paid', '{}', 'failed', 9, 500, 'HTTP 500: busy') RETURNING id::text`, e.ID).Scan(&delivery)
+	dir := t.TempDir()
+	t.Setenv(credentials.EnvMasterKey, strings.Repeat("cd", 32))
+	t.Setenv(EnvAdminUsers, "")
+	s := lidza.NewServices()
+	lidza.Provide(s, hk)
+	lidza.Provide(s, q)
+	srv := serve(t, Options{Auth: noAuth, Allow: func(context.Context) bool { return true }, CredentialsDir: dir}, s)
+	if _, body := get(t, srv, "/admin/"); !strings.Contains(body, `href="/admin/webhooks"`) {
+		t.Fatal("Webhooks not in the sidebar")
+	}
+	code, body := get(t, srv, "/admin/webhooks")
+	for _, want := range []string{"https://hooks.example.com/in", ">disabled<", "/webhooks/endpoints/" + e.ID + "/enable", "order.paid", "HTTP 500", "/webhooks/deliveries/" + delivery + "/replay"} {
+		if code != 200 || !strings.Contains(body, want) {
+			t.Fatalf("page lacks %q: %d\n%s", want, code, body)
+		}
+	}
+	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	for _, path := range []string{"/admin/webhooks/endpoints/" + e.ID + "/enable", "/admin/webhooks/deliveries/" + delivery + "/replay"} {
+		res, err := client.PostForm(srv.URL+path, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		if loc := res.Header.Get("Location"); res.StatusCode != http.StatusSeeOther || !strings.Contains(loc, "saved=") {
+			t.Fatalf("%s: %d %s", path, res.StatusCode, loc)
+		}
+	}
+	if got, _ := hk.Get(ctx, "ws1", e.ID); got.DisabledAt != nil {
+		t.Error("endpoint still disabled")
+	}
+	var pending int
+	pool.QueryRow(ctx, `SELECT count(*) FROM hook_delivery WHERE status = 'pending'`).Scan(&pending)
+	if pending != 1 {
+		t.Errorf("%d pending deliveries after replay", pending)
 	}
 }

@@ -184,6 +184,25 @@ var Officials = []Official{
 		},
 	},
 	{
+		Name:        "hooks",
+		Description: "Outbound webhooks: events sent to the URLs an app's users subscribe, signed (Standard Webhooks), delivered through the jobs pack with retries over about eleven hours, a delivery log with replay, failing endpoints disabled, internal addresses refused.",
+		Env: []string{
+			"# lidza/hooks (needs lidza/db and lidza/jobs, and the master key for endpoint secrets)",
+			"# HOOKS_ALLOW_PRIVATE=true   # development only: endpoints on localhost and private networks",
+			"HOOKS_TIMEOUT=10s",
+			"HOOKS_DISABLE_AFTER=20     # deliveries in a row that failed every attempt before an endpoint is disabled",
+			"HOOKS_MAX_ENDPOINTS=20     # per owner",
+			"HOOKS_RETENTION=720h       # deliveries kept; 0 keeps them",
+		},
+		Notes: []string{
+			"send: hooks.From(ctx).Send(ctx, owner, \"order.paid\", order); SendTx(ctx, tx, ...) inside the change's transaction",
+			"routes for users to manage their endpoints: hooks.Mount(r, hooks.Options{}) (owner: the workspace, else the user)",
+			"receivers verify with webhook.Standard(\"THEIR_SECRET\", handler) (pkg/webhook) or any Standard Webhooks library",
+			"run `lidza gen` and `lidza db migrate`: hook_endpoint and hook_delivery come from schema.lidza",
+		},
+		Production: []Setting{{Name: "HOOKS_ALLOW_PRIVATE", Why: "must be off in production: endpoints may not reach internal addresses", Dev: []string{"true", "1"}, Optional: true}},
+	},
+	{
 		Name:        "mail",
 		Description: "Transactional email behind one Send: Mailgun, SendGrid, Postmark, Resend or SMTP over plain HTTP, log and outbox providers for development and tests, templates in mail/, an outbox table with the db pack, background delivery with retries through the jobs pack.",
 		Env: []string{

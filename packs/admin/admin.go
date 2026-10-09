@@ -175,6 +175,9 @@ func New(opt Options) *Handler {
 	h.mux.HandleFunc("GET "+p+"/mail/settings", h.packSettings("mail", "Mail"))
 	h.mux.HandleFunc("GET "+p+"/jobs", h.jobs)
 	h.mux.HandleFunc("POST "+p+"/jobs/{id}/retry", h.retryJob)
+	h.mux.HandleFunc("GET "+p+"/webhooks", h.webhooks)
+	h.mux.HandleFunc("POST "+p+"/webhooks/deliveries/{id}/replay", h.replayDelivery)
+	h.mux.HandleFunc("POST "+p+"/webhooks/endpoints/{id}/enable", h.enableEndpoint)
 	h.mux.HandleFunc("GET "+p+"/storage", h.storage)
 	h.mux.HandleFunc("GET "+p+"/storage/settings", h.packSettings("storage", "Storage"))
 	h.mountPages()
@@ -384,6 +387,9 @@ func (h *Handler) nav(ctx context.Context) []navItem {
 	}
 	if _, ok := lidza.Optional[jobsService](ctx); ok {
 		add("Jobs", "jobs", "list-check")
+	}
+	if _, ok := lidza.Optional[hooksService](ctx); ok {
+		add("Webhooks", "webhooks", "send")
 	}
 	// The app's pages, in their groups in first-seen order; those without
 	// a group, and the app's settings, under "App".

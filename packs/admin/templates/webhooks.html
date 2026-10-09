@@ -1,0 +1,46 @@
+{{define "content"}}
+{{$d := .Data}}
+{{if $d.Error}}<div class="alert alert-danger">{{$d.Error}}</div>{{end}}
+<div class="card mb-3">
+  <div class="card-header"><h2 class="card-title">Endpoints</h2><div class="card-actions small text-secondary">every owner's, the disabled first</div></div>
+  {{if $d.Endpoints}}
+  <div class="table-responsive"><table class="table table-vcenter card-table">
+    <thead><tr><th>URL</th><th>Owner</th><th>Events</th><th>State</th><th class="admin-actions"><span class="visually-hidden">Actions</span></th></tr></thead>
+    <tbody>{{range $d.Endpoints}}<tr>
+      <td class="admin-truncate font-monospace small" title="{{.URL}}">{{.URL}}{{if .Description}}<div class="text-secondary">{{.Description}}</div>{{end}}</td>
+      <td class="small font-monospace text-secondary">{{or .Owner "app"}}</td>
+      <td class="small">{{range $i, $e := .Events}}{{if $i}}, {{end}}{{$e}}{{else}}all{{end}}</td>
+      <td>{{if .DisabledAt}}<span class="badge bg-red-lt" title="{{.Disabled}}">disabled</span>{{else if .Failures}}<span class="badge bg-yellow-lt">{{.Failures}} failed in a row</span>{{else}}<span class="badge bg-green-lt">active</span>{{end}}</td>
+      <td class="admin-actions">{{if .DisabledAt}}<form method="post" action="{{$.Path}}/webhooks/endpoints/{{.ID}}/enable"><button type="submit" class="btn btn-sm">{{icon "player-play"}}<span class="ms-1">Enable</span></button></form>{{end}}</td>
+    </tr>{{end}}</tbody>
+  </table></div>
+  {{else}}
+  <div class="card-body">{{template "admin-empty" (dict "Icon" "send" "Title" "No endpoints yet" "Text" "Endpoints appear when the app or its users subscribe a URL (hooks.Mount, or hooks.From(ctx).Create).")}}</div>
+  {{end}}
+</div>
+<div class="card">
+  <div class="card-header">
+    <h2 class="card-title">Deliveries</h2>
+    <div class="card-actions btn-list">
+      {{range $s, $label := dict "" "All" "failed" "Failed" "pending" "Pending" "delivered" "Delivered"}}<a class="btn btn-sm{{if eq $d.Status $s}} btn-primary{{end}}" href="{{$.Path}}/webhooks{{if $s}}?status={{$s}}{{end}}">{{$label}}</a>{{end}}
+    </div>
+  </div>
+  {{if $d.Deliveries}}
+  <div class="table-responsive"><table class="table table-vcenter card-table">
+    <thead><tr><th>When</th><th>Event</th><th>Endpoint</th><th>State</th><th>Attempts</th><th>Last reply</th><th class="admin-actions"><span class="visually-hidden">Actions</span></th></tr></thead>
+    <tbody>{{range $d.Deliveries}}<tr>
+      <td class="text-secondary" title="{{.CreatedAt.Format "2006-01-02 15:04:05 MST"}}">{{since .CreatedAt}}</td>
+      <td><span class="badge bg-secondary-lt font-monospace">{{.Event}}</span></td>
+      <td class="admin-truncate small font-monospace" title="{{.URL}}">{{.URL}}</td>
+      <td>{{if eq .Status "failed"}}<span class="badge bg-red-lt">failed</span>{{else if eq .Status "delivered"}}<span class="badge bg-green-lt">delivered</span>{{else}}<span class="badge bg-secondary-lt">pending</span>{{end}}</td>
+      <td>{{.Attempts}}</td>
+      <td class="small text-secondary admin-truncate" title="{{.LastError}}">{{with .LastStatus}}HTTP {{.}}{{end}}{{if .LastError}} {{short .LastError}}{{end}}</td>
+      <td class="admin-actions">{{if ne .Status "pending"}}<form method="post" action="{{$.Path}}/webhooks/deliveries/{{.ID}}/replay"><button type="submit" class="btn btn-sm">{{icon "refresh"}}<span class="ms-1">Replay</span></button></form>{{end}}</td>
+    </tr>{{end}}</tbody>
+  </table></div>
+  {{else}}
+  <div class="card-body">{{template "admin-empty" (dict "Icon" "send" "Title" "No deliveries" "Text" "Events the app sends (hooks.From(ctx).Send) appear here with each attempt's outcome.")}}</div>
+  {{end}}
+</div>
+<p class="text-secondary small mt-3">A delivery is retried for about eleven hours (5 s, 30 s, 2 min, 10 min, 30 min, 1 h, 3 h, 6 h); an endpoint whose deliveries keep failing every attempt is disabled until enabled here or by its owner.</p>
+{{end}}

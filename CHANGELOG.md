@@ -9,6 +9,27 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- Outbound webhooks (Phase 8): the hooks pack (`lidza pack add hooks`,
+  with db and jobs). `hooks.From(ctx).Send(ctx, owner, event, data)`
+  and `SendTx` queue a delivery to each enabled endpoint of the owner
+  subscribed to the event (all, a name, or `order.*`), signed with the
+  Standard Webhooks headers, the same body on every attempt, retried at
+  5 s, 30 s, 2 min, 10 min, 30 min, 1 h, 3 h and 6 h, redirects not
+  followed. Endpoints that keep failing are disabled. Internal
+  addresses (loopback, private, link-local, metadata, CGNAT and
+  documentation ranges) are refused when saved and at each connection
+  after DNS; `HOOKS_ALLOW_PRIVATE=true` for development. Secrets are
+  sealed with the master key. `hooks.Mount` serves `/api/v1/hooks` for
+  users to manage their endpoints (create, change, secret, rotate,
+  ping, deliveries, replay); the admin pages' Webhooks page lists
+  endpoints and deliveries with Replay and Enable. Recipe "Send
+  webhooks". `lidza new --packs hooks` adds db and jobs.
+- `webhook.Standard` verifies Standard Webhooks deliveries (Svix,
+  Resend, another Līdza app); `webhook.StandardSignature` and
+  `StandardKey` sign them.
+
 ## v0.1.93 (2026-10-09)
 
 - Full-text search (Phase 8): `@search` on string fields (weights

@@ -97,7 +97,7 @@ import package `main`. Preserve its tests and behavior during the move:
 | `lidza gen resource <Model> [--public \| --shared]` | queries, `Create/Update/<Model>List` types, `handlers/<table>.go` with list, get, create, patch, delete under `/api/v1/<plural>` (the list with search, filters, a date range, sorting and pages through `list.Read`: recipe "Add a paginated, filterable list"), registered in `app/routes.go` (in `appDir` when set) behind `auth.Require()`. An owned model (`ownerId`, or a field with `@ref(User)`) is scoped to the signed-in user. `--public` marks the model `@public`: open routes, no owner. `--shared` marks it `@shared`: behind sign-in, rows not scoped. Needs the `db` and `auth` packs (`auth` not with `--public`). |
 | `lidza update [--migrate]` | brings the app's branch and the framework up to date together: a branch behind its upstream is pulled first when that is a clean fast-forward (nothing uncommitted, no local commits the upstream lacks), otherwise the update stops and says what to run (`--no-pull` stops instead of pulling); then the CLI and this app's framework module move to the newest release (never back to an older one; `--to <commit>` takes a release not tagged yet), it regenerates, refreshes the deployment files, then runs `lidza install`. It stops when the files it rewrites have uncommitted changes (`git stash push` sets them aside); `--commit` commits the update when done. In a team, one person makes the update and merges it; the others `git pull`, then `lidza update --cli-only`. |
 | `lidza gen deploy [--force]` | the `Dockerfile`, `.dockerignore` and `deploy/notes.service` from the current templates; a file the app changed is kept and named unless `--force`. |
-| `lidza pack add <name>` | enables an official pack: `db`, `auth`, `jobs`, `mail`, `llm`, `storage`, `cache`, `i18n`, `realtime`, `analytics`, `geo`, `media`. |
+| `lidza pack add <name>` | enables an official pack: `db`, `auth`, `jobs`, `mail`, `llm`, `storage`, `cache`, `i18n`, `realtime`, `analytics`, `audit`, `hooks`, `geo`, `media`. |
 | `lidza credentials set NAME=value` | seals a secret into `config/credentials.yml.enc` with `config/master.key`; `list` (names), `show` (every value, decrypted) or `show NAME`, `edit` (the whole file in `$EDITOR`), `unset`, `init`. |
 | `lidza admin add EMAIL...` | lets these users (emails or ids) open `/admin` besides the first account: `ADMIN_USERS` in the sealed credentials, read within seconds; in production after a commit and deploy of `config/credentials.yml.enc`. Admins added on the Users page, in the file and in the environment all count. `remove`, `list`. |
 | `lidza admin owner status\|rotate [--production]` | with `AUTH_OWNER_CLAIM=true`: whether the app waits for its owner and where the one-time token file is (never the token); `rotate` replaces an unclaimed token at once on every node. |
@@ -1164,7 +1164,10 @@ verified.
    r.Handle("POST /api/v1/webhooks/mail", webhook.Mailgun("MAIL_WEBHOOK_SIGNING_KEY", handlers.MailEvent))
    ```
 
-   Other providers: `webhook.HMAC("NAME", "X-Hub-Signature-256", h,
+   Other providers: `webhook.Standard("NAME", h)` for the Standard
+   Webhooks headers (`webhook-id`, `webhook-timestamp`,
+   `webhook-signature`, a `whsec_` secret) that Svix, Resend and another
+   Līdza app's hooks pack send; `webhook.HMAC("NAME", "X-Hub-Signature-256", h,
    webhook.Prefix("sha256="), webhook.IDHeader("X-GitHub-Delivery"))`
    for an HMAC-SHA256 of the body in a header (`webhook.Base64()` when
    it is base64); `webhook.Token("NAME", "Authorization", h,
@@ -1247,6 +1250,47 @@ verified.
    --forward-to 127.0.0.1:3000/api/v1/webhooks/payments`) prints the
    secret to seal as `dev.PAYMENTS_WEBHOOK_SECRET`.
 7. `lidza check`, then `lidza test`.
+
+### Send webhooks
+
+Let the app's users (or other systems) subscribe a URL to its events:
+each event POSTed there, signed, retried until it lands, with a log.
+
+1. `lidza pack add hooks` (MCP: `lidza_pack_add`; after `db` and
+   `jobs`), then `lidza gen` and `lidza db migrate` (`hook_endpoint`,
+   `hook_delivery`). Endpoint secrets are sealed with the master key.
+2. Send from a handler or a job, once the change is made:
+   `n, err := hooks.From(ctx).Send(ctx, owner, "order.paid", order)`,
+   or `SendTx(ctx, tx, owner, "order.paid", order)` inside the change's
+   transaction, so a rolled-back change sends nothing. `owner` is whose
+   endpoints receive it: the workspace (`auth.WorkspaceID(ctx)`), the
+   user, or `""` for the app's own. Event names are lower case with
+   dots (`order.paid`); the body is `{"type", "timestamp", "data"}`,
+   the same bytes on every attempt.
+3. Let users manage their endpoints: `hooks.Mount(r, hooks.Options{})`
+   in `app/routes.go` serves `/api/v1/hooks` (create, list, change,
+   delete, reveal and rotate the secret, ping, the deliveries, replay),
+   owned by the request's workspace, else the user;
+   `Options{Guard: auth.RequireWorkspace()}` or a permission
+   (`roles.Require("hooks.manage", ...)`) to restrict it. The client
+   gets `api.hooksList`, `api.hookCreate` (its reply carries the secret
+   once), `api.hookPing`, `api.hookDeliveries`, `api.hookReplay`. An
+   endpoint takes every event, or the ones it names (`order.*`).
+4. Delivery: signed with Standard Webhooks headers (`webhook-id`,
+   `webhook-timestamp`, `webhook-signature`), which receivers verify with
+   any Standard Webhooks library or, in a Līdza app,
+   `webhook.Standard("THEIR_SECRET", handler)`; retried at 5 s, 30 s, 2
+   min, 10 min, 30 min, 1 h, 3 h and 6 h; redirects not followed; after
+   `HOOKS_DISABLE_AFTER` deliveries that all failed, the endpoint is
+   disabled until its owner or the admin pages enable it. URLs on
+   internal addresses (loopback, private ranges, link-local, the cloud
+   metadata address) are refused when saved and at each connection;
+   `HOOKS_ALLOW_PRIVATE=true` allows them for development only.
+5. The admin pages' Webhooks list every endpoint and the latest
+   deliveries, with Replay and Enable.
+6. Test with an `httptest` receiver: set `HOOKS_ALLOW_PRIVATE=true` in
+   `.env.test`, create an endpoint for its URL, send, and check what it
+   received and verified.
 
 ### Connect an external account
 

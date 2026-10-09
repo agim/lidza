@@ -9,7 +9,7 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
-## Unreleased
+## v0.1.92 (2026-10-09)
 
 - Teams and invitations (Phase 8): `auth.Teams` on `auth.Roles`, a
   workspace's id the scope of its memberships. `teams.Mount(r)` serves

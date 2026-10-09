@@ -327,3 +327,39 @@ func TestPrefixOutsideDir(t *testing.T) {
 		t.Fatal("written outside the directory")
 	}
 }
+
+// TestLocalSymlinkEscape: a symlink placed inside the storage directory
+// that points outside it is never followed: Get, Stat and Put through it
+// fail, and the outside file is neither read nor overwritten.
+func TestLocalSymlinkEscape(t *testing.T) {
+	base := t.TempDir()
+	dir := filepath.Join(base, "storage")
+	l, err := newLocal(dir, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	outside := filepath.Join(base, "outside")
+	os.MkdirAll(outside, 0o755)
+	os.WriteFile(filepath.Join(outside, "secret.txt"), []byte("SECRET"), 0o644)
+	if err := os.Symlink(outside, filepath.Join(dir, "avatars")); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	if rc, _, err := l.Get(ctx, "avatars/secret.txt"); err == nil {
+		data, _ := io.ReadAll(rc)
+		rc.Close()
+		t.Fatalf("read through the symlink: %q", data)
+	}
+	if _, err := l.Put(ctx, "avatars/secret.txt", []byte("overwritten"), PutOptions{}); err == nil {
+		t.Error("wrote through the symlink")
+	}
+	if data, _ := os.ReadFile(filepath.Join(outside, "secret.txt")); string(data) != "SECRET" {
+		t.Errorf("outside file changed: %q", data)
+	}
+	if _, err := l.Put(ctx, "photos/ok.txt", []byte("fine"), PutOptions{}); err != nil {
+		t.Fatalf("a normal key: %v", err)
+	}
+	if objs, err := l.List(ctx, "", 10); err != nil || len(objs) != 1 || objs[0].Key != "photos/ok.txt" {
+		t.Errorf("list: %+v %v", objs, err)
+	}
+}

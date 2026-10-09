@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"math"
-	"net"
 	"net/http"
 	"strconv"
 	"sync"
@@ -14,8 +13,8 @@ type RateLimitOptions struct {
 	// RPS is the sustained rate per key; Burst the bucket size.
 	RPS   float64
 	Burst int
-	// Key groups requests; default is the client IP from RemoteAddr.
-	// Behind a trusted proxy, key by the forwarded address instead.
+	// Key groups requests; default is ClientIP, the client's address
+	// through the trusted proxies (ClientIdentity, LIDZA_TRUSTED_PROXIES).
 	Key func(r *http.Request) string
 	// MaxKeys bounds the table of buckets; when reached, buckets idle for
 	// the longest are evicted. Default 100000.
@@ -51,15 +50,6 @@ func RateLimit(o RateLimitOptions) Middleware {
 			next.ServeHTTP(w, r)
 		})
 	}
-}
-
-// ClientIP is the default rate-limit key: the connection's remote host.
-func ClientIP(r *http.Request) string {
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		return r.RemoteAddr
-	}
-	return host
 }
 
 type bucket struct {

@@ -211,10 +211,22 @@ compress too (Caddy `encode zstd gzip`, nginx `gzip on`); it passes an
 already-compressed response through, so the two do not conflict, and it
 is the way to compress API responses. Check what reaches the browser
 through the proxy: `curl -sI -H 'Accept-Encoding: br, gzip'
-https://app.example.com/` shows `Content-Encoding`. The rate
-limiters key on the client address by default; behind a proxy, key on
-the forwarded address (`middleware.RateLimitOptions.Key`,
-`auth.ThrottleBy`). Route `/healthz` (liveness) and `/readyz`
+https://app.example.com/` shows `Content-Encoding`.
+
+Name the proxy in `LIDZA_TRUSTED_PROXIES`: `loopback` for a proxy on
+the same host (Caddy, nginx), else its addresses or CIDRs
+(`10.0.0.0/8`, `private` for the private ranges), comma-separated. Then
+`middleware.ClientIP` is the visitor: from a trusted peer the binary
+reads `X-Forwarded-For` (or `Forwarded`) from the right, skips trusted
+hops and takes the first address that is not one, so a client cannot
+spoof its way past (a left part it sent is never reached), and a
+malformed entry stops the walk. Unset, no forwarded header is trusted
+and every visitor behind a proxy is the proxy: one rate-limit bucket
+for all, so one client can lock everyone out of sign-in. The rate
+limiters, the auth throttles, `auth.Event.Request` and the request
+log's `client_ip` all use it. The request log carries method, path (at
+most 512 bytes, control characters escaped), status, bytes, duration,
+request id and `client_ip`; never the query, headers, cookies or body. Route `/healthz` (liveness) and `/readyz`
 (readiness: 503 while the database or the bus is unreachable) to the
 orchestrator, and scrape `/metrics`. Keep `/mcp` and `/debug/pprof/`
 (dev only) off the public side.

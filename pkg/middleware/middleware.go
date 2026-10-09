@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/agim/lidza/pkg/report"
 )
@@ -92,17 +93,59 @@ func Recover(log *slog.Logger) Middleware {
 }
 
 // Logger writes one structured line per request: method, path, status,
-// bytes, duration and request id.
+// bytes, duration, request id and client_ip (ClientIP: the resolved
+// client, never a raw forwarded header). The path is the URL path only,
+// cut at maxLogPath bytes; the query, headers, cookies and body are
+// never logged.
 func Logger(log *slog.Logger) Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
 			sw := &statusWriter{ResponseWriter: w}
 			next.ServeHTTP(sw, r)
-			log.Info("request", "method", r.Method, "path", r.URL.Path, "status", sw.status(),
-				"bytes", sw.bytes, "ms", time.Since(start).Milliseconds(), "request_id", GetRequestID(r.Context()))
+			log.Info("request", "method", logMethod(r.Method), "path", logPath(r.URL.Path), "status", sw.status(),
+				"bytes", sw.bytes, "ms", time.Since(start).Milliseconds(), "request_id", GetRequestID(r.Context()),
+				"client_ip", ClientIP(r))
 		})
 	}
+}
+
+// maxLogPath bounds the path a request log line carries: a probe's path
+// is the attacker's to choose.
+const maxLogPath = 512
+
+// logPath is the path to log: at most maxLogPath bytes (cut on a rune
+// boundary, marked), control characters shown as \uXXXX escapes so a line
+// cannot be split.
+func logPath(p string) string {
+	cut := false
+	if len(p) > maxLogPath {
+		p = strings.ToValidUTF8(p[:maxLogPath], "")
+		cut = true
+	}
+	if strings.IndexFunc(p, unicode.IsControl) >= 0 {
+		var b strings.Builder
+		for _, c := range p {
+			if unicode.IsControl(c) {
+				fmt.Fprintf(&b, "\\u%04x", c)
+			} else {
+				b.WriteRune(c)
+			}
+		}
+		p = b.String()
+	}
+	if cut {
+		p += "...(cut)"
+	}
+	return p
+}
+
+// logMethod is the method, or "OTHER" for one that is not a short token.
+func logMethod(m string) string {
+	if len(m) > 16 || strings.IndexFunc(m, func(c rune) bool { return c < 'A' || c > 'Z' }) >= 0 {
+		return "OTHER"
+	}
+	return m
 }
 
 // statusWriter records the status and byte count; it forwards Flush,

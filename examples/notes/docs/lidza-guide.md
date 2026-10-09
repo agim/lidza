@@ -72,6 +72,9 @@ import package `main`. Preserve its tests and behavior during the move:
    lidza.App` in `app/app.go`.
 2. `main.go` keeps the embed and runs it:
    `func main() { lidza.Run(app.New(lidza.Sub(dist, "dist"))) }`.
+   A build served from disk instead of embedded goes through
+   `lidza.DirFS(dir)`, never `os.DirFS`: it refuses a symlink or path
+   that leads out of the directory.
 3. Add `"appDir": "app"` to `lidza.json` and run `lidza gen`: `packs.go`
    is generated into `app/` (delete the root one). `lidza gen resource`
    registers routes in `app/routes.go` and `lidza mcp` reads
@@ -2194,8 +2197,12 @@ minute), so a host it stops approving is refused and never renewed. An
 approved host reaches the whole app: serve its paths with `r.Mount`
 (outside `/api`) and keep the rest to the app's domains with a
 middleware on `r.Host`. The admin overview lists the certificates and
-the latest refusals. Or put a TLS-terminating proxy in front and forward
-`X-Forwarded-For`. Point the orchestrator at `/healthz` and `/readyz`,
+the latest refusals. Or put a TLS-terminating proxy in front, forward
+`X-Forwarded-For`, and name it in `LIDZA_TRUSTED_PROXIES` (`loopback`
+for a proxy on the same host, else its addresses or CIDRs): only then is
+the forwarded client trusted, and the rate limits, the sign-in throttle,
+`middleware.ClientIP` and the request log's `client_ip` see each visitor
+instead of the proxy. Never read `X-Forwarded-For` by hand. Point the orchestrator at `/healthz` and `/readyz`,
 scrape `/metrics`. Production settings: `LIDZA_MODE` unset,
 `LIDZA_LOG=json`, `AUTH_SECRET` the same on every node. The framework's
 `docs/deploy.md` has the details.
@@ -2205,6 +2212,7 @@ scrape `/metrics`. Production settings: `LIDZA_MODE` unset,
 | Variable | Meaning | Default |
 |---|---|---|
 | `LIDZA_ADDR` | listen address (ignored when TLS is on) | `127.0.0.1:3000` |
+| `LIDZA_TRUSTED_PROXIES` | the proxies in front whose `X-Forwarded-For` counts: IPs, CIDRs, `loopback`, `private`; `middleware.ClientIP`, the rate limits, the sign-in throttle and the request log's `client_ip` resolve the visitor through them | unset (the connection's address; no forwarded header trusted) |
 | `AUTH_PROVIDERS` | sign-in providers `auth.Mount` serves: `google`, `github`, `microsoft`, or a name with `AUTH_<NAME>_ISSUER`; each with `AUTH_<NAME>_CLIENT_ID` and `AUTH_<NAME>_CLIENT_SECRET` in the credentials | unset |
 | `APP_URL` | the public origin: mail links and the providers' callback URL; `https://` also sends Strict-Transport-Security (`App.HSTS`) | from `LIDZA_TLS_DOMAINS`, else the request |
 | `SECURITY_CONTACT` | where to report a vulnerability, served as `/.well-known/security.txt` (RFC 9116, with `Expires` kept ahead): emails or `https://`/`tel:` URLs, comma-separated; unset serves the build's own `.well-known/security.txt`, if any | unset |

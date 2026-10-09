@@ -154,6 +154,9 @@ const (
 //	LIDZA_ADDR          listen address, default 127.0.0.1:3000
 //	LIDZA_MODE          "dev" to proxy the frontend instead of serving Dist
 //	LIDZA_FRONTEND_URL  the frontend dev server (dev mode; set by `lidza dev`)
+//	LIDZA_TRUSTED_PROXIES  proxies whose X-Forwarded-For counts (IPs,
+//	                    CIDRs, loopback, private); ClientIP resolves
+//	                    through them
 //	LIDZA_TLS_DOMAINS   serve HTTPS on :443 for these domains with Let's
 //	                    Encrypt certificates (stored in Postgres through the
 //	                    db pack), redirect :80; APP_URL and AUTH_COOKIE_SECURE
@@ -420,7 +423,14 @@ func handler(app App, services *Services) (http.Handler, *devserver.Sidecar, err
 	}
 	all := devserver.Split(router.APIPrefix, api, opsThenFrontend(ops, mounted(r.Mounts(), frontend), os.Getenv(devserver.EnvMode) == "dev"))
 	policy := hsts(app.HSTS, settings("APP_URL"))
+	proxies, err := middleware.ParseProxies(settings(middleware.EnvTrustedProxies))
+	if err != nil {
+		return nil, nil, err
+	}
 	mw := append([]middleware.Middleware{
+		// First: every route, the admin pages and mounts included, sees
+		// the client resolved through the trusted proxies.
+		middleware.ClientIdentity(proxies),
 		middleware.SecureHeaders(middleware.SecureHeadersOptions{CSP: csp(app.CSP), PermissionsPolicy: app.PermissionsPolicy, HSTS: policy != "", HSTSPolicy: policy}),
 		servicesMiddleware(services),
 	}, app.Middleware...)
@@ -496,6 +506,18 @@ func opsThenFrontend(ops *http.ServeMux, frontend http.Handler, dev bool) http.H
 			frontend.ServeHTTP(w, r)
 		}
 	})
+}
+
+// DirFS serves a directory on disk as an fs.FS that cannot leave it: a
+// symlink inside pointing elsewhere, or any path that would escape, is
+// refused (os.Root). For App.Dist from disk instead of the embedded build;
+// os.DirFS follows symlinks out of the directory.
+func DirFS(dir string) (fs.FS, error) {
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return nil, err
+	}
+	return root.FS(), nil
 }
 
 // Sub returns the subdirectory dir of fsys, for `//go:embed all:dist`

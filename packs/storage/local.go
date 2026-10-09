@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"mime"
 	"os"
 	"path/filepath"
@@ -16,19 +17,29 @@ import (
 
 // local keeps objects as files under dir and their content type in a
 // sidecar under dir/.meta. Presigned URLs are the public address when one
-// is set; otherwise the app serves them (Handler).
-type local struct{ dir, public string }
+// is set; otherwise the app serves them (Handler). Every file operation
+// goes through an os.Root on dir, so no key and no symlink placed inside
+// it reaches a file outside.
+type local struct {
+	dir, public string
+	root        *os.Root
+}
 
 func newLocal(dir, public string) (*local, error) {
 	if err := os.MkdirAll(filepath.Join(dir, ".meta"), 0o755); err != nil {
 		return nil, err
 	}
-	return &local{dir: dir, public: strings.TrimRight(public, "/")}, nil
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return nil, err
+	}
+	return &local{dir: dir, public: strings.TrimRight(public, "/"), root: root}, nil
 }
 
 func (l *local) Name() string { return "local" }
 
-// paths returns the object's file and its metadata file, refusing a key
+// paths returns the object's file and its metadata file, relative to the
+// root, refusing a key
 // that would land outside the directory (Storage checks keys first; this
 // holds for any caller).
 func (l *local) paths(key string) (file, meta string, err error) {
@@ -36,7 +47,7 @@ func (l *local) paths(key string) (file, meta string, err error) {
 	if !filepath.IsLocal(rel) || rel == ".meta" || strings.HasPrefix(rel, ".meta"+string(filepath.Separator)) {
 		return "", "", fmt.Errorf("storage: invalid key %q", key)
 	}
-	return filepath.Join(l.dir, rel), filepath.Join(l.dir, ".meta", rel+".json"), nil
+	return rel, filepath.Join(".meta", rel+".json"), nil
 }
 
 type localMeta struct {
@@ -50,15 +61,15 @@ func (l *local) Put(ctx context.Context, key string, data []byte, opt PutOptions
 		return Object{}, err
 	}
 	for _, p := range []string{file, meta} {
-		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		if err := l.root.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 			return Object{}, err
 		}
 	}
-	if err := os.WriteFile(file, data, 0o644); err != nil {
+	if err := l.root.WriteFile(file, data, 0o644); err != nil {
 		return Object{}, err
 	}
 	m, _ := json.Marshal(localMeta(opt))
-	if err := os.WriteFile(meta, m, 0o644); err != nil {
+	if err := l.root.WriteFile(meta, m, 0o644); err != nil {
 		return Object{}, err
 	}
 	return l.Stat(ctx, key)
@@ -73,7 +84,7 @@ func (l *local) Get(ctx context.Context, key string) (io.ReadCloser, Object, err
 	if err != nil {
 		return nil, Object{}, err
 	}
-	f, err := os.Open(file)
+	f, err := l.root.Open(file)
 	if err != nil {
 		return nil, Object{}, err
 	}
@@ -85,7 +96,7 @@ func (l *local) Stat(ctx context.Context, key string) (Object, error) {
 	if err != nil {
 		return Object{}, err
 	}
-	info, err := os.Stat(file)
+	info, err := l.root.Stat(file)
 	if errors.Is(err, os.ErrNotExist) || (err == nil && info.IsDir()) {
 		return Object{}, ErrNotFound
 	}
@@ -93,7 +104,7 @@ func (l *local) Stat(ctx context.Context, key string) (Object, error) {
 		return Object{}, err
 	}
 	var m localMeta
-	if data, err := os.ReadFile(meta); err == nil {
+	if data, err := l.root.ReadFile(meta); err == nil {
 		json.Unmarshal(data, &m)
 	}
 	if m.ContentType == "" {
@@ -107,21 +118,19 @@ func (l *local) Delete(ctx context.Context, key string) error {
 	if err != nil {
 		return err
 	}
-	if err := os.Remove(file); err != nil && !errors.Is(err, os.ErrNotExist) {
+	if err := l.root.Remove(file); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	os.Remove(meta)
+	l.root.Remove(meta)
 	return nil
 }
 
 func (l *local) List(ctx context.Context, prefix string, limit int) ([]Object, error) {
 	var out []Object
-	err := filepath.WalkDir(l.dir, func(p string, d os.DirEntry, err error) error {
+	err := fs.WalkDir(l.root.FS(), ".", func(rel string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		rel, _ := filepath.Rel(l.dir, p)
-		rel = filepath.ToSlash(rel)
 		if d.IsDir() {
 			if rel == ".meta" {
 				return filepath.SkipDir

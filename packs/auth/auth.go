@@ -314,8 +314,9 @@ func (a *Auth) ConsumeToken(ctx context.Context, purpose, token string) (string,
 // AUTH_LOGIN_RPS and AUTH_LOGIN_BURST, replying 429 beyond it. Wrap the
 // route: router.Route(r, "POST /api/v1/auth/register", register, auth.Throttle()).
 // Each wrapped route counts on its own. The sign-in route takes
-// ThrottleSignIn, for a limit of its own. Behind a proxy that sets
-// X-Forwarded-For, key on it with ThrottleBy.
+// ThrottleSignIn, for a limit of its own. The client address is
+// middleware.ClientIP: behind a proxy, set LIDZA_TRUSTED_PROXIES so each
+// visitor has its own bucket; ThrottleBy keys on something else.
 func Throttle() middleware.Middleware {
 	return ThrottleBy(nil)
 }

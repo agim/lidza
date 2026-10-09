@@ -511,3 +511,26 @@ func (h *Handler) storage(w http.ResponseWriter, r *http.Request) {
 	}
 	h.render(w, r, "storage", "Storage", data)
 }
+
+// workspaces lists the app's workspaces (auth.Teams): name, members,
+// open invitations and owners, searchable and paged.
+func (h *Handler) workspaces(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	a, ok := lidza.Optional[*auth.Auth](ctx)
+	if !ok || !a.HasWorkspaces(ctx) {
+		http.NotFound(w, r)
+		return
+	}
+	q := r.URL.Query().Get("q")
+	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	if page < 1 {
+		page = 1
+	}
+	const per = 50
+	rows, total, err := a.Workspaces(ctx, q, h.opt.WorkspaceOwner, per, (page-1)*per)
+	data := map[string]any{"Query": q, "Page": page, "Total": total, "Pages": (total + per - 1) / per, "Rows": rows}
+	if err != nil {
+		data["Error"] = err.Error()
+	}
+	h.render(w, r, "workspaces", "Workspaces", data)
+}

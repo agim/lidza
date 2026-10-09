@@ -54,8 +54,11 @@ type Result struct {
 	RoutesLine string
 	Registered bool
 	// Owner is the owner field of an owned model, "" otherwise; Public and
-	// Shared are true for a @public or @shared model.
+	// Shared are true for a @public or @shared model. Workspace is true
+	// when Owner is the workspace field: rows scoped to the request's
+	// workspace (auth.RequireWorkspace), not to the user.
 	Owner          string
+	Workspace      bool
 	Public, Shared bool
 	// StaleInputs are the Create and Update types in schema.lidza that
 	// still take the owner field (written before the model was scoped);
@@ -86,8 +89,12 @@ func Generate(root string, opt Options) (*Result, error) {
 		return nil, fmt.Errorf("resource %s: its routes go behind sign-in (auth.Require()) and the app has no auth pack: run `lidza pack add auth` first, or pass --public for a resource anyone may read and write", m.Name)
 	}
 	r := &Resource{Schema: s, Model: m, Module: opt.Module, Owner: s.Owner(m)}
+	if ws := s.Workspace(m); ws != nil {
+		// The rows belong to the workspace, not to whoever wrote them.
+		r.Owner, r.Workspace = ws, true
+	}
 	if opt.Public || opt.Shared {
-		r.Owner = nil
+		r.Owner, r.Workspace = nil, false
 	}
 	if err := r.check(); err != nil {
 		return nil, err
@@ -95,6 +102,7 @@ func Generate(root string, opt Options) (*Result, error) {
 	res := &Result{Public: m.Public || opt.Public, Shared: m.Shared || opt.Shared}
 	if r.Owner != nil {
 		res.Owner = r.Owner.Name
+		res.Workspace = r.Workspace
 	}
 	handlersFile := filepath.Join("handlers", m.Table+".go")
 	if _, err := os.Stat(filepath.Join(root, handlersFile)); err == nil && !opt.Force {
@@ -163,6 +171,10 @@ type Resource struct {
 	Schema *schema.Schema
 	Model  *schema.Model
 	Module string
+	// Workspace is true when Owner is a workspace field (schema
+	// Schema.Workspace): its value is auth.WorkspaceID(ctx), the routes
+	// sit behind auth.RequireWorkspace().
+	Workspace bool
 	// Owner is the field scoping the rows to the signed-in user, nil for
 	// a model that is not owned.
 	Owner *schema.Field
@@ -180,6 +192,9 @@ func (r *Resource) check() error {
 		return fmt.Errorf("model %s: id must be uuid, string, int or bigint", r.Model.Name)
 	}
 	if o := r.Owner; o != nil && ((o.Type != "uuid" && o.Type != "string") || o.Optional) {
+		if r.Workspace {
+			return fmt.Errorf("model %s: the workspace field %s holds the workspace's id, a string: make it `%s uuid` or `%s string` (required)", r.Model.Name, o.Name, o.Name, o.Name)
+		}
 		return fmt.Errorf("model %s: the owner field %s holds the signed-in user's id, a string: make it `%s uuid` or `%s string` (required), or mark the model @public (--public) if its rows belong to no one", r.Model.Name, o.Name, o.Name, o.Name)
 	}
 	for _, f := range r.Model.Fields {
@@ -379,7 +394,11 @@ func (r *Resource) SQL() string {
 	if o := r.Owner; o != nil {
 		// Owned: every statement filters by, or sets, the owner column.
 		oc := col(o)
-		fmt.Fprintf(&b, "-- Scoped to the signed-in user: every statement takes the owner (%s).\n\n", oc)
+		if r.Workspace {
+			fmt.Fprintf(&b, "-- Scoped to the request's workspace: every statement takes it (%s).\n\n", oc)
+		} else {
+			fmt.Fprintf(&b, "-- Scoped to the signed-in user: every statement takes the owner (%s).\n\n", oc)
+		}
 		b.WriteString(r.listSQL(t))
 		fmt.Fprintf(&b, "-- name: Get%s :one\nSELECT * FROM %s WHERE %s = $1 AND %s = $2;\n\n", r.Name(), t, col(id), oc)
 	} else {
@@ -428,7 +447,10 @@ func (r *Resource) Handlers() string {
 	id := r.Model.IDField()
 	var b strings.Builder
 	fmt.Fprintf(&b, "// Generated once by lidza gen resource %s; edit freely.\n", name)
-	if r.Owner != nil {
+	switch {
+	case r.Workspace:
+		fmt.Fprintf(&b, "// Scoped to the request's workspace: every query takes %s from\n// auth.WorkspaceID (the routes sit behind auth.RequireWorkspace), so\n// another workspace's row is a 404.\n", r.Owner.Name)
+	case r.Owner != nil:
 		fmt.Fprintf(&b, "// Scoped to the signed-in user: every query takes %s from\n// auth.CurrentUser, so another user's row is a 404.\n", r.Owner.Name)
 	}
 	b.WriteString("\npackage handlers\n\n")
@@ -468,6 +490,9 @@ func (r *Resource) Handlers() string {
 	owner, ownerField, byID := "", "", "id"
 	if o := r.Owner; o != nil {
 		owner = "auth.CurrentUser(ctx).ID"
+		if r.Workspace {
+			owner = "auth.WorkspaceID(ctx)"
+		}
 		ownerField = fmt.Sprintf("\t\t%s: %s,\n", sqlcName(o), owner)
 		byID = fmt.Sprintf("queries.Get%sParams{%s: id, %s: %s}", name, sqlcName(id), sqlcName(o), owner)
 	}
@@ -728,12 +753,18 @@ type registration struct {
 	call string
 	// group is the group's variable, "" for a public resource.
 	group, prefix string
+	// middleware guards the group: auth.Require(), or
+	// auth.RequireWorkspace() for a workspace-scoped resource.
+	middleware string
 }
 
 func (r *Resource) registration() registration {
 	reg := registration{call: "handlers." + r.Name() + "Routes("}
 	if !r.Model.Public {
-		reg.group, reg.prefix = lowerFirst(r.Plural()), r.Path()
+		reg.group, reg.prefix, reg.middleware = lowerFirst(r.Plural()), r.Path(), "auth.Require()"
+		if r.Workspace {
+			reg.middleware = "auth.RequireWorkspace()"
+		}
 	}
 	return reg
 }
@@ -744,7 +775,7 @@ func (reg registration) lines() []string {
 		return []string{reg.call + "r)"}
 	}
 	return []string{
-		fmt.Sprintf("%s := r.Group(%q, auth.Require())", reg.group, reg.prefix),
+		fmt.Sprintf("%s := r.Group(%q, %s)", reg.group, reg.prefix, reg.middleware),
 		reg.call + reg.group + ")",
 	}
 }

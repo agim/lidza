@@ -299,6 +299,10 @@ func main() {}
 	if _, ok := c.Schemas["SignedIn"]; !ok {
 		t.Errorf("schema SignedIn missing: %v", keys(c.Schemas))
 	}
+	// Routes of the pack the app does not mount (auth.Teams) stay out.
+	if _, ok := byID["workspacesList"]; ok {
+		t.Errorf("workspace routes in an app that does not mount auth.Teams")
+	}
 	var raw []string
 	for _, r := range c.Routes {
 		if r.Pack == "auth" && !r.Typed {
@@ -307,6 +311,54 @@ func main() {}
 	}
 	if fmt.Sprint(raw) != "[GET /api/v1/auth/{provider}/start GET /api/v1/auth/{provider}/callback GET /api/v1/auth/connect/{provider}/start GET /api/v1/auth/connect/{provider}/callback]" {
 		t.Errorf("raw pack routes: %v", raw)
+	}
+}
+
+// TestMountedTeamsRoutes: an app that mounts auth.Teams gets the
+// workspace operations, named for the client, beside the sign-in ones.
+func TestMountedTeamsRoutes(t *testing.T) {
+	if _, err := exec.LookPath("go"); err != nil {
+		t.Skip("go not installed")
+	}
+	root, _ := filepath.Abs("../..")
+	dir := t.TempDir()
+	write(t, dir, "go.mod", "module demo\n\ngo 1.27\n\nrequire github.com/agim/lidza v0.0.0\n\nreplace github.com/agim/lidza => "+root+"\n")
+	write(t, dir, "main.go", `package main
+
+import (
+	"github.com/agim/lidza/packs/auth"
+	"github.com/agim/lidza/pkg/router"
+)
+
+var teams = auth.Teams{Roles: auth.Roles{"owner": {"*"}}}
+
+func routes(r *router.Router) {
+	auth.Mount(r, auth.Options{})
+	teams.Mount(r)
+}
+
+func main() {}
+`)
+	cmd := exec.Command("go", "mod", "tidy")
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("go mod tidy: %v\n%s", err, out)
+	}
+	c, err := Project(dir, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	byID := map[string]Operation{}
+	for _, op := range c.Operations {
+		byID[op.ID] = op
+	}
+	for _, id := range []string{"authLogin", "workspacesList", "workspaceCreate", "workspaceInvite", "inviteAccept", "workspaceMembers"} {
+		if _, ok := byID[id]; !ok {
+			t.Errorf("operation %s missing (have %v)", id, keys(byID))
+		}
+	}
+	if op := byID["workspaceInvite"]; op.Path != "/api/v1/workspaces/{id}/invites" || op.Input != "InviteInput" || op.Output != "Invite" {
+		t.Errorf("workspaceInvite: %+v", op)
 	}
 }
 

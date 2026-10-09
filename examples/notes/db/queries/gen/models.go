@@ -51,6 +51,20 @@ type AuthIdentity struct {
 	LastUsedAt      time.Time `json:"last_used_at"`
 }
 
+type AuthInvite struct {
+	ID         string     `json:"id"`
+	Workspace  string     `json:"workspace"`
+	Email      string     `json:"email"`
+	Role       string     `json:"role"`
+	TokenHash  string     `json:"token_hash"`
+	InvitedBy  string     `json:"invited_by"`
+	ExpiresAt  time.Time  `json:"expires_at"`
+	AcceptedAt *time.Time `json:"accepted_at"`
+	AcceptedBy *string    `json:"accepted_by"`
+	RevokedAt  *time.Time `json:"revoked_at"`
+	CreatedAt  time.Time  `json:"created_at"`
+}
+
 type AuthMember struct {
 	ID        string    `json:"id"`
 	Subject   string    `json:"subject"`
@@ -99,6 +113,14 @@ type AuthUser struct {
 	VerifiedAt   *time.Time `json:"verified_at"`
 	CreatedAt    time.Time  `json:"created_at"`
 	UpdatedAt    time.Time  `json:"updated_at"`
+}
+
+type AuthWorkspace struct {
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	CreatedBy string    `json:"created_by"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 type LlmUsage struct {

@@ -6,6 +6,7 @@ bolt
 brand-github
 brand-google
 brand-windows
+building
 chart-bar
 check
 chevron-right

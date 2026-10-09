@@ -69,6 +69,9 @@ func typedRoutes(root string, lidzaSchema *schema.Schema, module string) ([]Oper
 	var routerPkg *types.Package
 	// The framework packs whose Mount the app calls: their routes count.
 	mountedPacks := map[string]*packages.Package{}
+	// mountFuncs are the Mount functions the app calls in each pack
+	// (auth.Mount, a Teams value's Mount): only routes they reach count.
+	mountFuncs := map[string][]*types.Func{}
 
 	for _, pkg := range pkgs {
 		for _, e := range pkg.Errors {
@@ -97,6 +100,7 @@ func typedRoutes(root string, lidzaSchema *schema.Schema, module string) ([]Oper
 				if fn.Name() == "Mount" && strings.HasPrefix(fn.Pkg().Path(), packsPrefix) {
 					if dep, ok := pkg.Imports[fn.Pkg().Path()]; ok && dep.TypesInfo != nil {
 						mountedPacks[fn.Pkg().Path()] = dep
+						mountFuncs[fn.Pkg().Path()] = append(mountFuncs[fn.Pkg().Path()], fn)
 					}
 					return true
 				}
@@ -127,8 +131,9 @@ func typedRoutes(root string, lidzaSchema *schema.Schema, module string) ([]Oper
 	// handler named by the pack.
 	var packRaw []Route
 	for _, path := range sortedKeys(mountedPacks) {
-		ops = append(ops, packOperations(mountedPacks[path], b)...)
-		packRaw = append(packRaw, packRoutes(mountedPacks[path])...)
+		reach := reachable(mountedPacks[path], mountFuncs[path])
+		ops = append(ops, packOperations(mountedPacks[path], b, reach)...)
+		packRaw = append(packRaw, packRoutes(mountedPacks[path], reach)...)
 	}
 
 	// Built-in operations: their output types live in the router package.
@@ -482,10 +487,10 @@ func sortedKeys[V any](m map[string]V) []string {
 // packOperations finds the router.Route calls with literal patterns in a
 // framework pack the app mounted (auth.Mount): the routes the pack
 // registers on the app's router, typed with the pack's own types.
-func packOperations(pkg *packages.Package, b *schemaBuilder) []Operation {
+func packOperations(pkg *packages.Package, b *schemaBuilder, reach []ast.Node) []Operation {
 	var ops []Operation
 	packName := strings.TrimPrefix(pkg.PkgPath, packsPrefix)
-	for _, f := range pkg.Syntax {
+	for _, f := range reach {
 		ast.Inspect(f, func(n ast.Node) bool {
 			call, ok := n.(*ast.CallExpr)
 			if !ok || len(call.Args) < 3 {
@@ -526,10 +531,10 @@ func packOperations(pkg *packages.Package, b *schemaBuilder) []Operation {
 
 // PackRoutes lists the raw routes (HandleFunc, Handle) a mounted pack
 // registers, for the route listing; the typed ones are operations.
-func packRoutes(pkg *packages.Package) []Route {
+func packRoutes(pkg *packages.Package, reach []ast.Node) []Route {
 	var routes []Route
 	packName := strings.TrimPrefix(pkg.PkgPath, packsPrefix)
-	for _, f := range pkg.Syntax {
+	for _, f := range reach {
 		ast.Inspect(f, func(n ast.Node) bool {
 			call, ok := n.(*ast.CallExpr)
 			if !ok || len(call.Args) != 2 {
@@ -555,4 +560,47 @@ func packRoutes(pkg *packages.Package) []Route {
 		})
 	}
 	return routes
+}
+
+// reachable returns the function bodies of pkg that the app's Mount
+// calls reach: the Mount functions and every function or method of the
+// pack they call, transitively. A pack's routes outside them (another
+// type's Mount the app does not call) stay out of the app's API.
+func reachable(pkg *packages.Package, roots []*types.Func) []ast.Node {
+	decls := map[types.Object]*ast.FuncDecl{}
+	for _, f := range pkg.Syntax {
+		for _, d := range f.Decls {
+			if fd, ok := d.(*ast.FuncDecl); ok && fd.Body != nil {
+				if obj := pkg.TypesInfo.Defs[fd.Name]; obj != nil {
+					decls[obj] = fd
+				}
+			}
+		}
+	}
+	seen := map[types.Object]bool{}
+	var out []ast.Node
+	var visit func(obj types.Object)
+	visit = func(obj types.Object) {
+		if seen[obj] {
+			return
+		}
+		seen[obj] = true
+		fd, ok := decls[obj]
+		if !ok {
+			return
+		}
+		out = append(out, fd)
+		ast.Inspect(fd.Body, func(n ast.Node) bool {
+			if id, ok := n.(*ast.Ident); ok {
+				if fn, ok := pkg.TypesInfo.Uses[id].(*types.Func); ok && fn.Pkg() == pkg.Types {
+					visit(fn.Origin())
+				}
+			}
+			return true
+		})
+	}
+	for _, r := range roots {
+		visit(r.Origin())
+	}
+	return out
 }

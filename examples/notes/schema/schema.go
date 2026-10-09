@@ -332,6 +332,63 @@ func (v AuthOwnerClaim) Validate() error {
 	return errs.Result()
 }
 
+// AuthWorkspace is a row of the auth_workspace table.
+type AuthWorkspace struct {
+	ID        string    `json:"id" db:"id"`
+	Name      string    `json:"name" db:"name"`
+	CreatedBy string    `json:"createdBy" db:"created_by"`
+	CreatedAt time.Time `json:"createdAt" db:"created_at"`
+	UpdatedAt time.Time `json:"updatedAt" db:"updated_at"`
+}
+
+// Validate applies the rules of AuthWorkspace from schema.lidza.
+func (v AuthWorkspace) Validate() error {
+	var errs validate.Errors
+	if v.Name == "" {
+		errs.Add("name", "required", "required")
+	}
+	if v.CreatedBy == "" {
+		errs.Add("createdBy", "required", "required")
+	}
+	return errs.Result()
+}
+
+// AuthInvite is a row of the auth_invite table.
+type AuthInvite struct {
+	ID         string     `json:"id" db:"id"`
+	Workspace  string     `json:"workspace" db:"workspace"`
+	Email      string     `json:"email" db:"email"`
+	Role       string     `json:"role" db:"role"`
+	TokenHash  string     `json:"tokenHash" db:"token_hash"`
+	InvitedBy  string     `json:"invitedBy" db:"invited_by"`
+	ExpiresAt  time.Time  `json:"expiresAt" db:"expires_at"`
+	AcceptedAt *time.Time `json:"acceptedAt" db:"accepted_at"`
+	AcceptedBy *string    `json:"acceptedBy" db:"accepted_by"`
+	RevokedAt  *time.Time `json:"revokedAt" db:"revoked_at"`
+	CreatedAt  time.Time  `json:"createdAt" db:"created_at"`
+}
+
+// Validate applies the rules of AuthInvite from schema.lidza.
+func (v AuthInvite) Validate() error {
+	var errs validate.Errors
+	if v.Workspace == "" {
+		errs.Add("workspace", "required", "required")
+	}
+	if v.Email == "" {
+		errs.Add("email", "required", "required")
+	}
+	if v.Role == "" {
+		errs.Add("role", "required", "required")
+	}
+	if v.TokenHash == "" {
+		errs.Add("tokenHash", "required", "required")
+	}
+	if v.InvitedBy == "" {
+		errs.Add("invitedBy", "required", "required")
+	}
+	return errs.Result()
+}
+
 // CreateNote is an API type.
 type CreateNote struct {
 	Title string  `json:"title"`

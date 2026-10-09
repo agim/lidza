@@ -1,0 +1,59 @@
+{{define "content"}}
+{{$d := .Data}}
+{{if $d.Error}}<div class="alert alert-danger">{{$d.Error}}</div>{{end}}
+<div class="card">
+  <div class="card-header">
+    <div>
+      <h2 class="card-title">Workspaces</h2>
+      <div class="text-secondary small mt-1">{{$d.Total}} workspace(s){{if $d.Query}} matching “{{$d.Query}}”{{end}}</div>
+    </div>
+    <div class="card-actions">
+      <form role="search" method="get" action="{{.Path}}/workspaces">
+        <label class="visually-hidden" for="q">Search workspaces</label>
+        <div class="input-icon">
+          <span class="input-icon-addon">{{icon "search"}}</span>
+          <input type="search" class="form-control" id="q" name="q" value="{{$d.Query}}" placeholder="Name…" autocomplete="off">
+        </div>
+      </form>
+    </div>
+  </div>
+  {{if $d.Rows}}
+  <div class="table-responsive">
+    <table class="table table-vcenter card-table">
+      <thead><tr><th>Workspace</th><th>Owners</th><th class="text-end">Members</th><th class="text-end">Open invitations</th><th>Created</th></tr></thead>
+      <tbody>
+      {{range $d.Rows}}
+        <tr>
+          <td>
+            <div class="d-flex align-items-center gap-2">
+              <span class="avatar avatar-sm bg-{{color .ID}}-lt">{{initials .Name}}</span>
+              <div class="text-truncate">
+                <div class="fw-medium text-truncate">{{.Name}}</div>
+                <div class="text-secondary small font-monospace text-truncate">{{.ID}}</div>
+              </div>
+            </div>
+          </td>
+          <td class="text-truncate">{{range $i, $o := .Owners}}{{if $i}}, {{end}}{{$o}}{{else}}<span class="text-secondary">none</span>{{end}}</td>
+          <td class="text-end">{{.Members}}</td>
+          <td class="text-end">{{.Invites}}</td>
+          <td class="text-secondary">{{.CreatedAt.Format "2 Jan 2006"}}</td>
+        </tr>
+      {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{if gt $d.Pages 1}}
+  <div class="card-footer d-flex align-items-center">
+    <p class="m-0 text-secondary small">Page {{$d.Page}} of {{$d.Pages}}</p>
+    <ul class="pagination m-0 ms-auto">
+      <li class="page-item{{if le $d.Page 1}} disabled{{end}}"><a class="page-link" href="{{.Path}}/workspaces?q={{$d.Query}}&amp;page={{sub $d.Page 1}}"{{if le $d.Page 1}} tabindex="-1" aria-disabled="true"{{end}}>Previous</a></li>
+      <li class="page-item{{if ge $d.Page $d.Pages}} disabled{{end}}"><a class="page-link" href="{{.Path}}/workspaces?q={{$d.Query}}&amp;page={{add $d.Page 1}}"{{if ge $d.Page $d.Pages}} tabindex="-1" aria-disabled="true"{{end}}>Next</a></li>
+    </ul>
+  </div>
+  {{end}}
+  {{else}}
+  <div class="card-body">{{template "admin-empty" (dict "Icon" "building" "Title" (printf "%s" (or (and $d.Query "No workspace matches") "No workspaces yet")) "Text" "Workspaces appear here when members create them.")}}</div>
+  {{end}}
+</div>
+<p class="text-secondary small mt-3">Members manage their workspaces in the app: invitations, roles and leaving. Owners are the members holding the owner role.</p>
+{{end}}

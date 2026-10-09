@@ -336,3 +336,41 @@ func TestGenerateShared(t *testing.T) {
 		t.Error("--public with --shared accepted")
 	}
 }
+
+// TestGenerateWorkspace: a model with workspaceId is scoped to the
+// request's workspace, not the user: every statement takes it, the
+// handlers read auth.WorkspaceID, and the routes sit behind
+// auth.RequireWorkspace(). workspaceId wins over ownerId.
+func TestGenerateWorkspace(t *testing.T) {
+	root := t.TempDir()
+	os.WriteFile(filepath.Join(root, schema.FileName), []byte(`model Project {
+  id          uuid   @id @default(uuid())
+  workspaceId uuid   @index
+  ownerId     uuid
+  name        string @min(1)
+  createdAt   time   @default(now())
+}
+`), 0o644)
+	os.WriteFile(filepath.Join(root, "sqlc.yaml"), []byte("version: 2\n"), 0o644)
+	os.WriteFile(filepath.Join(root, "routes.go"), []byte(routesSrc), 0o644)
+	res, err := Generate(root, Options{Model: "Project", Module: "app", Auth: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Owner != "workspaceId" || !res.Workspace {
+		t.Fatalf("result %+v", res)
+	}
+	sql := read(t, root, "db/queries/project.sql")
+	for _, want := range []string{"Scoped to the request's workspace", "WHERE id = $1 AND workspace_id = $2", "workspace_id = sqlc.arg('workspace_id')"} {
+		if !strings.Contains(sql, want) {
+			t.Errorf("sql lacks %q:\n%s", want, sql)
+		}
+	}
+	h := read(t, root, "handlers/project.go")
+	if !strings.Contains(h, "auth.WorkspaceID(ctx)") || strings.Contains(h, "auth.CurrentUser(ctx).ID") {
+		t.Errorf("handlers do not take the workspace:\n%s", h)
+	}
+	if routes := read(t, root, "routes.go"); !strings.Contains(routes, `r.Group("/api/v1/projects", auth.RequireWorkspace())`) {
+		t.Errorf("routes:\n%s", routes)
+	}
+}

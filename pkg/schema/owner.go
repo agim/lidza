@@ -42,3 +42,38 @@ func (s *Schema) Owner(m *Model) *Field {
 	}
 	return nil
 }
+
+// WorkspaceModels are the model names Workspace treats as the app's
+// workspaces: the auth pack's AuthWorkspace (auth.Teams) and an app's
+// own Workspace.
+var WorkspaceModels = []string{"Workspace", "AuthWorkspace"}
+
+// Workspace returns the field that ties a row of m to a workspace
+// (auth.Teams), or nil: a field named workspaceId, else the first with
+// @ref(Workspace) or @ref(AuthWorkspace). Its value is the request's
+// workspace, auth.WorkspaceID(ctx), which auth.RequireWorkspace checks
+// the signed-in user belongs to. It takes precedence over Owner: the
+// rows belong to the workspace, not to whoever wrote them. A model
+// marked @public or @shared, and a type, have none.
+func (s *Schema) Workspace(m *Model) *Field {
+	if m == nil || !m.Persisted || m.Public || m.Shared {
+		return nil
+	}
+	candidate := func(f *Field) bool { return !f.ID && !f.Array }
+	for _, f := range m.Fields {
+		if f.Name == "workspaceId" && candidate(f) {
+			return f
+		}
+	}
+	for _, f := range m.Fields {
+		if !candidate(f) {
+			continue
+		}
+		for _, w := range WorkspaceModels {
+			if f.Ref == w {
+				return f
+			}
+		}
+	}
+	return nil
+}

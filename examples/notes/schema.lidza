@@ -247,3 +247,30 @@ model AuthOwnerClaim @table("auth_owner_claim") {
   createdAt time   @default(now())
   updatedAt time   @default(now())
 }
+
+// A workspace (auth.Teams): a group of accounts sharing the app's data.
+// Its id is the scope of its members' roles in auth_member.
+model AuthWorkspace @table("auth_workspace") {
+  id        uuid   @id @default(uuid())
+  name      string
+  createdBy string
+  createdAt time   @default(now())
+  updatedAt time   @default(now())
+}
+
+// An invitation to a workspace, bound to an email address; the token is
+// kept as its hash.
+model AuthInvite @table("auth_invite") {
+  id         uuid   @id @default(uuid())
+  workspace  string
+  email      string
+  role       string
+  tokenHash  string @unique
+  invitedBy  string
+  expiresAt  time
+  acceptedAt time?
+  acceptedBy string?
+  revokedAt  time?
+  createdAt  time   @default(now())
+  @@index(workspace)
+}

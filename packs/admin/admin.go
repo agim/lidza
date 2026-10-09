@@ -76,6 +76,9 @@ type Options struct {
 	FirstUser func(ctx context.Context) string
 	// NoFirstUserAdmin turns that rule off: only listed users get in.
 	NoFirstUserAdmin bool
+	// WorkspaceOwner is the auth.Teams owner role the Workspaces page
+	// lists; "owner" when empty.
+	WorkspaceOwner string
 	// FoldGroups folds the sidebar's labelled groups (Services and the
 	// app's Page.Group sections) but the one holding the page shown; a
 	// click opens one. For an app with many pages, so the list fits.
@@ -160,6 +163,7 @@ func New(opt Options) *Handler {
 	h.mux.HandleFunc("POST "+p+"/admins", h.saveAdmins)
 	h.mux.HandleFunc("GET "+p+"/users", h.users)
 	h.mux.HandleFunc("GET "+p+"/users/sign-in", h.packSettings("users", "Users"))
+	h.mux.HandleFunc("GET "+p+"/workspaces", h.workspaces)
 	h.mux.HandleFunc("POST "+p+"/users/{subject}/{action}", h.userAction)
 	h.mux.HandleFunc("GET "+p+"/settings", h.appSettings)
 	h.mux.HandleFunc("POST "+p+"/settings", h.saveSettings)
@@ -361,6 +365,9 @@ func (h *Handler) nav(ctx context.Context) []navItem {
 	items := []navItem{{Name: "Overview", Href: h.path + "/", Icon: "layout-dashboard"}}
 	if _, ok := lidza.Optional[*auth.Auth](ctx); ok {
 		items = append(items, navItem{Name: "Users", Href: h.path + "/users", Icon: "users", Status: status["users"]})
+		if a, _ := lidza.Optional[*auth.Auth](ctx); a.HasWorkspaces(ctx) {
+			items = append(items, navItem{Name: "Workspaces", Href: h.path + "/workspaces", Icon: "building"})
+		}
 	}
 	group := "Services"
 	add := func(name, page, icon string) {

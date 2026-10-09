@@ -150,3 +150,26 @@ CREATE TABLE auth_owner_claim (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
+CREATE TABLE auth_workspace (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name text NOT NULL,
+  created_by text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE auth_invite (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  workspace text NOT NULL,
+  email text NOT NULL,
+  role text NOT NULL,
+  token_hash text NOT NULL UNIQUE,
+  invited_by text NOT NULL,
+  expires_at timestamptz NOT NULL,
+  accepted_at timestamptz,
+  accepted_by text,
+  revoked_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX auth_invite_workspace_idx ON auth_invite (workspace);
+

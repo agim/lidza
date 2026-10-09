@@ -193,6 +193,40 @@ pub struct AuthOwnerClaim {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AuthWorkspace {
+    pub id: String,
+    pub name: String,
+    #[serde(rename = "createdBy")]
+    pub created_by: String,
+    #[serde(rename = "createdAt")]
+    pub created_at: String,
+    #[serde(rename = "updatedAt")]
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AuthInvite {
+    pub id: String,
+    pub workspace: String,
+    pub email: String,
+    pub role: String,
+    #[serde(rename = "tokenHash")]
+    pub token_hash: String,
+    #[serde(rename = "invitedBy")]
+    pub invited_by: String,
+    #[serde(rename = "expiresAt")]
+    pub expires_at: String,
+    #[serde(rename = "acceptedAt")]
+    pub accepted_at: Option<String>,
+    #[serde(rename = "acceptedBy")]
+    pub accepted_by: Option<String>,
+    #[serde(rename = "revokedAt")]
+    pub revoked_at: Option<String>,
+    #[serde(rename = "createdAt")]
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CreateNote {
     pub title: String,
     pub body: Option<String>,

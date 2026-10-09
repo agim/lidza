@@ -9,6 +9,28 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- Teams and invitations (Phase 8): `auth.Teams` on `auth.Roles`, a
+  workspace's id the scope of its memberships. `teams.Mount(r)` serves
+  creating, listing, renaming and deleting workspaces, switching the
+  current one, members and their roles, and invitations: a one-time
+  link mailed through the mail pack, bound to the invited address,
+  expiring (7 days), replaced by a newer one and revocable. Nobody
+  grants a role with permissions they do not hold; the last owner
+  stays; `OnDelete` removes the app's rows in the same transaction;
+  `OnEvent` reports each change. `lidza gen` adds the `AuthWorkspace`
+  and `AuthInvite` models.
+- `auth.RequireWorkspace()` resolves the request's workspace (the
+  `X-Workspace` header or the switch cookie; 400 without one, 404 for a
+  non-member) and `auth.WorkspaceID(ctx)` returns it. `lidza gen
+  resource` scopes a model with `workspaceId` (or `@ref(AuthWorkspace)`)
+  to it: every query takes it, the routes sit behind the middleware.
+- The admin pages list workspaces with their owners, members and open
+  invitations. Recipe "Add teams and invitations".
+- A mounted pack's routes reach the client only from the `Mount` the
+  app calls, so mounting `auth.Mount` alone adds no workspace routes.
+
 ## v0.1.91 (2026-10-09)
 
 - Go 1.27.2: the module's toolchain. Go 1.27.2 writes export data that

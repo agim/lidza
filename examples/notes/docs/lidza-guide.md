@@ -1450,6 +1450,63 @@ role, and in which team, is in the auth pack's `auth_member` table.
    against each route with `lidzatest`: a viewer cannot write, an editor
    cannot manage members, another team's admin gets 403.
 
+### Add teams and invitations
+
+Let people work together in workspaces: create one, invite others by
+email, give them roles, switch between workspaces. The workspace routes,
+the invitation mail and the membership checks are the auth pack's
+(`auth.Teams`, on `auth.Roles`); the app adds its pages and scopes its
+data to the workspace.
+
+1. Define the roles, with the permissions the workspace routes ask for
+   (`members.read`, `members.invite`, `members.manage`,
+   `workspace.update`, `workspace.delete`) next to the app's own:
+
+   ```go
+   var roles = auth.Roles{
+   	"owner":  {"*"},
+   	"admin":  {"members.*", "workspace.update", "projects.*"},
+   	"member": {"members.read", "projects.*"},
+   }
+   var teams = auth.Teams{Roles: roles, Title: "notes"}
+   ```
+
+   The creator of a workspace gets `owner` (`Teams.Owner` to name
+   another). Nobody grants a role with permissions they do not hold,
+   and the last owner cannot leave, be removed or demoted.
+2. In `app/routes.go`, after `auth.Mount`: `teams.Mount(r)`. Run `lidza
+   gen` (the `AuthWorkspace` and `AuthInvite` models), then `lidza db
+   migrate`. The client gets `api.workspacesList`, `api.workspaceCreate`,
+   `api.workspaceSwitch`, `api.workspaceMembers`, `api.workspaceInvite`,
+   `api.workspaceSetRole`, `api.workspaceRemoveMember`,
+   `api.invitePreview` and `api.inviteAccept`.
+3. An invitation is an email with a one-time link to the app's
+   `/invite?token=...` page (`Teams.InvitePath`), valid 7 days
+   (`InviteTTL`), bound to the invited address. The page, signed in
+   (send the visitor to sign-in or sign-up first, back to the same
+   link), shows `api.invitePreview({ token })` (the workspace's name and
+   the role) and accepts with `api.inviteAccept({ token })`; a different
+   address is a 403 `invite_address`, a used, revoked or expired link a
+   410 `invite_gone`. Never put the token in the page's path: the
+   request log records paths. `mail/auth_invite.txt.tmpl` (and `.html`)
+   replaces the plain text (`.App`, `.Link`, `.Workspace`, `.Inviter`,
+   `.Email`, `.Role`).
+4. Scope the app's rows to the workspace: a model with `workspaceId uuid
+   @index` gets, from `lidza gen resource`, queries that all take it and
+   routes behind `auth.RequireWorkspace()`, which reads the workspace
+   from the `X-Workspace` header or the cookie `api.workspaceSwitch`
+   sets, answers 400 when none is chosen and 404 for one the user is not
+   in. A handler of its own reads `auth.WorkspaceID(ctx)` behind the same
+   middleware, and checks finer permissions with `roles.Check(ctx,
+   auth.WorkspaceID(ctx), "projects.delete")`.
+5. Deleting a workspace removes its memberships and invitations;
+   `Teams.OnDelete(ctx, tx, id)` deletes the app's own rows in the same
+   transaction. `Teams.OnEvent` reports each change (created, invited,
+   joined, role changed, removed, left, deleted) for an audit log
+   (`audit.Record`). The admin pages list the workspaces.
+6. Test it with two accounts: invite, accept, a stranger's 404, a
+   member's 403 on an admin route. `lidza test`, then `lidza test --e2e`.
+
 ### Record an audit event
 
 Keep a durable record of who did what, for operators and compliance:

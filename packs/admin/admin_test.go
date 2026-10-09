@@ -447,3 +447,65 @@ func TestOwnerClaimForm(t *testing.T) {
 		t.Fatalf("after the claim: %d", code)
 	}
 }
+
+// TestWorkspacesPage: with workspaces in the database the sidebar lists
+// the page, and it shows each workspace's owners, members and open
+// invitations; without the table neither appears.
+func TestWorkspacesPage(t *testing.T) {
+	dbURL := os.Getenv("LIDZA_TEST_DATABASE_URL")
+	if dbURL == "" {
+		dbURL = "postgres:///lidza_test?host=/var/run/postgresql"
+	}
+	ctx := context.Background()
+	shared, err := db.Open(ctx, db.Config{URL: dbURL, MaxConns: 1, ConnectTimeout: 2 * time.Second})
+	if err != nil {
+		t.Skipf("no test database: %v", err)
+	}
+	t.Cleanup(shared.Close)
+	schema := fmt.Sprintf("admin_ws_%d", os.Getpid())
+	if _, err := shared.Exec(ctx, "DROP SCHEMA IF EXISTS "+schema+" CASCADE; CREATE SCHEMA "+schema); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { shared.Exec(ctx, "DROP SCHEMA IF EXISTS "+schema+" CASCADE") })
+	sep := "?"
+	if strings.Contains(dbURL, "?") {
+		sep = "&"
+	}
+	pool, err := db.Open(ctx, db.Config{URL: dbURL + sep + "search_path=" + schema, MaxConns: 2, ConnectTimeout: 2 * time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(pool.Close)
+	if _, err := pool.Exec(ctx, auth.SessionTable+auth.TokenTable+auth.AccountTable+auth.UserTable+auth.IdentityTable+auth.MemberTable); err != nil {
+		t.Fatal(err)
+	}
+	a, err := auth.New(auth.Config{Secret: strings.Repeat("s", 32), AccessTTL: time.Minute, RefreshTTL: time.Hour}, pool)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	t.Setenv(credentials.EnvMasterKey, "")
+	t.Setenv(EnvAdminUsers, "")
+	t.Cleanup(func() { credentials.SetOverrides(nil) })
+	s := lidza.NewServices()
+	lidza.Provide(s, a)
+	srv := serve(t, Options{Auth: noAuth, Allow: func(context.Context) bool { return true }, CredentialsDir: dir}, s)
+	if _, body := get(t, srv, "/admin/"); strings.Contains(body, "/admin/workspaces") {
+		t.Fatal("Workspaces listed without the table")
+	}
+	if _, err := pool.Exec(ctx, auth.WorkspaceTable+auth.InviteTable); err != nil {
+		t.Fatal(err)
+	}
+	var ws string
+	pool.QueryRow(ctx, `INSERT INTO auth_workspace (name, created_by) VALUES ('Acme', 'u1') RETURNING id::text`).Scan(&ws)
+	pool.Exec(ctx, `INSERT INTO auth_user (subject, email) VALUES ('u1', 'ann@example.com')`)
+	pool.Exec(ctx, `INSERT INTO auth_member (subject, scope, role) VALUES ('u1', $1, 'owner'), ('u2', $1, 'member')`, ws)
+	pool.Exec(ctx, `INSERT INTO auth_invite (workspace, email, role, token_hash, invited_by, expires_at) VALUES ($1, 'x@example.com', 'member', 'h', 'u1', now() + interval '1 day')`, ws)
+	if _, body := get(t, srv, "/admin/"); !strings.Contains(body, `href="/admin/workspaces"`) {
+		t.Fatal("Workspaces not in the sidebar")
+	}
+	code, body := get(t, srv, "/admin/workspaces")
+	if code != 200 || !strings.Contains(body, "Acme") || !strings.Contains(body, "ann@example.com") || !strings.Contains(body, `<td class="text-end">2</td>`) || !strings.Contains(body, `<td class="text-end">1</td>`) {
+		t.Fatalf("workspaces page: %d %s", code, body)
+	}
+}

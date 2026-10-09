@@ -253,6 +253,40 @@ Check (passes): the template app's `/about` is served as complete HTML by
 the binary and hydrates in Chromium without console errors, then fetches
 its data once; an `img` without `alt` fails `lidza check`.
 
+## Phase 8: Teams, search, outbound webhooks, payments
+
+Started 2026-10-10. Built and released one part at a time, in this order.
+
+- Teams and invitations: workspaces as `auth.Roles` scopes. Create a
+  workspace (its creator an owner), invite by email (a signed one-time
+  link through the mail pack, expiring, bound to the address), accept
+  (signed in, or after signing up), list members, change a member's
+  role, remove a member, leave, switch the current workspace. Routes in
+  the auth pack's `Mount`, a client in `@lidza/client`, a recipe, the
+  members on the admin pages. Owned rows scope to the workspace as they
+  scope to the user today.
+- Full-text search: `@search` on `string` fields in `schema.lidza`
+  generates a weighted `tsvector` column (generated, stored), a GIN
+  index and ranked search queries; `list.Read`'s `q` uses it, with
+  highlighted snippets; `gen resource` writes it for searchable models.
+  Replaces the `position()` search for those models.
+- Outbound webhooks: an app sends events to subscriber URLs, signed
+  (HMAC-SHA256 over a timestamp and the body, the same scheme
+  `pkg/webhook` verifies), delivered by the jobs pack with retries and
+  backoff, a delivery log, replay from the admin pages, endpoint
+  disabling after repeated failure, and SSRF-safe targets (no private,
+  loopback or link-local addresses unless allowed).
+- Payments: a billing pack on Stripe: checkout and customer-portal
+  sessions, plans and subscriptions synced from Stripe webhooks to a
+  workspace or account, entitlement checks (`billing.Has(ctx, "feature")`),
+  test mode with Stripe's test keys, a recipe.
+
+Check: a new app with the packs passes `lidza test` and `lidza test
+--e2e` with a flow per part (invite and accept across two accounts;
+search ranks and highlights; a delivery fails, retries and succeeds to
+a test receiver; a test-mode checkout updates the subscription from a
+signed webhook), and the evals cover the new agent surfaces.
+
 ## Beyond the roadmap
 
 Every phase of the plan is delivered. Follow-up work, in Agim's order.
@@ -607,4 +641,4 @@ build, stopping at the first failure.
 
 ### Next
 
-Nothing queued.
+Phase 8.

@@ -196,6 +196,9 @@ func Mount(r *router.Router, opt Options) {
 		router.Route(r, "POST /api/v1/auth/delete", s.authDelete, Throttle(), Require())
 	}
 	router.Route(r, "GET /api/v1/auth/providers", s.authProviders)
+	// The owner claim (AUTH_OWNER_CLAIM): 404 while it is off.
+	router.Route(r, "GET /api/v1/auth/owner", s.authOwner, Require())
+	router.Route(r, "POST /api/v1/auth/owner/claim", s.authOwnerClaim, Throttle(), Require())
 	r.HandleFunc("GET /api/v1/auth/{provider}/start", s.start)
 	r.HandleFunc("GET /api/v1/auth/{provider}/callback", s.callback)
 	// Connectors from the environment can be configured later (the admin
@@ -465,6 +468,24 @@ func (p PasswordChange) Validate() error {
 // ReauthWindow instead.
 type AccountDeletion struct {
 	Password string `json:"password,omitempty"`
+}
+
+// OwnerClaim is the token that claims the app's ownership
+// (AUTH_OWNER_CLAIM): read from the token file or the deployment
+// platform, never from a page.
+type OwnerClaim struct {
+	Token string `json:"token"`
+}
+
+// Validate implements validate.Validator.
+func (c OwnerClaim) Validate() error {
+	var errs validate.Errors
+	if strings.TrimSpace(c.Token) == "" {
+		errs.Add("token", "required", "is required")
+	} else if len(c.Token) > 512 {
+		errs.Add("token", "max", "at most 512 characters")
+	}
+	return errs.Result()
 }
 
 // ProviderLink is one sign-in button: its name, label and the URL to
@@ -1148,4 +1169,36 @@ func (s *signin) sendLink(ctx context.Context, p Profile, purpose string) error 
 	}
 	_, err = m.Send(ctx, msg)
 	return err
+}
+
+// authOwner says whether the app waits for its owner: the signed-in
+// visitor sees "unclaimed" or "claimed", never the token.
+func (s *signin) authOwner(ctx context.Context, _ *router.Request[router.None]) (OwnerStatus, error) {
+	st, err := From(ctx).OwnerClaimStatus(ctx)
+	if errors.Is(err, ErrOwnerClaimOff) {
+		return OwnerStatus{}, router.NotFound("the owner claim is off")
+	}
+	return st, err
+}
+
+// authOwnerClaim makes the signed-in account the app's owner when the
+// token matches (ClaimOwner): 403 for a wrong token, 409 once claimed.
+func (s *signin) authOwnerClaim(ctx context.Context, req *router.Request[OwnerClaim]) (OwnerStatus, error) {
+	a := From(ctx)
+	u := CurrentUser(ctx)
+	err := a.ClaimOwner(ctx, u.ID, req.Body.Token)
+	switch {
+	case errors.Is(err, ErrOwnerClaimOff):
+		return OwnerStatus{}, router.NotFound("the owner claim is off")
+	case errors.Is(err, ErrOwnerToken):
+		s.event(ctx, req.Raw, Event{Kind: EventOwnerClaimFailed, Subject: u.ID, Reason: "bad_token"})
+		return OwnerStatus{}, router.ErrorCode(http.StatusForbidden, "bad_token", "the token does not match")
+	case errors.Is(err, ErrOwnerClaimed):
+		s.event(ctx, req.Raw, Event{Kind: EventOwnerClaimFailed, Subject: u.ID, Reason: "claimed"})
+		return OwnerStatus{}, router.ErrorCode(http.StatusConflict, "claimed", "the app already has its owner")
+	case err != nil:
+		return OwnerStatus{}, err
+	}
+	s.event(ctx, req.Raw, Event{Kind: EventOwnerClaimed, Subject: u.ID})
+	return a.OwnerClaimStatus(ctx)
 }

@@ -12,4 +12,6 @@ test-results
 !.env.example
 # The master key never enters an image: the deployment sets LIDZA_MASTER_KEY.
 config/master.key
+# A local owner claim token stays local: an image's claim is its deployment's.
+config/owner-claim
 storage

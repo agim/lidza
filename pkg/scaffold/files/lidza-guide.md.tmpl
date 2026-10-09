@@ -99,6 +99,7 @@ import package `main`. Preserve its tests and behavior during the move:
 | `lidza pack add <name>` | enables an official pack: `db`, `auth`, `jobs`, `mail`, `llm`, `storage`, `cache`, `i18n`, `realtime`, `analytics`, `geo`, `media`. |
 | `lidza credentials set NAME=value` | seals a secret into `config/credentials.yml.enc` with `config/master.key`; `list` (names), `show` (every value, decrypted) or `show NAME`, `edit` (the whole file in `$EDITOR`), `unset`, `init`. |
 | `lidza admin add EMAIL...` | lets these users (emails or ids) open `/admin` besides the first account: `ADMIN_USERS` in the sealed credentials, read within seconds; in production after a commit and deploy of `config/credentials.yml.enc`. Admins added on the Users page, in the file and in the environment all count. `remove`, `list`. |
+| `lidza admin owner status\|rotate [--production]` | with `AUTH_OWNER_CLAIM=true`: whether the app waits for its owner and where the one-time token file is (never the token); `rotate` replaces an unclaimed token at once on every node. |
 | `lidza brief [--all] [--list]` | the kickoff interview in a terminal: the open questions of `docs/brief.md` one by one, each with suggestions to pick by number or your own answer; `--all` goes through every question, `--list` prints them. `lidza brief answer <id> "..."` records one; `lidza brief skip [id...]` skips questions for good (no ids: every open one), and `s` or `S` in the interview skips one or the rest. |
 | `lidza note add "..."` | a lasting fact about this app in the agent files' Team notes, shared through git. |
 | `lidza test [-v] [--run Regexp] [--fresh] [go test flags]` | creates and migrates the `.env.test` database (`--fresh` drops and recreates it first, after a migration from another branch), runs `go test ./...` with `LIDZA_MODE=test`, then the frontend check. Tests never see the master key or a variable named like one of the app's credentials: they run on `.env.test` and the test providers; a test that needs a key sets `LIDZA_MASTER_KEY` itself. |
@@ -2020,7 +2021,13 @@ the `lidza_client` Dart package there with the same operations as
 
 `admin.Mount(r, admin.Options{Title: "{{.Name}}"})` in `{{.RoutesFile}}` serves
 `/admin` for the app's first account (the first user ever to sign in is
-an admin; `Options.NoFirstUserAdmin` turns that off) and for the users
+an admin; `Options.NoFirstUserAdmin` turns that off; with
+`AUTH_OWNER_CLAIM=true`, for a deployment anyone can reach first, it is
+the signed-in account that pastes a one-time token on the page `/admin`
+shows it: the token is `AUTH_OWNER_CLAIM_TOKEN` from the platform or
+generated into `config/owner-claim/token`, with `status.json` beside it
+for a hosting agent; it works once and ownership never reopens; `lidza
+admin owner status|rotate`) and for the users
 `ADMIN_USERS` names (ids or emails, comma separated, in `.env` or added
 from the Overview page, which saves them sealed; `Options.Allow` for
 another rule). The pages are built on Tabler, light and dark, with their

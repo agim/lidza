@@ -64,6 +64,17 @@ type Config struct {
 	// providers send the browser back to; derived from the request when
 	// unset (and from LIDZA_TLS_DOMAINS when the binary serves TLS).
 	AppURL string `env:"APP_URL"`
+	// OwnerClaim makes the app's first account (FirstSubject, an admin)
+	// the account that presents a one-time token, not the first to sign
+	// in (owner.go). For a deployment anyone can reach before its owner.
+	OwnerClaim bool `env:"AUTH_OWNER_CLAIM"`
+	// OwnerClaimToken is the token when the deployment platform supplies
+	// it (at least 32 characters; the same on every node); generated into
+	// OwnerClaimDir/token otherwise.
+	OwnerClaimToken string `env:"AUTH_OWNER_CLAIM_TOKEN"`
+	// OwnerClaimDir holds the token file (while unclaimed) and
+	// status.json; config/owner-claim by default.
+	OwnerClaimDir string `env:"AUTH_OWNER_CLAIM_DIR"`
 }
 
 // Cookie names.
@@ -121,6 +132,9 @@ func (a *Auth) Start(ctx context.Context, s *lidza.Services) error {
 		return err
 	}
 	a.cfg, a.pool = built.cfg, built.pool
+	if err := a.startOwnerClaim(ctx); err != nil {
+		return err
+	}
 	lidza.Provide(s, a)
 	return nil
 }
@@ -470,12 +484,22 @@ func WithUser(ctx context.Context, u *User) context.Context {
 // FirstSubject returns the subject of the earliest session ever opened:
 // the first user to sign in, the app's first account. Empty until
 // someone has. The answer is cached once known; sessions are revoked,
-// never deleted.
+// never deleted. With AUTH_OWNER_CLAIM it is the account that claimed
+// the app with the owner token (ClaimOwner), empty until one has.
 func (a *Auth) FirstSubject(ctx context.Context) (string, error) {
 	a.firstMu.Lock()
 	defer a.firstMu.Unlock()
 	if a.first != "" {
 		return a.first, nil
+	}
+	if a.cfg.OwnerClaim {
+		// Under the owner claim the first account is the claimant, ""
+		// until someone has claimed with the token.
+		subject, err := a.ownerFirst(ctx)
+		if err == nil {
+			a.first = subject
+		}
+		return subject, err
 	}
 	var subject string
 	err := a.pool.QueryRow(ctx, `SELECT subject FROM auth_session ORDER BY created_at, id LIMIT 1`).Scan(&subject)

@@ -11,6 +11,21 @@ change. A release without one is additive: an app updates with
 
 ## Unreleased
 
+- The owner claim (`AUTH_OWNER_CLAIM=true`, #45): on a deployment
+  anyone can reach first, the app's first account (`FirstSubject`, the
+  automatic admin) is the signed-in account that presents a one-time
+  token, not the first to sign in. The token is the platform's
+  `AUTH_OWNER_CLAIM_TOKEN` or generated once into
+  `config/owner-claim/token` (0600, ignored by git and Docker); only its
+  hash is stored (`AuthOwnerClaim`: `lidza gen`, then `lidza db
+  migrate`). `status.json` beside it is the hosting agent's contract.
+  `/admin` offers the claim form to a signed-in non-admin; `POST
+  /api/v1/auth/owner/claim` and `GET /api/v1/auth/owner` serve an app's
+  own page. Constant-time, throttled, one conditional update (one winner
+  of simultaneous claims), events without the token; ownership never
+  reopens; an app that already has a first account keeps it. `lidza
+  admin owner status|rotate`. `docs/deploy.md` has the contract and what
+  applies live or at a restart.
 - Admin sidebar groups: `admin.Page.Group` lists an app's pages under
   labelled sections, in the order their first page comes; pages without
   one stay under "App" with the app's settings. Every labelled section

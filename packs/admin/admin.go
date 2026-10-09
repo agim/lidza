@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"context"
 	"embed"
+	"errors"
 	"fmt"
 	"html/template"
 	"io/fs"
@@ -192,9 +193,16 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.chain.ServeHTTP(w, r)
 }
 
-// gate refuses users Allow does not admit.
+// gate refuses users Allow does not admit, but for the owner claim
+// (AUTH_OWNER_CLAIM): a signed-in account that is not an admin yet may
+// post the token there.
 func (h *Handler) gate(next http.Handler) http.Handler {
+	claim := auth.Throttle()(http.HandlerFunc(h.claim))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost && r.URL.Path == h.path+"/claim" {
+			claim.ServeHTTP(w, r)
+			return
+		}
 		if !h.opt.Allow(r.Context()) {
 			h.denied(w, r)
 			return
@@ -608,7 +616,45 @@ func (h *Handler) renderWith(w http.ResponseWriter, r *http.Request, status int,
 func (h *Handler) denied(w http.ResponseWriter, r *http.Request) {
 	// In development the first account is often a test's or a
 	// screenshot script's, so the page says how to add yourself.
-	h.renderStatus(w, r, http.StatusForbidden, "denied", "Not an admin", map[string]any{"Env": EnvAdminUsers, "Dev": env.Mode() == "dev"})
+	h.deniedWith(w, r, "")
+}
+
+// deniedWith is the denied page with a claim error to show.
+func (h *Handler) deniedWith(w http.ResponseWriter, r *http.Request, claimError string) {
+	data := map[string]any{"Env": EnvAdminUsers, "Dev": env.Mode() == "dev", "ClaimError": claimError}
+	if a, ok := lidza.Optional[*auth.Auth](r.Context()); ok {
+		if st, err := a.OwnerClaimStatus(r.Context()); err == nil && st.State == "unclaimed" {
+			data["Claim"] = h.path + "/claim"
+			data["ClaimFile"] = a.OwnerClaimFile()
+		}
+	}
+	h.renderStatus(w, r, http.StatusForbidden, "denied", "Not an admin", data)
+}
+
+// claim makes the signed-in account the app's owner with the owner
+// token (auth.ClaimOwner), then opens the admin pages.
+func (h *Handler) claim(w http.ResponseWriter, r *http.Request) {
+	a, ok := lidza.Optional[*auth.Auth](r.Context())
+	u := auth.CurrentUser(r.Context())
+	if !ok || u == nil {
+		http.NotFound(w, r)
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 4096)
+	err := a.ClaimOwner(r.Context(), u.ID, r.PostFormValue("token"))
+	switch {
+	case err == nil:
+		http.Redirect(w, r, h.path+"/", http.StatusSeeOther)
+	case errors.Is(err, auth.ErrOwnerClaimOff):
+		http.NotFound(w, r)
+	case errors.Is(err, auth.ErrOwnerToken):
+		h.deniedWith(w, r, "That token does not match. Copy it again from the token file or your hosting panel.")
+	case errors.Is(err, auth.ErrOwnerClaimed):
+		h.deniedWith(w, r, "This app already has its owner.")
+	default:
+		lidza.Log(r.Context()).Error("admin: owner claim", "error", err)
+		h.deniedWith(w, r, "The claim failed; try again.")
+	}
 }
 
 func humanBytes(n int64) string {

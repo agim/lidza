@@ -179,6 +179,20 @@ pub struct AuthMember {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AuthOwnerClaim {
+    pub id: String,
+    #[serde(rename = "tokenHash")]
+    pub token_hash: String,
+    pub subject: Option<String>,
+    #[serde(rename = "claimedAt")]
+    pub claimed_at: Option<String>,
+    #[serde(rename = "createdAt")]
+    pub created_at: String,
+    #[serde(rename = "updatedAt")]
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CreateNote {
     pub title: String,
     pub body: Option<String>,

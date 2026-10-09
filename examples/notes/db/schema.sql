@@ -141,3 +141,12 @@ CREATE TABLE auth_member (
 CREATE UNIQUE INDEX auth_member_subject_scope_role_key ON auth_member (subject, scope, role);
 CREATE INDEX auth_member_scope_role_idx ON auth_member (scope, role);
 
+CREATE TABLE auth_owner_claim (
+  id text PRIMARY KEY,
+  token_hash text NOT NULL,
+  subject text,
+  claimed_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+

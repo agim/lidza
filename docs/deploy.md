@@ -66,6 +66,45 @@ and the master key is all a deploy adds. Values saved from the admin
 pages live in the database, sealed with the same key, and every node
 reads them.
 
+## The first admin on a public deployment
+
+By default the first account to sign in is the app's first admin. On a
+deployment anyone can reach before its owner does, set
+`AUTH_OWNER_CLAIM=true`: then the first admin is the signed-in account
+that presents a one-time owner token, whoever signed in first.
+
+- The token is `AUTH_OWNER_CLAIM_TOKEN` when the platform supplies one
+  (at least 32 characters; the same on every node), else generated once
+  into `<AUTH_OWNER_CLAIM_DIR>/token`, mode 0600 in a 0700 directory
+  (`config/owner-claim/` by default; it ignores itself in git and the
+  Dockerfile leaves it out of images). Only its SHA-256 is in the
+  database (`auth_owner_claim`). It never appears in logs, responses or
+  URLs.
+- `<AUTH_OWNER_CLAIM_DIR>/status.json` is `{"state":"unclaimed"}` or
+  `{"state":"claimed","claimedAt":"..."}`, written at start and on
+  claim: what a hosting agent reads. The token file exists only while
+  unclaimed.
+- The owner signs in (any provider) and pastes the token on `/admin`
+  (the page offers the form), or the app's own page posts it to `POST
+  /api/v1/auth/owner/claim` (`{"token": ...}`; `GET /api/v1/auth/owner`
+  says unclaimed or claimed). Wrong is 403, already claimed 409; both are
+  throttled and reported as `owner_claim_failed` events without the
+  token. The claim is one conditional update: of two at once, one wins.
+- Ownership never reopens: the row stays when the owner's sessions end
+  or the account is deleted. A lost owner is recovered as any admin is,
+  through `ADMIN_USERS` (`lidza admin add`).
+- `lidza admin owner status` says which state and where the token file
+  is; `lidza admin owner rotate` replaces an unclaimed token (the file
+  and the stored hash: the old one stops working at once, on every
+  node). Add `--production` for a database on another host.
+- Turning it on in an app that already has a first account records that
+  account as the owner.
+
+What takes effect when: `AUTH_OWNER_CLAIM`, `AUTH_OWNER_CLAIM_TOKEN` and
+`AUTH_OWNER_CLAIM_DIR` are read at start (a restart applies a change); a
+rotation and a claim apply at once, without a restart; `ADMIN_USERS` is
+read within seconds.
+
 ## Database
 
 Migrations are files under `db/migrations`, read from the working

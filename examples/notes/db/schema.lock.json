@@ -20,6 +20,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 8
         },
@@ -38,6 +39,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 9
         },
@@ -56,6 +58,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 10
         },
@@ -74,6 +77,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 11
         },
@@ -92,6 +96,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 12
         },
@@ -110,6 +115,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 13
         },
@@ -128,6 +134,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 14
         },
@@ -146,6 +153,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 15
         },
@@ -164,6 +172,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 16
         }
@@ -191,6 +200,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 22
         },
@@ -209,6 +219,7 @@
           "Max": 200,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 23
         },
@@ -227,6 +238,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 24
         },
@@ -245,6 +257,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 25
         },
@@ -263,6 +276,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 26
         }
@@ -290,6 +304,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 31
         },
@@ -308,6 +323,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 32
         },
@@ -326,6 +342,7 @@
           "Max": 200,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 33
         },
@@ -344,6 +361,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 34
         },
@@ -362,6 +380,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 35
         }
@@ -389,6 +408,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 121
         },
@@ -407,6 +427,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 122
         },
@@ -425,6 +446,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 123
         },
@@ -443,6 +465,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 124
         },
@@ -461,6 +484,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 125
         },
@@ -479,6 +503,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 126
         },
@@ -497,6 +522,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 127
         }
@@ -524,6 +550,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 132
         },
@@ -542,6 +569,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 133
         },
@@ -560,6 +588,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 134
         },
@@ -578,6 +607,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 135
         },
@@ -596,6 +626,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 136
         },
@@ -614,6 +645,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 137
         },
@@ -632,6 +664,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 138
         },
@@ -650,6 +683,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 139
         },
@@ -668,6 +702,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 140
         },
@@ -686,6 +721,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 141
         },
@@ -704,6 +740,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 142
         },
@@ -722,6 +759,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 143
         },
@@ -740,6 +778,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 144
         },
@@ -758,6 +797,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 145
         },
@@ -776,6 +816,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 146
         },
@@ -794,6 +835,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 147
         },
@@ -812,6 +854,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 148
         },
@@ -830,6 +873,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 149
         }
@@ -857,6 +901,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 156
         },
@@ -875,6 +920,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 157
         },
@@ -893,6 +939,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 158
         },
@@ -911,6 +958,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 159
         },
@@ -929,6 +977,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 160
         },
@@ -947,6 +996,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 161
         },
@@ -965,6 +1015,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 162
         },
@@ -983,6 +1034,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 163
         },
@@ -1001,6 +1053,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 164
         },
@@ -1019,6 +1072,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 165
         }
@@ -1046,6 +1100,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 171
         },
@@ -1064,6 +1119,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 172
         },
@@ -1082,6 +1138,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 173
         },
@@ -1100,6 +1157,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 174
         },
@@ -1118,6 +1176,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 175
         }
@@ -1145,6 +1204,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 183
         },
@@ -1163,6 +1223,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 184
         },
@@ -1181,6 +1242,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 185
         },
@@ -1199,6 +1261,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 186
         },
@@ -1217,6 +1280,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 187
         },
@@ -1235,6 +1299,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 188
         },
@@ -1253,6 +1318,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 189
         }
@@ -1280,6 +1346,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 195
         },
@@ -1298,6 +1365,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 196
         },
@@ -1316,6 +1384,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 197
         },
@@ -1334,6 +1403,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 198
         },
@@ -1352,6 +1422,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 199
         },
@@ -1370,6 +1441,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 200
         },
@@ -1388,6 +1460,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 201
         },
@@ -1406,6 +1479,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 202
         }
@@ -1433,6 +1507,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 209
         },
@@ -1451,6 +1526,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 210
         },
@@ -1469,6 +1545,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 211
         },
@@ -1487,6 +1564,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 212
         },
@@ -1505,6 +1583,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 213
         },
@@ -1523,6 +1602,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 214
         },
@@ -1541,6 +1621,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 215
         },
@@ -1559,6 +1640,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 216
         },
@@ -1577,6 +1659,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 217
         },
@@ -1595,6 +1678,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 218
         },
@@ -1613,6 +1697,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 219
         },
@@ -1631,6 +1716,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 220
         },
@@ -1649,6 +1735,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 221
         }
@@ -1684,6 +1771,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 229
         },
@@ -1702,6 +1790,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 230
         },
@@ -1720,6 +1809,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 231
         },
@@ -1738,6 +1828,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 232
         },
@@ -1756,6 +1847,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 233
         },
@@ -1774,6 +1866,7 @@
           "Max": null,
           "Email": false,
           "URL": false,
+          "Timezone": false,
           "Pattern": "",
           "Line": 234
         }
@@ -1796,6 +1889,129 @@
         }
       ],
       "Line": 228,
+      "Persisted": true
+    },
+    {
+      "Name": "AuthOwnerClaim",
+      "Table": "auth_owner_claim",
+      "Fields": [
+        {
+          "Name": "id",
+          "Type": "string",
+          "Optional": false,
+          "Array": false,
+          "ID": true,
+          "Unique": false,
+          "Index": false,
+          "Default": "",
+          "Ref": "",
+          "OnDelete": "",
+          "Min": null,
+          "Max": null,
+          "Email": false,
+          "URL": false,
+          "Timezone": false,
+          "Pattern": "",
+          "Line": 243
+        },
+        {
+          "Name": "tokenHash",
+          "Type": "string",
+          "Optional": false,
+          "Array": false,
+          "ID": false,
+          "Unique": false,
+          "Index": false,
+          "Default": "",
+          "Ref": "",
+          "OnDelete": "",
+          "Min": null,
+          "Max": null,
+          "Email": false,
+          "URL": false,
+          "Timezone": false,
+          "Pattern": "",
+          "Line": 244
+        },
+        {
+          "Name": "subject",
+          "Type": "string",
+          "Optional": true,
+          "Array": false,
+          "ID": false,
+          "Unique": false,
+          "Index": false,
+          "Default": "",
+          "Ref": "",
+          "OnDelete": "",
+          "Min": null,
+          "Max": null,
+          "Email": false,
+          "URL": false,
+          "Timezone": false,
+          "Pattern": "",
+          "Line": 245
+        },
+        {
+          "Name": "claimedAt",
+          "Type": "time",
+          "Optional": true,
+          "Array": false,
+          "ID": false,
+          "Unique": false,
+          "Index": false,
+          "Default": "",
+          "Ref": "",
+          "OnDelete": "",
+          "Min": null,
+          "Max": null,
+          "Email": false,
+          "URL": false,
+          "Timezone": false,
+          "Pattern": "",
+          "Line": 246
+        },
+        {
+          "Name": "createdAt",
+          "Type": "time",
+          "Optional": false,
+          "Array": false,
+          "ID": false,
+          "Unique": false,
+          "Index": false,
+          "Default": "now()",
+          "Ref": "",
+          "OnDelete": "",
+          "Min": null,
+          "Max": null,
+          "Email": false,
+          "URL": false,
+          "Timezone": false,
+          "Pattern": "",
+          "Line": 247
+        },
+        {
+          "Name": "updatedAt",
+          "Type": "time",
+          "Optional": false,
+          "Array": false,
+          "ID": false,
+          "Unique": false,
+          "Index": false,
+          "Default": "now()",
+          "Ref": "",
+          "OnDelete": "",
+          "Min": null,
+          "Max": null,
+          "Email": false,
+          "URL": false,
+          "Timezone": false,
+          "Pattern": "",
+          "Line": 248
+        }
+      ],
+      "Indexes": null,
+      "Line": 242,
       "Persisted": true
     }
   ],

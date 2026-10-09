@@ -109,6 +109,7 @@ var Officials = []Official{
 			"# AUTH_SIGNIN_BURST=5        # unset: AUTH_LOGIN_BURST",
 			"# AUTH_MIN_PASSWORD=10       # auth.ValidatePassword floor",
 			"# AUTH_TOKEN_TTL=1h          # verification and reset links",
+			"# AUTH_OWNER_CLAIM=true      # public deploys: the first admin claims with a one-time token (config/owner-claim/token), not by signing in first",
 			"# AUTH_PROVIDERS=google,github   # sign-in providers for auth.Mount; ids and secrets in the credentials",
 			"# AUTH_CONNECT=github             # external accounts users connect (auth.Connection); AUTH_CONNECT_GITHUB_CLIENT_ID and _CLIENT_SECRET in the credentials, _SCOPES optional",
 		},

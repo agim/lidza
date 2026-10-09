@@ -313,6 +313,25 @@ func (v AuthMember) Validate() error {
 	return errs.Result()
 }
 
+// AuthOwnerClaim is a row of the auth_owner_claim table.
+type AuthOwnerClaim struct {
+	ID        string     `json:"id" db:"id"`
+	TokenHash string     `json:"tokenHash" db:"token_hash"`
+	Subject   *string    `json:"subject" db:"subject"`
+	ClaimedAt *time.Time `json:"claimedAt" db:"claimed_at"`
+	CreatedAt time.Time  `json:"createdAt" db:"created_at"`
+	UpdatedAt time.Time  `json:"updatedAt" db:"updated_at"`
+}
+
+// Validate applies the rules of AuthOwnerClaim from schema.lidza.
+func (v AuthOwnerClaim) Validate() error {
+	var errs validate.Errors
+	if v.TokenHash == "" {
+		errs.Add("tokenHash", "required", "required")
+	}
+	return errs.Result()
+}
+
 // CreateNote is an API type.
 type CreateNote struct {
 	Title string  `json:"title"`

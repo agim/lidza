@@ -22,6 +22,8 @@ const (
 	EventConnected           = "connected"             // an external account connected (Method: the provider)
 	EventConnectFailed       = "connect_failed"        // Reason: denied, state, scopes, refused, provider
 	EventDisconnected        = "disconnected"          // a connection removed and revoked at the provider
+	EventOwnerClaimed        = "owner_claimed"         // the signed-in account claimed the app with the owner token
+	EventOwnerClaimFailed    = "owner_claim_failed"    // Reason: bad_token, claimed (the token never appears)
 )
 
 // Event is one account event, as Options.OnEvent sees it.

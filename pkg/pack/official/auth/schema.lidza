@@ -90,3 +90,15 @@ model AuthMember @table("auth_member") {
   @@unique(subject, scope, role)
   @@index(scope, role)
 }
+
+// The app's owner claim (AUTH_OWNER_CLAIM): one row, id "owner". The
+// token is kept as its hash until an account claims with it; then the
+// account is the owner and the row stays, so ownership never reopens.
+model AuthOwnerClaim @table("auth_owner_claim") {
+  id        string @id
+  tokenHash string
+  subject   string?
+  claimedAt time?
+  createdAt time   @default(now())
+  updatedAt time   @default(now())
+}

@@ -2,6 +2,8 @@ package admin
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net/http"
@@ -358,5 +360,90 @@ func TestOverviewCertificates(t *testing.T) {
 	plain := serve(t, Options{Auth: noAuth, Allow: func(context.Context) bool { return true }, CredentialsDir: dir, Dir: dir}, lidza.NewServices())
 	if _, body := get(t, plain, "/admin/"); strings.Contains(body, "Refused lately") || strings.Contains(body, ">Certificates<") {
 		t.Error("certificates card without TLS")
+	}
+}
+
+// TestOwnerClaimForm: with the owner claim on and no owner yet, a
+// signed-in account is not an admin by signing in first; the denied page
+// offers the claim form, a wrong token is refused there, and the right
+// one makes the account the owner and opens the admin pages.
+func TestOwnerClaimForm(t *testing.T) {
+	dbURL := os.Getenv("LIDZA_TEST_DATABASE_URL")
+	if dbURL == "" {
+		dbURL = "postgres:///lidza_test?host=/var/run/postgresql"
+	}
+	ctx := context.Background()
+	shared, err := db.Open(ctx, db.Config{URL: dbURL, MaxConns: 1, ConnectTimeout: 2 * time.Second})
+	if err != nil {
+		t.Skipf("no test database: %v", err)
+	}
+	t.Cleanup(shared.Close)
+	schema := fmt.Sprintf("admin_claim_%d", os.Getpid())
+	if _, err := shared.Exec(ctx, "DROP SCHEMA IF EXISTS "+schema+" CASCADE; CREATE SCHEMA "+schema); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { shared.Exec(ctx, "DROP SCHEMA IF EXISTS "+schema+" CASCADE") })
+	sep := "?"
+	if strings.Contains(dbURL, "?") {
+		sep = "&"
+	}
+	pool, err := db.Open(ctx, db.Config{URL: dbURL + sep + "search_path=" + schema, MaxConns: 2, ConnectTimeout: 2 * time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(pool.Close)
+	if _, err := pool.Exec(ctx, auth.SessionTable+auth.TokenTable+auth.AccountTable+auth.UserTable+auth.IdentityTable+auth.OwnerClaimTable); err != nil {
+		t.Fatal(err)
+	}
+	token := strings.Repeat("t", 48)
+	sum := sha256.Sum256([]byte(token))
+	if _, err := pool.Exec(ctx, `INSERT INTO auth_owner_claim (id, token_hash) VALUES ('owner', $1)`, hex.EncodeToString(sum[:])); err != nil {
+		t.Fatal(err)
+	}
+	a, err := auth.New(auth.Config{Secret: strings.Repeat("s", 32), AccessTTL: time.Minute, RefreshTTL: time.Hour, LoginRPS: 100, LoginBurst: 100,
+		OwnerClaim: true, OwnerClaimToken: token, OwnerClaimDir: filepath.Join(t.TempDir(), "claim")}, pool)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.Login(ctx, "visitor", map[string]any{"email": "visitor@example.com"}); err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	t.Setenv(credentials.EnvMasterKey, "")
+	t.Setenv(EnvAdminUsers, "")
+	t.Cleanup(func() { credentials.SetOverrides(nil) })
+	s := lidza.NewServices()
+	lidza.Provide(s, a)
+	visitor := &auth.User{ID: "visitor", Claims: map[string]any{"email": "visitor@example.com"}}
+	asVisitor := func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			next.ServeHTTP(w, r.WithContext(auth.WithUser(r.Context(), visitor)))
+		})
+	}
+	srv := serve(t, Options{Auth: asVisitor, CredentialsDir: dir, Dir: filepath.Join(dir, "admin")}, s)
+	code, body := get(t, srv, "/admin/")
+	if code != http.StatusForbidden || !strings.Contains(body, `action="/admin/claim"`) || !strings.Contains(body, "your hosting platform gave you") {
+		t.Fatalf("denied page without the claim form: %d %s", code, body)
+	}
+	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	res, err := client.PostForm(srv.URL+"/admin/claim", url.Values{"token": {"wrong"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wrong, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if res.StatusCode != http.StatusForbidden || !strings.Contains(string(wrong), "does not match") {
+		t.Fatalf("wrong token: %d %s", res.StatusCode, wrong)
+	}
+	res, err = client.PostForm(srv.URL+"/admin/claim", url.Values{"token": {token}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusSeeOther || res.Header.Get("Location") != "/admin/" {
+		t.Fatalf("claim: %d %s", res.StatusCode, res.Header.Get("Location"))
+	}
+	if code, body := get(t, srv, "/admin/"); code != 200 || strings.Contains(body, `action="/admin/claim"`) {
+		t.Fatalf("after the claim: %d", code)
 	}
 }

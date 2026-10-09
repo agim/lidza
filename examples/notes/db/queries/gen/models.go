@@ -60,6 +60,15 @@ type AuthMember struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+type AuthOwnerClaim struct {
+	ID        string     `json:"id"`
+	TokenHash string     `json:"token_hash"`
+	Subject   *string    `json:"subject"`
+	ClaimedAt *time.Time `json:"claimed_at"`
+	CreatedAt time.Time  `json:"created_at"`
+	UpdatedAt time.Time  `json:"updated_at"`
+}
+
 type AuthSession struct {
 	ID              string     `json:"id"`
 	Subject         string     `json:"subject"`

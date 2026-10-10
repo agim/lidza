@@ -170,7 +170,7 @@ type Subscription struct {
 	ID                string     `json:"id"`
 	Owner             string     `json:"owner"`
 	Customer          string     `json:"customer"`
-	Price             string     `json:"-"`
+	Price             string     `json:"price"`
 	Status            string     `json:"status"`
 	CurrentPeriodEnd  *time.Time `json:"currentPeriodEnd,omitempty"`
 	CancelAtPeriodEnd bool       `json:"cancelAtPeriodEnd"`
@@ -474,4 +474,26 @@ func (b *Billing) Event(ctx context.Context, typ string, created time.Time, obje
 		return b.sync(ctx, s, created)
 	}
 	return nil
+}
+
+// Subscriptions lists the subscriptions the app keeps, newest event
+// first, across owners (status narrows them; "" for all): what the
+// admin pages and the agent tools show.
+func (b *Billing) Subscriptions(ctx context.Context, status string, limit int) ([]Subscription, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	rows, err := b.pool.Query(ctx, `SELECT id, owner, customer, price, status, current_period_end, cancel_at_period_end FROM billing_subscription
+		WHERE $1 = '' OR status = $1 ORDER BY event_at DESC, id LIMIT $2`, status, limit)
+	if err != nil {
+		return nil, err
+	}
+	out, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (Subscription, error) {
+		var s Subscription
+		return s, r.Scan(&s.ID, &s.Owner, &s.Customer, &s.Price, &s.Status, &s.CurrentPeriodEnd, &s.CancelAtPeriodEnd)
+	})
+	if out == nil {
+		out = []Subscription{}
+	}
+	return out, err
 }

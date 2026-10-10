@@ -19,6 +19,9 @@ Gotchas:
 - Redis on 6379 is the local Valkey stand-in.
 - `examples/notes` is the reference app; its files are embedded for `lidza snippet` from `pkg/snippets/_files`. After changing the example: `go generate ./pkg/snippets` (the package test fails while they differ), and `lidza test` plus `lidza test --e2e` inside it.
 - A new check rule or agent surface gets a case in `evals/` (`go test -tags evals -timeout 40m ./evals`; past the default 10 minutes).
+- A new CLI command or official Go pack gets its MCP tools, or a reason
+  it has none, in `pkg/mcpserver/coverage.go`; `TestCoverage` fails
+  otherwise. Inspection tools are read-only and never return secrets.
 - Build the CLI with `go install ./cmd/lidza` or `go build -o <scratch path>`, never a bare `go build ./cmd/lidza` at the root: it writes a 36 MB `lidza` there (ignored now; `scripts/release.sh` refuses tracked files over 2 MB).
 - Git: pull before committing, push straight to `master`; no branches or PRs unless asked.
 - Releases: `install.sh` installs the tag it pins, not master. A new command

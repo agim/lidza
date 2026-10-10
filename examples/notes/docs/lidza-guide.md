@@ -2339,6 +2339,11 @@ guard an outbound dependency with `resilience.New(...)`.
 
 ## Deployment
 
+Managed deploys from a portal: [Līdza Deploy](https://github.com/agim/lidza-deploy)
+deploys this app from GitHub on push to a server it manages (HTTPS,
+health checks, logs, rollback, team roles); behind its proxy, set
+`LIDZA_TRUSTED_PROXIES=loopback`. To run the binary yourself:
+
 `lidza build` makes `bin/notes`: the frontend embedded, no Node at
 runtime (except `LIDZA_SSR=1`), with a Brotli and a gzip copy of each
 compressible file it serves to browsers that accept one (pages built

@@ -9,6 +9,23 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- MCP: tools for the commands and packs that had none. `lidza_gen_llms`,
+  `lidza_admins` and `lidza_owner_status` (read-only; adding admins and
+  rotating the owner token stay in a terminal); read-only inspection
+  tools for the enabled packs: `lidza_jobs` (queue counts, recent jobs),
+  `lidza_hooks` (endpoints, deliveries; never secrets), `lidza_billing`
+  (subscriptions), `lidza_audit` (events), `lidza_workspaces`
+  (workspaces, the owner claim's state). `pkg/mcpserver/coverage.go`
+  names each command's and pack's tools or why it has none, and
+  `TestCoverage` fails when a new one has neither. The agent files no
+  longer claim every command is a tool: they name the ones that stay in
+  the terminal and the inspection tools.
+- Docs: managed deploys from a portal with
+  [Līdza Deploy](https://github.com/agim/lidza-deploy), in the README,
+  `docs/deploy.md` and the app guide.
+
 ## v0.1.94 (2026-10-09)
 
 - Payments (Phase 8): the billing pack (`lidza pack add billing`), on

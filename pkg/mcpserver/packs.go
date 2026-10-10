@@ -4,6 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/agim/lidza/packs/audit"
+	"github.com/agim/lidza/packs/auth"
+	"github.com/agim/lidza/packs/billing"
+	"github.com/agim/lidza/packs/hooks"
+	"github.com/agim/lidza/packs/jobs"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"os"
 	"path/filepath"
 	"slices"
@@ -252,6 +258,127 @@ func addPackTools(s *group, dir string, cfg *config.Config) {
 				rows = []mail.Stored{}
 			}
 			return jsonResult(rows)
+		})
+	}
+
+	// withPool opens the app's database from .env for one call.
+	withPool := func(ctx context.Context, f func(*pgxpool.Pool) (*mcp.CallToolResult, error)) (*mcp.CallToolResult, error) {
+		var dbcfg db.Config
+		if err := env.Load(dir, &dbcfg); err != nil {
+			return mcp.NewToolResultErrorFromErr("database", err), nil
+		}
+		pool, err := db.Open(ctx, dbcfg)
+		if err != nil {
+			return mcp.NewToolResultErrorFromErr("database", err), nil
+		}
+		defer pool.Close()
+		return f(pool)
+	}
+	has := func(name string) bool { return slices.Contains(cfg.Packs, pack.OfficialPrefix+name) }
+	if has("jobs") && has("db") {
+		s.AddTool(mcp.NewTool("lidza_jobs",
+			mcp.WithDescription("The jobs pack's queue: how many jobs are pending, running, done and failed, and the newest jobs with kind, state, attempts and last error. Use it to see whether a background job ran and why it failed. Needs DATABASE_URL in .env."),
+			mcp.WithNumber("limit", mcp.Description("How many of the newest jobs (default 30)."), mcp.DefaultNumber(30)),
+		), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return withPool(ctx, func(pool *pgxpool.Pool) (*mcp.CallToolResult, error) {
+				q := jobs.New(jobs.Config{}, pool)
+				counts, err := q.Counts(ctx)
+				if err != nil {
+					return mcp.NewToolResultErrorFromErr("query", err), nil
+				}
+				recent, err := q.Recent(ctx, req.GetInt("limit", 30))
+				if err != nil {
+					return mcp.NewToolResultErrorFromErr("query", err), nil
+				}
+				return jsonResult(map[string]any{"counts": counts, "recent": recent})
+			})
+		})
+	}
+	if has("hooks") && has("db") {
+		s.AddTool(mcp.NewTool("lidza_hooks",
+			mcp.WithDescription("The hooks pack (outbound webhooks): every owner's endpoints (URL, events, failures, disabled) and the newest deliveries (event, status, attempts, last HTTP status and error, body). Use it to check an event was sent and why a delivery fails. Never shows secrets. Needs DATABASE_URL in .env."),
+			mcp.WithString("status", mcp.Description("Only deliveries in this state: pending, delivered or failed.")),
+			mcp.WithNumber("limit", mcp.Description("How many deliveries, newest first (default 30)."), mcp.DefaultNumber(30)),
+		), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return withPool(ctx, func(pool *pgxpool.Pool) (*mcp.CallToolResult, error) {
+				h := hooks.New(hooks.Config{}, pool, nil)
+				eps, err := h.AdminEndpoints(ctx, 100)
+				if err != nil {
+					return mcp.NewToolResultErrorFromErr("query", err), nil
+				}
+				ds, err := h.AdminDeliveries(ctx, req.GetString("status", ""), req.GetInt("limit", 30))
+				if err != nil {
+					return mcp.NewToolResultErrorFromErr("query", err), nil
+				}
+				return jsonResult(map[string]any{"endpoints": eps, "deliveries": ds})
+			})
+		})
+	}
+	if has("billing") && has("db") {
+		s.AddTool(mcp.NewTool("lidza_billing",
+			mcp.WithDescription("The billing pack's subscriptions as the app keeps them from Stripe's webhooks: owner, Stripe customer and price, status, period end, cancel at period end; newest event first. Use it to check a checkout or a webhook reached the app. Needs DATABASE_URL in .env."),
+			mcp.WithString("status", mcp.Description("Only this Stripe status: active, trialing, past_due, canceled, ...")),
+			mcp.WithNumber("limit", mcp.Description("How many (default 30)."), mcp.DefaultNumber(30)),
+		), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return withPool(ctx, func(pool *pgxpool.Pool) (*mcp.CallToolResult, error) {
+				subs, err := billing.New(billing.Config{}, pool).Subscriptions(ctx, req.GetString("status", ""), req.GetInt("limit", 30))
+				if err != nil {
+					return mcp.NewToolResultErrorFromErr("query", err), nil
+				}
+				return jsonResult(subs)
+			})
+		})
+	}
+	if has("audit") && has("db") {
+		s.AddTool(mcp.NewTool("lidza_audit",
+			mcp.WithDescription("The audit pack's newest events: actor, action, resource, scope, outcome, metadata (secrets redacted), time. Filter by actor, action prefix, resource or scope. Needs DATABASE_URL in .env."),
+			mcp.WithString("actor", mcp.Description("Only this actor.")),
+			mcp.WithString("action", mcp.Description("Only this action.")),
+			mcp.WithString("resource", mcp.Description("Only this resource.")),
+			mcp.WithString("scope", mcp.Description("Only this scope (a workspace).")),
+			mcp.WithNumber("limit", mcp.Description("How many (default 50, at most 200)."), mcp.DefaultNumber(50)),
+		), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return withPool(ctx, func(pool *pgxpool.Pool) (*mcp.CallToolResult, error) {
+				page, err := audit.New(audit.Config{}, pool).List(ctx, audit.Query{Actor: req.GetString("actor", ""), Action: req.GetString("action", ""),
+					Resource: req.GetString("resource", ""), Scope: req.GetString("scope", ""), Limit: req.GetInt("limit", 50)})
+				if err != nil {
+					return mcp.NewToolResultErrorFromErr("query", err), nil
+				}
+				return jsonResult(page)
+			})
+		})
+	}
+	if has("auth") && has("db") {
+		s.AddTool(mcp.NewTool("lidza_workspaces",
+			mcp.WithDescription("The app's workspaces (auth.Teams): name, owners, member and open-invitation counts, newest first; and the owner claim's state when AUTH_OWNER_CLAIM is on (never the token). Needs DATABASE_URL and AUTH_SECRET in .env."),
+			mcp.WithString("query", mcp.Description("Only workspaces whose name contains this.")),
+			mcp.WithNumber("limit", mcp.Description("How many (default 50)."), mcp.DefaultNumber(50)),
+		), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return withPool(ctx, func(pool *pgxpool.Pool) (*mcp.CallToolResult, error) {
+				var acfg auth.Config
+				if err := env.Load(dir, &acfg); err != nil {
+					return mcp.NewToolResultErrorFromErr("auth", err), nil
+				}
+				a, err := auth.New(acfg, pool)
+				if err != nil {
+					return mcp.NewToolResultErrorFromErr("auth", err), nil
+				}
+				out := map[string]any{}
+				if st, err := a.OwnerClaimStatus(ctx); err == nil {
+					out["ownerClaim"] = st
+				}
+				if !a.HasWorkspaces(ctx) {
+					out["workspaces"] = []any{}
+					out["note"] = "no auth_workspace table: the app does not use auth.Teams (or lidza gen and lidza db migrate have not run)"
+					return jsonResult(out)
+				}
+				ws, total, err := a.Workspaces(ctx, req.GetString("query", ""), "", req.GetInt("limit", 50), 0)
+				if err != nil {
+					return mcp.NewToolResultErrorFromErr("query", err), nil
+				}
+				out["workspaces"], out["total"] = ws, total
+				return jsonResult(out)
+			})
 		})
 	}
 

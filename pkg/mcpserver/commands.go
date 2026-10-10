@@ -275,6 +275,17 @@ func addCommandTools(s *server.MCPServer, dir string, cfg *config.Config, after 
 			}
 			return args, nil
 		}},
+		{"lidza_gen_llms", "Write a starting llms.txt for visiting agents (llmstxt.org): the app's name as the H1, a summary to write, a link per page the last build prerendered, in public/ (static/ for htmx), served at /llms.txt. Public content only: never the guides, handlers or configuration.", []mcp.ToolOption{
+			mcp.WithBoolean("force", mcp.Description("Overwrite an existing llms.txt.")),
+		}, 2 * time.Minute, false, true, func(req mcp.CallToolRequest) ([]string, error) {
+			args := []string{"gen", "llms"}
+			if req.GetBool("force", false) {
+				args = append(args, "--force")
+			}
+			return args, nil
+		}},
+		{"lidza_admins", "Who opens /admin besides the first account: ADMIN_USERS in the sealed credentials (ids or emails). Adding or removing an admin stays in a terminal (lidza admin add|remove): it grants access.", nil, time.Minute, false, false, fixed("admin", "list")},
+		{"lidza_owner_status", "The owner claim (AUTH_OWNER_CLAIM): whether the app still waits for its owner and where the one-time token file is; never the token. Rotating it stays in a terminal (lidza admin owner rotate).", nil, time.Minute, false, false, fixed("admin", "owner", "status")},
 		{"lidza_doctor", "Report the toolchain, the services, node_modules, the pack builds and the browser for e2e tests, each missing item with its fix.", nil, 2 * time.Minute, false, false, fixed("doctor")},
 	}
 	for _, t := range tools {

@@ -11,7 +11,7 @@ commands and the rules.
 - {{.AgentGuidanceLine}}
 
 - `lidza dev`: run on http://127.0.0.1:3000 with hot reload for Go and the frontend.
-- `lidza check --json`: every Go, Rust and frontend error in one list; run it after each change until `"status": "ok"`. Every `lidza` command is also an MCP tool (`lidza_check`, `lidza_gen`, `lidza_gen_resource`, `lidza_pack_add`, `lidza_db_migrate`, `lidza_test`, `lidza_verify`, `lidza_build`, `lidza_audit_layout`, `lidza_audit_performance`): prefer the tool over a shell.
+- `lidza check --json`: every Go, Rust and frontend error in one list; run it after each change until `"status": "ok"`. The `lidza` commands are MCP tools too (`lidza_check`, `lidza_gen`, `lidza_gen_resource`, `lidza_pack_add`, `lidza_db_migrate`, `lidza_test`, `lidza_verify`, `lidza_build`, `lidza_audit_layout`, `lidza_audit_performance`): prefer the tool over a shell. `new`, `install`, `dev`, `update` and `benchmark` stay in the developer's terminal. Each enabled pack has a tool showing what it holds: `lidza_jobs`, `lidza_mail`, `lidza_hooks`, `lidza_billing`, `lidza_audit`, `lidza_workspaces`, `lidza_storage`, `lidza_errors`.
 - `lidza test` for Go tests, `lidza test --e2e` for the browser suite, `lidza doctor` when something is missing on the machine.
 - `lidza verify` before committing (the pre-commit hook runs it): generated files staged, no test deleted, skipped or stripped of assertions, check clean, tests green.
 - Never weaken a test to make it pass: no deleting it, skipping it or removing its assertions. If a test is wrong, say so to the developer and let them confirm the change (`LIDZA_ALLOW_TEST_CHANGES=1 git commit`); do not confirm it yourself.

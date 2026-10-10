@@ -6,6 +6,23 @@ frontend and the operational endpoints, and needs Node at runtime only
 for per-request SSR. `lidza new` writes a `Dockerfile`, a `.dockerignore`
 and `deploy/<name>.service`; this page is the rest.
 
+## Managed deploys
+
+To deploy from a portal instead of by hand, use
+[Līdza Deploy](https://github.com/agim/lidza-deploy): a deployment agent
+and a web control panel built with Līdza. One agent hosts many Līdza apps
+on a Debian or Ubuntu server, each on its own domain with HTTPS through
+Caddy. It deploys a GitHub repository and branch on push (signed
+webhooks) or by hand, builds the release in Docker, checks `/readyz`
+before traffic switches, and keeps deployment history, logs and rollback;
+the panel has administrator, deployer and viewer roles. Install it on the
+server with its `install.sh` (its README has the steps). It reads the
+contracts this page describes: the binary's `/healthz` and `/readyz`,
+`APP_URL`, `LIDZA_TRUSTED_PROXIES` (`loopback` behind its Caddy), and the
+owner claim's token and status files.
+
+The rest of this page is for running the binary yourself.
+
 ## Build
 
 ```sh

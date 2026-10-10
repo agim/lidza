@@ -44,6 +44,16 @@ Default template: Vite + React + TypeScript. `svelte`, `astro` (static) and
 follow the same contract: Go owns `/api`, types come from the generated
 client, production is one binary.
 
+## Deploying
+
+`lidza build` makes one binary; `docs/deploy.md` covers running it
+yourself (systemd, Docker, TLS built in or behind a proxy). For managed
+deploys from a portal, [Līdza Deploy](https://github.com/agim/lidza-deploy)
+is a deployment agent and web control panel for Līdza apps: deploys from
+GitHub on push, many apps per server, each on its own domain with
+automatic HTTPS, health checks before traffic switches, logs, history and
+rollback, and team roles.
+
 ## Status
 
 Phases 1 to 7 done: `lidza new` with the `react`, `svelte`, `astro` and
@@ -93,3 +103,4 @@ bin/lidza new demo --lidza-dir "$PWD"   # an app pointed at this checkout
 - `docs/features.md`: feature matrix, what is done, what comes when, open decisions.
 - `docs/scalability.md`: the scalable-by-default primitives and the rules every change follows.
 - `docs/design.md`: why Līdza is built the way it is.
+- `docs/deploy.md`: deploying an app; managed deploys with [Līdza Deploy](https://github.com/agim/lidza-deploy).

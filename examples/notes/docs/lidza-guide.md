@@ -1616,6 +1616,66 @@ portal to manage, and the app checking what a plan includes.
    `webhook.StripeSignature(secret, time, body)`: checkout, the
    completed event, an upgrade, a cancellation, a forged event's 401.
 
+### Sell a feature to teams
+
+A feature a workspace pays for and all its members use: teams, billing
+and a model together. The pieces are the recipes "Add teams and
+invitations", "Add payments" and "Add an LLM feature"; this is how they
+meet.
+
+1. Packs: `db`, `auth`, `mail` (invitations), `billing`, `llm`, then
+   `lidza gen` and `lidza db migrate`. Workspaces come from `auth.Teams`
+   with a role that may use the feature:
+
+   ```go
+   var teams = &auth.Teams{Roles: auth.Roles{"owner": {"*"}, "member": {"summaries.create"}}}
+   var plans = billing.Plans{
+   	billing.FreePlan: {Name: "Free"},
+   	"team":           {Name: "Team", Price: "price_...", Features: []string{"ai"}},
+   }
+   ```
+
+2. Routes in `app/routes.go`: the workspace routes, billing guarded by
+   the workspace (so the workspace, not the user, is the customer), and
+   the feature in a group that needs a workspace:
+
+   ```go
+   teams.Mount(r)
+   plans.Mount(r, billing.Options{Guard: auth.RequireWorkspace()})
+   ai := r.Group("/api/v1/summaries", auth.RequireWorkspace())
+   router.Route(ai, "POST /api/v1/summaries", summarize)
+   ```
+
+3. The handler checks the plan first, then calls the model, labelled
+   so the admin pages' usage shows what the feature costs:
+
+   ```go
+   func summarize(ctx context.Context, req *router.Request[schema.SummaryInput]) (schema.Summary, error) {
+   	if err := plans.Require(ctx, auth.WorkspaceID(ctx), "ai"); err != nil {
+   		return schema.Summary{}, err // 402 "upgrade": the page offers checkout
+   	}
+   	res, err := llm.From(ctx).Chat(ctx, llm.Request{
+   		System:   "Summarize in one sentence.",
+   		Messages: []llm.Message{{Role: llm.User, Content: req.Body.Text}},
+   		Label:    "summary",
+   	})
+   	return schema.Summary{Text: res.Text}, err
+   }
+   ```
+
+   A long call goes to a job instead (`jobs.From(ctx).Enqueue`, with
+   the workspace id in the payload) and the page listens with `useLive`.
+4. The page sends the workspace with every call (`X-Workspace`, or the
+   current workspace the switch route stores), shows `api.billingAccount`
+   to owners, and on a 402 with code `upgrade` offers
+   `api.billingCheckout({plan: "team"})`.
+5. Test the whole flow with the fake model and a fake Stripe: an owner
+   creates a workspace and invites a member (the token from the outbox
+   mail), the member gets 402, a signed `checkout.session.completed`
+   for the workspace makes it 200, another workspace still gets 402 and
+   a stranger sending Acme's id gets 403. The framework's own version of
+   this test is `packs/billing/teamflow_test.go`.
+
 ### Record an audit event
 
 Keep a durable record of who did what, for operators and compliance:
@@ -2320,7 +2380,13 @@ twice (`UPDATE post SET slug = ... WHERE slug IS NULL`).
 The binary serves `/healthz` (liveness), `/readyz` (503 while a pack's
 check fails: database ping, bus) and `/metrics` (Prometheus: requests by
 route pattern, durations, pool and connection gauges). In dev,
-`/debug/pprof/` too. `lidza check` has rules of its own: package-level
+`/debug/pprof/` too. Tracing is OpenTelemetry, on when
+`OTEL_EXPORTER_OTLP_ENDPOINT` is set: spans for requests, queries (by
+sqlc name), jobs (continuing the enqueuing request's trace), mail, LLM
+calls and `lidza.HTTPClient(ctx)` calls; log with `slog.InfoContext(ctx,
+...)` (or `lidza.Log(ctx)`) so a line carries `trace_id`. Give a slow
+piece of your own a span with `tracing.Span(ctx, "name")` and
+`tracing.End(span, err)` (`github.com/agim/lidza/pkg/tracing`). `lidza check` has rules of its own: package-level
 maps or slices (L001) and goroutines started in handlers (L002), because
 state belongs in Postgres or Valkey and background work in a bounded
 worker or the jobs pack; hand-written `fetch` of `/api` (L003); imports

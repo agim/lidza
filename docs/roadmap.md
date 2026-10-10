@@ -292,7 +292,7 @@ signed webhook), and the evals cover the new agent surfaces.
 
 Agreed 2026-10-10, in this order. Security hardening done in v0.1.99
 and v0.1.100; zero-downtime migrations done in v0.1.101; OpenTelemetry
-tracing done in v0.1.102; docs and contributors done in v0.1.103.
+tracing, docs and contributors done in v0.1.102.
 
 - Security hardening: fuzz tests on every parser of untrusted input,
   `scripts/fuzz.sh`, `govulncheck` in `scripts/release.sh` and CI, and

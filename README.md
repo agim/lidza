@@ -56,7 +56,7 @@ rollback, and team roles.
 
 ## Status
 
-Phases 1 to 7 done: `lidza new` with the `react`, `svelte`, `astro` and
+Phases 1 to 8 done: `lidza new` with the `react`, `svelte`, `astro` and
 `htmx` templates, `lidza dev` (Go and frontend hot reload behind one port),
 `lidza build` (one binary), the agent interface (`lidza check --json`,
 `lidza context`, `lidza mcp`, `/llms.txt`), `schema.lidza` with generated
@@ -68,7 +68,8 @@ limiting, circuit breaker, `lidza check` rules for unbounded state,
 `lidza benchmark` on k6; application services: `auth` (sessions,
 sign-in with email and password or with Google, GitHub, Microsoft and
 any OIDC issuer), `jobs`, `cache`, `i18n` packs and `lidza test`; frontend depth: prerendered routes,
-accessibility in `lidza check`, `useLive`, client-side validators. Every
+accessibility in `lidza check`, `useLive`, client-side validators; teams and invitations, full-text search,
+outbound webhooks and Stripe billing. Every
 roadmap phase is delivered. See
 `docs/roadmap.md`;
 `docs/features.md` maps every capability to a phase.
@@ -103,4 +104,9 @@ bin/lidza new demo --lidza-dir "$PWD"   # an app pointed at this checkout
 - `docs/features.md`: feature matrix, what is done, what comes when, open decisions.
 - `docs/scalability.md`: the scalable-by-default primitives and the rules every change follows.
 - `docs/design.md`: why Līdza is built the way it is.
+- `docs/versioning.md`: what the public API is, how releases may change it before v1.0, and the v1.0 freeze.
 - `docs/deploy.md`: deploying an app; managed deploys with [Līdza Deploy](https://github.com/agim/lidza-deploy).
+
+## License
+
+Apache License 2.0. See `LICENSE`.

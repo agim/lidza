@@ -3,7 +3,7 @@ name = "lidza-core"
 version = "0.1.0"
 edition = "2024"
 description = "Līdza compute core: Rust functions the Go control plane calls natively or as WASM"
-license = "MIT"
+license = "Apache-2.0"
 repository = "https://github.com/agim/lidza"
 
 [lib]

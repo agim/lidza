@@ -642,4 +642,16 @@ build, stopping at the first failure.
 
 ### Next
 
-Nothing queued.
+v1.0: API freeze (queued 2026-10-10). Freeze the public API that
+`docs/versioning.md` defines, then tag `v1.0.0`:
+
+- Review every public package and CLI command for names, options and
+  errors worth changing first; make those changes as "Breaking:"
+  entries while still on `v0.x`.
+- Remove what is deprecated; mark what is not ready "experimental".
+- A test that fails when an exported Go identifier, a CLI flag or a
+  check rule code disappears (a recorded API surface, compared on each
+  release).
+- Check: `go doc` reads cleanly for every public package, pkg.go.dev
+  shows the documentation, and `examples/notes` passes `lidza ship` on
+  `v1.0.0`.

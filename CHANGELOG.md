@@ -7,7 +7,19 @@ version in `go.mod`. `install.sh` pins the newest release here;
 pin, tags and pushes. A change that breaks an app built on an earlier
 release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
-`lidza update --migrate`.
+`lidza update --migrate`. `docs/versioning.md` defines the public API
+these rules cover.
+
+## Unreleased
+
+- Līdza is licensed under the Apache License 2.0 (`LICENSE`); before,
+  the repository carried no license, so nobody else could legally use
+  it and pkg.go.dev hid its documentation. The `lidza-core` crate's
+  manifest said MIT and now says Apache-2.0 too.
+- `docs/versioning.md`: what counts as public API (packages, CLI,
+  `schema.lidza`, settings, routes, rule codes, MCP tools), the
+  pre-v1.0 rules for breaking changes and deprecation, and a queued
+  "v1.0: API freeze" item on the roadmap.
 
 ## v0.1.97 (2026-10-10)
 

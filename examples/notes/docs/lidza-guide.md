@@ -2355,7 +2355,14 @@ image that runs as a non-root user on port 3000 (the binary, `db/`,
 needs a volume at `STORAGE_DIR`, so production uses `s3`); `deploy/notes.service`
 runs the binary under systemd from `/opt/notes` (install commands in
 its header). Migrations ship as files in `db/`: apply them with `lidza db
-migrate --production` in the deploy step or `DB_MIGRATE=true` at start. `lidza ship
+migrate --production` in the deploy step or `DB_MIGRATE=true` at start.
+They run while the app serves: statements wait at most
+`DB_MIGRATE_LOCK_TIMEOUT` (5s) for a lock and retry; `lidza gen` builds
+indexes and validates constraints on existing tables in a second,
+`-- lidza:no-transaction` migration that runs outside a transaction;
+`lidza check` warns (L021) on a new migration that renames, changes a
+type, drops what the running version reads, or locks a table for a
+scan, and names the expand-and-contract steps. `lidza ship
 --domains app.example.com` records the domain in `lidza.json` and writes
 `deploy/production.env`, the environment of the deployed process
 (plus `DATABASE_URL` and `LIDZA_MASTER_KEY`). TLS: with

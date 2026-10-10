@@ -9,7 +9,7 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
-## Unreleased
+## v0.1.97 (2026-10-10)
 
 - The Dockerfile's runtime copies belong to the image's nonroot user
   (`COPY --chown=65532:65532`, #48): built from a checkout made under

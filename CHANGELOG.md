@@ -10,7 +10,7 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
-## Unreleased
+## v0.1.99 (2026-10-10)
 
 - Fuzz tests on every parser of untrusted input (webhook signatures,
   access tokens, sealed cookies, stored password hashes, provider keys,

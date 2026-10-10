@@ -10,7 +10,7 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
-## Unreleased
+## v0.1.100 (2026-10-10)
 
 - Sign-in and account-connect redirects (`?redirect=`) refuse control
   characters and backslashes anywhere in the path: `/<TAB>/evil.example`

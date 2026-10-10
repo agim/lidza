@@ -226,8 +226,12 @@ const rememberCol = `COALESCE((to_jsonb(s)->>'remember')::bool, true)`
 // keeps working: requests a browser sent in parallel with an expired
 // access token all carry the old refresh cookie, and the first one to
 // arrive rotates it. Within the grace the others get a new access token
-// only (Tokens.Refresh empty); the session is not rotated again.
-const RefreshGrace = time.Minute
+// only (Tokens.Refresh empty); the session is not rotated again. It
+// also covers a renewal whose reply never reached the browser (a
+// navigation or a closed tab cancelled the request): the browser still
+// holds the old token, and it works for this long, the access token's
+// default lifetime. A browser back later than that signs in again.
+const RefreshGrace = 15 * time.Minute
 
 // Refresh rotates a session: the refresh token is replaced, a new access
 // token issued. A revoked or expired session fails. The token Refresh
@@ -256,7 +260,7 @@ func (a *Auth) Refresh(ctx context.Context, refreshToken string, claims map[stri
 		// others a page sent in parallel find it changed and get an
 		// access token only, within the grace. Unconditionally, each
 		// rotated in turn and the browser kept whichever reply came last,
-		// a token dead a minute later. The session slides: it ends
+		// a token dead once the grace ran out. The session slides: it ends
 		// RefreshTTL after its last use, not after the sign-in.
 		refresh = randomID()
 		tag, err := a.pool.Exec(ctx, `UPDATE auth_session SET prev_refresh_hash = refresh_hash, rotated_at = now(), refresh_hash = $1,

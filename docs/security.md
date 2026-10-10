@@ -42,7 +42,8 @@ auditors and app authors.
 - Access tokens: HS256 JWTs under `AUTH_SECRET` (32 bytes at least),
   issuer and expiry required, any other algorithm refused. Refresh
   tokens are stored hashed and rotate, one rotation per expiry however
-  many requests race (the others renew within a minute's grace);
+  many requests race (the others renew within a 15-minute grace, which also covers a
+  renewal whose reply the browser never got);
   sessions slide, ending `AUTH_REFRESH_TTL` after their last use; logout
   and `RevokeAll` end the session server-side. A database error is a
   503, never a sign-out.

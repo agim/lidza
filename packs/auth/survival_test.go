@@ -145,3 +145,25 @@ func TestSessionSurvival(t *testing.T) {
 		t.Fatalf("database down: %d cleared=%v", rec.Code, cleared(rec))
 	}
 }
+
+// TestLostRenewalReply: the browser never got the reply that rotated its
+// refresh token; the old one still renews within the grace, not after.
+func TestLostRenewalReply(t *testing.T) {
+	a := testAuth(t)
+	ctx := context.Background()
+	tokens, err := a.Login(ctx, "u-lost", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.Refresh(ctx, tokens.Refresh, nil); err != nil { // the reply that got lost
+		t.Fatal(err)
+	}
+	a.pool.Exec(ctx, `UPDATE auth_session SET rotated_at = now() - interval '14 minutes' WHERE subject = 'u-lost'`)
+	if g, err := a.Refresh(ctx, tokens.Refresh, nil); err != nil || g.Access == "" {
+		t.Fatalf("old token 14 minutes after a lost reply: %v", err)
+	}
+	a.pool.Exec(ctx, `UPDATE auth_session SET rotated_at = now() - interval '16 minutes' WHERE subject = 'u-lost'`)
+	if _, err := a.Refresh(ctx, tokens.Refresh, nil); err != ErrSessionExpired {
+		t.Fatalf("old token past the grace: %v", err)
+	}
+}

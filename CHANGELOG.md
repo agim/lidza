@@ -10,6 +10,14 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
+## Unreleased
+
+- `auth.RefreshGrace` is 15 minutes (was 1): a renewal whose reply never
+  reached the browser (a navigation or a closed tab cancelled it) left
+  the browser holding the replaced refresh token, which stopped working
+  a minute later; it now works for the access token's default lifetime.
+  A stolen replaced token is usable for as long, for access tokens only.
+
 ## v0.1.103 (2026-10-10)
 
 - Signed-in sessions no longer end early:

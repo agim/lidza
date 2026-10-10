@@ -2504,7 +2504,8 @@ image that runs as a non-root user on port 3000 (the binary, `db/`,
 `LIDZA_MASTER_KEY` in the environment, and the local storage provider
 needs a volume at `STORAGE_DIR`, so production uses `s3`); `deploy/{{.Name}}.service`
 runs the binary under systemd from `/opt/{{.Name}}` (install commands in
-its header). Migrations ship as files in `db/`: apply them with `lidza db
+its header); `lidza gen deploy --k8s` adds Kubernetes manifests
+(`deploy/k8s/{{.Name}}.yaml`: Deployment, Service, PodDisruptionBudget). Migrations ship as files in `db/`: apply them with `lidza db
 migrate --production` in the deploy step or `DB_MIGRATE=true` at start.
 They run while the app serves: statements wait at most
 `DB_MIGRATE_LOCK_TIMEOUT` (5s) for a lock and retry; `lidza gen` builds

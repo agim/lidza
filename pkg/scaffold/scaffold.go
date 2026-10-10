@@ -626,6 +626,16 @@ func renderBytes(src string, data templateData) ([]byte, error) {
 // release and Go version), not the CLI's, so the image builds what the
 // app was tested with.
 func DeployFiles(dir string, cfg *config.Config, force bool) (written, kept []string, err error) {
+	return deployFiles(dir, cfg, force, false)
+}
+
+// K8sFiles is DeployFiles plus deploy/k8s/<name>.yaml: a Deployment,
+// Service and PodDisruptionBudget from the same contract.
+func K8sFiles(dir string, cfg *config.Config, force bool) (written, kept []string, err error) {
+	return deployFiles(dir, cfg, force, true)
+}
+
+func deployFiles(dir string, cfg *config.Config, force, k8s bool) (written, kept []string, err error) {
 	data := dataFor(cfg, "")
 	app := AppVersions(dir)
 	if app.Lidza != "" && app.LocalPath == "" {
@@ -635,11 +645,16 @@ func DeployFiles(dir string, cfg *config.Config, force bool) (written, kept []st
 		data.Go = app.Go
 	}
 	data.Rust = hasRustPacks(dir)
-	for _, f := range []struct{ src, dst string }{
+	files := []struct{ src, dst string }{
 		{"Dockerfile.tmpl", "Dockerfile"},
 		{"dockerignore.tmpl", ".dockerignore"},
 		{"systemd.service.tmpl", filepath.Join("deploy", cfg.Name+".service")},
-	} {
+	}
+	if k8s || fileExists(filepath.Join(dir, "deploy", "k8s", cfg.Name+".yaml")) {
+		// Once written, the manifests are kept current like the rest.
+		files = append(files, struct{ src, dst string }{"k8s.yaml.tmpl", filepath.Join("deploy", "k8s", cfg.Name+".yaml")})
+	}
+	for _, f := range files {
 		want, err := renderBytes(f.src, data)
 		if err != nil {
 			return nil, nil, err
@@ -869,4 +884,9 @@ func envHasKey(data, key string) bool {
 		}
 	}
 	return false
+}
+
+func fileExists(p string) bool {
+	_, err := os.Stat(p)
+	return err == nil
 }

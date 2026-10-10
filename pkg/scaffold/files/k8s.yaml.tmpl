@@ -1,0 +1,119 @@
+# Kubernetes manifests for {{.Name}} (lidza gen deploy --k8s), from the same
+# contract as the Dockerfile: one stateless binary on port 3000, /healthz and
+# /readyz, configuration from the environment, nothing written but /tmp.
+#
+# 1. Build and push the image (docker build -t REGISTRY/{{.Name}}:TAG .) and
+#    set it below.
+# 2. Create the secret with what deploy/production.env holds plus the secrets:
+#      kubectl create secret generic {{.Name}} --from-env-file=deploy/production.env \
+#        --from-literal=DATABASE_URL=... --from-literal=LIDZA_MASTER_KEY=...
+#    (AUTH_SECRET and provider keys too, unless they are in the sealed
+#    credentials the image carries.)
+# 3. kubectl apply -f deploy/k8s/{{.Name}}.yaml, then route an Ingress or a
+#    Gateway to the Service; terminate TLS there and keep
+#    LIDZA_TRUSTED_PROXIES naming its addresses.
+#
+# Every replica applies pending migrations at start (DB_MIGRATE): an advisory
+# lock lets one run them while the others wait. lidza db migrate --production
+# from a release step works as well; then remove DB_MIGRATE.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{.Name}}
+  labels:
+    app.kubernetes.io/name: {{.Name}}
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{.Name}}
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{.Name}}
+    spec:
+      # Beyond the binary's own 10 s shutdown, so requests and jobs drain.
+      terminationGracePeriodSeconds: 30
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: {{.Name}}
+          image: REGISTRY/{{.Name}}:TAG
+          ports:
+            - name: http
+              containerPort: 3000
+          envFrom:
+            - secretRef:
+                name: {{.Name}}
+          env:
+            - name: LIDZA_ADDR
+              value: "0.0.0.0:3000"
+            - name: DB_MIGRATE
+              value: "true"
+            # The cluster's ingress reaches the pods from private addresses.
+            - name: LIDZA_TRUSTED_PROXIES
+              value: private
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          startupProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 2
+            failureThreshold: 60
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 10
+          readinessProbe:
+            httpGet: {path: /readyz, port: http}
+            periodSeconds: 5
+            failureThreshold: 2
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        # The only writable path: LIDZA_SSR extracts the renderer here.
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{.Name}}
+  labels:
+    app.kubernetes.io/name: {{.Name}}
+spec:
+  selector:
+    app.kubernetes.io/name: {{.Name}}
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{.Name}}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{.Name}}

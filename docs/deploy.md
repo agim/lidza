@@ -332,6 +332,23 @@ Log records written with a request's context carry `trace_id` and
 bounded queue: an unreachable collector costs dropped spans, not memory
 or latency.
 
+## Kubernetes
+
+`lidza gen deploy --k8s` writes `deploy/k8s/<name>.yaml` from the same
+contract as the Dockerfile: a Deployment (two replicas, the image's
+nonroot user, a read-only root filesystem with all capabilities
+dropped, `/tmp` the only writable path, startup and liveness probes on
+`/healthz`, readiness on `/readyz`, settings from a Secret named after
+the app), a ClusterIP Service on port 80 and a PodDisruptionBudget. Its
+header lists the steps: push the image, create the Secret from
+`deploy/production.env` plus `DATABASE_URL` and `LIDZA_MASTER_KEY`,
+apply, then route an Ingress or Gateway to the Service (TLS ends there;
+`LIDZA_TRUSTED_PROXIES=private` is set so the client address comes
+through). Every replica runs `DB_MIGRATE=true`; the advisory lock lets
+one apply the migrations. Once the file exists, `lidza gen deploy` and
+`lidza update` keep it current like the Dockerfile. There is no Helm
+chart.
+
 ## Scaling out
 
 The app is stateless: sessions are rows, jobs are rows, the cache and

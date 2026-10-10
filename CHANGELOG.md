@@ -12,6 +12,13 @@ these rules cover.
 
 ## Unreleased
 
+- `lidza gen deploy --k8s` writes `deploy/k8s/<name>.yaml`: a
+  Deployment (nonroot, read-only root filesystem, capabilities dropped,
+  `/healthz` and `/readyz` probes, settings from a Secret, migrations at
+  start under the advisory lock), a Service and a PodDisruptionBudget.
+  Verified on a local kind cluster: both replicas ready, one applied
+  the migration, a request through the Service enqueued a job that ran.
+  Once written, `lidza gen deploy` keeps the file current.
 - `docs/configuration.md`: every setting an app reads (121), with its
   default and description, generated from the source: the packs'
   `Config` env tags, the `Env` constants and the settings read by name

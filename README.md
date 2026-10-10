@@ -56,7 +56,7 @@ rollback, and team roles.
 
 ## Status
 
-Phases 1 to 8 done: `lidza new` with the `react`, `svelte`, `astro` and
+Phases 1 to 9 done: `lidza new` with the `react`, `svelte`, `astro` and
 `htmx` templates, `lidza dev` (Go and frontend hot reload behind one port),
 `lidza build` (one binary), the agent interface (`lidza check --json`,
 `lidza context`, `lidza mcp`, `/llms.txt`), `schema.lidza` with generated
@@ -69,7 +69,9 @@ limiting, circuit breaker, `lidza check` rules for unbounded state,
 sign-in with email and password or with Google, GitHub, Microsoft and
 any OIDC issuer), `jobs`, `cache`, `i18n` packs and `lidza test`; frontend depth: prerendered routes,
 accessibility in `lidza check`, `useLive`, client-side validators; teams and invitations, full-text search,
-outbound webhooks and Stripe billing. Every
+outbound webhooks and Stripe billing; production readiness: fuzzed
+parsers, migrations without downtime, OpenTelemetry tracing, a
+configuration reference, Kubernetes manifests. Every
 roadmap phase is delivered. See
 `docs/roadmap.md`;
 `docs/features.md` maps every capability to a phase.

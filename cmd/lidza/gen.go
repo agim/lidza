@@ -343,13 +343,15 @@ func generateClient(dir string, cfg *config.Config, out io.Writer) error {
 }
 
 // runGenDeploy is `lidza gen deploy`: the Dockerfile, .dockerignore and
-// deploy/<name>.service from the current templates. A file the app
+// deploy/<name>.service from the current templates, and with --k8s the
+// Kubernetes manifests (kept current afterwards once they exist). A file the app
 // changed is kept and named; --force replaces it, discarding the app's
 // changes (git diff shows them).
 func runGenDeploy(_ context.Context, args []string) error {
 	fs := flags("gen deploy")
 	dir := fs.String("dir", ".", "project directory")
 	force := fs.Bool("force", false, "replace the deployment files the app changed")
+	k8s := fs.Bool("k8s", false, "also write deploy/k8s/<name>.yaml: a Kubernetes Deployment, Service and PodDisruptionBudget")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -360,7 +362,11 @@ func runGenDeploy(_ context.Context, args []string) error {
 	if cfg == nil {
 		return errors.New("gen deploy needs a lidza.json project")
 	}
-	written, kept, err := scaffold.DeployFiles(abs, cfg, *force)
+	files := scaffold.DeployFiles
+	if *k8s {
+		files = scaffold.K8sFiles
+	}
+	written, kept, err := files(abs, cfg, *force)
 	if err != nil {
 		return err
 	}

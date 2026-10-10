@@ -10,7 +10,7 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
-## Unreleased
+## v0.1.101 (2026-10-10)
 
 - Migrations without downtime:
   - Each statement waits at most `DB_MIGRATE_LOCK_TIMEOUT` (default 5s)

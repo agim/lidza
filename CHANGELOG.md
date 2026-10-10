@@ -10,7 +10,7 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
-## Unreleased
+## v0.1.102 (2026-10-10)
 
 - `lidza gen deploy --k8s` writes `deploy/k8s/<name>.yaml`: a
   Deployment (nonroot, read-only root filesystem, capabilities dropped,

@@ -35,6 +35,10 @@ these rules cover.
   CI. `golang.org/x/net` and `golang.org/x/crypto` move to releases
   without the advisories it reported (none was reachable from Līdza's
   code).
+- Code scanning with CodeQL (Go, TypeScript, workflows; security-extended
+  queries) per release tag, weekly and on demand, in place of the
+  Fortify starter workflow, which needed an account the project does
+  not have.
 - `docs/security.md`: trust boundaries, what each pack defends against,
   what is left to the app, and how it is checked.
 - Roadmap Phase 9, production readiness: security hardening (this

@@ -124,5 +124,6 @@ auditors and app authors.
   forwarding headers, storage keys, webhook targets, timezones and mail
   addresses. Their seeds run with `go test`; `scripts/fuzz.sh` runs
   each one for a while.
-- `govulncheck` before every release and in CI.
+- `govulncheck` before every release and in CI; CodeQL code scanning per
+  release tag and weekly.
 - No external audit has been done yet.

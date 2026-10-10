@@ -15,6 +15,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/agim/lidza/pkg/tracing"
+	"go.opentelemetry.io/otel/attribute"
 	htmltemplate "html/template"
 	"log/slog"
 	"net/http"
@@ -295,7 +297,7 @@ func (m *Mail) Send(ctx context.Context, msg Message) (string, error) {
 		return "", err
 	}
 	if m.pool == nil {
-		return st.provider.Send(ctx, msg)
+		return st.send(ctx, msg)
 	}
 	if m.queue != nil {
 		tx, err := m.pool.Begin(ctx)
@@ -422,7 +424,7 @@ func (m *Mail) Deliver(ctx context.Context, id string) error {
 	if err := validateMessage(&msg, st.cfg); err != nil {
 		return m.failed(ctx, id, err)
 	}
-	providerID, sendErr := st.provider.Send(ctx, msg)
+	providerID, sendErr := st.send(ctx, msg)
 	if sendErr != nil {
 		return m.failed(ctx, id, sendErr)
 	}
@@ -658,6 +660,18 @@ func Languages(ctx context.Context) []string {
 	}
 	h, _ := ctx.Value(acceptKey{}).(string)
 	return ParseAcceptLanguage(h)
+}
+
+// send hands msg to the provider inside a span when tracing is on; the
+// span names the provider, never the addresses or the content.
+func (st *snapshot) send(ctx context.Context, msg Message) (string, error) {
+	if !tracing.On() {
+		return st.provider.Send(ctx, msg)
+	}
+	ctx, span := tracing.Span(ctx, "mail.send", attribute.String("mail.provider", st.cfg.Provider))
+	id, err := st.provider.Send(ctx, msg)
+	tracing.End(span, err)
+	return id, err
 }
 
 // ParseAcceptLanguage returns the languages of an Accept-Language

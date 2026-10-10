@@ -76,7 +76,7 @@ func Recover(log *slog.Logger) Middleware {
 						panic(p)
 					}
 					stack := string(debug.Stack())
-					log.Error("panic", "error", fmt.Sprint(p), "method", r.Method, "path", r.URL.Path,
+					log.ErrorContext(r.Context(), "panic", "error", fmt.Sprint(p), "method", r.Method, "path", r.URL.Path,
 						"request_id", GetRequestID(r.Context()), "stack", stack)
 					report.Capture(r.Context(), report.Error{
 						Source: "server", Message: "panic: " + fmt.Sprint(p), Stack: stack, Route: r.Pattern,
@@ -103,7 +103,7 @@ func Logger(log *slog.Logger) Middleware {
 			start := time.Now()
 			sw := &statusWriter{ResponseWriter: w}
 			next.ServeHTTP(sw, r)
-			log.Info("request", "method", logMethod(r.Method), "path", logPath(r.URL.Path), "status", sw.status(),
+			log.InfoContext(r.Context(), "request", "method", logMethod(r.Method), "path", logPath(r.URL.Path), "status", sw.status(),
 				"bytes", sw.bytes, "ms", time.Since(start).Milliseconds(), "request_id", GetRequestID(r.Context()),
 				"client_ip", ClientIP(r))
 		})

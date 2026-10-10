@@ -10,6 +10,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/agim/lidza/pkg/tracing"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"log/slog"
 	"math"
 	"sync"
@@ -87,6 +90,9 @@ type Queue struct {
 	active      atomic.Int64
 	released    atomic.Int64
 	warnedTable atomic.Bool
+	// traceColumn caches whether the job table has trace_parent (an app
+	// that has not migrated yet lacks it): 0 unknown, 1 yes, 2 no.
+	traceColumn atomic.Int32
 }
 
 // Pack returns the pack for packs.go; it needs the db pack started first.
@@ -374,10 +380,20 @@ func (q *Queue) enqueue(ctx context.Context, db rowQuerier, kind string, payload
 	if err != nil {
 		return "", err
 	}
+	// With tracing on, the job carries the enqueuing span, so its run
+	// continues the request's trace.
+	cols, vals, args := "kind, payload, run_at, max_attempts", "$1, $2, $3, $4", []any{kind, data, e.runAt, e.maxAttempts}
+	if tracing.On() {
+		var span trace.Span
+		ctx, span = tracing.Span(ctx, "enqueue "+kind, attribute.String("job.kind", kind))
+		defer span.End()
+		if tp := tracing.Traceparent(ctx); tp != "" && q.hasTraceColumn(ctx) {
+			cols, vals, args = cols+", trace_parent", vals+", $5", append(args, tp)
+		}
+	}
 	var id string
 	if e.unique == nil {
-		err = db.QueryRow(ctx, `INSERT INTO job (kind, payload, run_at, max_attempts) VALUES ($1, $2, $3, $4) RETURNING id`,
-			kind, data, e.runAt, e.maxAttempts).Scan(&id)
+		err = db.QueryRow(ctx, `INSERT INTO job (`+cols+`) VALUES (`+vals+`) RETURNING id`, args...).Scan(&id)
 		if err != nil {
 			return "", fmt.Errorf("jobs: enqueue: %w", err)
 		}
@@ -390,8 +406,9 @@ func (q *Queue) enqueue(ctx context.Context, db rowQuerier, kind string, payload
 	// commits or rolls back, then stores nothing or the job. The live job
 	// it met may finish before the lookup; then try again.
 	for range 3 {
-		err = db.QueryRow(ctx, `INSERT INTO job (kind, payload, run_at, max_attempts, unique_key) VALUES ($1, $2, $3, $4, $5)
-			ON CONFLICT (kind, unique_key) DO NOTHING RETURNING id`, kind, data, e.runAt, e.maxAttempts, *e.unique).Scan(&id)
+		key := fmt.Sprintf("$%d", len(args)+1)
+		err = db.QueryRow(ctx, `INSERT INTO job (`+cols+`, unique_key) VALUES (`+vals+`, `+key+`)
+			ON CONFLICT (kind, unique_key) DO NOTHING RETURNING id`, append(args, *e.unique)...).Scan(&id)
 		if err == nil {
 			return id, nil
 		}
@@ -410,6 +427,29 @@ func (q *Queue) enqueue(ctx context.Context, db rowQuerier, kind string, payload
 		}
 	}
 	return "", fmt.Errorf("jobs: enqueue %s: key %q kept changing hands", kind, *e.unique)
+}
+
+// hasTraceColumn reports whether the job table has trace_parent; it asks
+// once, and again after a "no" only on a later process.
+func (q *Queue) hasTraceColumn(ctx context.Context) bool {
+	switch q.traceColumn.Load() {
+	case 1:
+		return true
+	case 2:
+		return false
+	}
+	var ok bool
+	err := q.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM information_schema.columns
+		WHERE table_schema = current_schema() AND table_name = 'job' AND column_name = 'trace_parent')`).Scan(&ok)
+	if err != nil {
+		return false
+	}
+	if ok {
+		q.traceColumn.Store(1)
+	} else {
+		q.traceColumn.Store(2)
+	}
+	return ok
 }
 
 // Recent returns the newest jobs by run time, every state. The admin
@@ -523,7 +563,7 @@ func (q *Queue) runOne(ctx context.Context) (bool, error) {
 		fmt.Sprintf("%d seconds", int(q.cfg.Stale.Seconds()))); err != nil {
 		return false, err
 	}
-	j, lockedAt, keyed, err := q.claim(dctx, free, limited, caps)
+	j, lockedAt, keyed, traceParent, err := q.claim(dctx, free, limited, caps)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
 	}
@@ -544,7 +584,15 @@ func (q *Queue) runOne(ctx context.Context) (bool, error) {
 	if q.services != nil {
 		jctx = lidza.WithServices(jctx, q.services)
 	}
+	var span trace.Span
+	if tracing.On() {
+		jctx, span = tracing.Tracer().Start(tracing.WithTraceparent(jctx, traceParent), "job "+j.Kind,
+			trace.WithSpanKind(trace.SpanKindConsumer), trace.WithAttributes(attribute.String("job.kind", j.Kind), attribute.Int("job.attempt", j.Attempts)))
+	}
 	runErr := safeRun(jctx, handlers[j.Kind], j.Payload)
+	if span != nil {
+		tracing.End(span, runErr)
+	}
 	// The outcome is written only while this node's claim holds: a job
 	// taken over after JOBS_STALE, or released at shutdown, belongs to
 	// its next run.
@@ -581,7 +629,7 @@ func (q *Queue) runOne(ctx context.Context) (bool, error) {
 // through the row's JSON, so a job table without the column (an app that
 // has not migrated yet) still claims.
 const claimSet = `SET state = 'running', locked_at = clock_timestamp(), attempts = attempts + 1`
-const claimReturning = ` RETURNING id, kind, payload, attempts, max_attempts, locked_at, (to_jsonb(job) ->> 'unique_key') IS NOT NULL`
+const claimReturning = ` RETURNING id, kind, payload, attempts, max_attempts, locked_at, (to_jsonb(job) ->> 'unique_key') IS NOT NULL, coalesce(to_jsonb(job) ->> 'trace_parent', '')`
 
 // claim takes the oldest due job of the free kinds or of the limited
 // kinds under their cap, marks it running and returns it (pgx.ErrNoRows
@@ -592,9 +640,9 @@ const claimReturning = ` RETURNING id, kind, payload, attempts, max_attempts, lo
 // in a new statement, which sees every claim committed before the lock
 // was granted, and claims. The lock is held to the commit, so no two
 // claims of a kind see the same count on any node.
-func (q *Queue) claim(ctx context.Context, free, limited []string, caps []int32) (j Job, lockedAt time.Time, keyed bool, err error) {
+func (q *Queue) claim(ctx context.Context, free, limited []string, caps []int32) (j Job, lockedAt time.Time, keyed bool, traceParent string, err error) {
 	scan := func(row pgx.Row) error {
-		return row.Scan(&j.ID, &j.Kind, &j.Payload, &j.Attempts, &j.MaxAttempts, &lockedAt, &keyed)
+		return row.Scan(&j.ID, &j.Kind, &j.Payload, &j.Attempts, &j.MaxAttempts, &lockedAt, &keyed, &traceParent)
 	}
 	if len(limited) == 0 {
 		err = scan(q.pool.QueryRow(ctx, `UPDATE job `+claimSet+`

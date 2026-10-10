@@ -13,6 +13,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/agim/lidza/pkg/tracing"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"log/slog"
 	"slices"
 	"strings"
@@ -456,6 +459,11 @@ func (l *LLM) Embeddings(ctx context.Context, req EmbedRequest) (EmbedResponse, 
 	model := or(req.Model, cfg.EmbedModel)
 	start := time.Now()
 	var out embedResult
+	if tracing.On() {
+		var span trace.Span
+		ctx, span = tracing.Span(ctx, "llm.embed "+model, attribute.String("gen_ai.provider.name", p.Name()), attribute.Int("llm.texts", len(req.Texts)))
+		defer span.End()
+	}
 	err = l.retry(ctx, cfg, func(ctx context.Context) error {
 		var err error
 		if e, ok := p.(embedder); ok {
@@ -582,6 +590,14 @@ func (l *LLM) call(ctx context.Context, req Request, stream func(string) error) 
 	}
 	start := time.Now()
 	var res Response
+	if tracing.On() {
+		var span trace.Span
+		ctx, span = tracing.Span(ctx, "llm.chat "+req.Model, attribute.String("gen_ai.provider.name", cfg.Provider), attribute.String("gen_ai.request.model", req.Model))
+		defer func() {
+			span.SetAttributes(attribute.Int("gen_ai.usage.input_tokens", res.Usage.Input), attribute.Int("gen_ai.usage.output_tokens", res.Usage.Output))
+			span.End()
+		}()
+	}
 	started := false
 	var wrapped func(string) error
 	if stream != nil {

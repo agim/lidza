@@ -2404,7 +2404,13 @@ twice (`UPDATE post SET slug = ... WHERE slug IS NULL`).
 The binary serves `/healthz` (liveness), `/readyz` (503 while a pack's
 check fails: database ping, bus) and `/metrics` (Prometheus: requests by
 route pattern, durations, pool and connection gauges). In dev,
-`/debug/pprof/` too. `lidza check` has rules of its own: package-level
+`/debug/pprof/` too. Tracing is OpenTelemetry, on when
+`OTEL_EXPORTER_OTLP_ENDPOINT` is set: spans for requests, queries (by
+sqlc name), jobs (continuing the enqueuing request's trace), mail, LLM
+calls and `lidza.HTTPClient(ctx)` calls; log with `slog.InfoContext(ctx,
+...)` (or `lidza.Log(ctx)`) so a line carries `trace_id`. Give a slow
+piece of your own a span with `tracing.Span(ctx, "name")` and
+`tracing.End(span, err)` (`github.com/agim/lidza/pkg/tracing`). `lidza check` has rules of its own: package-level
 maps or slices (L001) and goroutines started in handlers (L002), because
 state belongs in Postgres or Valkey and background work in a bounded
 worker or the jobs pack; hand-written `fetch` of `/api` (L003); imports

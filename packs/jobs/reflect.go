@@ -19,7 +19,8 @@ const JobTable = `CREATE TABLE IF NOT EXISTS job (
   finished_at timestamptz,
   last_error text,
   created_at timestamptz NOT NULL DEFAULT now(),
-  unique_key text
+  unique_key text,
+  trace_parent text
 );
 CREATE INDEX IF NOT EXISTS job_state_run_at_idx ON job (state, run_at);
 CREATE UNIQUE INDEX IF NOT EXISTS job_kind_unique_key_key ON job (kind, unique_key);`

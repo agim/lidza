@@ -2,6 +2,7 @@ package lidza
 
 import (
 	"context"
+	"github.com/agim/lidza/pkg/tracing"
 	"net/http"
 	"time"
 )
@@ -40,6 +41,10 @@ func HTTPClient(ctx context.Context) *http.Client {
 		if rt, ok := s.Lookup(typeOf[http.RoundTripper]()); ok {
 			client.Transport = rt.(http.RoundTripper)
 		}
+	}
+	if tracing.On() {
+		// A client span per call, with traceparent sent along.
+		client.Transport = tracing.Transport(client.Transport)
 	}
 	return client
 }

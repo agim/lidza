@@ -300,6 +300,38 @@ request id and `client_ip`; never the query, headers, cookies or body. Route `/h
 orchestrator, and scrape `/metrics`. Keep `/mcp` and `/debug/pprof/`
 (dev only) off the public side.
 
+### Tracing
+
+OpenTelemetry tracing is off until an OTLP/HTTP endpoint is set:
+
+```sh
+OTEL_EXPORTER_OTLP_ENDPOINT=http://collector:4318   # Jaeger, Tempo, Honeycomb, any OTLP receiver
+OTEL_SERVICE_NAME=shop                               # default: the app's name
+OTEL_TRACES_SAMPLER=parentbased_traceidratio         # optional; with OTEL_TRACES_SAMPLER_ARG=0.1
+```
+
+The standard `OTEL_*` variables apply (`OTEL_EXPORTER_OTLP_HEADERS` for
+a hosted backend's key, `OTEL_RESOURCE_ATTRIBUTES`, `OTEL_SDK_DISABLED`).
+Recorded, each with the caller's span as parent:
+
+- a server span per request, named by its route pattern (`GET
+  /api/v1/posts/{id}`), continuing a `traceparent` the client sent;
+- a span per database query under a request or a job, named by its sqlc
+  query name (`GetPost`), without the SQL or its arguments;
+- `enqueue <kind>` and a `job <kind>` span per run: the job row keeps
+  the trace (`trace_parent`, added to the jobs pack's table by `lidza
+  gen`), so the run continues the request's trace on whichever node
+  takes it;
+- `mail.send` with the provider, `llm.chat` and `llm.embed` with the
+  model and token counts, never addresses, prompts or replies;
+- a client span per call through `lidza.HTTPClient(ctx)`, which sends
+  `traceparent` along.
+
+Log records written with a request's context carry `trace_id` and
+`span_id`, so a log line leads to its trace. Spans are batched with a
+bounded queue: an unreachable collector costs dropped spans, not memory
+or latency.
+
 ## Scaling out
 
 The app is stateless: sessions are rows, jobs are rows, the cache and

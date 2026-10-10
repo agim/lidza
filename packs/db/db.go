@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/agim/lidza/pkg/tracing"
 	"os"
 	"strings"
 	"time"
@@ -201,6 +202,9 @@ func Open(ctx context.Context, cfg Config) (*pgxpool.Pool, error) {
 	}
 	if cfg.ConnectTimeout > 0 {
 		pc.ConnConfig.ConnectTimeout = cfg.ConnectTimeout
+	}
+	if tracing.On() && pc.ConnConfig.Tracer == nil {
+		pc.ConnConfig.Tracer = queryTracer{}
 	}
 	pool, err := pgxpool.NewWithConfig(ctx, pc)
 	if err != nil {

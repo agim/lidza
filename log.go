@@ -2,6 +2,8 @@ package lidza
 
 import (
 	"context"
+	"github.com/agim/lidza/pkg/tracing"
+	"go.opentelemetry.io/otel/trace"
 	"log/slog"
 	"os"
 	"strings"
@@ -40,10 +42,13 @@ func NewLogger() *slog.Logger {
 		}
 	}
 	opts := &slog.HandlerOptions{Level: level}
+	var h slog.Handler = slog.NewTextHandler(os.Stderr, opts)
 	if format == "json" {
-		return slog.New(slog.NewJSONHandler(os.Stderr, opts))
+		h = slog.NewJSONHandler(os.Stderr, opts)
 	}
-	return slog.New(slog.NewTextHandler(os.Stderr, opts))
+	// A record logged with a request's context carries its trace_id and
+	// span_id when tracing is on.
+	return slog.New(tracing.LogHandler(h))
 }
 
 // Log returns the app logger for a request, with the request id attached
@@ -58,6 +63,9 @@ func Log(ctx context.Context) *slog.Logger {
 	}
 	if id := middleware.GetRequestID(ctx); id != "" {
 		log = log.With("request_id", id)
+	}
+	if sc := trace.SpanContextFromContext(ctx); sc.IsValid() {
+		log = log.With("trace_id", sc.TraceID().String(), "span_id", sc.SpanID().String())
 	}
 	return log
 }

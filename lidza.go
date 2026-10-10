@@ -26,6 +26,7 @@ import (
 	"github.com/agim/lidza/pkg/middleware"
 	"github.com/agim/lidza/pkg/router"
 	"github.com/agim/lidza/pkg/telemetry"
+	"github.com/agim/lidza/pkg/tracing"
 )
 
 // DefaultTimeout is the per-request deadline for API handlers.
@@ -182,6 +183,8 @@ type Booted struct {
 	app      App
 	started  []Pack
 	sidecar  *devserver.Sidecar
+	// stopTracing flushes the spans still queued (tracing.Start).
+	stopTracing func(context.Context) error
 }
 
 // Boot starts the packs in order, runs OnStart and builds the handler.
@@ -191,13 +194,18 @@ func Boot(ctx context.Context, app App) (*Booted, error) {
 		app.Logger = NewLogger()
 		slog.SetDefault(app.Logger)
 	}
+	stopTracing, err := tracing.Start(ctx, app.Name)
+	if err != nil {
+		return nil, fmt.Errorf("tracing (OTEL_EXPORTER_OTLP_ENDPOINT): %w", err)
+	}
 	services := NewServices()
 	Provide(services, app.Logger)
 	h, sidecar, err := handler(app, services)
 	if err != nil {
+		stopTracing(ctx)
 		return nil, err
 	}
-	b := &Booted{Handler: h, Services: services, app: app, sidecar: sidecar}
+	b := &Booted{Handler: h, Services: services, app: app, sidecar: sidecar, stopTracing: stopTracing}
 	if sidecar != nil {
 		if err := sidecar.Start(ctx); err != nil {
 			return nil, fmt.Errorf("ssr sidecar: %w", err)
@@ -254,6 +262,12 @@ func (b *Booted) Close(ctx context.Context) error {
 			first = err
 		}
 		b.sidecar = nil
+	}
+	if b.stopTracing != nil {
+		if err := b.stopTracing(ctx); err != nil {
+			log.Warn("tracing: flushing spans", "error", err)
+		}
+		b.stopTracing = nil
 	}
 	return first
 }
@@ -351,6 +365,7 @@ func handler(app App, services *Services) (http.Handler, *devserver.Sidecar, err
 		middleware.Recover(log),
 		middleware.StreamTimeout(timeout, streamTimeout),
 		tel.Middleware(),
+		tracing.Route(),
 	}
 	for _, p := range app.Packs {
 		if m, ok := p.(Middlewarer); ok {
@@ -428,7 +443,10 @@ func handler(app App, services *Services) (http.Handler, *devserver.Sidecar, err
 		return nil, nil, err
 	}
 	mw := append([]middleware.Middleware{
-		// First: every route, the admin pages and mounts included, sees
+		// The request's span, when tracing is on: everything below runs
+		// inside it.
+		tracing.Middleware(),
+		// Then: every route, the admin pages and mounts included, sees
 		// the client resolved through the trusted proxies.
 		middleware.ClientIdentity(proxies),
 		middleware.SecureHeaders(middleware.SecureHeadersOptions{CSP: csp(app.CSP), PermissionsPolicy: app.PermissionsPolicy, HSTS: policy != "", HSTSPolicy: policy}),

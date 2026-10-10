@@ -10,6 +10,22 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
+## Unreleased
+
+- OpenTelemetry tracing (`pkg/tracing`), off until
+  `OTEL_EXPORTER_OTLP_ENDPOINT` is set (OTLP/HTTP; the standard `OTEL_*`
+  variables apply). Spans for requests (named by route pattern,
+  continuing an incoming `traceparent`), database queries under a
+  request or job (by sqlc name, without SQL or arguments), job enqueue
+  and run (the run continues the enqueuing trace through the job row's
+  new `trace_parent` column; a table without it keeps working), mail
+  sends, LLM chat and embedding calls (model and token counts), and
+  calls through `lidza.HTTPClient(ctx)`, which send `traceparent` on.
+  Logs written with a request's context, and `lidza.Log(ctx)`, carry
+  `trace_id` and `span_id`. `tracing.Span`/`End` for an app's own spans,
+  `tracing.Install` for tests. Apps with the jobs pack: `lidza gen`
+  adds the column (a nullable add, safe while serving).
+
 ## v0.1.101 (2026-10-10)
 
 - Migrations without downtime:

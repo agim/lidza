@@ -9,7 +9,7 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
-## Unreleased
+## v0.1.96 (2026-10-10)
 
 - The Dockerfile installs sqlc (#47): an app with a `sqlc.yaml` gets
   the supported release (`pack.SQLCVersion`, v1.31.1, the one

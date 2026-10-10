@@ -43,11 +43,17 @@ RUN mkdir -p db mail admin config && lidza build --out /out/{{.Name}}
 # image has no room for: use STORAGE_PROVIDER=s3, or mount a volume there.
 FROM gcr.io/distroless/static-debian12:nonroot
 WORKDIR /app
-COPY --from=build /out/{{.Name}} /app/{{.Name}}
-COPY --from=build /src/db /app/db
-COPY --from=build /src/mail /app/mail
-COPY --from=build /src/admin /app/admin
-COPY --from=build /src/config /app/config
+# Owned by the image's nonroot user (65532), which runs the binary: a
+# checkout made under umask 0077 leaves these files 0600 and directories
+# 0700, which root-owned copies would make unreadable to it. The modes
+# stay as they are; nothing is opened to other users. Run the container
+# with a read-only root filesystem (docker run --read-only) to keep the
+# app from changing them.
+COPY --from=build --chown=65532:65532 /out/{{.Name}} /app/{{.Name}}
+COPY --from=build --chown=65532:65532 /src/db /app/db
+COPY --from=build --chown=65532:65532 /src/mail /app/mail
+COPY --from=build --chown=65532:65532 /src/admin /app/admin
+COPY --from=build --chown=65532:65532 /src/config /app/config
 # Plain HTTP on 3000 behind a proxy, or, with LIDZA_TLS_DOMAINS in the
 # environment (deploy/production.env), HTTPS on 443 and the redirect on 80.
 ENV LIDZA_ADDR=0.0.0.0:3000

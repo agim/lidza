@@ -235,27 +235,49 @@ const RefreshGrace = time.Minute
 func (a *Auth) Refresh(ctx context.Context, refreshToken string, claims map[string]any) (Tokens, error) {
 	var sessionID, subject string
 	var current, remember bool
+	hash := hashToken(refreshToken)
 	err := a.pool.QueryRow(ctx, `SELECT id, subject, refresh_hash = $1, `+rememberCol+` FROM auth_session s
 		WHERE (refresh_hash = $1 OR (prev_refresh_hash = $1 AND rotated_at > now() - $2::interval))
 		AND revoked_at IS NULL AND expires_at > now()`,
-		hashToken(refreshToken), fmt.Sprintf("%d seconds", int(RefreshGrace.Seconds()))).Scan(&sessionID, &subject, &current, &remember)
+		hash, fmt.Sprintf("%d seconds", int(RefreshGrace.Seconds()))).Scan(&sessionID, &subject, &current, &remember)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Tokens{}, ErrSessionExpired
+	}
 	if err != nil {
-		return Tokens{}, router.Errorf(http.StatusUnauthorized, "session expired")
+		// The database, not the session: the caller keeps the cookies.
+		return Tokens{}, fmt.Errorf("auth: refresh: %w", err)
 	}
 	if err := a.seen(ctx, subject, claims); err != nil {
 		return Tokens{}, err
 	}
 	refresh := ""
 	if current {
+		// Only the request whose token is still current rotates: the
+		// others a page sent in parallel find it changed and get an
+		// access token only, within the grace. Unconditionally, each
+		// rotated in turn and the browser kept whichever reply came last,
+		// a token dead a minute later. The session slides: it ends
+		// RefreshTTL after its last use, not after the sign-in.
 		refresh = randomID()
-		if _, err := a.pool.Exec(ctx, `UPDATE auth_session SET prev_refresh_hash = refresh_hash, rotated_at = now(), refresh_hash = $1 WHERE id = $2`, hashToken(refresh), sessionID); err != nil {
-			return Tokens{}, err
+		tag, err := a.pool.Exec(ctx, `UPDATE auth_session SET prev_refresh_hash = refresh_hash, rotated_at = now(), refresh_hash = $1,
+			expires_at = GREATEST(expires_at, now() + $4::interval) WHERE id = $2 AND refresh_hash = $3`,
+			hashToken(refresh), sessionID, hash, fmt.Sprintf("%d seconds", int(a.cfg.RefreshTTL.Seconds())))
+		if err != nil {
+			return Tokens{}, fmt.Errorf("auth: refresh: %w", err)
+		}
+		if tag.RowsAffected() == 0 {
+			refresh = ""
 		}
 	}
 	t, err := a.tokens(subject, claims, sessionID, refresh)
 	t.SessionOnly = !remember
 	return t, err
 }
+
+// ErrSessionExpired is Refresh's 401: the refresh token names no open
+// session (ended, expired, or replaced longer than RefreshGrace ago).
+// Any other error is the database's, and the session may be fine.
+var ErrSessionExpired = router.Errorf(http.StatusUnauthorized, "session expired")
 
 // Logout revokes the session of the current user.
 func (a *Auth) Logout(ctx context.Context, sessionID string) error {
@@ -452,7 +474,11 @@ func (a *Auth) Cookies(t Tokens) []*http.Cookie {
 		{Name: AccessCookie, Value: t.Access, Path: "/", HttpOnly: true, Secure: a.cfg.CookieSecure, SameSite: http.SameSiteLaxMode, MaxAge: maxAge},
 	}
 	if t.Refresh != "" {
-		cookies = append(cookies, &http.Cookie{Name: RefreshCookie, Value: t.Refresh, Path: "/", HttpOnly: true, Secure: a.cfg.CookieSecure, SameSite: http.SameSiteStrictMode, MaxAge: maxAge})
+		// Lax like the access cookie: Strict withheld it on a link from
+		// another site, and a page rendered on the server then saw an
+		// expired access token and no way to renew it. It grants nothing
+		// the access cookie does not, and neither rides a cross-site POST.
+		cookies = append(cookies, &http.Cookie{Name: RefreshCookie, Value: t.Refresh, Path: "/", HttpOnly: true, Secure: a.cfg.CookieSecure, SameSite: http.SameSiteLaxMode, MaxAge: maxAge})
 	}
 	return cookies
 }
@@ -573,14 +599,23 @@ func guard(required bool) func(http.Handler) http.Handler {
 			// refresh cookie is valid gets a new one on this request: the
 			// session slides without a refresh route. Bearer clients refresh
 			// explicitly.
+			refreshSent := false
 			if u == nil && (token == "" || fromCookie) {
 				if c, cerr := r.Cookie(RefreshCookie); cerr == nil && c.Value != "" {
-					if renewed, rerr := a.Refresh(r.Context(), c.Value, a.expiredClaims(token)); rerr == nil {
+					refreshSent = true
+					renewed, rerr := a.Refresh(r.Context(), c.Value, a.expiredClaims(token))
+					switch {
+					case rerr == nil:
 						a.SetCookies(w, renewed)
 						token, fromCookie = renewed.Access, true
 						u, err = a.Verify(token)
-					} else {
+					case errors.Is(rerr, ErrSessionExpired):
 						staleCookie = true
+					default:
+						// The database failed, not the session: keep the
+						// cookies, so the next request signs in again.
+						unavailable(w, r, rerr)
+						return
 					}
 				}
 			}
@@ -597,14 +632,26 @@ func guard(required bool) func(http.Handler) http.Handler {
 				return
 			}
 			if err != nil {
-				if fromCookie {
+				if fromCookie && (refreshSent || !errors.Is(err, jwt.ErrTokenExpired)) {
 					signedOut(http.StatusUnauthorized, "invalid or expired token")
+					return
+				}
+				// An expired access cookie without the refresh cookie is no
+				// proof the session ended (a request that did not carry it):
+				// signed out for this request, the cookies left alone.
+				if fromCookie && !required {
+					next.ServeHTTP(w, r)
 					return
 				}
 				router.Error(w, http.StatusUnauthorized, "invalid or expired token")
 				return
 			}
-			if u.SessionID != "" && !a.sessionActive(r.Context(), u.SessionID) {
+			active, aerr := a.sessionActive(r.Context(), u.SessionID)
+			if aerr != nil {
+				unavailable(w, r, aerr)
+				return
+			}
+			if u.SessionID != "" && !active {
 				if fromCookie {
 					signedOut(http.StatusUnauthorized, "session ended")
 					return
@@ -647,11 +694,26 @@ func (a *Auth) expiredClaims(token string) map[string]any {
 // still open: one primary-key lookup per authenticated request, so a
 // logout, a password reset or RevokeAll takes effect at once instead of
 // when the access token expires.
-func (a *Auth) sessionActive(ctx context.Context, sessionID string) bool {
+// A database error is returned, not taken for an ended session.
+func (a *Auth) sessionActive(ctx context.Context, sessionID string) (bool, error) {
+	if sessionID == "" {
+		return true, nil
+	}
 	var one int
 	err := a.pool.QueryRow(ctx, `SELECT 1 FROM auth_session s WHERE s.id = $1 AND s.revoked_at IS NULL AND s.expires_at > now()
 		AND NOT EXISTS (SELECT 1 FROM auth_account a WHERE a.subject = s.subject AND a.disabled_at IS NOT NULL)`, sessionID).Scan(&one)
-	return err == nil
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
+// unavailable answers a request whose session could not be checked
+// because the database failed: 503, cookies untouched.
+func unavailable(w http.ResponseWriter, r *http.Request, err error) {
+	lidza.Log(r.Context()).Error("auth: session check failed", "error", err)
+	w.Header().Set("Retry-After", "1")
+	router.Error(w, http.StatusServiceUnavailable, "try again")
 }
 
 // sameOrigin reports whether the browser declared the request same-origin

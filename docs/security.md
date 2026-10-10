@@ -41,10 +41,14 @@ auditors and app authors.
   computation.
 - Access tokens: HS256 JWTs under `AUTH_SECRET` (32 bytes at least),
   issuer and expiry required, any other algorithm refused. Refresh
-  tokens are stored hashed and rotate; logout and `RevokeAll` end the
-  session server-side.
-- Cookies: HttpOnly, `Secure` in production, the access cookie
-  SameSite=Lax and the refresh cookie Strict. A cookie-authenticated
+  tokens are stored hashed and rotate, one rotation per expiry however
+  many requests race (the others renew within a minute's grace);
+  sessions slide, ending `AUTH_REFRESH_TTL` after their last use; logout
+  and `RevokeAll` end the session server-side. A database error is a
+  503, never a sign-out.
+- Cookies: HttpOnly, `Secure` in production, both SameSite=Lax (neither
+  rides a cross-site POST; the refresh cookie grants nothing the access
+  cookie does not). A cookie-authenticated
   state-changing request must be `application/json` or same-origin by
   `Sec-Fetch-Site` (CSRF).
 - Sign-in with a provider: authorization code with PKCE, a sealed state

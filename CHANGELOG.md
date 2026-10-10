@@ -10,6 +10,29 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
+## Unreleased
+
+- Signed-in sessions no longer end early:
+  - Parallel requests after the access token expired (a page loading
+    several things at once) each rotated the session: in a test 7 of 8
+    did, and the browser kept whichever reply came last, a refresh token
+    dead a minute later. Rotation is now conditional: one request
+    rotates, the others renew their access token within the grace.
+  - A database error while renewing or checking the session (a pool
+    timeout, a restart) counted as an ended session and cleared the
+    cookies: everyone signed in was signed out. It is now a 503 with the
+    cookies kept.
+  - Sessions slide as documented: renewing moves the session's end to
+    `AUTH_REFRESH_TTL` after now; before, it ended that long after the
+    sign-in however active the user was.
+  - The refresh cookie is `SameSite=Lax` like the access cookie (it was
+    Strict): a link from another site to a page rendered on the server
+    arrived without it, the expired access token could not be renewed,
+    and the session's cookies were cleared. An expired access cookie
+    without the refresh cookie now leaves the cookies alone.
+  - `auth.ErrSessionExpired` is `Refresh`'s 401; other errors are the
+    database's.
+
 ## v0.1.102 (2026-10-10)
 
 - `lidza gen deploy --k8s` writes `deploy/k8s/<name>.yaml`: a

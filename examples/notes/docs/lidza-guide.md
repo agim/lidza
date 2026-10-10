@@ -2034,7 +2034,9 @@ Official Go packs, configured from `.env` (see `.env.example` after
   transactions (recipe "Add sign-in"). Sessions slide: when
   a browser's access token has expired, `Require` and `Optional` renew
   it from the refresh cookie on that request and set both cookies again,
-  so a tab stays signed in for `AUTH_REFRESH_TTL` without a refresh
+  so a tab stays signed in for `AUTH_REFRESH_TTL` after its last use
+  (requests racing on an expired token rotate the session once; a
+  database error is a 503 that keeps the cookies) without a refresh
   route or client code; a bearer client refreshes through a route of the
   app that calls `auth.From(ctx).Refresh`. Without "remember me":
   `auth.From(ctx).LoginWith(ctx, userID, claims,

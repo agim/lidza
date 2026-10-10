@@ -389,7 +389,7 @@ func TestAccounts(t *testing.T) {
 	if ac, _ := a.AccountOf(ctx, "u2"); !ac.Disabled() || ac.Sessions != 0 {
 		t.Fatalf("disabled: %+v", ac)
 	}
-	if u, _ := a.Verify(t2.Access); u == nil || a.sessionActive(ctx, u.SessionID) {
+	if u, _ := a.Verify(t2.Access); u == nil || func() bool { ok, _ := a.sessionActive(ctx, u.SessionID); return ok }() {
 		t.Fatal("session still active after disable")
 	}
 	if _, err := a.Login(ctx, "u2", nil); !errors.Is(err, ErrDisabled) {

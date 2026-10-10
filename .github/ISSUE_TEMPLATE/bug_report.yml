@@ -1,0 +1,30 @@
+name: Bug report
+description: Something in Līdza does not work as documented.
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: "`lidza version`, and the Līdza version in the app's go.mod if different."
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: The command or request, what you expected, what happened instead (with the error or `lidza check --json` output).
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How to reproduce
+      description: Steps from `lidza new`, or a small app. Leave out secrets and private data.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Go, Node and Postgres versions (`lidza doctor` prints them).

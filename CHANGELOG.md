@@ -12,6 +12,19 @@ these rules cover.
 
 ## Unreleased
 
+- `docs/configuration.md`: every setting an app reads (121), with its
+  default and description, generated from the source: the packs'
+  `Config` env tags, the `Env` constants and the settings read by name
+  (`go generate ./pkg/configref`; the test fails while it is stale or a
+  setting read by name is undocumented).
+- `CONTRIBUTING.md` (what is accepted, set-up, the checks, conventions,
+  the license of contributions) and issue templates for bugs and
+  feature requests, with the private vulnerability report linked.
+- Recipe "Sell a feature to teams": workspaces, billing per workspace
+  and an LLM call behind the plan check, with the framework's own
+  end-to-end test of it (`packs/billing/teamflow_test.go`: invite,
+  402 before paying, a signed Stripe event, 200 for members, 402 for
+  another workspace, 403 for a stranger).
 - OpenTelemetry tracing (`pkg/tracing`), off until
   `OTEL_EXPORTER_OTLP_ENDPOINT` is set (OTLP/HTTP; the standard `OTEL_*`
   variables apply). Spans for requests (named by route pattern,

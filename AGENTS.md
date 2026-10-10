@@ -22,6 +22,10 @@ Gotchas:
 - A new CLI command or official Go pack gets its MCP tools, or a reason
   it has none, in `pkg/mcpserver/coverage.go`; `TestCoverage` fails
   otherwise. Inspection tools are read-only and never return secrets.
+- A new or changed setting (an `env` tag, an `Env` constant, a name
+  read with `os.Getenv`) is documented where it is declared; `go
+  generate ./pkg/configref` rewrites `docs/configuration.md` and the
+  package test fails until then.
 - Build the CLI with `go install ./cmd/lidza` or `go build -o <scratch path>`, never a bare `go build ./cmd/lidza` at the root: it writes a 36 MB `lidza` there (ignored now; `scripts/release.sh` refuses tracked files over 2 MB).
 - Git: pull before committing, push straight to `master`; no branches or PRs unless asked.
 - Releases: `install.sh` installs the tag it pins, not master. A new command

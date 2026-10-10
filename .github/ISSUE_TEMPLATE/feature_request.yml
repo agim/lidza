@@ -1,0 +1,21 @@
+name: Feature request
+description: A capability every Līdza app would use.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What an app cannot do today, or does with too much code. Describe it in general terms (posts, products, tags), not one app's domain.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: The API, command or setting you have in mind, if any.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you do now
+      description: The workaround, and why it falls short.

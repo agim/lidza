@@ -30,8 +30,10 @@ type Config struct {
 	URL string `env:"DATABASE_URL" required:"true"`
 	// MaxConns bounds the pool; size it below Postgres max_connections
 	// divided by the number of app nodes.
-	MaxConns       int           `env:"DB_MAX_CONNS" default:"10"`
-	MinConns       int           `env:"DB_MIN_CONNS" default:"0"`
+	MaxConns int `env:"DB_MAX_CONNS" default:"10"`
+	// MinConns keeps that many connections open while idle.
+	MinConns int `env:"DB_MIN_CONNS" default:"0"`
+	// ConnectTimeout bounds opening a connection and the first ping.
 	ConnectTimeout time.Duration `env:"DB_CONNECT_TIMEOUT" default:"5s"`
 	// Migrate applies pending migrations from db/migrations at start.
 	Migrate bool `env:"DB_MIGRATE"`

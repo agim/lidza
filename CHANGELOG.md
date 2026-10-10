@@ -10,7 +10,7 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
-## Unreleased
+## v0.1.104 (2026-10-10)
 
 - `auth.RefreshGrace` is 15 minutes (was 1): a renewal whose reply never
   reached the browser (a navigation or a closed tab cancelled it) left

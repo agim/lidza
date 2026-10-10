@@ -166,6 +166,7 @@ func runBuild(ctx context.Context, args []string) error {
 	fs := flags("build")
 	dir := fs.String("dir", ".", "project directory")
 	out := fs.String("out", "", "output binary (default bin/<name>)")
+	pregen := fs.Bool("pregenerated", false, "build with the committed db/queries/gen instead of running sqlc (LIDZA_PREGENERATED=1 does the same)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -178,6 +179,14 @@ func runBuild(ctx context.Context, args []string) error {
 	}
 	if !filepath.IsAbs(*out) {
 		*out = filepath.Join(cfg.Dir, *out)
+	}
+	if *pregen {
+		os.Setenv(envPregenerated, "1")
+	}
+	// Before any compiling: a build without the tools its generation
+	// needs would ship stale or missing code.
+	if err := buildPrerequisites(cfg.Dir); err != nil {
+		return err
 	}
 
 	if err := generateAll(cfg.Dir, cfg, os.Stdout); err != nil {

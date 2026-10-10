@@ -189,6 +189,8 @@ type templateData struct {
 	// Rust says the app has Rust packs: the Dockerfile installs the
 	// toolchain.
 	Rust bool
+	// SQLCInstall installs the supported sqlc in the Dockerfile's builder.
+	SQLCInstall string
 	// DecisionsLine tells the agent about the decision log.
 	DecisionsLine string
 	// BriefLine tells the agent about the brief and the team notes.
@@ -224,6 +226,7 @@ func dataFor(cfg *config.Config, lidzaDir string) templateData {
 		DevURL:            cfg.Frontend.URL,
 		Go:                goMinor(),
 		LidzaVersion:      moduleVersion(),
+		SQLCInstall:       pack.SQLCInstall,
 		DecisionsLine:     DecisionsLine,
 		BriefLine:         BriefLine,
 		LayoutLine:        LayoutLine,

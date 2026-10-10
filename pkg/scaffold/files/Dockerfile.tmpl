@@ -19,7 +19,12 @@ ENV PATH=/root/.cargo/bin:$PATH
 {{- end}}
 RUN go install {{.Module}}/cmd/lidza@{{.LidzaVersion}}
 WORKDIR /src
-COPY go.mod go.sum ./
+# sqlc generates db/queries/gen when the app has a sqlc.yaml (the db
+# pack): the release the framework supports, built with cgo for its
+# Postgres parser. An app without one skips it. A builder that must not
+# run sqlc builds with the committed code: lidza build --pregenerated.
+COPY go.mod go.sum sqlc.yaml* ./
+RUN if [ -f sqlc.yaml ]; then {{.SQLCInstall}}; fi
 RUN go mod download
 {{- if .Dist}}
 COPY package.json package-lock.json* ./

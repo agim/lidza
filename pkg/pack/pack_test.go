@@ -246,3 +246,15 @@ func TestAddWithExistingDeclaration(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// install.sh installs the sqlc release the framework names everywhere
+// else (the Dockerfile, lidza build's message).
+func TestSQLCVersionMatchesInstaller(t *testing.T) {
+	data, err := os.ReadFile("../../install.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "\nSQLC_VERSION="+SQLCVersion+"\n") {
+		t.Fatalf("install.sh does not pin SQLC_VERSION=%s", SQLCVersion)
+	}
+}

@@ -37,6 +37,17 @@ drop it, or copy the checkout into the build context, before building an
 image. Rust packs need the Rust toolchain in the builder: uncomment the
 two lines.
 
+An app with a `sqlc.yaml` (the db pack) generates its queries with sqlc
+during the build. The Dockerfile installs the release the framework
+supports (`v1.31.1`, built with cgo for its Postgres parser) only when
+the file is there, in a layer the app's sources do not invalidate. A
+`lidza build` without sqlc stops before compiling anything and says how
+to install it. A builder that deliberately builds with the committed
+`db/queries/gen` (kept current by `lidza verify`) runs `lidza build
+--pregenerated` (or sets `LIDZA_PREGENERATED=1`); it fails when that
+code is missing. An app made before this has the old Dockerfile: `lidza
+gen deploy` refreshes it.
+
 `lidza build` also stores a Brotli (`.br`) and a gzip (`.gz`) copy of
 every compressible file of the frontend build (HTML, CSS, JavaScript,
 JSON, SVG, text) of 1 KB or more, embedded with the rest. The binary

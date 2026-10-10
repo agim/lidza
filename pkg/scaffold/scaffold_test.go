@@ -11,6 +11,7 @@ import (
 
 	"github.com/agim/lidza/pkg/config"
 	"github.com/agim/lidza/pkg/diag"
+	"github.com/agim/lidza/pkg/pack"
 	"github.com/agim/lidza/pkg/recipes"
 )
 
@@ -523,5 +524,29 @@ func TestNewAppsKeepRootClean(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// The builder installs the supported sqlc, with cgo, when the app has a
+// sqlc.yaml, before lidza build and in a layer the app's sources do not
+// invalidate; an app without one skips it (issue #47).
+func TestDockerfileProvisionsSQLC(t *testing.T) {
+	dir := t.TempDir()
+	cfg := config.Default("withdb", "react")
+	os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module example.com/withdb\n\ngo 1.27\n\nrequire github.com/agim/lidza v0.1.90\n"), 0o644)
+	if _, _, err := DeployFiles(dir, &cfg, false); err != nil {
+		t.Fatal(err)
+	}
+	df, _ := os.ReadFile(filepath.Join(dir, "Dockerfile"))
+	src := string(df)
+	copyLine := "COPY go.mod go.sum sqlc.yaml* ./"
+	install := "RUN if [ -f sqlc.yaml ]; then CGO_ENABLED=1 go install github.com/sqlc-dev/sqlc/cmd/sqlc@" + pack.SQLCVersion + "; fi"
+	for _, want := range []string{copyLine, install} {
+		if !strings.Contains(src, want) {
+			t.Fatalf("Dockerfile lacks %q:\n%s", want, src)
+		}
+	}
+	if !(strings.Index(src, copyLine) < strings.Index(src, install) && strings.Index(src, install) < strings.Index(src, "COPY . .") && strings.Index(src, "COPY . .") < strings.Index(src, "&& lidza build")) {
+		t.Fatalf("sqlc is not installed before the sources and lidza build:\n%s", src)
 	}
 }

@@ -254,8 +254,15 @@ func generateQueries(ctx context.Context, dir string, out io.Writer) error {
 			printRenames(out, renames)
 		}
 	}
+	if pregenerated() {
+		if !hasGeneratedQueries(dir) {
+			return fmt.Errorf("%s=1: no db/queries/gen to build with; generate it with sqlc (%s) and commit it", envPregenerated, pack.SQLCInstall)
+		}
+		fmt.Fprintln(out, "[lidza] db/queries/gen: using the committed code (pregenerated); lidza verify keeps it current")
+		return nil
+	}
 	if _, err := exec.LookPath("sqlc"); err != nil {
-		fmt.Fprintln(out, "[lidza] sqlc is not installed; db/queries not generated (run install.sh)")
+		fmt.Fprintf(out, "[lidza] sqlc is not installed; db/queries not generated: %s\n", pack.SQLCInstall)
 		return nil
 	}
 	cmd := exec.CommandContext(ctx, "sqlc", "generate")
@@ -391,6 +398,54 @@ func mergeLockDriver(base, ours, theirs string) error {
 	}
 	if len(conflicts) > 0 {
 		return fmt.Errorf("%s: both branches changed %s: merge schema.lidza, then lidza gen (it writes the migration and the lock), then git add %s", schema.LockFile, strings.Join(conflicts, ", "), schema.LockFile)
+	}
+	return nil
+}
+
+// envPregenerated, set to 1 (lidza build --pregenerated sets it), builds
+// with the committed db/queries/gen instead of running sqlc: for a
+// builder without sqlc whose generated code CI verified (lidza verify).
+const envPregenerated = "LIDZA_PREGENERATED"
+
+func pregenerated() bool { return os.Getenv(envPregenerated) == "1" }
+
+// needsQueries reports whether the app generates its queries with sqlc:
+// a sqlc.yaml and the schema's SQL.
+func needsQueries(dir string) bool {
+	_, errC := os.Stat(filepath.Join(dir, pack.SQLCFile))
+	_, errS := os.Stat(filepath.Join(dir, schema.SQLFile))
+	return errC == nil && errS == nil
+}
+
+// hasGeneratedQueries reports whether db/queries/gen holds Go code.
+func hasGeneratedQueries(dir string) bool {
+	entries, err := os.ReadDir(filepath.Join(dir, "db", "queries", "gen"))
+	if err != nil {
+		return false
+	}
+	for _, e := range entries {
+		if strings.HasSuffix(e.Name(), ".go") {
+			return true
+		}
+	}
+	return false
+}
+
+// buildPrerequisites stops a production build before any compiling when
+// the app generates queries and sqlc is missing: building on would ship
+// stale or missing query code.
+func buildPrerequisites(dir string) error {
+	if !needsQueries(dir) {
+		return nil
+	}
+	if pregenerated() {
+		if !hasGeneratedQueries(dir) {
+			return fmt.Errorf("build --pregenerated: no db/queries/gen to build with; generate it with sqlc (%s) and commit it", pack.SQLCInstall)
+		}
+		return nil
+	}
+	if _, err := exec.LookPath("sqlc"); err != nil {
+		return fmt.Errorf("build: this app generates its queries with sqlc (%s) and sqlc is not installed: %s (the Dockerfile from lidza gen deploy does it); or build with the committed db/queries/gen: lidza build --pregenerated", pack.SQLCFile, pack.SQLCInstall)
 	}
 	return nil
 }

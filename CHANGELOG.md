@@ -9,6 +9,19 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- The Dockerfile installs sqlc (#47): an app with a `sqlc.yaml` gets
+  the supported release (`pack.SQLCVersion`, v1.31.1, the one
+  `install.sh` pins) built with cgo in the builder, before its sources
+  are copied; an app without one skips it. `lidza build` stops before
+  any frontend, Rust or Go compiling when the app generates queries and
+  sqlc is missing, naming the install command; `lidza build
+  --pregenerated` (or `LIDZA_PREGENERATED=1`) builds with the committed
+  `db/queries/gen` and fails when it is missing. `lidza gen` and
+  `lidza dev` still only warn. Existing apps: `lidza gen deploy`
+  refreshes the Dockerfile.
+
 ## v0.1.95 (2026-10-10)
 
 - MCP: tools for the commands and packs that had none. `lidza_gen_llms`,

@@ -575,6 +575,14 @@ func appendEnvExample(root string, lines []string) error {
 // SQLCFile is the sqlc configuration `lidza pack add db` writes.
 const SQLCFile = "sqlc.yaml"
 
+// SQLCVersion is the sqlc release the framework supports: install.sh
+// installs it, the generated Dockerfile builds it, lidza build names it.
+const SQLCVersion = "v1.31.1"
+
+// SQLCInstall is the command that installs SQLCVersion. sqlc's Postgres
+// parser is C, so it builds with cgo.
+const SQLCInstall = "CGO_ENABLED=1 go install github.com/sqlc-dev/sqlc/cmd/sqlc@" + SQLCVersion
+
 // QueriesDir holds the SQL files sqlc compiles.
 const QueriesDir = "db/queries"
 

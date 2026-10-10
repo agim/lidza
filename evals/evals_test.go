@@ -823,6 +823,29 @@ func TestDuplicateMigrationNumber(t *testing.T) {
 	expect(t, check(t), expectation{code: "L019", severity: "error", file: "db/migrations/0001_create_note.up.sql", message: "0001_create_label"})
 }
 
+// A new migration that rewrites or locks a table with rows, or breaks the
+// running version, is a warning naming the safe steps (L021); a new table
+// and an index on it are not.
+func TestUnsafeMigration(t *testing.T) {
+	if _, err := os.Stat(filepath.Join(app, "db")); err == nil {
+		t.Fatal("the eval app has a db directory; this case assumes none")
+	}
+	t.Cleanup(func() { os.RemoveAll(filepath.Join(app, "db")) })
+	edit(t, map[string]string{
+		"db/migrations/20261010000000_alter_note.up.sql": "CREATE TABLE label (id uuid PRIMARY KEY);\n" +
+			"CREATE INDEX label_id_idx ON label (id);\n" +
+			"ALTER TABLE note ALTER COLUMN title TYPE varchar(200);\n",
+		"db/migrations/20261010000000_alter_note.down.sql": "DROP TABLE label;\n",
+	})
+	r := check(t)
+	expect(t, r, expectation{code: "L021", severity: "warning", file: "db/migrations/20261010000000_alter_note.up.sql", message: "Expand and contract"})
+	for _, d := range r.Diagnostics {
+		if d.Code == "L021" && d.Line != 3 {
+			t.Errorf("unexpected L021: %+v", d)
+		}
+	}
+}
+
 // dropDatabases drops databases an earlier run left, on the server
 // DATABASE_URL names (the local socket by default).
 func dropDatabases(t *testing.T, names ...string) {

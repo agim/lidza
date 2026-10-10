@@ -71,6 +71,19 @@ func Generate(root string, s *Schema, cargoDir, tsFile string) (*Result, error) 
 			if err := write(filepath.Join(MigrationsDir, m.Name+".down.sql"), down); err != nil {
 				return nil, err
 			}
+			if len(m.After) > 0 {
+				// Up may be empty (only an index changed); it is still
+				// written, so the pair keeps its order.
+				after := NextStamp(filepath.Join(root, MigrationsDir), Clock()) + strings.TrimPrefix(m.Name, m.Name[:strings.IndexByte(m.Name, '_')]) + "_concurrently"
+				up, down := m.AfterFiles(after)
+				if err := write(filepath.Join(MigrationsDir, after+".up.sql"), up); err != nil {
+					return nil, err
+				}
+				if err := write(filepath.Join(MigrationsDir, after+".down.sql"), down); err != nil {
+					return nil, err
+				}
+				res.Migration += ", " + after
+			}
 			if err := SaveLock(root, s); err != nil {
 				return nil, err
 			}

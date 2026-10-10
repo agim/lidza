@@ -556,7 +556,7 @@ func migrate(ctx context.Context, dir, mode string, allowLoss bool) (int, string
 	if allowLoss {
 		hold = nil
 	}
-	applied, held, err := db.MigrateUntil(ctx, pool, os.DirFS(filepath.Join(dir, cfg.MigrationsDir)), hold)
+	applied, held, err := db.MigrateUntil(ctx, pool, os.DirFS(filepath.Join(dir, cfg.MigrationsDir)), hold, db.LockTimeout(cfg.MigrateLockTimeout))
 	if err != nil {
 		return 0, "", err
 	}

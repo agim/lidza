@@ -171,6 +171,37 @@ transaction each under a lock, so the second node finds nothing to do.
 Prefer the deploy step when a migration is marked `-- review` (it can
 lose data or fail on existing rows).
 
+### Migrations without downtime
+
+While a migration runs, the app keeps serving, and until the rollout
+ends the previous version runs too. Līdza keeps both working:
+
+- Every statement waits at most `DB_MIGRATE_LOCK_TIMEOUT` (default 5s)
+  for a table lock, so a migration queued behind a long query never
+  stalls the queries queued behind it. One that times out is retried
+  three times (1s, 2s, 4s apart), then the migration stops with the
+  reason and nothing of it applied.
+- On a table that already exists, `lidza gen` writes what would scan it
+  under a lock as a second migration, `<stamp>_..._concurrently`, that
+  starts with `-- lidza:no-transaction` and runs statement by
+  statement: indexes are built `CREATE INDEX CONCURRENTLY`, foreign keys
+  and checks added `NOT VALID` in the first migration and validated in
+  the second, `NOT NULL` set through a validated check, and a unique
+  field built as a concurrent index that then becomes the constraint.
+  Each statement there can run again, so a failed index build is simply
+  retried by the next `lidza db migrate`.
+- What cannot be made safe automatically is a warning in `lidza check`
+  (L021) on migrations not yet committed, with the steps: a rename, a
+  type change, a dropped column or table, a volatile default
+  (`gen_random_uuid()`) on a new column. These need expand and contract
+  across releases: add the new column, write both and backfill in
+  batches, switch reads, and drop the old one in a later release, after
+  every node runs code that no longer reads it.
+
+A hand-written migration follows the same rules; `-- lidza:ignore L021`
+on the line before a statement accepts it (a small table, a
+maintenance window).
+
 ## Process
 
 - **systemd**: `deploy/<name>.service` runs the binary from

@@ -19,13 +19,24 @@ const (
 	LockFile      = "db/schema.lock.json"
 )
 
-// Migration is one generated pair of up and down scripts.
+// Migration is one generated pair of up and down scripts, and the
+// statements that must run outside a transaction after it.
 type Migration struct {
 	// Name is "0003_add_post"; the files are Name+".up.sql" and ".down.sql".
 	Name string
 	Up   []string
 	Down []string
+	// After holds what would lock a table that already has rows if it
+	// ran in Up: indexes built CONCURRENTLY, constraints validated. It
+	// becomes a second migration, marked NoTransaction, named after Up's
+	// with the next stamp; AfterDown reverts it.
+	After     []string
+	AfterDown []string
 }
+
+// NoTransaction is the first line of a migration the db pack runs
+// statement by statement outside a transaction (db.NoTransaction).
+const NoTransaction = "-- lidza:no-transaction"
 
 // Diff computes the migration from prev (nil for a fresh project) to cur.
 // It returns nil when nothing changed. Handled: enums created, dropped or
@@ -114,8 +125,17 @@ func Diff(prev, cur *Schema, seq int) *Migration {
 					m.Up = append(m.Up, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s DROP NOT NULL;", table, col))
 					m.Down = append([]string{fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET NOT NULL;", table, col)}, m.Down...)
 				} else {
-					m.Up = append(m.Up, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET NOT NULL; -- review: fails on existing NULLs", table, col))
-					m.Down = append([]string{fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s DROP NOT NULL;", table, col)}, m.Down...)
+					// A NOT VALID check first, validated outside the
+					// transaction without blocking writes; SET NOT NULL then
+					// uses it instead of scanning the table under its lock.
+					check := qid(constraintName(t.Table, snake(f.Name), "not_null"))
+					m.Up = append(m.Up, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s IS NOT NULL) NOT VALID;", table, check, col))
+					m.Down = append([]string{fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT IF EXISTS %s;", table, check)}, m.Down...)
+					m.After = append(m.After,
+						fmt.Sprintf("ALTER TABLE %s VALIDATE CONSTRAINT %s; -- review: fails on existing NULLs", table, check),
+						fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET NOT NULL;", table, col),
+						fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT IF EXISTS %s;", table, check))
+					m.AfterDown = append([]string{fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s DROP NOT NULL;", table, col)}, m.AfterDown...)
 				}
 				changed = true
 			}
@@ -128,8 +148,11 @@ func Diff(prev, cur *Schema, seq int) *Migration {
 					down = append(down, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s FOREIGN KEY (%s) %s;", table, name, col, oref))
 				}
 				if nref != "" {
-					up = append(up, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s FOREIGN KEY (%s) %s;", table, name, col, nref))
+					// NOT VALID skips checking existing rows under the lock;
+					// they are validated after, without blocking writes.
+					up = append(up, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s FOREIGN KEY (%s) %s NOT VALID;", table, name, col, nref))
 					down = append([]string{fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s;", table, name)}, down...)
+					m.After = append(m.After, fmt.Sprintf("ALTER TABLE %s VALIDATE CONSTRAINT %s;", table, name))
 				}
 				m.Up = append(m.Up, up...)
 				m.Down = append(down, m.Down...)
@@ -157,8 +180,13 @@ func Diff(prev, cur *Schema, seq int) *Migration {
 			if of.Unique != f.Unique && !f.ID {
 				name := t.Table + "_" + snake(f.Name) + "_key"
 				if f.Unique {
-					m.Up = append(m.Up, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s UNIQUE (%s);", table, name, col))
-					m.Down = append([]string{fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s;", table, name)}, m.Down...)
+					// The index is built CONCURRENTLY, then becomes the
+					// constraint without another scan.
+					m.After = append(m.After,
+						fmt.Sprintf("DROP INDEX CONCURRENTLY IF EXISTS %s;", name),
+						fmt.Sprintf("CREATE UNIQUE INDEX CONCURRENTLY %s ON %s (%s);", name, table, col),
+						fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s UNIQUE USING INDEX %s;", table, name, name))
+					m.AfterDown = append([]string{fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT IF EXISTS %s;", table, name)}, m.AfterDown...)
 				} else {
 					m.Up = append(m.Up, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s;", table, name))
 					m.Down = append([]string{fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s UNIQUE (%s);", table, name, col)}, m.Down...)
@@ -179,17 +207,22 @@ func Diff(prev, cur *Schema, seq int) *Migration {
 		}
 		oldIdx := indexSet(old)
 		newIdx := indexSet(t)
+		// Indexes on a table that has rows are built and dropped
+		// CONCURRENTLY, outside the transaction: writes go on meanwhile.
+		// Each is dropped first if it exists, so a build that failed
+		// (leaving an invalid index) is simply run again.
+		dropIdx := func(name string) string { return fmt.Sprintf("DROP INDEX CONCURRENTLY IF EXISTS %s;", name) }
 		for _, name := range sortedFields(newIdx) {
 			if _, ok := oldIdx[name]; !ok {
-				m.Up = append(m.Up, newIdx[name])
-				m.Down = append([]string{fmt.Sprintf("DROP INDEX %s;", name)}, m.Down...)
+				m.After = append(m.After, dropIdx(name), concurrently(newIdx[name]))
+				m.AfterDown = append([]string{dropIdx(name)}, m.AfterDown...)
 				changed = true
 			}
 		}
 		for _, name := range sortedFields(oldIdx) {
 			if _, ok := newIdx[name]; !ok {
-				m.Up = append(m.Up, fmt.Sprintf("DROP INDEX %s;", name))
-				m.Down = append([]string{oldIdx[name]}, m.Down...)
+				m.After = append(m.After, dropIdx(name))
+				m.AfterDown = append([]string{dropIdx(name), concurrently(oldIdx[name])}, m.AfterDown...)
 				changed = true
 			}
 		}
@@ -197,8 +230,8 @@ func Diff(prev, cur *Schema, seq int) *Migration {
 		// search): drop and create it again.
 		for _, name := range sortedFields(newIdx) {
 			if before, ok := oldIdx[name]; ok && before != newIdx[name] {
-				m.Up = append(m.Up, fmt.Sprintf("DROP INDEX %s;", name), newIdx[name])
-				m.Down = append([]string{fmt.Sprintf("DROP INDEX %s;", name), before}, m.Down...)
+				m.After = append(m.After, dropIdx(name), concurrently(newIdx[name]))
+				m.AfterDown = append([]string{dropIdx(name), concurrently(before)}, m.AfterDown...)
 				changed = true
 			}
 		}
@@ -222,7 +255,7 @@ func Diff(prev, cur *Schema, seq int) *Migration {
 		}
 	}
 
-	if len(m.Up) == 0 {
+	if len(m.Up) == 0 && len(m.After) == 0 {
 		return nil
 	}
 	name := "init"
@@ -272,6 +305,33 @@ func indexSet(m *Model) map[string]string {
 func (m *Migration) Files() (up, down string) {
 	return "-- " + m.Name + " (generated by lidza gen from " + FileName + ")\n" + strings.Join(m.Up, "\n") + "\n",
 		"-- " + m.Name + " (generated by lidza gen from " + FileName + ")\n" + strings.Join(m.Down, "\n") + "\n"
+}
+
+// AfterFiles renders the After scripts, named name (the migration that
+// follows this one): NoTransaction first, then a statement per line.
+func (m *Migration) AfterFiles(name string) (up, down string) {
+	head := NoTransaction + "\n-- " + name + " (generated by lidza gen from " + FileName + "): runs after " + m.Name + ", outside a transaction\n"
+	return head + strings.Join(m.After, "\n") + "\n", head + strings.Join(m.AfterDown, "\n") + "\n"
+}
+
+// concurrently turns a CREATE [UNIQUE] INDEX into its CONCURRENTLY form.
+func concurrently(stmt string) string {
+	for _, p := range []string{"CREATE UNIQUE INDEX ", "CREATE INDEX "} {
+		if rest, ok := strings.CutPrefix(stmt, p); ok {
+			return p + "CONCURRENTLY " + rest
+		}
+	}
+	return stmt
+}
+
+// constraintName is "<table>_<column>_<suffix>", cut to Postgres' 63
+// bytes.
+func constraintName(table, column, suffix string) string {
+	n := table + "_" + column + "_" + suffix
+	if len(n) > 63 {
+		n = n[:63]
+	}
+	return n
 }
 
 // Clock is the time new migrations are named by; tests set it.

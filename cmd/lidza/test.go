@@ -98,7 +98,7 @@ func prepareTestDB(ctx context.Context, dir string) error {
 		return err
 	}
 	defer pool.Close()
-	applied, err := db.Migrate(ctx, pool, os.DirFS(filepath.Join(dir, cfg.MigrationsDir)))
+	applied, err := db.Migrate(ctx, pool, os.DirFS(filepath.Join(dir, cfg.MigrationsDir)), db.LockTimeout(cfg.MigrateLockTimeout))
 	if err != nil {
 		// Loud: a run that stops here has run no test.
 		return fmt.Errorf("FAILED, no test ran: the test database could not be migrated: %w. A migration from another branch may be in it: lidza test --fresh drops and recreates it", err)

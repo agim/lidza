@@ -97,6 +97,11 @@ import (
 //
 //   - L020 (an error): tests, application code or noise files at an app root.
 //
+//   - L021: a statement in a new migration that locks a table with rows
+//     for a scan or a rewrite, or breaks the version still running
+//     during the deploy (a rename, a type change, a drop); the safe
+//     steps are named (migrationsafety.go).
+//
 // Except for L004, L019 and L020 the findings are warnings: they point at the pattern,
 // the author decides. A comment "lidza:ignore L001" on the line, or the
 // line before, exempts that line from the rule it names.
@@ -151,6 +156,7 @@ func Rules(ctx context.Context, root string) []Diagnostic {
 	out = append(out, openBrief(root)...)
 	out = append(out, ownedQueries(root)...)
 	out = append(out, migrationNumbers(root)...)
+	out = append(out, migrationSafety(root)...)
 	out = append(out, rootLayout(root)...)
 	return out
 }

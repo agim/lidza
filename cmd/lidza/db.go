@@ -76,7 +76,7 @@ func runDB(ctx context.Context, args []string) error {
 
 	switch sub {
 	case "migrate":
-		applied, err := db.Migrate(ctx, pool, migrations)
+		applied, err := db.Migrate(ctx, pool, migrations, db.LockTimeout(cfg.MigrateLockTimeout))
 		if err != nil {
 			return err
 		}
@@ -91,7 +91,7 @@ func runDB(ctx context.Context, args []string) error {
 			devserver.RequestRestart(abs)
 		}
 	case "rollback":
-		reverted, err := db.Rollback(ctx, pool, migrations, *steps)
+		reverted, err := db.Rollback(ctx, pool, migrations, *steps, db.LockTimeout(cfg.MigrateLockTimeout))
 		if err != nil {
 			return err
 		}

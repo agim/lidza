@@ -37,6 +37,11 @@ type Config struct {
 	// MigrationsDir is where the migration files live, relative to the
 	// working directory.
 	MigrationsDir string `env:"DB_MIGRATIONS_DIR" default:"db/migrations"`
+	// MigrateLockTimeout bounds how long each migration statement waits
+	// for a table lock before it gives up and retries, so a migration
+	// queued behind a long query never stalls the queries queued behind
+	// it.
+	MigrateLockTimeout time.Duration `env:"DB_MIGRATE_LOCK_TIMEOUT" default:"5s"`
 }
 
 // DB is the running pack.
@@ -71,7 +76,7 @@ func (d *DB) Start(ctx context.Context, s *lidza.Services) error {
 	}
 	d.Pool = pool
 	if d.cfg.Migrate {
-		applied, err := Migrate(ctx, pool, os.DirFS(d.cfg.MigrationsDir))
+		applied, err := Migrate(ctx, pool, os.DirFS(d.cfg.MigrationsDir), LockTimeout(d.cfg.MigrateLockTimeout))
 		if err != nil {
 			pool.Close()
 			return fmt.Errorf("migrate: %w", err)

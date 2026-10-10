@@ -563,11 +563,15 @@ func TestDiffRef(t *testing.T) {
 	up := strings.Join(m.Up, "\n")
 	for _, want := range []string{
 		"ALTER TABLE task DROP CONSTRAINT task_project_id_fkey;",
-		"ALTER TABLE task ADD CONSTRAINT task_project_id_fkey FOREIGN KEY (project_id) REFERENCES project(id) ON DELETE CASCADE;",
+		"ALTER TABLE task ADD CONSTRAINT task_project_id_fkey FOREIGN KEY (project_id) REFERENCES project(id) ON DELETE CASCADE NOT VALID;",
 	} {
 		if !strings.Contains(up, want) {
 			t.Errorf("up missing %q\n%s", want, up)
 		}
+	}
+	// Existing rows are checked after, without blocking writes.
+	if after := strings.Join(m.After, "\n"); after != "ALTER TABLE task VALIDATE CONSTRAINT task_project_id_fkey;" {
+		t.Errorf("after:\n%s", after)
 	}
 	if down := strings.Join(m.Down, "\n"); !strings.Contains(down, "ADD CONSTRAINT task_project_id_fkey FOREIGN KEY (project_id) REFERENCES project(id);") {
 		t.Errorf("down:\n%s", down)
@@ -739,8 +743,8 @@ func TestSearchIndex(t *testing.T) {
 		t.Fatal(err)
 	}
 	mig := Diff(s, next, 2)
-	up := strings.Join(mig.Up, "\n")
-	if !strings.Contains(up, "DROP INDEX post_search_idx;") || !strings.Contains(up, "coalesce(slug, '')), 'D')") || !strings.Contains(up, "coalesce(body, '')), 'C')") {
+	up := strings.Join(mig.After, "\n")
+	if !strings.Contains(up, "DROP INDEX CONCURRENTLY IF EXISTS post_search_idx;\nCREATE INDEX CONCURRENTLY post_search_idx ON post USING gin") || !strings.Contains(up, "coalesce(slug, '')), 'D')") || !strings.Contains(up, "coalesce(body, '')), 'C')") {
 		t.Fatalf("search index not recreated:\n%s", up)
 	}
 	for _, bad := range []string{

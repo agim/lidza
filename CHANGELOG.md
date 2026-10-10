@@ -10,6 +10,29 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
+## Unreleased
+
+- Migrations without downtime:
+  - Each statement waits at most `DB_MIGRATE_LOCK_TIMEOUT` (default 5s)
+    for a lock and is retried three times after a timeout; the error
+    then says which lock and what to do. `db.Migrate`, `MigrateUntil`
+    and `Rollback` take options (`db.LockTimeout`); existing calls
+    compile unchanged.
+  - A migration starting with `-- lidza:no-transaction`
+    (`db.NoTransaction`) runs statement by statement outside a
+    transaction, as `CREATE INDEX CONCURRENTLY` needs.
+  - `lidza gen` writes changes to existing tables in their non-blocking
+    forms: indexes built and dropped `CONCURRENTLY`, foreign keys and the
+    check behind `NOT NULL` added `NOT VALID` and validated, a unique
+    field as a concurrent index that becomes the constraint. They go in
+    a second migration, `<stamp>_..._concurrently`, after the first.
+    Migrations already generated are not changed.
+  - `lidza check` L021 (a warning) on new, uncommitted migrations: a
+    rename, a type change, a dropped column or table, a volatile default
+    on a new column, and hand-written statements that lock a table with
+    rows; the message names the expand-and-contract steps.
+    `docs/deploy.md` has the details.
+
 ## v0.1.100 (2026-10-10)
 
 - Sign-in and account-connect redirects (`?redirect=`) refuse control

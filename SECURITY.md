@@ -13,6 +13,9 @@ newest release is supported, and older ones are not patched.
 `lidza update` moves the CLI and an app's module to the newest release.
 `CHANGELOG.md` lists what changed in each one.
 
+`docs/security.md` describes what Līdza defends against and what it
+leaves to the app.
+
 ## Reporting a vulnerability
 
 Report privately through GitHub: the repository's **Security** tab,

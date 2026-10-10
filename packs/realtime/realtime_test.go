@@ -286,3 +286,16 @@ func TestDropLeavesEveryTopic(t *testing.T) {
 		t.Fatal("a dropped client subscribed again")
 	}
 }
+
+// TestTopicCap: a connection holds at most MaxTopics topics, each at
+// most maxTopicLen bytes, however often it subscribes.
+func TestTopicCap(t *testing.T) {
+	h := New(Config{MaxTopics: 3}, nil)
+	c := &client{send: make(chan Message, 1), topics: map[string]bool{}}
+	h.subscribe(c, []string{"a", "a", strings.Repeat("x", maxTopicLen+1), "b"})
+	h.subscribe(c, []string{"c", "d", "e"})
+	h.subscribe(c, []string{"f"})
+	if len(c.topics) != 3 || !c.topics["a"] || !c.topics["b"] || !c.topics["c"] || len(h.topics) != 3 {
+		t.Fatalf("topics %v, hub %d", c.topics, len(h.topics))
+	}
+}

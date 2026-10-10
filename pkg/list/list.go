@@ -211,7 +211,9 @@ func Split(headline string) []Part {
 		rest := headline[start+len(HighlightStart):]
 		stop := strings.Index(rest, HighlightStop)
 		if stop < 0 {
-			out = append(out, Part{Text: rest, Hit: true})
+			if rest != "" {
+				out = append(out, Part{Text: rest, Hit: true})
+			}
 			break
 		}
 		if stop > 0 {

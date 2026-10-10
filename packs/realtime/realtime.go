@@ -30,6 +30,9 @@ type Config struct {
 	// BusURL is a Valkey or Redis URL (redis://host:6379). Empty keeps
 	// fan-out inside the node, which is right for one node only.
 	BusURL string `env:"REALTIME_BUS_URL"`
+	// MaxTopics caps the topics one connection holds; further
+	// subscriptions are ignored. Topics longer than 256 bytes are refused.
+	MaxTopics int `env:"REALTIME_MAX_TOPICS" default:"100"`
 	// WriteTimeout bounds each send to a client.
 	WriteTimeout time.Duration `env:"REALTIME_WRITE_TIMEOUT" default:"5s"`
 }
@@ -89,7 +92,13 @@ func (h *Hub) defaults() {
 	if h.cfg.WriteTimeout <= 0 {
 		h.cfg.WriteTimeout = 5 * time.Second
 	}
+	if h.cfg.MaxTopics <= 0 {
+		h.cfg.MaxTopics = 100
+	}
 }
+
+// maxTopicLen bounds a topic name.
+const maxTopicLen = 256
 
 // From returns the hub from a request context.
 func From(ctx context.Context) *Hub { return lidza.Service[*Hub](ctx) }
@@ -238,8 +247,11 @@ func (h *Hub) subscribe(c *client, topics []string) {
 		return
 	}
 	for _, t := range topics {
-		if t == "" {
+		if t == "" || len(t) > maxTopicLen || c.topics[t] {
 			continue
+		}
+		if len(c.topics) >= h.cfg.MaxTopics {
+			return
 		}
 		if h.topics[t] == nil {
 			h.topics[t] = map[*client]struct{}{}
@@ -313,7 +325,10 @@ func (h *Hub) serve(w http.ResponseWriter, r *http.Request, authorize func(*http
 		}
 		var out []string
 		for _, t := range topics {
-			if t != "" && authorize(r, t) {
+			if len(out) == h.cfg.MaxTopics {
+				break
+			}
+			if t != "" && len(t) <= maxTopicLen && authorize(r, t) {
 				out = append(out, t)
 			}
 		}

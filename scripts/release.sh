@@ -11,6 +11,8 @@
 # (.github/workflows/tag.yml), for a place that may push master but not
 # tags, such as an agent's cloud session.
 set -eu
+# govulncheck release run by the vulnerability check below.
+GOVULNCHECK_VERSION=${GOVULNCHECK_VERSION:-v1.8.0}
 ver=${1:-}
 tagger=${RELEASE_TAG:-local}
 case "$tagger" in local|ci) ;; *) echo "RELEASE_TAG is local or ci" >&2; exit 2 ;; esac
@@ -36,6 +38,15 @@ if command -v staticcheck >/dev/null; then
 	staticcheck ./... || { echo "staticcheck failed" >&2; exit 1; }
 else
 	echo "staticcheck not installed: CI will run it (go install honnef.co/go/tools/cmd/staticcheck@latest)" >&2
+fi
+# Known vulnerabilities in code Līdza calls (Go's vulnerability
+# database; a module that has one but whose vulnerable code is never
+# called does not fail it). Offline, it warns and CI runs it.
+if ! out=$(go run golang.org/x/vuln/cmd/govulncheck@$GOVULNCHECK_VERSION ./... 2>&1); then
+	case "$out" in
+	*"affected by"*) echo "$out" >&2; echo "govulncheck failed: upgrade the module it names" >&2; exit 1 ;;
+	*) echo "govulncheck could not run (offline?); CI runs it: $out" | tail -3 >&2 ;;
+	esac
 fi
 today=$(date -u +%Y-%m-%d)
 sed -i.bak "s/^## Unreleased$/## $ver ($today)/" CHANGELOG.md && rm CHANGELOG.md.bak

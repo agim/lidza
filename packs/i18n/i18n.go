@@ -103,7 +103,7 @@ func (i *I18n) NegotiateTimezone(r *http.Request) *time.Location {
 	}
 	candidates = append(candidates, r.Header.Get("X-Timezone"))
 	for _, name := range candidates {
-		if name == "" {
+		if !zoneName(name) {
 			continue
 		}
 		if loc, err := time.LoadLocation(name); err == nil {
@@ -111,6 +111,22 @@ func (i *I18n) NegotiateTimezone(r *http.Request) *time.Location {
 		}
 	}
 	return i.defZone
+}
+
+// zoneName reports whether a client's value can name an IANA zone
+// ("Europe/Berlin", "America/Argentina/Buenos_Aires", "Etc/GMT+5"), so
+// nothing else reaches the zone loader: no paths, no "Local", no
+// unbounded text.
+func zoneName(s string) bool {
+	if s == "" || len(s) > 64 || s == "Local" || strings.Contains(s, "..") || s[0] == '/' {
+		return false
+	}
+	for _, r := range s {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("/_+-", r)) {
+			return false
+		}
+	}
+	return true
 }
 
 type timezoneKey struct{}

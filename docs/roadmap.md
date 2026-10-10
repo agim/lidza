@@ -288,6 +288,36 @@ search ranks and highlights; a delivery fails, retries and succeeds to
 a test receiver; a test-mode checkout updates the subscription from a
 signed webhook), and the evals cover the new agent surfaces.
 
+## Phase 9: Production readiness
+
+Agreed 2026-10-10, in this order.
+
+- Security hardening: fuzz tests on every parser of untrusted input,
+  `scripts/fuzz.sh`, `govulncheck` in `scripts/release.sh` and CI, and
+  `docs/security.md` (trust boundaries, each pack's defences, what is
+  left to the app).
+- Zero-downtime migrations: generated migrations set `lock_timeout` and
+  build indexes on existing tables `CONCURRENTLY`; a check rule flags a
+  change that locks or breaks a running deploy (a rename, a type change,
+  `NOT NULL` on an existing column) and names the expand and contract
+  steps; `docs/deploy.md` documents the order.
+- OpenTelemetry tracing: opt-in with `OTEL_EXPORTER_OTLP_ENDPOINT`;
+  spans for routes, database queries, jobs, mail, LLM calls and
+  outbound HTTP; `traceparent` propagated; trace ids in the logs.
+- Docs and contributors: a configuration reference generated from the
+  packs' `Config` structs, kept complete by a test; `CONTRIBUTING.md`
+  and issue templates; a recipe and an e2e flow that combine auth,
+  workspaces, billing and the LLM pack.
+- Kubernetes: `lidza gen deploy --k8s` writes a Deployment, a Service
+  and the probes from the same contract as the Dockerfile. No Helm
+  chart; billing stays on Stripe until a second processor is needed.
+
+Check: each part passes `go test`, the evals, and its own acceptance
+(a fuzz run of every target; a migration on a table under load holds
+no lock past `lock_timeout`; a trace in a local collector spans a
+request through a job; the reference lists every setting; the
+manifests apply to a local cluster and pass the probes).
+
 ## Beyond the roadmap
 
 Every phase of the plan is delivered. Follow-up work, in Agim's order.

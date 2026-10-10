@@ -710,13 +710,18 @@ func CheckPassword(encoded, password string) bool {
 	if _, err := fmt.Sscanf(parts[3], "m=%d,t=%d,p=%d", &mem, &iters, &par); err != nil {
 		return false
 	}
+	// A damaged or hostile row is a mismatch: argon2 panics on p=0 and
+	// would spend whatever memory and time the row names.
+	if par < 1 || par > 16 || iters < 1 || iters > 16 || mem > 1<<20 {
+		return false
+	}
 	enc := base64.RawStdEncoding
 	salt, err := enc.DecodeString(parts[4])
 	if err != nil {
 		return false
 	}
 	want, err := enc.DecodeString(parts[5])
-	if err != nil {
+	if err != nil || len(want) < 16 || len(want) > 64 {
 		return false
 	}
 	got := argon2.IDKey([]byte(password), salt, iters, mem, par, uint32(len(want)))

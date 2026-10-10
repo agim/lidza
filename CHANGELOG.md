@@ -10,6 +10,37 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
+## Unreleased
+
+- Fuzz tests on every parser of untrusted input (webhook signatures,
+  access tokens, sealed cookies, stored password hashes, provider keys,
+  `schema.lidza`, the credentials file, decimals, dates, search
+  highlights, forwarding headers, storage keys, webhook targets,
+  timezones, mail addresses); their seeds run with `go test`, and
+  `scripts/fuzz.sh [duration]` runs each target. Found and fixed:
+  - `auth.CheckPassword` panicked on a stored hash with `p=0` and
+    would spend whatever memory and passes a hash named; out-of-range
+    parameters are now a mismatch.
+  - Outgoing webhooks allowed IPv6 addresses that carry a private IPv4
+    one (IPv4-compatible `::7f00:1`, 6to4, Teredo) and `0.0.0.0/8`;
+    they are refused like the private address itself.
+  - `list.Split` returned an empty highlighted part for a dangling
+    start marker.
+- Realtime bounds the topics one connection holds
+  (`REALTIME_MAX_TOPICS`, default 100) and their length (256 bytes);
+  before, repeated subscribe messages grew the hub without limit.
+- i18n takes a client's timezone only when it is an IANA zone name:
+  no paths, no `Local`, at most 64 bytes.
+- `govulncheck` runs before every release (`scripts/release.sh`) and in
+  CI. `golang.org/x/net` and `golang.org/x/crypto` move to releases
+  without the advisories it reported (none was reachable from Līdza's
+  code).
+- `docs/security.md`: trust boundaries, what each pack defends against,
+  what is left to the app, and how it is checked.
+- Roadmap Phase 9, production readiness: security hardening (this
+  release), zero-downtime migrations, OpenTelemetry tracing, a
+  configuration reference and contributor docs, Kubernetes manifests.
+
 ## v0.1.98 (2026-10-10)
 
 - Līdza is licensed under the Apache License 2.0 (`LICENSE`); before,

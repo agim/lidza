@@ -306,7 +306,9 @@ func (h *Hooks) allowed(a netip.Addr) bool {
 
 // blocked are ranges IsGlobalUnicast counts as global that are not
 // reachable services: carrier-grade NAT, benchmarking, documentation,
-// the 6to4 relay, and IPv6's unique local and documentation ranges.
+// the 6to4 relay, "this network" (0.0.0.0/8), and IPv6's unique
+// local, documentation, IPv4-compatible, NAT64, Teredo and 6to4 ranges (the last three
+// carry an IPv4 address inside, which may be a private one).
 func blocked(a netip.Addr) bool {
 	for _, p := range blockedPrefixes {
 		if p.Contains(a) {
@@ -318,7 +320,7 @@ func blocked(a netip.Addr) bool {
 
 var blockedPrefixes = func() []netip.Prefix {
 	var out []netip.Prefix
-	for _, s := range []string{"100.64.0.0/10", "198.18.0.0/15", "192.0.0.0/24", "192.0.2.0/24", "198.51.100.0/24", "203.0.113.0/24", "192.88.99.0/24", "240.0.0.0/4", "fc00::/7", "2001:db8::/32", "64:ff9b::/96"} {
+	for _, s := range []string{"100.64.0.0/10", "198.18.0.0/15", "192.0.0.0/24", "192.0.2.0/24", "198.51.100.0/24", "203.0.113.0/24", "192.88.99.0/24", "240.0.0.0/4", "fc00::/7", "2001:db8::/32", "64:ff9b::/96", "0.0.0.0/8", "64:ff9b:1::/48", "2001::/32", "2002::/16", "::/96"} {
 		out = append(out, netip.MustParsePrefix(s))
 	}
 	return out

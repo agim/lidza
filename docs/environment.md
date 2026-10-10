@@ -17,6 +17,7 @@ under "Verification" passes.
 | rustc, cargo | 1.98.1 | rustup, `stable`; `~/.cargo/bin`; targets `wasm32-wasip1`, `wasm32-unknown-unknown` |
 | staticcheck | 2026.2.1 | `~/go/bin` |
 | golangci-lint | 2.14.0 | `~/go/bin` |
+| govulncheck | v1.8.0 | not installed: `go run golang.org/x/vuln/cmd/govulncheck@v1.8.0` from the module cache (`scripts/release.sh` and CI pin it) |
 | sqlc | 1.31.1 | `~/go/bin` |
 | wasm-tools | 1.259.0 | `~/.cargo/bin` |
 | k6 | 2.3.0 | apt, `dl.k6.io` repository (installed 2026-09-25 for Phase 5) |
@@ -319,6 +320,7 @@ database fails the transactional mail regression instead of skipping it.
 
 ```sh
 gofmt -l . && go vet ./... && staticcheck ./... && go test ./...
+go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...   # known vulnerabilities in code Līdza calls
 (cd core && cargo test && cargo build --target wasm32-wasip1)
 go build -o bin/lidza ./cmd/lidza
 go test -tags evals -timeout 40m ./evals -v   # platform evals on a fresh app, about 10 minutes

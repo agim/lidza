@@ -19,6 +19,7 @@ permissions:
 
 env:
   STATICCHECK_VERSION: "2026.2.1"
+  GOVULNCHECK_VERSION: "v1.8.0"
   SQLC_VERSION: "v1.31.1"
   LIDZA_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/lidza_test?sslmode=disable
   LIDZA_TEST_CACHE_URL: redis://localhost:6379/0
@@ -26,7 +27,7 @@ env:
 
 jobs:
   framework:
-    name: framework (vet, staticcheck, tests, core)
+    name: framework (vet, staticcheck, govulncheck, tests, core)
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -66,6 +67,8 @@ jobs:
         run: go vet ./...
       - name: staticcheck
         run: staticcheck ./...
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@$GOVULNCHECK_VERSION ./...
       - name: go test
         run: go test ./... -timeout 20m
       - name: core crate

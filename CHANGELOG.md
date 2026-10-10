@@ -10,7 +10,7 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
-## Unreleased
+## v0.1.98 (2026-10-10)
 
 - Līdza is licensed under the Apache License 2.0 (`LICENSE`); before,
   the repository carried no license, so nobody else could legally use

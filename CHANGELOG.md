@@ -10,7 +10,7 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
-## Unreleased
+## v0.1.103 (2026-10-10)
 
 - Signed-in sessions no longer end early:
   - Parallel requests after the access token expired (a page loading

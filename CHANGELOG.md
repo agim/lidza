@@ -10,6 +10,19 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
+## Unreleased
+
+- Sign-in and account-connect redirects (`?redirect=`) refuse control
+  characters and backslashes anywhere in the path: `/<TAB>/evil.example`
+  passed the check, and browsers drop tabs, so it redirected to another
+  site after sign-in. Found by CodeQL.
+- `list.Read` refuses `offset` and `limit` beyond 2147483647; a larger
+  offset wrapped to a negative number and the query failed with a 500.
+  Found by CodeQL.
+- Code scanning is the repository's CodeQL default setup (every push to
+  master, pull requests, weekly); the workflow added in v0.1.99
+  duplicated it and is removed.
+
 ## v0.1.99 (2026-10-10)
 
 - Fuzz tests on every parser of untrusted input (webhook signatures,

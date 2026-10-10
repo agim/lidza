@@ -604,10 +604,17 @@ func (s *signin) redirectURI(r *http.Request, provider string) string {
 }
 
 // localPath keeps a redirect inside the app: a path, never another
-// origin.
+// origin. Backslashes and control characters are refused anywhere:
+// browsers read "\\" as "/" and drop tabs and newlines, so "/\t/evil"
+// would arrive as "//evil".
 func localPath(p, fallback string) string {
-	if p == "" || !strings.HasPrefix(p, "/") || strings.HasPrefix(p, "//") || strings.HasPrefix(p, "/\\") {
+	if p == "" || !strings.HasPrefix(p, "/") || strings.HasPrefix(p, "//") || strings.ContainsRune(p, '\\') {
 		return fallback
+	}
+	for i := 0; i < len(p); i++ {
+		if p[i] < 0x20 || p[i] == 0x7f {
+			return fallback
+		}
 	}
 	return p
 }

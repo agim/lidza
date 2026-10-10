@@ -45,6 +45,12 @@ func TestRead(t *testing.T) {
 	if strings.Join(fields, ",") != "limit,offset,q,since,sort,order" {
 		t.Fatalf("fields: %v", fields)
 	}
+	// Past int32 the offset wrapped negative; now it is refused.
+	for _, q := range []string{"offset=2147483648", "offset=4294967296", "limit=4294967297"} {
+		if _, err := read(t, q, o); err == nil {
+			t.Errorf("%s accepted", q)
+		}
+	}
 	if _, err := read(t, "since=2026-10-06&until=2026-10-01", o); err == nil || !strings.Contains(err.Error(), "until") {
 		t.Fatalf("backwards range: %v", err)
 	}

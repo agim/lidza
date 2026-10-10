@@ -78,18 +78,20 @@ func Read[In any](req *router.Request[In], o Options) (Params, error) {
 	var errs validate.Errors
 	p := Params{Limit: int32(min(o.Limit, o.MaxLimit)), Filters: map[string]string{}}
 	if v := req.Query("limit"); v != "" {
-		n, err := strconv.Atoi(v)
+		n, err := strconv.ParseInt(v, 10, 32)
 		switch {
 		case err != nil || n < 1:
 			errs.Add("limit", "min", "a whole number of at least 1")
 		default:
-			p.Limit = int32(min(n, o.MaxLimit))
+			p.Limit = int32(min(int(n), o.MaxLimit))
 		}
 	}
 	if v := req.Query("offset"); v != "" {
-		n, err := strconv.Atoi(v)
+		// At most 2^31-1, the int4 the query takes; larger wrapped to a
+		// negative offset Postgres refuses (a 500).
+		n, err := strconv.ParseInt(v, 10, 32)
 		if err != nil || n < 0 {
-			errs.Add("offset", "min", "a whole number of at least 0")
+			errs.Add("offset", "min", "a whole number from 0 to 2147483647")
 		} else {
 			p.Offset = int32(n)
 		}

@@ -495,7 +495,7 @@ func TestProvidersFromEnv(t *testing.T) {
 }
 
 func TestLocalPath(t *testing.T) {
-	for in, want := range map[string]string{"": "/", "/x": "/x", "//evil.com": "/", "https://evil.com": "/", "/\\evil": "/"} {
+	for in, want := range map[string]string{"": "/", "/x": "/x", "//evil.com": "/", "https://evil.com": "/", "/\\evil": "/", "/\t/evil.com": "/", "/x\n/y": "/", "/a\\b": "/", "/a?b=/c": "/a?b=/c"} {
 		if got := localPath(in, "/"); got != want {
 			t.Errorf("localPath(%q) = %q, want %q", in, got, want)
 		}

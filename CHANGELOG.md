@@ -9,7 +9,7 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
-## Unreleased
+## v0.1.95 (2026-10-10)
 
 - MCP: tools for the commands and packs that had none. `lidza_gen_llms`,
   `lidza_admins` and `lidza_owner_status` (read-only; adding admins and

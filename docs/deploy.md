@@ -48,6 +48,16 @@ to install it. A builder that deliberately builds with the committed
 code is missing. An app made before this has the old Dockerfile: `lidza
 gen deploy` refreshes it.
 
+The runtime image runs as distroless's `nonroot` user (65532) and its
+files belong to it (`COPY --chown=65532:65532`), with the modes they had
+in the build: a checkout made under umask 0077 (directories 0700, files
+0600) still starts, and nothing is opened to other users. Run it with a
+read-only root filesystem (`docker run --read-only`). The master key,
+`.env` files and the owner claim never enter the image (`.dockerignore`);
+the sealed `config/credentials.yml.enc` does, and `LIDZA_MASTER_KEY` in
+the environment opens it. Apps with an older Dockerfile: `lidza gen
+deploy`.
+
 `lidza build` also stores a Brotli (`.br`) and a gzip (`.gz`) copy of
 every compressible file of the frontend build (HTML, CSS, JavaScript,
 JSON, SVG, text) of 1 KB or more, embedded with the rest. The binary

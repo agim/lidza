@@ -550,3 +550,45 @@ func TestDockerfileProvisionsSQLC(t *testing.T) {
 		t.Fatalf("sqlc is not installed before the sources and lidza build:\n%s", src)
 	}
 }
+
+// The runtime image's files belong to the user that runs the binary
+// (distroless nonroot, 65532), so a checkout made under umask 0077 still
+// starts; the master key, .env files and the owner claim stay out of the
+// build context (issue #48). Built and run for real with an owner-only
+// checkout when the fix was made: the root-owned copies failed with
+// "permission denied" on a mail template, these start and pass /readyz.
+func TestDockerfileRuntimeOwnership(t *testing.T) {
+	dir := t.TempDir()
+	cfg := config.Default("owned", "react")
+	os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module example.com/owned\n\ngo 1.27\n\nrequire github.com/agim/lidza v0.1.96\n"), 0o644)
+	if _, _, err := DeployFiles(dir, &cfg, false); err != nil {
+		t.Fatal(err)
+	}
+	df, _ := os.ReadFile(filepath.Join(dir, "Dockerfile"))
+	src := string(df)
+	runtime := src[strings.LastIndex(src, "\nFROM "):]
+	if !strings.Contains(runtime, "FROM gcr.io/distroless/static-debian12:nonroot\n") {
+		t.Fatalf("the runtime image is not distroless nonroot:\n%s", runtime)
+	}
+	copies := 0
+	for _, line := range strings.Split(runtime, "\n") {
+		if strings.HasPrefix(line, "COPY ") {
+			copies++
+			if !strings.HasPrefix(line, "COPY --from=build --chown=65532:65532 ") {
+				t.Errorf("runtime copy not owned by the nonroot user: %s", line)
+			}
+		}
+	}
+	if copies != 5 {
+		t.Errorf("%d runtime copies, want 5 (binary, db, mail, admin, config)", copies)
+	}
+	if strings.Contains(runtime, "--chmod") {
+		t.Error("the runtime copies change modes: owner-only files must stay owner-only")
+	}
+	ignore, _ := os.ReadFile(filepath.Join(dir, ".dockerignore"))
+	for _, want := range []string{"\nconfig/master.key\n", "\n.env\n", "\n.env.*\n", "\nconfig/owner-claim\n"} {
+		if !strings.Contains(string(ignore), want) {
+			t.Errorf(".dockerignore lacks %q", strings.TrimSpace(want))
+		}
+	}
+}

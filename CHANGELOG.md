@@ -9,6 +9,18 @@ release is listed first under its version as "Breaking:", with what to
 change. A release without one is additive: an app updates with
 `lidza update --migrate`.
 
+## Unreleased
+
+- The Dockerfile's runtime copies belong to the image's nonroot user
+  (`COPY --chown=65532:65532`, #48): built from a checkout made under
+  umask 0077, root-owned 0600 files (a mail template, the migrations,
+  the sealed credentials) were unreadable and the app exited with
+  "permission denied". Modes are kept, nothing becomes world-readable,
+  and the master key, `.env` files and the owner claim stay out of the
+  image. Verified by building and running such an image read-only:
+  before, exit 1; after, `/readyz` 200. Existing apps: `lidza gen
+  deploy`.
+
 ## v0.1.96 (2026-10-10)
 
 - The Dockerfile installs sqlc (#47): an app with a `sqlc.yaml` gets

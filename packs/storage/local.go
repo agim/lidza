@@ -167,6 +167,10 @@ func (l *local) PresignPut(ctx context.Context, key string, ttl time.Duration, c
 	return "", errors.New("storage: the local provider has no presigned uploads; accept the upload in a handler and call Put")
 }
 
+func (l *local) PresignDelete(ctx context.Context, key string, ttl time.Duration) (string, error) {
+	return "", errors.New("storage: the local provider has no presigned deletes; call Delete")
+}
+
 func (l *local) URL(key string) string {
 	if l.public == "" {
 		return ""

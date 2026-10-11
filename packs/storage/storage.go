@@ -15,6 +15,8 @@ import (
 	"log/slog"
 	"net/http"
 	"path"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -63,6 +65,24 @@ type Config struct {
 	// share. The app's keys never carry it: Put, Get, List and the rest
 	// add it, and the objects they return have it removed.
 	Prefix string `env:"STORAGE_PREFIX"`
+	// Stores names further stores, comma-separated ("media,exports"),
+	// each with its own bucket: Named(ctx, "media") is configured by
+	// STORAGE_MEDIA_BUCKET, _PREFIX, _PUBLIC_URL, _DIR and _CDN_ENDPOINT_ID,
+	// and takes the provider, address, region, keys and CDN token from
+	// STORAGE_MEDIA_* when set, else from the main store. Public files go
+	// in one, so they never share a bucket and prefix with private ones.
+	Stores string `env:"STORAGE_STORES"`
+	// CDN is the CDN in front of the bucket whose cache Purge empties:
+	// digitalocean (the Spaces CDN), or empty for none.
+	CDN string `env:"STORAGE_CDN"`
+	// CDNEndpointID is the CDN endpoint's id (DigitalOcean: the UUID of
+	// the Spaces CDN endpoint).
+	CDNEndpointID string `env:"STORAGE_CDN_ENDPOINT_ID"`
+	// CDNToken authenticates the CDN's API (DigitalOcean: a personal
+	// access token with CDN write scope); keep it in the credentials.
+	CDNToken string `env:"STORAGE_CDN_TOKEN"`
+	// CDNAPIURL is the CDN's API; tests point it at a stub.
+	CDNAPIURL string `env:"STORAGE_CDN_API_URL" default:"https://api.digitalocean.com"`
 }
 
 // Object describes a stored file.
@@ -94,10 +114,11 @@ type Provider interface {
 	Stat(ctx context.Context, key string) (Object, error)
 	Delete(ctx context.Context, key string) error
 	List(ctx context.Context, prefix string, limit int) ([]Object, error)
-	// PresignGet and PresignPut return URLs that grant the operation
-	// until ttl passes.
+	// PresignGet, PresignPut and PresignDelete return URLs that grant
+	// the operation until ttl passes.
 	PresignGet(ctx context.Context, key string, ttl time.Duration) (string, error)
 	PresignPut(ctx context.Context, key string, ttl time.Duration, contentType string) (string, error)
+	PresignDelete(ctx context.Context, key string, ttl time.Duration) (string, error)
 	// URL returns where the object is read without signing, "" when the
 	// backend has no public address.
 	URL(key string) string
@@ -162,7 +183,10 @@ type Storage struct {
 	cfg      Config
 	log      *slog.Logger
 	provider Provider
-	mu       sync.RWMutex
+	purger   purger
+	// named are the stores STORAGE_STORES declares, by name.
+	named map[string]*Storage
+	mu    sync.RWMutex
 }
 
 // Pack returns the pack for packs.go.
@@ -183,7 +207,82 @@ func New(cfg Config) (*Storage, error) {
 		return nil, err
 	}
 	s.provider = p
+	if s.purger, err = newPurger(s.cfg); err != nil {
+		return nil, err
+	}
 	return s, nil
+}
+
+// storeOwn are the settings a named store never takes from the main
+// one: where its files are and how they are reached.
+var storeOwn = []string{"BUCKET", "PREFIX", "PUBLIC_URL", "DIR", "CDN_ENDPOINT_ID", "STORES"}
+
+// build reads the main store and the named ones from the settings.
+func build(values map[string]string) (*Storage, error) {
+	var cfg Config
+	if err := env.Fill(&cfg, values); err != nil {
+		return nil, err
+	}
+	main, err := New(cfg)
+	if err != nil {
+		return nil, err
+	}
+	main.named = map[string]*Storage{}
+	for _, name := range strings.Split(cfg.Stores, ",") {
+		name = strings.ToLower(strings.TrimSpace(name))
+		if name == "" {
+			continue
+		}
+		if !storeName.MatchString(name) {
+			return nil, fmt.Errorf("storage: STORAGE_STORES: %q is not a store name (letters, digits, underscores)", name)
+		}
+		prefix := "STORAGE_" + strings.ToUpper(name) + "_"
+		own := map[string]string{}
+		for k, v := range values {
+			own[k] = v
+		}
+		for _, k := range storeOwn {
+			delete(own, "STORAGE_"+k)
+		}
+		for k, v := range values {
+			if rest, ok := strings.CutPrefix(k, prefix); ok {
+				own["STORAGE_"+rest] = v
+			}
+		}
+		if own["STORAGE_DIR"] == "" {
+			own["STORAGE_DIR"] = main.cfg.Dir + "-" + name
+		}
+		var ncfg Config
+		if err := env.Fill(&ncfg, own); err != nil {
+			return nil, fmt.Errorf("storage %s: %w", name, err)
+		}
+		if ncfg.Provider != "local" && ncfg.Bucket == "" {
+			return nil, fmt.Errorf("storage %s: set %sBUCKET", name, prefix)
+		}
+		st, err := New(ncfg)
+		if err != nil {
+			return nil, fmt.Errorf("storage %s: %w", name, err)
+		}
+		if overlaps(main.cfg, st.cfg) {
+			return nil, fmt.Errorf("storage %s: %sBUCKET and %sPREFIX share the main store's bucket and prefix; a named store keeps its files apart", name, prefix, prefix)
+		}
+		st.log = main.log
+		main.named[name] = st
+	}
+	return main, nil
+}
+
+var storeName = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
+
+// overlaps reports whether two stores could hold the same object.
+func overlaps(a, b Config) bool {
+	if a.Provider == "local" || b.Provider == "local" {
+		return a.Provider == b.Provider && filepath.Clean(a.Dir) == filepath.Clean(b.Dir)
+	}
+	if a.Bucket != b.Bucket || a.Endpoint != b.Endpoint {
+		return false
+	}
+	return strings.HasPrefix(a.Prefix, b.Prefix) || strings.HasPrefix(b.Prefix, a.Prefix)
 }
 
 func (s *Storage) defaults() {
@@ -259,17 +358,36 @@ func (s *Storage) Name() string { return "lidza/storage" }
 
 // Start reads the configuration and provides the pack.
 func (s *Storage) Start(ctx context.Context, svc *lidza.Services) error {
-	var cfg Config
-	if err := env.Load(".", &cfg); err != nil {
-		return err
-	}
-	built, err := New(cfg)
+	values, err := env.Values(".")
 	if err != nil {
 		return err
 	}
-	s.cfg, s.provider = built.cfg, built.provider
+	built, err := build(values)
+	if err != nil {
+		return err
+	}
+	s.cfg, s.provider, s.purger, s.named = built.cfg, built.provider, built.purger, built.named
 	lidza.Provide(svc, s)
 	return nil
+}
+
+// Named returns the store STORAGE_STORES declares under name, from a
+// handler's, job's or tool's context. It panics for a name not
+// declared, as From does for a pack not started.
+func Named(ctx context.Context, name string) *Storage {
+	st, ok := From(ctx).Store(name)
+	if !ok {
+		panic(fmt.Sprintf("storage: no store %q: list it in STORAGE_STORES and set STORAGE_%s_BUCKET", name, strings.ToUpper(name)))
+	}
+	return st
+}
+
+// Store returns a named store and whether STORAGE_STORES declares it.
+func (s *Storage) Store(name string) (*Storage, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	st, ok := s.named[strings.ToLower(name)]
+	return st, ok
 }
 
 // Stop implements lidza.Pack.
@@ -278,16 +396,16 @@ func (s *Storage) Stop(context.Context) error { return nil }
 // Reconfigure reads the configuration again and switches the provider:
 // what the admin pages call after a storage setting is saved.
 func (s *Storage) Reconfigure(ctx context.Context) error {
-	var cfg Config
-	if err := env.Load(".", &cfg); err != nil {
+	values, err := env.Values(".")
+	if err != nil {
 		return err
 	}
-	built, err := New(cfg)
+	built, err := build(values)
 	if err != nil {
 		return err
 	}
 	s.mu.Lock()
-	s.cfg, s.provider = built.cfg, built.provider
+	s.cfg, s.provider, s.purger, s.named = built.cfg, built.provider, built.purger, built.named
 	s.mu.Unlock()
 	s.log.Info("storage: reconfigured", "provider", built.cfg.Provider, "bucket", built.cfg.Bucket)
 	return nil
@@ -398,6 +516,57 @@ func (s *Storage) PresignPut(ctx context.Context, key string, ttl time.Duration,
 	}
 	v := s.now()
 	return v.p.PresignPut(ctx, v.full(key), ttl, contentType)
+}
+
+// PresignDelete returns a URL that deletes the object until ttl passes:
+// for a worker outside the app that cleans up what it was handed.
+func (s *Storage) PresignDelete(ctx context.Context, key string, ttl time.Duration) (string, error) {
+	if err := checkKey(key); err != nil {
+		return "", err
+	}
+	v := s.now()
+	return v.p.PresignDelete(ctx, v.full(key), ttl)
+}
+
+// Purge empties the CDN's cache for keys and prefixes: "sites/a/" (a
+// trailing slash) purges everything under it, "logo.png" one object, ""
+// the whole store. It is a no-op for the local provider; for a bucket
+// without STORAGE_CDN it is an error naming the settings. Long lists go
+// to the CDN in batches.
+func (s *Storage) Purge(ctx context.Context, prefixes ...string) error {
+	s.mu.RLock()
+	v, pg := view{s.cfg, s.provider}, s.purger
+	s.mu.RUnlock()
+	if v.cfg.Provider == "local" {
+		return nil
+	}
+	if pg == nil {
+		return errors.New("storage: Purge needs the CDN in front of the bucket: set STORAGE_CDN=digitalocean, STORAGE_CDN_ENDPOINT_ID and STORAGE_CDN_TOKEN")
+	}
+	if len(prefixes) == 0 {
+		return nil
+	}
+	paths := make([]string, 0, len(prefixes))
+	for _, p := range prefixes {
+		p = strings.TrimPrefix(p, "/")
+		switch {
+		case p == "":
+			paths = append(paths, v.full("*"))
+		case strings.HasSuffix(p, "/"):
+			if err := checkKey(strings.TrimSuffix(p, "/")); err != nil {
+				return err
+			}
+			paths = append(paths, v.full(p+"*"))
+		default:
+			if err := checkKey(p); err != nil {
+				return err
+			}
+			paths = append(paths, v.full(p))
+		}
+	}
+	ctx, cancel := context.WithTimeout(ctx, v.cfg.Timeout)
+	defer cancel()
+	return pg.purge(ctx, paths)
 }
 
 // URL returns the public address of the object (STORAGE_PUBLIC_URL plus

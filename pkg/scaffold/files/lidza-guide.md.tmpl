@@ -1235,6 +1235,18 @@ pack, with the app deciding who may read them.
    checks access and streams `Get`), or hand the browser a
    `PresignGet` URL for a minute; never a permanent public URL for a
    private file. Delete the object when the row goes.
+   Public files (served through a CDN) go in a store of their own, so
+   they never share a bucket and prefix with private ones:
+   `STORAGE_STORES=media`, `STORAGE_MEDIA_BUCKET`, `STORAGE_MEDIA_PUBLIC_URL`
+   (the CDN's address), and only the settings that differ from the main
+   store (`STORAGE_MEDIA_REGION`, `_ACCESS_KEY`, ...). In code,
+   `storage.Named(ctx, "media")` has the same methods; `URL(key)` is the
+   CDN address. After replacing public files, empty the CDN's cache:
+   `storage.Named(ctx, "media").Purge(ctx, "sites/42/")` (a trailing
+   slash purges the folder) with `STORAGE_MEDIA_CDN=digitalocean`,
+   `STORAGE_MEDIA_CDN_ENDPOINT_ID` and `STORAGE_CDN_TOKEN` in the
+   credentials; the local provider ignores it. `PresignDelete` hands a
+   worker outside the app a URL that deletes one object.
 4. Test with the local provider: `.env.test` sets `STORAGE_PROVIDER=local`
    and a `STORAGE_DIR`; upload through the API, read it back, delete the
    row and check `Stat` returns `storage.ErrNotFound`. The snippet

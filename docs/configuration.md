@@ -209,13 +209,18 @@ A pack's settings matter only when the pack is enabled in `lidza.json`.
 | `STORAGE_ACCESS_KEY` |  | STORAGE_ACCESS_KEY and STORAGE_SECRET_KEY authenticate; keep them in the credentials. |
 | `STORAGE_ACCOUNT_ID` |  | The Cloudflare account of an R2 bucket. |
 | `STORAGE_BUCKET` |  | The S3 bucket. |
+| `STORAGE_CDN` |  | The STORAGE_CDN in front of the bucket whose cache Purge empties: digitalocean (the Spaces STORAGE_CDN), or empty for none. |
+| `STORAGE_CDN_API_URL` | `https://api.digitalocean.com` | The STORAGE_CDN's API; tests point it at a stub. |
+| `STORAGE_CDN_ENDPOINT_ID` |  | The STORAGE_CDN endpoint's id (DigitalOcean: the UUID of the Spaces STORAGE_CDN endpoint). |
+| `STORAGE_CDN_TOKEN` |  | Authenticates the STORAGE_CDN's API (DigitalOcean: a personal access token with STORAGE_CDN write scope); keep it in the credentials. |
 | `STORAGE_DIR` | `storage` | Holds the files of the local provider. |
 | `STORAGE_ENDPOINT` | `https://s3.amazonaws.com` | The service: https://s3.amazonaws.com (default), https://<account>.r2.cloudflarestorage.com, http://127.0.0.1:9000 for MinIO. |
 | `STORAGE_MAX_SIZE` | `104857600` | Bounds one Put. |
 | `STORAGE_PATH_STYLE` |  | Puts the bucket in the path (http://host/bucket/key) instead of the host; on by default for every endpoint but AWS. |
 | `STORAGE_PREFIX` |  | A folder every key lives under ("myapp" stores avatars/1.png as myapp/avatars/1.png), for a bucket several apps share. The app's keys never carry it: Put, Get, List and the rest add it, and the objects they return have it removed. |
 | `STORAGE_PROVIDER` | `local` | Local (default: files under STORAGE_DIR), s3 (Amazon S3, or any S3-compatible service at STORAGE_ENDPOINT), or a named S3-compatible service whose address follows from STORAGE_REGION or STORAGE_ACCOUNT_ID: r2 (Cloudflare R2), spaces (DigitalOcean Spaces), b2 (Backblaze B2), gcs (Google Cloud Storage with HMAC keys), minio (MinIO, RustFS or another server at STORAGE_ENDPOINT). |
-| `STORAGE_PUBLIC_URL` |  | Where objects are readable without signing (a CDN, a public bucket); URL returns it plus the key. |
+| `STORAGE_PUBLIC_URL` |  | Where objects are readable without signing (a STORAGE_CDN, a public bucket); URL returns it plus the key. |
 | `STORAGE_REGION` | `us-east-1` | Signs the requests; us-east-1 by default (R2 and MinIO accept auto or us-east-1). |
 | `STORAGE_SECRET_KEY` |  | STORAGE_ACCESS_KEY and STORAGE_SECRET_KEY authenticate; keep them in the credentials. |
+| `STORAGE_STORES` |  | Names further stores, comma-separated ("media,exports"), each with its own bucket: Named(ctx, "media") is configured by STORAGE_MEDIA_BUCKET, _PREFIX, _PUBLIC_URL, _DIR and _CDN_ENDPOINT_ID, and takes the provider, address, region, keys and STORAGE_CDN token from STORAGE_MEDIA_* when set, else from the main store. Public files go in one, so they never share a bucket and prefix with private ones. |
 | `STORAGE_TIMEOUT` | `60s` | Bounds one operation. |

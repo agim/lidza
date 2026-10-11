@@ -347,6 +347,14 @@ func (p *s3) PresignPut(ctx context.Context, key string, ttl time.Duration, cont
 	return p.presign(req, ttl, p.now()), nil
 }
 
+func (p *s3) PresignDelete(ctx context.Context, key string, ttl time.Duration) (string, error) {
+	req, err := http.NewRequest(http.MethodDelete, p.objectURL(key).String(), nil)
+	if err != nil {
+		return "", err
+	}
+	return p.presign(req, ttl, p.now()), nil
+}
+
 func (p *s3) URL(key string) string {
 	if p.public != "" {
 		return p.public + "/" + key

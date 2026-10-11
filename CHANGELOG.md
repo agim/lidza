@@ -10,6 +10,22 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
+## Unreleased
+
+- Storage (#50):
+  - Named stores: `STORAGE_STORES=media` declares a store with its own
+    bucket, prefix, public URL and directory (`STORAGE_MEDIA_BUCKET`,
+    ...), taking the provider, address, region, keys and CDN token from
+    the main store unless it sets its own; `storage.Named(ctx, "media")`
+    returns it with the same methods. A named store that would share the
+    main store's bucket and prefix is refused at start.
+  - `Purge(ctx, prefixes...)` empties the CDN's cache (a trailing slash
+    purges a folder): DigitalOcean's Spaces CDN with `STORAGE_CDN`,
+    `STORAGE_CDN_ENDPOINT_ID` and `STORAGE_CDN_TOKEN`, in batches of 50;
+    a no-op for the local provider; for a bucket without a CDN, an
+    error naming the settings.
+  - `PresignDelete` alongside `PresignGet` and `PresignPut`.
+
 ## v0.1.105 (2026-10-11)
 
 - `lidza audit layout --stability` (#49):

@@ -10,7 +10,7 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
-## Unreleased
+## v0.1.107 (2026-10-11)
 
 - `GET /tls-allow?domain=<host>` (#51): a TLS terminator in front of the
   binary (Caddy's on-demand TLS `ask`) gets the app's verdict, 200 for a

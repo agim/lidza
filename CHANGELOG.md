@@ -10,6 +10,18 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
+## Unreleased
+
+- `GET /tls-allow?domain=<host>` (#51): a TLS terminator in front of the
+  binary (Caddy's on-demand TLS `ask`) gets the app's verdict, 200 for a
+  host in `LIDZA_TLS_DOMAINS` or one `App.TLSHosts` approves and 404
+  otherwise, through the same cache, refusal log and caps as the
+  binary's own TLS server. The admin overview lists the approved and
+  refused hosts whether or not the binary serves TLS. Served when the
+  app has `TLSHosts` or `LIDZA_TLS_DOMAINS`; the operator's, like
+  `/metrics`: a request carrying `X-Forwarded-For` or `Forwarded` gets
+  a 404.
+
 ## v0.1.106 (2026-10-11)
 
 - Storage (#50):

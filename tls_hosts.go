@@ -325,3 +325,62 @@ func orderHosts(body []byte) []string {
 	}
 	return hosts
 }
+
+// appTLSPolicy is the app's host policy: LIDZA_TLS_DOMAINS and
+// App.TLSHosts; nil when it has neither.
+func appTLSPolicy(app App, services *Services, log *slog.Logger) *tlsPolicy {
+	var domains []string
+	if t, err := tlsFromEnv(); err == nil && t != nil {
+		domains = t.domains
+	}
+	if app.TLSHosts == nil && len(domains) == 0 {
+		return nil
+	}
+	return newTLSPolicy(domains, app.TLSHosts, services, log)
+}
+
+// tlsAllowHandler serves TLSAllowPath. A request that came through a
+// proxy (it carries X-Forwarded-For or Forwarded) is a visitor's, not
+// the terminator's own question, and gets a 404 as if the path were not
+// there: the endpoint stays the operator's even where the proxy does not
+// hide it.
+func tlsAllowHandler(p *tlsPolicy) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-Forwarded-For") != "" || r.Header.Get("Forwarded") != "" {
+			http.NotFound(w, r)
+			return
+		}
+		host := strings.TrimSuffix(strings.ToLower(strings.TrimSpace(r.URL.Query().Get("domain"))), ".")
+		if !hostName(host) {
+			http.Error(w, "domain: a host name such as shop.example.com", http.StatusBadRequest)
+			return
+		}
+		if err := p.allow(r.Context(), host); err != nil {
+			http.Error(w, "not approved", http.StatusNotFound)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+}
+
+// hostName reports whether s is a DNS name a certificate can carry: at
+// least two labels of letters, digits and hyphens, at most 253 bytes; no
+// IP address, port or wildcard.
+func hostName(s string) bool {
+	if len(s) == 0 || len(s) > 253 || !strings.Contains(s, ".") {
+		return false
+	}
+	for _, label := range strings.Split(s, ".") {
+		if len(label) == 0 || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+			return false
+		}
+		for i := 0; i < len(label); i++ {
+			c := label[i]
+			if !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '-') {
+				return false
+			}
+		}
+	}
+	last := s[strings.LastIndexByte(s, '.')+1:]
+	return strings.Trim(last, "0123456789") != "" // not an IPv4 address
+}

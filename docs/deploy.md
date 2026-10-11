@@ -267,6 +267,15 @@ What the server needs, and what `lidza doctor` checks in the project:
   rest to the app's own domains with a middleware on `r.Host`.
   Approvals and refusals are logged (refusals at most 20 a minute) and
   the admin overview lists them for the node.
+- **A terminator in front** (Caddy, or a platform that runs it) can use
+  the same verdicts: `GET /tls-allow?domain=<host>` answers 200 for a
+  listed or approved host and 404 otherwise, with the same cache, logs
+  and admin listing, whether or not the binary serves TLS itself. For
+  Caddy's on-demand TLS: `on_demand_tls { ask
+  http://127.0.0.1:3000/tls-allow }`. Like `/metrics` it is the
+  operator's: keep it off the public side; a request that came through
+  a proxy (it carries `X-Forwarded-For` or `Forwarded`) gets a 404
+  regardless.
 - **Rate limits**: Let's Encrypt issues a bounded number of certificates
   per domain per week; rehearse against its staging directory with
   `LIDZA_TLS_DIRECTORY=https://acme-staging-v02.api.letsencrypt.org/directory`

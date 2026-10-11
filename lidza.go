@@ -115,7 +115,8 @@ type App struct {
 	// cache as the listed domains'. Requests on an approved host reach the
 	// whole app, as on a listed domain: a path outside /api is served
 	// with r.Mount, and a middleware that checks r.Host keeps the rest
-	// (the frontend, /api) to the app's own domains.
+	// (the frontend, /api) to the app's own domains. Behind a terminator
+	// that issues certificates itself, TLSAllowPath asks it the same way.
 	TLSHosts func(ctx context.Context, host string) error
 
 	// ReadyTimeout bounds the checks behind /readyz; default 3s.
@@ -147,6 +148,13 @@ const (
 	MetricsPath = "/metrics"
 	HealthzPath = "/healthz"
 	ReadyzPath  = "/readyz"
+	// TLSAllowPath answers a TLS terminator in front of the binary
+	// (Caddy's on-demand TLS "ask") whether a hostname may get a
+	// certificate: GET /tls-allow?domain=<host> is 200 for a name in
+	// LIDZA_TLS_DOMAINS or one App.TLSHosts approves, 404 otherwise. It
+	// is served when the app has either, and like /metrics it is for
+	// the operator: keep it off the public side of the proxy.
+	TLSAllowPath = "/tls-allow"
 )
 
 // Run serves the app until SIGINT or SIGTERM and exits the process with a
@@ -381,6 +389,15 @@ func handler(app App, services *Services) (http.Handler, *devserver.Sidecar, err
 	ops.Handle("GET "+MetricsPath, tel.Metrics())
 	ops.Handle("GET "+HealthzPath, telemetry.Healthz())
 	ops.Handle("GET "+ReadyzPath, tel.Readyz(readyTimeout))
+	// One host policy for the app, whoever terminates TLS: the binary
+	// (serveTLS takes it from the services) or a terminator in front that
+	// asks TLSAllowPath. Its verdicts, cache and refusals are the same
+	// either way, and the admin pages show them.
+	if policy := appTLSPolicy(app, services, log); policy != nil {
+		Provide(services, policy)
+		Provide[TLSReporter](services, policy.status)
+		ops.Handle("GET "+TLSAllowPath, tlsAllowHandler(policy))
+	}
 	if h := mcpHTTP(app, services); h != nil {
 		ops.Handle(MCPPath, h)
 	}
@@ -517,7 +534,7 @@ func mounted(mounts []router.Mount, next http.Handler) http.Handler {
 func opsThenFrontend(ops *http.ServeMux, frontend http.Handler, dev bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case r.URL.Path == MetricsPath, r.URL.Path == HealthzPath, r.URL.Path == ReadyzPath, r.URL.Path == MCPPath,
+		case r.URL.Path == MetricsPath, r.URL.Path == HealthzPath, r.URL.Path == ReadyzPath, r.URL.Path == MCPPath, r.URL.Path == TLSAllowPath,
 			dev && strings.HasPrefix(r.URL.Path, "/debug/pprof/"):
 			ops.ServeHTTP(w, r)
 		default:

@@ -170,8 +170,13 @@ func serveTLS(ctx context.Context, booted *Booted, t *tlsSettings, appName strin
 		booted.Close(ctx)
 		return err
 	}
-	policy := newTLSPolicy(t.domains, t.hosts, booted.Services, log)
-	Provide[TLSReporter](booted.Services, policy.status)
+	// The policy the handler built (it also answers TLSAllowPath); one
+	// of its own when the app was booted without one.
+	policy, ok := Optional[*tlsPolicy](WithServices(ctx, booted.Services))
+	if !ok {
+		policy = newTLSPolicy(t.domains, t.hosts, booted.Services, log)
+		Provide[TLSReporter](booted.Services, policy.status)
+	}
 	m := t.manager(cache, policy)
 	tlsLn, err := net.Listen("tcp", t.addr)
 	if err != nil {

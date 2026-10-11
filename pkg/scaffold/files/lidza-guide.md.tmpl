@@ -2544,7 +2544,9 @@ minute), so a host it stops approving is refused and never renewed. An
 approved host reaches the whole app: serve its paths with `r.Mount`
 (outside `/api`) and keep the rest to the app's domains with a
 middleware on `r.Host`. The admin overview lists the certificates and
-the latest refusals. Or put a TLS-terminating proxy in front, forward
+the latest refusals. A terminator in front that issues certificates on
+demand (Caddy's `ask`) asks `GET /tls-allow?domain=<host>`: 200 when
+`App.TLSHosts` approves, 404 when not, same cache. Or put a TLS-terminating proxy in front, forward
 `X-Forwarded-For`, and name it in `LIDZA_TRUSTED_PROXIES` (`loopback`
 for a proxy on the same host, else its addresses or CIDRs): only then is
 the forwarded client trusted, and the rate limits, the sign-in throttle,

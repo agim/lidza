@@ -10,7 +10,7 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
-## Unreleased
+## v0.1.106 (2026-10-11)
 
 - Storage (#50):
   - Named stores: `STORAGE_STORES=media` declares a store with its own

@@ -10,7 +10,7 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
-## Unreleased
+## v0.1.105 (2026-10-11)
 
 - `lidza audit layout --stability` (#49):
   - Runs on every page, not only pages with nested scrollers: a page

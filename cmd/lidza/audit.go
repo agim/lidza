@@ -45,11 +45,14 @@ default export signs a page in), at each viewport and theme, and reports
 what scrolls: sideways (always a fault; the elements past the edge are
 named), down (a fault past --max-scroll pixels; -1, the default, only
 reports it), and the containers inside the page that scroll on their own
-(listed, never a fault). --stability scrolls those containers, runs
---trigger (a JavaScript expression, such as a refresh call) or only
-waits that long, and faults a container that lost its position or the
-focus inside it; --allow names the ones that move on purpose (a log that
-follows its tail; data-audit-follow on the element does the same).
+(listed, never a fault). --stability, on every page, scrolls the
+document and those containers part way, focuses a control (without
+scrolling), runs --trigger once (a JavaScript expression, such as a
+refresh call) or only waits that long, and faults a container that lost
+its position, a document whose reading anchor (the element at the
+reader's eye line) moved or vanished, and lost focus; --allow names what
+moves on purpose (a log that follows its tail; data-audit-follow on the
+element, or on body for the document, does the same).
 Exits non-zero on a fault.
 `
 
@@ -88,10 +91,31 @@ type auditStability struct {
 		From     [2]int `json:"from"`
 		To       [2]int `json:"to"`
 	} `json:"resets,omitempty"`
-	Replaced    []string `json:"replaced,omitempty"`
-	FocusLost   bool     `json:"focusLost,omitempty"`
-	LayoutShift float64  `json:"layoutShift"`
-	Error       string   `json:"error,omitempty"`
+	Replaced []string `json:"replaced,omitempty"`
+	// Document is the page's own scroll and the reader's anchor.
+	Document    *auditDocument `json:"document,omitempty"`
+	FocusLost   bool           `json:"focusLost,omitempty"`
+	LayoutShift float64        `json:"layoutShift"`
+	// Triggered says --trigger ran (once); Scrollers counts the nested
+	// scrollers checked, zero on a page that scrolls only as a document.
+	Triggered bool   `json:"triggered,omitempty"`
+	Scrollers int    `json:"scrollers"`
+	Error     string `json:"error,omitempty"`
+}
+
+// auditDocument is the document during the stability wait. It is judged
+// by the reading anchor, the element at the reader's eye line: an
+// update that keeps it in place passes though the offset changed (an
+// insertion above that the page compensates for); one that moves it, or
+// loses it while the offset moves, is a reset.
+type auditDocument struct {
+	From           [2]int `json:"from"`
+	To             [2]int `json:"to"`
+	Anchor         string `json:"anchor,omitempty"`
+	AnchorShift    int    `json:"anchorShift,omitempty"`
+	AnchorLost     bool   `json:"anchorLost,omitempty"`
+	AnchorReplaced bool   `json:"anchorReplaced,omitempty"`
+	Reset          bool   `json:"reset,omitempty"`
 }
 
 func runAudit(ctx context.Context, args []string) error {
@@ -392,7 +416,8 @@ func pageFault(r auditResult, maxScroll int) bool {
 	if r.Error != "" || r.Sideways > 0 || (maxScroll >= 0 && r.Vertical > maxScroll) {
 		return true
 	}
-	return r.Stability != nil && (len(r.Stability.Resets) > 0 || r.Stability.FocusLost || r.Stability.Error != "")
+	st := r.Stability
+	return st != nil && (len(st.Resets) > 0 || st.FocusLost || st.Error != "" || (st.Document != nil && st.Document.Reset))
 }
 
 func printAudit(results []auditResult, maxScroll int, wanted, signedIn bool) {
@@ -446,8 +471,15 @@ func printAudit(results []auditResult, maxScroll int, wanted, signedIn bool) {
 			for _, rp := range st.Replaced {
 				fmt.Println("        replaced: " + rp)
 			}
+			if d := st.Document; d != nil && d.Reset {
+				what := fmt.Sprintf("moved %dpx on screen", d.AnchorShift)
+				if d.AnchorLost {
+					what = "is gone"
+				}
+				fmt.Printf("        the document lost the reader's place: scroll %d,%d to %d,%d; the anchor %s %s\n", d.From[0], d.From[1], d.To[0], d.To[1], d.Anchor, what)
+			}
 			if st.FocusLost {
-				fmt.Println("        lost the focus inside the first scroller")
+				fmt.Println("        lost the focus")
 			}
 			if st.LayoutShift > 0 {
 				fmt.Printf("        layout shift %.3f during the wait\n", st.LayoutShift)

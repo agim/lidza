@@ -10,6 +10,24 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
+## Unreleased
+
+- `lidza audit layout --stability` (#49):
+  - Runs on every page, not only pages with nested scrollers: a page
+    that scrolls only as a document (a list on a phone) used to report
+    OK without running the trigger.
+  - Checks the document: it scrolls part way, records the scroll
+    position and the reading anchor (the element at the reader's eye
+    line), and faults a document whose anchor moved on screen, or
+    vanished while the offset moved, with the evidence (from, to, the
+    anchor, how far). An update that keeps the anchor in place passes
+    though the offset changed.
+  - Focuses with `preventScroll` and records the baseline after focusing,
+    so focusing a control off to the side no longer reads as a reset;
+    with no nested scroller it focuses the first control in view.
+  - Reports `triggered` (the trigger runs exactly once) and the number
+    of nested scrollers checked.
+
 ## v0.1.104 (2026-10-10)
 
 - `auth.RefreshGrace` is 15 minutes (was 1): a renewal whose reply never

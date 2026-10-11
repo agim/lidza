@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -23,6 +24,19 @@ const draw = () => { document.getElementById('list').outerHTML = '<div id="list"
 draw(); setInterval(draw, 500)</script>`,
 	"/updated": `<div id="list" style="overflow:auto;width:100%"><table style="width:1200px"><tr><td id="cell">row</td><td><a href="#">Details</a></td></tr></table></div><script>
 let n = 0; setInterval(() => { document.getElementById('cell').textContent = 'row ' + (++n) }, 500)</script>`,
+	// Document-only pages (no nested scroller), as a list on a phone: a
+	// refresh that rebuilds the list and jumps to the top, and a keyed
+	// insertion above the reader that the page compensates for.
+	"/doc-reset": `<ul id="list"></ul><script>
+const fill = (v) => { document.getElementById('list').innerHTML = Array.from({length: 200}, (_, i) => '<li style="height:40px">item ' + i + v + '</li>').join('') }
+fill(''); window.refresh = () => { fetch('/hit'); fill(' (new)'); scrollTo(0, 0) }</script>`,
+	"/doc-insert": `<ul id="list" style="overflow-anchor:none"></ul><style>html,body{overflow-anchor:none}</style><script>
+const list = document.getElementById('list')
+for (let i = 0; i < 200; i++) { const li = document.createElement('li'); li.style.height = '40px'; li.textContent = 'release ' + i; list.append(li) }
+window.refresh = () => { fetch('/hit'); for (let i = 0; i < 5; i++) { const li = document.createElement('li'); li.style.height = '40px'; li.textContent = 'new ' + i; list.prepend(li) }; scrollBy(0, 200) }</script>`,
+	// A control far to the right in a sideways scroller: focusing it
+	// must not move the scroller and read as a reset.
+	"/offscreen": `<div id="wrap" style="overflow:auto;width:100%"><div style="width:3000px;height:60px"><button style="margin-left:2900px">Go</button></div></div>`,
 	"/follow": `<pre id="log" data-audit-follow style="overflow:auto;height:100px"></pre><script>
 const log = document.getElementById('log'); for (let i = 0; i < 50; i++) log.textContent += 'line ' + i + '\n'
 setInterval(() => { log.textContent += 'more\n'; log.scrollTop = log.scrollHeight }, 300)</script>`,
@@ -35,8 +49,12 @@ setInterval(() => { log.textContent += 'more\n'; log.scrollTop = log.scrollHeigh
 // follows on purpose, and a hash route is a same-document navigation,
 // not a failed load.
 func TestAuditLayout(t *testing.T) {
+	var hits atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
+		case "/hit":
+			hits.Add(1)
+			return
 		case "/login":
 			http.SetCookie(w, &http.Cookie{Name: "session", Value: "fixture", Path: "/"})
 		case "/private":
@@ -65,8 +83,17 @@ func TestAuditLayout(t *testing.T) {
 				Sideways int    `json:"sideways"`
 			} `json:"scrollers"`
 			Stability *struct {
-				Resets   []any    `json:"resets"`
-				Replaced []string `json:"replaced"`
+				Resets    []any    `json:"resets"`
+				Replaced  []string `json:"replaced"`
+				Triggered bool     `json:"triggered"`
+				Scrollers int      `json:"scrollers"`
+				Document  *struct {
+					From        [2]int `json:"from"`
+					To          [2]int `json:"to"`
+					Anchor      string `json:"anchor"`
+					AnchorShift int    `json:"anchorShift"`
+					Reset       bool   `json:"reset"`
+				} `json:"document"`
 			} `json:"stability"`
 		} `json:"results"`
 	}
@@ -104,6 +131,33 @@ func TestAuditLayout(t *testing.T) {
 	}
 	if r := audit("--routes", "/follow", "--stability", "2s", "--allow", "#none"); r.Status != "ok" {
 		t.Errorf("data-audit-follow ignored: %+v", r)
+	}
+
+	// A document-only page: the trigger runs once, and a refresh that
+	// rebuilds the list and jumps to the top faults with the evidence.
+	hits.Store(0)
+	r = audit("--routes", "/doc-reset", "--stability", "1s", "--trigger", "window.refresh()")
+	st := r.Results[0].Stability
+	if r.Status != "fault" || st == nil || !st.Triggered || st.Scrollers != 0 || st.Document == nil || !st.Document.Reset || st.Document.From[1] == 0 || st.Document.To[1] != 0 || st.Document.Anchor == "" {
+		t.Errorf("a document reset passed: %+v %+v", r, st)
+	}
+	if n := hits.Load(); n != 1 {
+		t.Errorf("the trigger ran %d times", n)
+	}
+	// An insertion above the reader that keeps the anchor in place passes,
+	// though the document's offset changed.
+	r = audit("--routes", "/doc-insert", "--stability", "1s", "--trigger", "window.refresh()")
+	if st := r.Results[0].Stability; r.Status != "ok" || st == nil || st.Document == nil || st.Document.To[1] == st.Document.From[1] {
+		t.Errorf("a compensated insertion failed: %s %+v", r.Status, func() any {
+			if st != nil && st.Document != nil {
+				return *st.Document
+			}
+			return st
+		}())
+	}
+	// Focusing a control off to the side moves nothing.
+	if r := audit("--routes", "/offscreen", "--stability", "1s"); r.Status != "ok" {
+		t.Errorf("focusing an offscreen control read as a reset: %+v", r.Results[0].Stability)
 	}
 
 	// An app's own sign-in, without registration.

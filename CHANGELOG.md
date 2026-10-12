@@ -10,7 +10,7 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
-## Unreleased
+## v0.1.109 (2026-10-12)
 
 - `devserver.Static` (and so `App.Head`) sets the head of a named HTML
   file too (`/console.html`): it skipped the hook there, while the home

@@ -1150,7 +1150,13 @@ pack, with the app deciding who may read them.
    slash purges the folder) with `STORAGE_MEDIA_CDN=digitalocean`,
    `STORAGE_MEDIA_CDN_ENDPOINT_ID` and `STORAGE_CDN_TOKEN` in the
    credentials; the local provider ignores it. `PresignDelete` hands a
-   worker outside the app a URL that deletes one object.
+   worker outside the app a URL that deletes one object. Before trusting
+   a bucket with private files (backups, exports), check it:
+   `storage.From(ctx).Privacy(ctx, key)` asks, with no credentials,
+   for the object, a listing and the public URL, and reports each check
+   as `denied`, `public` or `inconclusive` (`Private` only when all are
+   denied); `PrivacyProbe(ctx, "backups/probe.dump")` does it with a
+   temporary object named like the real ones.
 4. Test with the local provider: `.env.test` sets `STORAGE_PROVIDER=local`
    and a `STORAGE_DIR`; upload through the API, read it back, delete the
    row and check `Stat` returns `storage.ErrNotFound`. The snippet

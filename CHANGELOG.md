@@ -10,6 +10,23 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
+## Unreleased
+
+- Storage: `Privacy(ctx, key)` and `PrivacyProbe(ctx, key)` check
+  whether anonymous clients can reach an object (#56). After confirming
+  the object exists (authenticated `Stat`), they send, with no
+  credentials, cookies or signature, a HEAD of the object, a listing
+  under the store's prefix, and a HEAD at `STORAGE_PUBLIC_URL` when set;
+  each check is reported with its scope, time, status and an outcome
+  `denied`, `public` or `inconclusive` (redirects, which are not
+  followed, server errors, timeouts). `Private` is true only when every
+  check is denied; a missing object is an error, never "private".
+  `PrivacyProbe` puts a small object at a key that must not exist,
+  checks it and removes it, and marks the report as a probe that speaks
+  only for that key. Nothing is downloaded; each request is bounded;
+  signed URLs and credentials never appear in the report. Bucket
+  policies, ACLs and public-access blocks are not read.
+
 ## v0.1.110 (2026-10-12)
 
 - Mail: click and open tracking are off by default (#57). Mailgun

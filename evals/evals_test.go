@@ -846,6 +846,27 @@ func TestUnsafeMigration(t *testing.T) {
 	}
 }
 
+// A form that submits to mailto: or http: is a warning (L022); a mailto:
+// link and a same-origin form are not.
+func TestInsecureFormTarget(t *testing.T) {
+	t.Cleanup(func() { os.Remove(filepath.Join(app, "src", "contact.html")) })
+	edit(t, map[string]string{
+		"src/contact.html": "<form action=\"mailto:team@example.com\" method=\"post\"><button>Send</button></form>\n" +
+			"<a href=\"mailto:team@example.com\">Email us</a>\n<form action=\"/api/v1/contact\"></form>\n",
+	})
+	r := check(t)
+	expect(t, r, expectation{code: "L022", severity: "warning", file: "src/contact.html", message: "mixed content"})
+	n := 0
+	for _, d := range r.Diagnostics {
+		if d.Code == "L022" {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Errorf("%d L022 findings, want 1:\n%s", n, dump(r))
+	}
+}
+
 // dropDatabases drops databases an earlier run left, on the server
 // DATABASE_URL names (the local socket by default).
 func dropDatabases(t *testing.T, names ...string) {

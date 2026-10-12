@@ -94,7 +94,17 @@ for (const route of routes) {
       if (r) r.bytes = e.encodedDataLength
     })
     const first = i === 0
-    if (first) await page.coverage.startJSCoverage({ resetOnNavigation: false })
+    // Chrome's own mixed-content reports (an http: or mailto: form target
+    // on an https page raises one on load, before any submission).
+    const mixed = []
+    if (first) {
+      cdp.on('Audits.issueAdded', (e) => {
+        const d = e.issue?.code === 'MixedContentIssue' && e.issue.details?.mixedContentIssueDetails
+        if (d) mixed.push({ url: d.insecureURL || d.mainResourceURL || '', type: d.resourceType || '' })
+      })
+      await cdp.send('Audits.enable').catch(() => {})
+      await page.coverage.startJSCoverage({ resetOnNavigation: false })
+    }
     let status = 0
     try {
       const res = await page.goto(base + route, { waitUntil: 'load', timeout: 120000 })
@@ -125,7 +135,17 @@ for (const route of routes) {
           sized: img.hasAttribute('width') && img.hasAttribute('height'),
         }))
         const meta = (name) => document.querySelector(`meta[name="${name}"]`)?.getAttribute('content') || ''
+        // Where each form submits: its action and every formaction,
+        // resolved as the browser would.
+        const describe = (el) => el.tagName.toLowerCase() + (el.id ? '#' + el.id : '') + (el.getAttribute('name') ? `[name=${el.getAttribute('name')}]` : '')
+        const forms = []
+        for (const f of document.forms) {
+          if (f.hasAttribute('action')) forms.push({ el: describe(f), target: f.action })
+          for (const b of f.querySelectorAll('[formaction]')) forms.push({ el: describe(b), target: b.formAction })
+        }
         return {
+          forms,
+          protocol: location.protocol,
           title: document.title,
           lang: document.documentElement.getAttribute('lang') || '',
           viewport: meta('viewport'),
@@ -133,7 +153,7 @@ for (const route of routes) {
           images,
         }
       })
-      detail = { status, requests: [...requests.values()], coverage, page: page_, lcpEl: m.lcpEl, lcpImg: m.lcpImg }
+      detail = { status, requests: [...requests.values()], coverage, page: page_, lcpEl: m.lcpEl, lcpImg: m.lcpImg, mixed }
     }
     await context.close()
   }
@@ -180,6 +200,27 @@ for (const route of routes) {
   if (!p.lang) findings.push({ level: 'warn', check: 'seo', message: '<html> has no lang' })
   if (!/width=device-width/.test(p.viewport)) findings.push({ level: 'warn', check: 'seo', message: 'no <meta name="viewport" content="width=device-width, ...">' })
   if (!p.description) findings.push({ level: 'warn', check: 'seo', message: 'no <meta name="description">' })
+  // Form targets: a form that submits anywhere but http(s) (mailto:,
+  // data:, javascript:...), or to http: from an https page or another
+  // origin, is mixed content on the deployed https page. A mailto: link
+  // is not a form and is fine.
+  for (const f of p.forms) {
+    let u
+    try {
+      u = new URL(f.target)
+    } catch {
+      continue
+    }
+    const pageOrigin = new URL(base).origin
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') {
+      findings.push({ level: 'warn', check: 'form-target', message: `${f.el} submits to ${u.protocol} (${f.target}): an https page reports it as mixed content (Lighthouse best practices). Submit to a same-origin path whose handler does the work (the mail pack sends email), or keep the form on the page and handle its submit in script` })
+    } else if (u.protocol === 'http:' && (p.protocol === 'https:' || u.origin !== pageOrigin)) {
+      findings.push({ level: 'warn', check: 'form-target', message: `${f.el} submits to ${f.target} over http: the data travels unencrypted and an https page reports mixed content; use https or a same-origin path` })
+    }
+  }
+  for (const mc of detail.mixed) {
+    findings.push({ level: 'warn', check: 'mixed-content', message: `the browser reported mixed content: ${mc.type || 'a resource'} ${mc.url}` })
+  }
 
   results.push({
     route,
@@ -213,4 +254,7 @@ try {
   llms = { status: 0, problem: String(e.message || e).split('\n')[0] }
 }
 await browser.close()
-console.log(JSON.stringify({ signedIn, device: `${width}x${height}@${dpr}x, 4x CPU, slow 4G`, llms, results }))
+// Over plain http the browser reports no mixed content; the form
+// targets above are still checked.
+const note = new URL(base).protocol === 'http:' ? 'served over http: the browser reports mixed content only on https pages (audit the deployed address with --base-url https://...); form targets were checked from the page' : ''
+console.log(JSON.stringify({ signedIn, note, device: `${width}x${height}@${dpr}x, 4x CPU, slow 4G`, llms, results }))

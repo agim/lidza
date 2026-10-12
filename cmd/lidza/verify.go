@@ -100,6 +100,14 @@ func runVerify(ctx context.Context, args []string) error {
 		return s.Status != "failed"
 	}
 
+	// One machine's CLI must not commit another release's agent files:
+	// the pre-commit hook stops here until the CLI matches go.mod.
+	step("framework version", func() (string, error) {
+		if d := frameworkDrift(abs); d != nil {
+			return "", errors.New(d.String())
+		}
+		return "", nil
+	})
 	step("agent files current", func() (string, error) {
 		if cfg == nil {
 			return "plain Go module", errSkipped

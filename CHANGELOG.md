@@ -10,6 +10,27 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
+## Unreleased
+
+- Framework version drift (#53): when the CLI's release differs from the
+  one the app's `go.mod` pins, `gen`, `dev`, `install`, `check`, `note`,
+  `decision`, `recipe` and `brief` print one line naming both and the
+  command that fixes it (`lidza update --cli-only --to <go.mod's
+  version>`, or `lidza update` when the CLI is newer); `gen`, `dev`,
+  `install` and `recipe add` leave the agent files (`AGENTS.md`, the
+  guide, the skills) as the repository has them; `lidza verify`, and so
+  the pre-commit hook, fails a "framework version" step; `lidza doctor`
+  names the fix. A local `replace` checkout and a CLI built from source
+  are exempt.
+- Insecure form targets (#52): `lidza check` L022 warns on a form whose
+  `action` or `formaction` is `mailto:`, `http:` or another non-https
+  scheme in templates and components (an https page reports it as mixed
+  content on load); `mailto:` links are not flagged.
+  `lidza audit performance` reports the rendered forms' resolved
+  targets the same way (`form-target`), and the browser's own
+  `MixedContentIssue`s on an https page (`mixed-content`); over plain
+  http it notes that mixed content shows only on https.
+
 ## v0.1.107 (2026-10-11)
 
 - `GET /tls-allow?domain=<host>` (#51): a TLS terminator in front of the

@@ -147,6 +147,7 @@ func runAuditPerformance(ctx context.Context, args []string) error {
 	}
 	var report struct {
 		SignedIn bool         `json:"signedIn"`
+		Note     string       `json:"note"`
 		Device   string       `json:"device"`
 		LLMs     perfLLMs     `json:"llms"`
 		Results  []perfResult `json:"results"`
@@ -169,8 +170,11 @@ func runAuditPerformance(ctx context.Context, args []string) error {
 	}
 	if *o.asJSON {
 		r.report(map[string]any{"status": map[bool]string{true: "ok", false: "fault"}[faults == 0], "signedIn": report.SignedIn,
-			"device": report.Device, "budgets": budgets, "llms": report.LLMs, "results": report.Results})
+			"note": report.Note, "device": report.Device, "budgets": budgets, "llms": report.LLMs, "results": report.Results})
 	} else {
+		if report.Note != "" {
+			fmt.Println("[audit] " + report.Note)
+		}
 		printPerformance(report.Results, report.LLMs, report.Device, r.wantsSignIn(), report.SignedIn)
 	}
 	if faults > 0 {

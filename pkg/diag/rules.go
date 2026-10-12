@@ -102,6 +102,10 @@ import (
 //     during the deploy (a rename, a type change, a drop); the safe
 //     steps are named (migrationsafety.go).
 //
+//   - L022: a form whose action or formaction is mailto:, http: or
+//     another scheme than https, in the app's templates and components:
+//     mixed content on an https page (forms.go). Links are not forms.
+//
 // Except for L004, L019 and L020 the findings are warnings: they point at the pattern,
 // the author decides. A comment "lidza:ignore L001" on the line, or the
 // line before, exempts that line from the rule it names.
@@ -157,6 +161,7 @@ func Rules(ctx context.Context, root string) []Diagnostic {
 	out = append(out, ownedQueries(root)...)
 	out = append(out, migrationNumbers(root)...)
 	out = append(out, migrationSafety(root)...)
+	out = append(out, formTargets(root)...)
 	out = append(out, rootLayout(root)...)
 	return out
 }

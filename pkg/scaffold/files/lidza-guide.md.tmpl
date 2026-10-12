@@ -97,7 +97,7 @@ import package `main`. Preserve its tests and behavior during the move:
 | `lidza context` | writes `.lidza/context.json`: routes, handler signatures, Rust exports. |
 | `lidza mcp` | MCP server on stdio; see "Agent interface". |
 | `lidza gen resource <Model> [--public \| --shared]` | queries, `Create/Update/<Model>List` types, `handlers/<table>.go` with list, get, create, patch, delete under `/api/v1/<plural>` (the list with search, filters, a date range, sorting and pages through `list.Read`: recipe "Add a paginated, filterable list"), registered in `{{.RoutesFile}}` (in `appDir` when set) behind `auth.Require()`. An owned model (`ownerId`, or a field with `@ref(User)`) is scoped to the signed-in user. `--public` marks the model `@public`: open routes, no owner. `--shared` marks it `@shared`: behind sign-in, rows not scoped. Needs the `db` and `auth` packs (`auth` not with `--public`). |
-| `lidza update [--migrate]` | brings the app's branch and the framework up to date together: a branch behind its upstream is pulled first when that is a clean fast-forward (nothing uncommitted, no local commits the upstream lacks), otherwise the update stops and says what to run (`--no-pull` stops instead of pulling); then the CLI and this app's framework module move to the newest release (never back to an older one; `--to <commit>` takes a release not tagged yet), it regenerates, refreshes the deployment files, then runs `lidza install`. It stops when the files it rewrites have uncommitted changes (`git stash push` sets them aside); `--commit` commits the update when done. In a team, one person makes the update and merges it; the others `git pull`, then `lidza update --cli-only`. |
+| `lidza update [--migrate]` | brings the app's branch and the framework up to date together: a branch behind its upstream is pulled first when that is a clean fast-forward (nothing uncommitted, no local commits the upstream lacks), otherwise the update stops and says what to run (`--no-pull` stops instead of pulling); then the CLI and this app's framework module move to the newest release (never back to an older one; `--to <commit>` takes a release not tagged yet), it regenerates, refreshes the deployment files, then runs `lidza install`. It stops when the files it rewrites have uncommitted changes (`git stash push` sets them aside); `--commit` commits the update when done. In a team, one person makes the update and merges it; the others `git pull`, then `lidza update --cli-only` (`--to <go.mod's version>` when the app is behind the newest). While the CLI and `go.mod` differ, gen, dev and install leave the agent files alone and say so, and `lidza verify` fails. |
 | `lidza gen deploy [--force]` | the `Dockerfile`, `.dockerignore` and `deploy/{{.Name}}.service` from the current templates; a file the app changed is kept and named unless `--force`. |
 | `lidza pack add <name>` | enables an official pack: `db`, `auth`, `jobs`, `mail`, `llm`, `storage`, `cache`, `i18n`, `realtime`, `analytics`, `audit`, `hooks`, `billing`, `geo`, `media`. |
 | `lidza credentials set NAME=value` | seals a secret into `config/credentials.yml.enc` with `config/master.key`; `list` (names), `show` (every value, decrypted) or `show NAME`, `edit` (the whole file in `$EDITOR`), `unset`, `init`. |
@@ -2496,7 +2496,14 @@ to a buffer or a hash are exempt); and a run of at least 8 statements
 that repeats another in the app, names and literals aside (L017: reuse
 the first or extract a function both call). `// lidza:ignore L016` on
 the line, or the line before, exempts one call; above a function,
-`// lidza:ignore L017` exempts the function.
+`// lidza:ignore L017` exempts the function. A form whose `action` or
+`formaction` is `mailto:`, `http:` or another non-https scheme warns
+(L022): an https page reports it as mixed content on load. An email
+form submits to a same-origin handler that sends with the mail pack (or
+keeps a same-origin action and handles the submit in script); a
+`mailto:` link is fine. `lidza audit performance` checks the rendered
+forms the same way, and over https reports the browser's own
+mixed-content issues.
 Rate limit a route group with `r.Use(middleware.RateLimit(middleware.RateLimitOptions{RPS: 10, Burst: 20}))`
 (per node; a limit across nodes counts with the cache pack's `Incr`);
 guard an outbound dependency with `resilience.New(...)`.

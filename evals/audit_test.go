@@ -193,7 +193,7 @@ func TestAuditPerformance(t *testing.T) {
 			w.Write([]byte("<!doctype html><div id=app></div>"))
 		default:
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			w.Write([]byte(`<!doctype html><html lang="en"><meta name="viewport" content="width=device-width"><title>Fixture</title><body><h1>Fixture</h1><img src="/big.svg" alt="" style="width:100px"><script src="/app.js"></script>`))
+			w.Write([]byte(`<!doctype html><html lang="en"><meta name="viewport" content="width=device-width"><title>Fixture</title><body><h1>Fixture</h1><img src="/big.svg" alt="" style="width:100px"><form id="contact" action="mailto:team@example.com"></form><a href="mailto:team@example.com">mail</a><form action="/send"><button formaction="http://other.example/x">Go</button></form><script src="/app.js"></script>`))
 		}
 	}))
 	defer srv.Close()
@@ -229,7 +229,16 @@ func TestAuditPerformance(t *testing.T) {
 	for _, f := range res.Findings {
 		checks[f.Check] = true
 	}
-	for _, want := range []string{"compression", "unused-js", "image-size", "image-dimensions", "seo"} {
+	forms := 0
+	for _, f := range res.Findings {
+		if f.Check == "form-target" {
+			forms++
+		}
+	}
+	if forms != 2 {
+		t.Errorf("form targets: %d findings, want 2 (the mailto: form and the http: formaction, not the link)", forms)
+	}
+	for _, want := range []string{"compression", "unused-js", "image-size", "image-dimensions", "seo", "form-target"} {
 		if !checks[want] {
 			t.Errorf("no %s finding: %+v", want, res.Findings)
 		}

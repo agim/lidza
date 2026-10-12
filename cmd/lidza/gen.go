@@ -132,7 +132,13 @@ func generateAll(dir string, cfg *config.Config, out io.Writer) error {
 	if err := generatePacks(context.Background(), dir, cfg, out); err != nil {
 		return err
 	}
-	if cfg != nil {
+	if cfg != nil && frameworkDrift(dir) != nil {
+		// Another release's agent files: keep them (warnDrift said why);
+		// the skills follow the guide the repo has.
+		if _, err := recipes.Sync(dir); err != nil {
+			return fmt.Errorf("skills: %w", err)
+		}
+	} else if cfg != nil {
 		changed, err := scaffold.Refresh(dir, cfg)
 		if err != nil {
 			return fmt.Errorf("recipes: %w", err)

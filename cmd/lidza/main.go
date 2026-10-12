@@ -91,6 +91,13 @@ func main() {
 	}
 
 	var err error
+	switch os.Args[1] {
+	case "gen", "dev", "install", "setup", "check", "note", "decision", "recipe", "brief":
+		// verify fails on it in a step of its own; doctor lists it.
+		if abs, cfg, perr := loadProject("."); perr == nil && cfg != nil {
+			warnDrift(os.Stderr, abs)
+		}
+	}
 	switch cmd, args := os.Args[1], os.Args[2:]; cmd {
 	case "new":
 		err = runNew(ctx, args)

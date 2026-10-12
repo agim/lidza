@@ -105,7 +105,11 @@ func runDoctor(ctx context.Context, args []string) error {
 			case mod == version.String():
 				ok("framework module " + mod + " matches the CLI")
 			default:
-				todo("framework module "+mod+", CLI "+version.String(), "lidza update (both to the newest release) or lidza update --to "+mod)
+				fix := "lidza update (both to the newest release) or lidza update --cli-only --to " + mod
+				if d := frameworkDrift(abs); d != nil {
+					fix = d.String()
+				}
+				todo("framework module "+mod+", CLI "+version.String(), fix)
 			}
 		}
 		if slices.Contains(cfg.Packs, pack.OfficialPrefix+"db") {

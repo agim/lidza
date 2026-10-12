@@ -261,8 +261,11 @@ the pre-commit hook.
 
 In a team, one person (or one session) makes the project update and
 merges it; everyone else runs `git pull`, then `lidza update --cli-only`
-for the matching CLI. `lidza doctor` reports when
-the CLI and the project's module differ. What changed is in the
+for the matching CLI (`--to <version>` when the app is not on the newest
+release). Until the CLI matches the version `go.mod` pins, the commands
+that write files say so up front and leave the agent files (`AGENTS.md`,
+the guide, the skills) as the repository has them, and `lidza verify`
+(the pre-commit hook) stops a commit; `lidza doctor` lists it too. What changed is in the
 framework's `CHANGELOG.md`.
 
 ## Resources

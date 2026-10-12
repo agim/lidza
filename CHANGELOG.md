@@ -10,7 +10,7 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
-## Unreleased
+## v0.1.111 (2026-10-12)
 
 - Storage: `Privacy(ctx, key)` and `PrivacyProbe(ctx, key)` check
   whether anonymous clients can reach an object (#56). After confirming

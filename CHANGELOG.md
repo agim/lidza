@@ -10,7 +10,7 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
-## Unreleased
+## v0.1.108 (2026-10-12)
 
 - Framework version drift (#53): when the CLI's release differs from the
   one the app's `go.mod` pins, `gen`, `dev`, `install`, `check`, `note`,

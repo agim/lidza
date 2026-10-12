@@ -64,7 +64,7 @@ func Static(dist fs.FS, opts ...Option) http.Handler {
 		}
 		// Any other HTML file is a page too: its inline code needs the
 		// policy's hashes.
-		if strings.HasSuffix(name, ".html") && name != "index.html" && exists(dist, name) && servePage(w, r, dist, name, false, nil) {
+		if strings.HasSuffix(name, ".html") && name != "index.html" && exists(dist, name) && servePage(w, r, dist, name, false, o.head) {
 			return
 		}
 		// index.html is written directly: FileServer would redirect it to "/".

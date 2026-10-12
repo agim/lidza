@@ -10,6 +10,15 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
+## Unreleased
+
+- `devserver.Static` (and so `App.Head`) sets the head of a named HTML
+  file too (`/console.html`): it skipped the hook there, while the home
+  page, prerendered directory pages and the shell had it (#54). A test
+  covers every kind of page with the hook's status, escaping, CSP hashes,
+  ETag and conditional GET/HEAD, and that assets and missing HTML files
+  never call it.
+
 ## v0.1.108 (2026-10-12)
 
 - Framework version drift (#53): when the CLI's release differs from the

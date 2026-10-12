@@ -10,7 +10,7 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
-## Unreleased
+## v0.1.110 (2026-10-12)
 
 - Mail: click and open tracking are off by default (#57). Mailgun
   (`o:tracking`, `o:tracking-clicks`, `o:tracking-opens` = no, on the

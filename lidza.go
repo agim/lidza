@@ -589,9 +589,10 @@ func envOr(key, def string) string {
 }
 
 // warnAppSettingsInEnv logs, in production, the app settings the
-// environment or a .env file supplies: they belong in the app's
-// database, so the app moves with it (lidza settings import). Names
-// only, never values. The environment still wins over the database.
+// process environment sets (a server's or a deploy platform's
+// variables): they win over the values saved in the app, so the admin
+// pages cannot switch them until they are removed there. Names only,
+// never values.
 func warnAppSettingsInEnv(log *slog.Logger) {
 	if env.Mode() != "production" {
 		return
@@ -602,15 +603,14 @@ func warnAppSettingsInEnv(log *slog.Logger) {
 	}
 	var from []string
 	for name, origin := range origins {
-		if origin == env.OriginCredentials || origin == env.OriginSaved || !env.AppSetting(name) {
-			continue
+		if origin == env.OriginProcess && env.AppSetting(name) {
+			from = append(from, name)
 		}
-		from = append(from, name+" ("+origin+")")
 	}
 	if len(from) == 0 {
 		return
 	}
 	slices.Sort(from)
-	log.Warn("app settings from the environment: store them in the app's database (lidza settings import --production, or the admin pages), so the environment holds only the database, the master key and tuning; an environment value still wins over the saved one",
+	log.Warn("app settings set in the server's environment: they override the admin pages until removed there; keep them in the app instead (lidza settings import --production, or the admin pages)",
 		"settings", strings.Join(from, ", "))
 }

@@ -108,13 +108,14 @@ lidza settings set --production MAIL_API_KEY=... STRIPE_SECRET_KEY=...
 or through the admin pages once the app runs. `AUTH_SECRET` is
 generated on the first start and kept there. `docs/configuration.md`
 marks every setting `app` or `infra`; the app logs at start which app
-settings still come from the environment, and `lidza check` (L023)
-names those in env files. An environment variable still wins over the
-saved value, as an emergency override.
+settings the server's environment sets. An environment variable still
+wins over the saved value, as an emergency override, and locks its
+field on the admin pages until it is removed. A value saved on one node
+reaches the others within `DB_CREDENTIALS_POLL` (10 seconds).
 
-`config/credentials.yml.enc` ships with the app as the development seed
-(and a fallback a deploy may use: its `production:` section is read in
-production); the master key never does.
+`config/credentials.yml.enc` ships with the app: the development seed,
+and its `production:` section is read in production, under the values
+saved in the database. The master key never ships.
 
 ## The first admin on a public deployment
 

@@ -7,7 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/agim/lidza/pkg/tracing"
+	"log/slog"
 	"os"
 	"strings"
 	"time"
@@ -17,6 +17,7 @@ import (
 	"golang.org/x/crypto/acme/autocert"
 
 	"github.com/agim/lidza/pkg/credentials"
+	"github.com/agim/lidza/pkg/tracing"
 
 	"github.com/agim/lidza"
 	"github.com/agim/lidza/pkg/env"
@@ -45,12 +46,20 @@ type Config struct {
 	// queued behind a long query never stalls the queries queued behind
 	// it.
 	MigrateLockTimeout time.Duration `env:"DB_MIGRATE_LOCK_TIMEOUT" default:"5s"`
+	// CredentialsPoll is how often each node checks the settings saved
+	// in the database for a change made on another node (the admin pages
+	// save on one), then loads them and reconfigures the packs; 0 turns
+	// it off.
+	CredentialsPoll time.Duration `env:"DB_CREDENTIALS_POLL" default:"10s"`
 }
 
 // DB is the running pack.
 type DB struct {
 	Pool *pgxpool.Pool
 	cfg  Config
+
+	stop context.CancelFunc // ends watch
+	done chan struct{}      // closed when watch returns
 }
 
 // Pack returns the pack for packs.go. Configuration is read at Start.
@@ -100,11 +109,47 @@ func (d *DB) Start(ctx context.Context, s *lidza.Services) error {
 		return fmt.Errorf("credentials: %w", err)
 	}
 	lidza.Provide[credentials.Store](s, store)
+	if _, err := credentials.Key("."); err == nil && d.cfg.CredentialsPoll > 0 {
+		wctx, stop := context.WithCancel(context.Background())
+		d.stop, d.done = stop, make(chan struct{})
+		go d.watch(wctx, store, s)
+	}
 	return nil
 }
 
-// Stop closes the pool after in-flight queries finish.
+// watch follows the settings saved on other nodes: when the table
+// changes it loads them again and reconfigures the packs, as the admin
+// pages do on the node that saved.
+func (d *DB) watch(ctx context.Context, store *CredentialStore, s *lidza.Services) {
+	defer close(d.done)
+	t := time.NewTicker(d.cfg.CredentialsPoll)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+		cctx, cancel := context.WithTimeout(ctx, d.cfg.CredentialsPoll)
+		changed, err := store.Refresh(cctx)
+		if err == nil && changed {
+			err = lidza.Reconfigure(cctx, s)
+		}
+		cancel()
+		if err != nil && ctx.Err() == nil {
+			slog.Warn("db: saved settings refresh", "error", err)
+		}
+	}
+}
+
+// Stop ends the settings watch, then closes the pool after in-flight
+// queries finish.
 func (d *DB) Stop(context.Context) error {
+	if d.stop != nil {
+		d.stop()
+		<-d.done
+		d.stop = nil
+	}
 	if d.Pool != nil {
 		d.Pool.Close()
 	}

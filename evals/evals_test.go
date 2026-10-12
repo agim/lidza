@@ -867,31 +867,6 @@ func TestInsecureFormTarget(t *testing.T) {
 	}
 }
 
-// An app setting in an environment file is a warning (L023): it belongs
-// in the app's database. Infrastructure settings and .env.test pass, and
-// a fresh app's own .env has none.
-func TestAppSettingInEnvFile(t *testing.T) {
-	r := check(t)
-	for _, d := range r.Diagnostics {
-		if d.Code == "L023" {
-			t.Fatalf("a fresh app has an app setting in an env file: %+v", d)
-		}
-	}
-	t.Cleanup(func() { os.Remove(filepath.Join(app, ".env.production")) })
-	edit(t, map[string]string{".env.production": "LIDZA_LOG=json\nDB_MAX_CONNS=20\nMAIL_API_KEY=key-1\n"})
-	r = check(t)
-	expect(t, r, expectation{code: "L023", severity: "warning", file: ".env.production", message: "MAIL_API_KEY is the app's configuration"})
-	n := 0
-	for _, d := range r.Diagnostics {
-		if d.Code == "L023" {
-			n++
-		}
-	}
-	if n != 1 {
-		t.Errorf("%d L023 findings, want 1:\n%s", n, dump(r))
-	}
-}
-
 // dropDatabases drops databases an earlier run left, on the server
 // DATABASE_URL names (the local socket by default).
 func dropDatabases(t *testing.T, names ...string) {

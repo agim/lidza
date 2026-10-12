@@ -33,16 +33,17 @@ these rules cover.
   - `AUTH_SECRET` is no longer required: unset, it is generated on the
     app's first start and kept in the database, the same on every node
     (needs the master key).
-  - `lidza check` L023 warns on an app setting in `.env`, `.env.<mode>`,
-    `.env.example` or `deploy/production.env` (`.env.test` is the test
-    suite's fixture). Production logs at start which app settings still
-    come from the environment (names only).
+  - Production logs at start which app settings the process
+    environment sets (names only): those lock their field on the admin
+    pages until they are removed from the server or deploy platform.
+  - A value saved on one node reaches every node within
+    `DB_CREDENTIALS_POLL` (10s), and the packs reconfigure there too.
   - New apps: `lidza install` writes only `DATABASE_URL` and `CACHE_URL`
     to `.env`; the packs' `.env.example` lines for app settings are
     comments; development defaults `APP_URL` to `http://` plus
     `LIDZA_ADDR` and `MAIL_FROM` to `dev@localhost`; `.env.test` gets a
-    test-only `AUTH_SECRET`. `lidza ship` keeps app settings out of
-    `deploy/production.env`.
+    test-only `AUTH_SECRET`. `lidza ship` still writes app settings
+    from `deploy.env`, under a note to move them into the database.
   - Unchanged: an environment variable still wins over a saved value,
     and the credentials file stays as the development seed. Existing
     apps keep working; `lidza check` lists what to move, and

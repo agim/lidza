@@ -258,7 +258,7 @@ func settingsImport(ctx context.Context, dir string, store *db.CredentialStore, 
 		fmt.Println("nothing to import: every app setting is saved in the app's database already, or none is set")
 	} else {
 		fmt.Printf("%s into the app's database (%s): %s\n", verb, env.Mode(), strings.Join(moved, ", "))
-		fmt.Println("then remove them from the environment and the .env files (lidza check, L023, names them); an environment value still wins over the saved one")
+		fmt.Println("then remove them from the server's environment and the .env files; an environment value still wins over the saved one")
 	}
 	if len(skipped) > 0 {
 		fmt.Printf("already saved, kept (--overwrite replaces): %s\n", strings.Join(skipped, ", "))

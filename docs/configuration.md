@@ -121,6 +121,7 @@ database (the admin pages, `lidza settings set`), so the app moves with its data
 |---|---|---|---|
 | `DATABASE_URL` | infra | required | The connection string, e.g. postgres://user:pass@host/db or postgres:///db?host=/var/run/postgresql for a Unix socket (/tmp on macOS; LocalURL finds this machine's). |
 | `DB_CONNECT_TIMEOUT` | infra | `5s` | Bounds opening a connection and the first ping. |
+| `DB_CREDENTIALS_POLL` | infra | `10s` | How often each node checks the settings saved in the database for a change made on another node (the admin pages save on one), then loads them and reconfigures the packs; 0 turns it off. |
 | `DB_MAX_CONNS` | infra | `10` | Bounds the pool; size it below Postgres max_connections divided by the number of app nodes. |
 | `DB_MIGRATE` | infra |  | Applies pending migrations from db/migrations at start. |
 | `DB_MIGRATE_LOCK_TIMEOUT` | infra | `5s` | Bounds how long each migration statement waits for a table lock before it gives up and retries, so a migration queued behind a long query never stalls the queries queued behind it. |

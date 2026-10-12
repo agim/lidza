@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"sync"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -18,6 +20,9 @@ import (
 type CredentialStore struct {
 	pool *pgxpool.Pool
 	dir  string
+
+	mu   sync.Mutex
+	seen string // the table's version at the last Load
 }
 
 // NewCredentialStore returns a store over pool for the app in dir.
@@ -48,6 +53,11 @@ func (c *CredentialStore) Load(ctx context.Context) error {
 	if err := c.ensure(ctx); err != nil {
 		return err
 	}
+	// The version before the rows: a save after it is seen by Refresh.
+	version, err := c.version(ctx)
+	if err != nil {
+		return err
+	}
 	rows, err := c.pool.Query(ctx, `SELECT name, sealed FROM credential`)
 	if err != nil {
 		return err
@@ -65,8 +75,40 @@ func (c *CredentialStore) Load(ctx context.Context) error {
 		}
 		values[name] = string(plain)
 	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
 	credentials.SetOverrides(values)
-	return rows.Err()
+	c.mu.Lock()
+	c.seen = version
+	c.mu.Unlock()
+	return nil
+}
+
+// version identifies the table's contents: any save or delete changes
+// the count or the newest updated_at.
+func (c *CredentialStore) version(ctx context.Context) (string, error) {
+	var n int64
+	var newest time.Time
+	err := c.pool.QueryRow(ctx, `SELECT count(*), coalesce(max(updated_at), 'epoch'::timestamptz) FROM credential`).Scan(&n, &newest)
+	return fmt.Sprintf("%d/%d", n, newest.UnixMicro()), err
+}
+
+// Refresh loads the stored values again when the table changed since
+// the last Load (a value saved or removed on another node) and reports
+// whether it did.
+func (c *CredentialStore) Refresh(ctx context.Context) (bool, error) {
+	version, err := c.version(ctx)
+	if err != nil {
+		return false, err
+	}
+	c.mu.Lock()
+	same := version == c.seen
+	c.mu.Unlock()
+	if same {
+		return false, nil
+	}
+	return true, c.Load(ctx)
 }
 
 // Save seals and stores one value and applies it at once.

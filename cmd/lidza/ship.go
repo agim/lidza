@@ -152,7 +152,7 @@ func writeProductionEnv(dir string, cfg *config.Config) (string, error) {
 		}
 		if len(app) > 0 {
 			// Written as before, so a deploy keeps working; they belong in
-			// the production database (lidza check L023 names them).
+			// the production database.
 			b.WriteString("\n# App settings from deploy.env: they belong in the app's production database.\n# Move them once (lidza settings import --production), then drop them from deploy.env.\n")
 			for _, k := range app {
 				fmt.Fprintf(&b, "%s=%s\n", k, cfg.Deploy.Env[k])

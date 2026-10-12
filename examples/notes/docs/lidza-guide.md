@@ -2302,10 +2302,8 @@ to another server takes its configuration along in its database: the
 environment holds only the deployment's settings, the database
 (`DATABASE_URL`), the master key (`LIDZA_MASTER_KEY`), addresses,
 logging, tracing and tuning (pool sizes, workers, timeouts, rate
-limits). `docs/configuration.md` marks each setting `app` or `infra`,
-and `lidza check` warns (L023) on an app setting in `.env`,
-`.env.<mode>`, `.env.example` or `deploy/production.env`;
-`lidza settings import` moves such values into the database (with
+limits). `docs/configuration.md` marks each setting `app` or `infra`;
+`lidza settings import` moves app settings found in the environment into the database (with
 `--production`, into production's). `AUTH_SECRET` is generated on the
 app's first start and kept in the database, the same on every node.
 An environment variable still wins over a saved value, for an

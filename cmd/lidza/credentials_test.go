@@ -85,7 +85,9 @@ func TestCredentialsSavedSettings(t *testing.T) {
 	if out := stdout(t, func() error { return runCredentials(ctx, []string{"list", "--dir", dir}) }); out != "MAIL_API_KEY\nSTORAGE_PROVIDER (saved from the admin pages)\n" {
 		t.Fatalf("list: %q", out)
 	}
-	if out := stdout(t, func() error { return runCredentials(ctx, []string{"show", "--dir", dir}) }); !strings.Contains(out, "from-file") || !strings.Contains(out, "Saved from the admin pages") || !strings.Contains(out, "spaces") {
+	if out := stdout(t, func() error { return runCredentials(ctx, []string{"show", "--dir", dir}) }); !strings.Contains(out, "from-file") || !strings.Contains(out, "Saved from the admin pages") || !strings.Contains(out, "spaces") ||
+		strings.Count(out, "sealed with config/master.key") != 1 || !strings.Contains(out, "lidza credentials unset NAME clears one") {
+		// The saved section has its own header, not the file's again (#55).
 		t.Fatalf("show: %q", out)
 	}
 	if out := stdout(t, func() error { return runCredentials(ctx, []string{"show", "--dir", dir, "STORAGE_PROVIDER"}) }); out != "spaces\n" {

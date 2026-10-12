@@ -386,13 +386,21 @@ func Parse(text string) (map[string]string, error) {
 
 // Format writes values as the flat YAML Parse reads, names sorted.
 func Format(values map[string]string) string {
+	return FileHeader + FormatValues(values)
+}
+
+// FileHeader is the comment Format writes at the top of the sealed file.
+const FileHeader = "# Secrets of this app, sealed with config/master.key. Edit with\n# lidza credentials set NAME=value; every pack reads them like .env.\n# A mode's section (dev:, production:) holds values for that mode\n# only, over the plain ones: lidza credentials set dev.NAME=value.\n"
+
+// FormatValues is Format without the file's header: values shown from
+// somewhere else, such as the ones saved from the admin pages.
+func FormatValues(values map[string]string) string {
 	names := make([]string, 0, len(values))
 	for k := range values {
 		names = append(names, k)
 	}
 	sort.Strings(names)
 	var b strings.Builder
-	b.WriteString("# Secrets of this app, sealed with config/master.key. Edit with\n# lidza credentials set NAME=value; every pack reads them like .env.\n# A mode's section (dev:, production:) holds values for that mode\n# only, over the plain ones: lidza credentials set dev.NAME=value.\n")
 	quote := func(v string) string {
 		if v == "" || strings.ContainsAny(v, "#:\"\n\\") || v != strings.TrimSpace(v) {
 			return strconv.Quote(v)

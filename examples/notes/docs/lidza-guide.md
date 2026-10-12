@@ -834,7 +834,10 @@ mail pack, never through a vendor SDK.
 1. `lidza pack add mail` (MCP: `lidza_pack_add`; after `db`, and `jobs`
    for background delivery);
    set `MAIL_FROM` and, in production, `MAIL_PROVIDER` with its key in
-   `.env`. `.env.test` gets `MAIL_PROVIDER=outbox`.
+   `.env`. `.env.test` gets `MAIL_PROVIDER=outbox`. Click and open
+   tracking stay off on Mailgun, SendGrid and Postmark whatever the
+   account says (a verification link is never rewritten to a tracker);
+   `MAIL_TRACKING=true` hands it back to the account.
 2. Write the bodies as Go templates: `mail/<name>.txt.tmpl` (always) and
    `mail/<name>.html.tmpl` (optional), over the `Data` you pass. Other
    languages: `mail/<name>.<lang>.txt.tmpl` (`verify.de.txt.tmpl`,

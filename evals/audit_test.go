@@ -4,7 +4,9 @@ package evals
 
 import (
 	"bytes"
+	"compress/gzip"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -245,5 +247,60 @@ func TestAuditPerformance(t *testing.T) {
 	}
 	if !strings.Contains(r.LLMs.Problem, "HTML") {
 		t.Errorf("llms.txt served as HTML: %+v", r.LLMs)
+	}
+}
+
+// TestAdminCardOnPhone: an admin settings card whose description holds
+// one long unbreakable URL (a sign-in callback on a real domain) fits a
+// phone: the header wraps instead of pushing the page sideways (#58).
+// The page is the section-form partial's markup with the pack's own
+// stylesheets.
+func TestAdminCardOnPhone(t *testing.T) {
+	assets := filepath.Join(root, "packs", "admin", "assets")
+	gz, err := os.ReadFile(filepath.Join(assets, "tabler.min.css.gz"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	zr, err := gzip.NewReader(bytes.NewReader(gz))
+	if err != nil {
+		t.Fatal(err)
+	}
+	tabler, _ := io.ReadAll(zr)
+	admin, err := os.ReadFile(filepath.Join(assets, "admin.css"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := `<!doctype html><html><head><meta name="viewport" content="width=device-width"><link rel="stylesheet" href="/tabler.css"><link rel="stylesheet" href="/admin.css"></head><body><div class="page-body"><div class="container-xl">
+<form class="card"><div class="card-header"><div class="d-flex align-items-center gap-3"><span class="avatar bg-primary-lt">S</span><div>
+<h2 class="card-title mb-0">Sign-in providers</h2><div class="text-secondary small mt-1">Register https://portal.example-company.com/api/v1/auth/google/callback as the redirect URI at each provider.</div>
+</div></div><div class="card-actions"><span class="badge bg-secondary-lt">Email and password only</span></div></div><div class="card-body">x</div></form></div></div></body></html>`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/tabler.css":
+			w.Header().Set("Content-Type", "text/css")
+			w.Write(tabler)
+		case "/admin.css":
+			w.Header().Set("Content-Type", "text/css")
+			w.Write(admin)
+		default:
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Write([]byte(page))
+		}
+	}))
+	defer srv.Close()
+	out, _ := command(app, lidza, "audit", "layout", "--json", "--base-url", srv.URL, "--viewport", "390x844", "--routes", "/settings")
+	i := strings.Index(string(out), "{\n")
+	var r struct {
+		Status  string `json:"status"`
+		Results []struct {
+			Sideways  int      `json:"sideways"`
+			Offenders []string `json:"offenders"`
+		} `json:"results"`
+	}
+	if i < 0 || json.NewDecoder(bytes.NewReader(out[i:])).Decode(&r) != nil || len(r.Results) == 0 {
+		t.Fatalf("no report:\n%s", out)
+	}
+	if r.Results[0].Sideways > 0 {
+		t.Errorf("the card pushes a phone's page %dpx sideways: %v", r.Results[0].Sideways, r.Results[0].Offenders)
 	}
 }

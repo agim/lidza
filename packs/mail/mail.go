@@ -57,6 +57,14 @@ type Config struct {
 	// BaseURL overrides a provider's API base outright (a proxy); it wins
 	// over Region.
 	BaseURL string `env:"MAIL_BASE_URL"`
+	// Tracking lets the provider's click and open tracking apply. Off
+	// (the default), Mailgun, SendGrid and Postmark are told on every
+	// message not to rewrite links or add a tracking pixel, whatever the
+	// account's settings: a verification or reset link stays the app's
+	// own https link, and a link scanner cannot spend it through a
+	// tracker. Resend has no per-message switch: turn tracking off for
+	// the domain in its dashboard.
+	Tracking bool `env:"MAIL_TRACKING"`
 	// SMTPURL is smtp://user:pass@host:587 (STARTTLS) or
 	// smtps://user:pass@host:465 (TLS). The SMTP fields below are the same
 	// setting in parts; the URL wins when both are set.

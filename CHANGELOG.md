@@ -10,6 +10,24 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
+## Unreleased
+
+- Mail: click and open tracking are off by default (#57). Mailgun
+  (`o:tracking`, `o:tracking-clicks`, `o:tracking-opens` = no, on the
+  form and the MIME endpoint), SendGrid (`tracking_settings`) and
+  Postmark (`TrackLinks: None`, `TrackOpens: false`) are told so on every
+  message, whatever the account's defaults, so a verification or reset
+  link is never rewritten to an http tracker a link scanner can spend.
+  `MAIL_TRACKING=true` leaves it to the account. Resend has no
+  per-message switch: turn tracking off for its domain.
+- `lidza credentials show`: the section saved from the admin pages no
+  longer repeats the sealed file's header; it says how those values are
+  changed (the admin pages; `lidza credentials unset NAME`) (#55).
+- Admin settings cards fit a phone (#58): a description with one long
+  word (a sign-in callback URL on the app's domain) breaks and the
+  header wraps, instead of pushing the status badge, and the page,
+  sideways (114px at 390px wide in the new eval).
+
 ## v0.1.109 (2026-10-12)
 
 - `devserver.Static` (and so `App.Head`) sets the head of a named HTML

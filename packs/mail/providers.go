@@ -61,17 +61,17 @@ func newProvider(cfg Config) (Provider, error) {
 		if err := errors.Join(need("MAIL_API_KEY", cfg.APIKey), need("MAIL_DOMAIN", cfg.Domain)); err != nil {
 			return nil, err
 		}
-		return mailgun{key: cfg.APIKey, domain: cfg.Domain, base: or(cfg.BaseURL, regional(cfg.Region, "https://api.mailgun.net", "https://api.eu.mailgun.net"))}, nil
+		return mailgun{key: cfg.APIKey, domain: cfg.Domain, base: or(cfg.BaseURL, regional(cfg.Region, "https://api.mailgun.net", "https://api.eu.mailgun.net")), tracking: cfg.Tracking}, nil
 	case "sendgrid":
 		if err := need("MAIL_API_KEY", cfg.APIKey); err != nil {
 			return nil, err
 		}
-		return sendgrid{key: cfg.APIKey, base: or(cfg.BaseURL, regional(cfg.Region, "https://api.sendgrid.com", "https://api.eu.sendgrid.com"))}, nil
+		return sendgrid{key: cfg.APIKey, base: or(cfg.BaseURL, regional(cfg.Region, "https://api.sendgrid.com", "https://api.eu.sendgrid.com")), tracking: cfg.Tracking}, nil
 	case "postmark":
 		if err := need("MAIL_API_KEY", cfg.APIKey); err != nil {
 			return nil, err
 		}
-		return postmark{key: cfg.APIKey, base: or(cfg.BaseURL, "https://api.postmarkapp.com")}, nil
+		return postmark{key: cfg.APIKey, base: or(cfg.BaseURL, "https://api.postmarkapp.com"), tracking: cfg.Tracking}, nil
 	case "resend":
 		if err := need("MAIL_API_KEY", cfg.APIKey); err != nil {
 			return nil, err
@@ -170,7 +170,14 @@ func jsonRequest(ctx context.Context, url string, v any) (*http.Request, error) 
 }
 
 // mailgun: POST /v3/<domain>/messages, form fields, basic auth "api:<key>".
-type mailgun struct{ key, domain, base string }
+type mailgun struct {
+	key, domain, base string
+	tracking          bool
+}
+
+// mailgunNoTracking are the options that keep Mailgun from rewriting
+// links and adding an open pixel, whatever the domain's defaults.
+var mailgunNoTracking = map[string]string{"o:tracking": "no", "o:tracking-clicks": "no", "o:tracking-opens": "no"}
 
 func (p mailgun) Send(ctx context.Context, msg Message) (string, error) {
 	to, cc, bcc, err := recipientLists(msg)
@@ -202,6 +209,11 @@ func (p mailgun) Send(ctx context.Context, msg Message) (string, error) {
 	}
 	for k, v := range msg.Headers {
 		form.Set("h:"+k, v)
+	}
+	if !p.tracking {
+		for k, v := range mailgunNoTracking {
+			form.Set(k, v)
+		}
 	}
 	var data io.Reader = strings.NewReader(form.Encode())
 	contentType := "application/x-www-form-urlencoded"
@@ -261,6 +273,13 @@ func (p mailgun) sendMIME(ctx context.Context, msg Message, to, cc, bcc []*mail.
 	}
 	var buffer bytes.Buffer
 	writer := multipart.NewWriter(&buffer)
+	if !p.tracking {
+		for _, k := range []string{"o:tracking", "o:tracking-clicks", "o:tracking-opens"} {
+			if err := writer.WriteField(k, mailgunNoTracking[k]); err != nil {
+				return "", err
+			}
+		}
+	}
 	// Mailgun's MIME endpoint takes all envelope recipients in `to`.
 	// Cc stays in the MIME header and Bcc stays out of it.
 	for _, list := range [][]*mail.Address{to, cc, bcc} {
@@ -303,7 +322,10 @@ func (p mailgun) sendMIME(ctx context.Context, msg Message, to, cc, bcc []*mail.
 }
 
 // sendgrid: POST /v3/mail/send, JSON, bearer key; the id is a header.
-type sendgrid struct{ key, base string }
+type sendgrid struct {
+	key, base string
+	tracking  bool
+}
 
 func (p sendgrid) Send(ctx context.Context, msg Message) (string, error) {
 	from, err := parseAddress(msg.From)
@@ -340,6 +362,12 @@ func (p sendgrid) Send(ctx context.Context, msg Message) (string, error) {
 		"from":             map[string]string{"email": from.Address, "name": from.Name},
 		"subject":          msg.Subject,
 		"content":          content,
+	}
+	if !p.tracking {
+		payload["tracking_settings"] = map[string]any{
+			"click_tracking": map[string]bool{"enable": false, "enable_text": false},
+			"open_tracking":  map[string]bool{"enable": false},
+		}
 	}
 	if msg.ReplyTo != "" {
 		reply, err := replyAddresses(msg.ReplyTo)
@@ -384,10 +412,16 @@ func (p sendgrid) Send(ctx context.Context, msg Message) (string, error) {
 }
 
 // postmark: POST /email, JSON, server token header.
-type postmark struct{ key, base string }
+type postmark struct {
+	key, base string
+	tracking  bool
+}
 
 func (p postmark) Send(ctx context.Context, msg Message) (string, error) {
 	payload := map[string]any{"From": msg.From, "To": msg.To, "Subject": msg.Subject, "MessageStream": "outbound"}
+	if !p.tracking {
+		payload["TrackOpens"], payload["TrackLinks"] = false, "None"
+	}
 	if len(msg.Cc) > 0 {
 		payload["Cc"] = strings.Join(msg.Cc, ", ")
 	}

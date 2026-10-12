@@ -119,8 +119,9 @@ func runCredentials(ctx context.Context, args []string) error {
 			// Every value, decrypted, as edit shows the file.
 			fmt.Print(credentials.Format(vals))
 			if len(saved) > 0 {
-				fmt.Print("\n# Saved from the admin pages, in the app's database; these win over the file.\n")
-				fmt.Print(credentials.Format(saved))
+				fmt.Print("\n# Saved from the admin pages, in the app's database; these win over the file.\n" +
+					"# Change them on the admin pages; lidza credentials unset NAME clears one.\n")
+				fmt.Print(credentials.FormatValues(saved))
 			}
 			return nil
 		}

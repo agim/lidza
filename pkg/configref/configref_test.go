@@ -19,6 +19,9 @@ func TestReferenceCurrent(t *testing.T) {
 	if err != nil || string(have) != Render(settings) {
 		t.Fatalf("%s is stale: go generate ./pkg/configref", File)
 	}
+	if admin, err := os.ReadFile(filepath.Join(root, AdminFile)); err != nil || string(admin) != RenderAdmin(settings) {
+		t.Fatalf("%s is stale: go generate ./pkg/configref", AdminFile)
+	}
 	for _, s := range settings {
 		if strings.TrimSpace(s.Doc) == "" {
 			t.Errorf("%s (%s) has no doc comment", s.Name, s.Area)

@@ -40,6 +40,9 @@ type Section struct {
 	// status text (sign-in with email and password alone), instead of
 	// "Not set up".
 	None string
+	// Optional marks a section whose settings all have defaults: it is
+	// "Defaults" until one is set, never "Not set up" or "Incomplete".
+	Optional bool
 }
 
 // Field is one setting.
@@ -209,7 +212,10 @@ func builtinSections() []Section {
 
 // sections are the built-in sections and the app's, as configured.
 func (h *Handler) sections() []Section {
-	return append(builtinSections(), h.opt.Sections...)
+	// The app's own sections come before the framework's app settings,
+	// so the Settings page opens on them.
+	out := append(builtinSections(), h.opt.Sections...)
+	return append(out, appSettingSections(coveredNames())...)
 }
 
 // enabledSections are the sections that apply to the running app.
@@ -393,6 +399,10 @@ func view(s Section, values, origins map[string]string) sectionView {
 		}
 	}
 	switch {
+	case s.Optional && !anySet(s.Fields, values):
+		sv.Status, sv.StatusText = "ok", "Defaults"
+	case s.Optional:
+		sv.Status, sv.StatusText = "ok", "Configured"
 	case s.Selector != "" && len(selected) == 0 && s.None != "":
 		sv.Status, sv.StatusText = "ok", s.None
 	case s.Selector != "" && len(selected) == 0:

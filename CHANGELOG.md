@@ -10,6 +10,44 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
+## Unreleased
+
+- App settings live in the app (a convention, and the tools for it):
+  - Every setting is an app setting (keys, providers and models,
+    `APP_URL`, `MAIL_FROM`, buckets, admins, `AUTH_SECRET`) or the
+    deployment's (`infra`: the database, the master key, addresses,
+    logging, tracing, tuning): `env.Kind`, and a Kind column in
+    `docs/configuration.md`. App settings are saved in the app's
+    database, sealed with the master key, so an app moves with its
+    database; the environment needs only the deployment's.
+  - `lidza settings list | get | set | unset | import` (MCP:
+    `lidza_settings_list`, `lidza_settings_set`) work on the app's
+    database (`--production` for production's); `import` moves the app
+    settings in `.env`, `.env.<mode>`, `deploy/production.env`, the
+    credentials file and the environment into it. Infrastructure
+    settings are refused.
+  - The admin Settings page edits every app setting no pack page does
+    (Application, Administrators, Sign-in policy, Billing, Language and
+    time zone, Analytics, more Mail, Models and Storage), from a table
+    generated with `docs/configuration.md`.
+  - `AUTH_SECRET` is no longer required: unset, it is generated on the
+    app's first start and kept in the database, the same on every node
+    (needs the master key).
+  - `lidza check` L023 warns on an app setting in `.env`, `.env.<mode>`,
+    `.env.example` or `deploy/production.env` (`.env.test` is the test
+    suite's fixture). Production logs at start which app settings still
+    come from the environment (names only).
+  - New apps: `lidza install` writes only `DATABASE_URL` and `CACHE_URL`
+    to `.env`; the packs' `.env.example` lines for app settings are
+    comments; development defaults `APP_URL` to `http://` plus
+    `LIDZA_ADDR` and `MAIL_FROM` to `dev@localhost`; `.env.test` gets a
+    test-only `AUTH_SECRET`. `lidza ship` keeps app settings out of
+    `deploy/production.env`.
+  - Unchanged: an environment variable still wins over a saved value,
+    and the credentials file stays as the development seed. Existing
+    apps keep working; `lidza check` lists what to move, and
+    `lidza settings import` moves it.
+
 ## v0.1.111 (2026-10-12)
 
 - Storage: `Privacy(ctx, key)` and `PrivacyProbe(ctx, key)` check

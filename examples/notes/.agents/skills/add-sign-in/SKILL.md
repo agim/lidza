@@ -38,7 +38,7 @@ OAuth flow.
    (nothing is sent once it is verified, or with `NoVerifyEmail`).
 3. Providers: `AUTH_PROVIDERS=google,github` in `.env` or on the admin
    pages (section "Sign-in providers"); the client id and secret in the
-   credentials: `lidza credentials set AUTH_GOOGLE_CLIENT_ID=...
+   app's settings: `lidza settings set AUTH_GOOGLE_CLIENT_ID=...
    AUTH_GOOGLE_CLIENT_SECRET=...`. Register the callback
    `<APP_URL>/api/v1/auth/google/callback` with the provider. Microsoft
    takes `AUTH_MICROSOFT_TENANT`; another OIDC issuer takes

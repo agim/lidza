@@ -844,6 +844,11 @@ func ignoresEnvTest(gitignore string) bool {
 // embeddings, storage on local disk.
 func TestEnv(packs []string) []string {
 	var out []string
+	if slices.Contains(packs, "lidza/auth") {
+		// Tests run without the master key, so the secret the app would
+		// generate into its database is a fixture here.
+		out = append(out, "AUTH_SECRET=test-only-secret-never-used-outside-tests-0123456789")
+	}
 	if slices.Contains(packs, "lidza/cache") {
 		out = append(out, "CACHE_URL=memory")
 	}

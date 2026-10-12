@@ -64,7 +64,8 @@ Commands:
   context  write .lidza/context.json: routes, handler signatures, Rust exports
   api      print the framework's public Go API as the project resolves it: the package list, one package, a --filter search, or all
   recipe   add one of this app's conventions to docs/lidza-guide.md as a recipe (prompt, skills, command), or list the recipes
-  credentials the app's secrets, sealed in config/credentials.yml.enc with config/master.key; every pack reads them like .env; dev.NAME and production.NAME are for one mode
+  settings  the app's settings (keys, providers, addresses), saved in its database so the app moves with it: list, get, set, unset, import from .env and the environment
+  credentials the development seed: secrets sealed in config/credentials.yml.enc with config/master.key; dev.NAME and production.NAME are for one mode
   admin    who may open the admin pages besides the first account: ADMIN_USERS in the credentials, read within seconds
   update   in a project, first the branch pulled when it is a clean fast-forward; then the CLI to the newest release and the module to the same version: go get, tidy, Dockerfile pin, lidza gen, then lidza install
   decision record why the app is built a way (a pack, Rust, a dependency, a schema tradeoff) in docs/decisions.md, or list the decisions
@@ -137,6 +138,8 @@ func main() {
 		err = runUpdate(ctx, args)
 	case "credentials":
 		err = runCredentials(ctx, args)
+	case "settings":
+		err = runSettings(ctx, args)
 	case "admin":
 		err = runAdmin(ctx, args)
 	case "decision":

@@ -21,5 +21,9 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	fmt.Printf("wrote %s: %d settings\n", configref.File, len(settings))
+	if err := os.WriteFile(filepath.Join(root, configref.AdminFile), []byte(configref.RenderAdmin(settings)), 0o644); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	fmt.Printf("wrote %s: %d settings, and %s\n", configref.File, len(settings), configref.AdminFile)
 }

@@ -575,3 +575,30 @@ func adminCSS(t *testing.T) []byte {
 	}
 	return b
 }
+
+// TestAppSettingsSections: every app setting no pack page edits has a
+// field on the Settings page (APP_URL, ADMIN_USERS), a pack's only
+// while it runs, AUTH_SECRET never; saving one stores it like any other.
+func TestAppSettingsSections(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv(credentials.EnvMasterKey, "")
+	t.Cleanup(func() { credentials.SetOverrides(nil) })
+	credentials.Generate(dir)
+	srv := serve(t, Options{Auth: noAuth, Allow: func(context.Context) bool { return true }, CredentialsDir: dir, Dir: dir}, lidza.NewServices())
+	code, body := get(t, srv, "/admin/settings?section=settings-app")
+	if code != 200 || !strings.Contains(body, `name="APP_URL"`) || !strings.Contains(body, `name="SECURITY_CONTACT"`) || strings.Contains(body, `name="AUTH_SECRET"`) || strings.Contains(body, "Stripe") {
+		t.Fatalf("application section: %d", code)
+	}
+	if _, body := get(t, srv, "/admin/settings?section=settings-admins"); !strings.Contains(body, `name="ADMIN_USERS"`) {
+		t.Fatal("administrators section")
+	}
+	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	res, err := client.PostForm(srv.URL+"/admin/settings", url.Values{"section": {"settings-app"}, "APP_URL": {"https://shop.example.com"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if v, _ := env.Values(dir); v["APP_URL"] != "https://shop.example.com" {
+		t.Fatalf("saved: %q (%d)", v["APP_URL"], res.StatusCode)
+	}
+}

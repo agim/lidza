@@ -226,6 +226,7 @@ func Boot(ctx context.Context, app App) (*Booted, error) {
 		}
 		b.started = append(b.started, p)
 	}
+	warnAppSettingsInEnv(app.logger())
 	if app.OnStart != nil {
 		if err := app.OnStart(ctx, services); err != nil {
 			b.Close(ctx)
@@ -585,4 +586,31 @@ func envOr(key, def string) string {
 		return v
 	}
 	return def
+}
+
+// warnAppSettingsInEnv logs, in production, the app settings the
+// environment or a .env file supplies: they belong in the app's
+// database, so the app moves with it (lidza settings import). Names
+// only, never values. The environment still wins over the database.
+func warnAppSettingsInEnv(log *slog.Logger) {
+	if env.Mode() != "production" {
+		return
+	}
+	origins, err := env.Origins(".")
+	if err != nil {
+		return
+	}
+	var from []string
+	for name, origin := range origins {
+		if origin == env.OriginCredentials || origin == env.OriginSaved || !env.AppSetting(name) {
+			continue
+		}
+		from = append(from, name+" ("+origin+")")
+	}
+	if len(from) == 0 {
+		return
+	}
+	slices.Sort(from)
+	log.Warn("app settings from the environment: store them in the app's database (lidza settings import --production, or the admin pages), so the environment holds only the database, the master key and tuning; an environment value still wins over the saved one",
+		"settings", strings.Join(from, ", "))
 }

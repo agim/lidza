@@ -12,7 +12,7 @@ portal to manage, and the app checking what a plan includes.
 1. `lidza pack add billing` (MCP: `lidza_pack_add`; after `db`), then
    `lidza gen` and `lidza db migrate` (`billing_customer`,
    `billing_subscription`). The keys go in the credentials: `lidza
-   credentials set STRIPE_SECRET_KEY=sk_test_...
+   settings set STRIPE_SECRET_KEY=sk_test_...
    STRIPE_WEBHOOK_SECRET=whsec_...` (test mode in development, the live
    keys in `production.`). `APP_URL` is where Stripe sends customers
    back.

@@ -91,18 +91,30 @@ analytics retention and OTLP endpoint, `MAIL_PROVIDER`, `MAIL_FROM` and
 `MAIL_API_KEY` (`mail`; keep `MAIL_PROVIDER=log` until the domain is
 verified at the provider).
 
-## Secrets
+## Settings and secrets
 
-`config/credentials.yml.enc` ships with the app; the master key does
-not. Set `LIDZA_MASTER_KEY` to the contents of `config/master.key` in the
-environment of the process (the unit's `.env`, the container's
-`--env-file`), and every pack reads the sealed values as if they were
-in `.env`. Production reads the plain values and the file's
-`production:` section (`lidza credentials set production.NAME=...`),
-so one file holds the sandbox keys for development and the live ones,
-and the master key is all a deploy adds. Values saved from the admin
-pages live in the database, sealed with the same key, and every node
-reads them.
+The environment of the deployed process holds the deployment's settings
+only: `DATABASE_URL`, `LIDZA_MASTER_KEY` (the contents of
+`config/master.key`), addresses and TLS, logging, tracing and tuning.
+The app's configuration (API keys, providers, `APP_URL`, `MAIL_FROM`,
+buckets, admins) lives in its database, sealed with the master key, so
+moving the app is moving its database and the key. Put it there once:
+
+```sh
+lidza settings import --production    # the app settings .env, deploy/production.env, the credentials file and the environment hold
+lidza settings set --production MAIL_API_KEY=... STRIPE_SECRET_KEY=...
+```
+
+or through the admin pages once the app runs. `AUTH_SECRET` is
+generated on the first start and kept there. `docs/configuration.md`
+marks every setting `app` or `infra`; the app logs at start which app
+settings still come from the environment, and `lidza check` (L023)
+names those in env files. An environment variable still wins over the
+saved value, as an emergency override.
+
+`config/credentials.yml.enc` ships with the app as the development seed
+(and a fallback a deploy may use: its `production:` section is read in
+production); the master key never does.
 
 ## The first admin on a public deployment
 

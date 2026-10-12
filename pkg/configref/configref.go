@@ -10,6 +10,8 @@ package configref
 
 import (
 	"fmt"
+
+	"github.com/agim/lidza/pkg/env"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -26,6 +28,10 @@ import (
 // File is the reference, relative to the repository root.
 const File = "docs/configuration.md"
 
+// AdminFile is the admin pack's table of the app settings, relative to
+// the repository root: the Settings page edits each one.
+const AdminFile = "packs/admin/appsettings_gen.go"
+
 // Setting is one environment variable.
 type Setting struct {
 	Name     string
@@ -33,6 +39,9 @@ type Setting struct {
 	Required bool
 	Doc      string
 	Area     string // "packs/auth", "core"
+	// Kind is env.KindInfra (the deployment's environment) or
+	// env.KindApp (stored in the app).
+	Kind string
 }
 
 // skipped are directories whose settings belong to the CLI or tests, not
@@ -50,6 +59,8 @@ var byName = map[string]Setting{
 	"APP_URL":                            {Area: "core", Doc: "The app's public address (https://app.example.com): links in mail, sign-in redirects, billing return pages, security.txt, HSTS when https."},
 	"SECURITY_CONTACT":                   {Area: "core", Doc: "Where to report a vulnerability (mailto: or https:); with it the app serves /.well-known/security.txt."},
 	"SECURITY_POLICY":                    {Area: "core", Doc: "The URL of the security policy security.txt links to."},
+	"AUTH_PROVIDERS":                     {Area: "packs/auth", Doc: "The sign-in providers auth.Mount serves, comma-separated (google, github, microsoft, or any name with AUTH_<NAME>_ISSUER for an OIDC issuer); each needs AUTH_<NAME>_CLIENT_ID and AUTH_<NAME>_CLIENT_SECRET, and Microsoft may take AUTH_MICROSOFT_TENANT."},
+	"AUTH_CONNECT":                       {Area: "packs/auth", Doc: "The external accounts a signed-in user can connect, comma-separated; each needs AUTH_CONNECT_<NAME>_CLIENT_ID and AUTH_CONNECT_<NAME>_CLIENT_SECRET."},
 	"PGHOST":                             {Area: "packs/db", Doc: "Read by the local database lookup (LocalURL) when DATABASE_URL is unset in development."},
 	"PGPORT":                             {Area: "packs/db", Doc: "Read with PGHOST by the local database lookup."},
 	"OTEL_EXPORTER_OTLP_ENDPOINT":        {Area: "pkg/tracing", Doc: "OTLP/HTTP collector address (http://collector:4318); setting it turns tracing on. The other standard OTEL_* variables apply (OTEL_SERVICE_NAME, OTEL_TRACES_SAMPLER, OTEL_EXPORTER_OTLP_HEADERS, OTEL_RESOURCE_ATTRIBUTES)."},
@@ -166,6 +177,15 @@ func Collect(root string) ([]Setting, error) {
 						add(Setting{Name: v, Doc: clean(id.Name, doc), Area: area})
 					}
 				}
+			case *ast.IndexExpr:
+				// values["X"]: a setting read from the merged map.
+				if lit, ok := n.Index.(*ast.BasicLit); ok && lit.Kind == token.STRING {
+					if v, _ := strconv.Unquote(lit.Value); envName.MatchString(v) {
+						if id, ok := n.X.(*ast.Ident); ok && (id.Name == "values" || id.Name == "settings") {
+							read[v] = true
+						}
+					}
+				}
 			case *ast.CallExpr:
 				// os.Getenv("X"), settings("X"), values["X"] and the like.
 				if len(n.Args) == 1 {
@@ -211,6 +231,7 @@ func Collect(root string) ([]Setting, error) {
 	out := make([]Setting, 0, len(found))
 	for _, s := range found {
 		s.Doc = withNames(s.Doc, goNames)
+		s.Kind = env.Kind(s.Name)
 		out = append(out, s)
 	}
 	sort.Slice(out, func(i, j int) bool {
@@ -288,8 +309,11 @@ func Render(settings []Setting) string {
 	var b strings.Builder
 	b.WriteString("# Configuration\n\n" +
 		"Every setting a Līdza app reads, from the framework's source (`go generate ./pkg/configref` writes this file).\n" +
-		"An app reads `.env`, then `.env.<mode>`, then the sealed credentials, then the process environment; later wins.\n" +
-		"A pack's settings matter only when the pack is enabled in `lidza.json`.\n")
+		"An app reads `.env`, then `.env.<mode>`, then the sealed credentials file and the values saved in its database, then the process environment; later wins.\n" +
+		"A pack's settings matter only when the pack is enabled in `lidza.json`.\n\n" +
+		"**Kind** says where a setting belongs. `app`: the app's configuration (keys, providers, addresses, senders), stored in the app's\n" +
+		"database (the admin pages, `lidza settings set`), so the app moves with its database; the sealed credentials file seeds development.\n" +
+		"`infra`: the deployment's environment: the database, the master key, addresses, logging, tracing and tuning.\n")
 	area := ""
 	for _, s := range settings {
 		if s.Area != area {
@@ -298,7 +322,7 @@ func Render(settings []Setting) string {
 			if area != "core" {
 				title = "`" + area + "`"
 			}
-			b.WriteString("\n## " + title + "\n\n| Setting | Default | Description |\n|---|---|---|\n")
+			b.WriteString("\n## " + title + "\n\n| Setting | Kind | Default | Description |\n|---|---|---|---|\n")
 		}
 		def := "`" + s.Default + "`"
 		switch {
@@ -307,7 +331,26 @@ func Render(settings []Setting) string {
 		case s.Default == "":
 			def = ""
 		}
-		fmt.Fprintf(&b, "| `%s` | %s | %s |\n", s.Name, def, s.Doc)
+		fmt.Fprintf(&b, "| `%s` | %s | %s | %s |\n", s.Name, s.Kind, def, s.Doc)
 	}
+	return b.String()
+}
+
+// RenderAdmin is the admin pack's table of app settings (env.KindApp),
+// as Go: name, area, default, description.
+func RenderAdmin(settings []Setting) string {
+	var b strings.Builder
+	b.WriteString("// Code generated by go generate ./pkg/configref. DO NOT EDIT.\n\npackage admin\n\n" +
+		"// appSettings are the app settings the framework reads (env.KindApp),\n" +
+		"// from docs/configuration.md: the Settings page offers each one the\n" +
+		"// pack pages do not.\n" +
+		"var appSettings = []appSetting{\n")
+	for _, s := range settings {
+		if s.Kind != "app" {
+			continue
+		}
+		fmt.Fprintf(&b, "\t{Name: %q, Area: %q, Default: %q, Doc: %q},\n", s.Name, s.Area, s.Default, strings.ReplaceAll(s.Doc, `\|`, "|"))
+	}
+	b.WriteString("}\n")
 	return b.String()
 }

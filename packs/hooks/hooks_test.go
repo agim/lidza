@@ -25,14 +25,27 @@ func testHooks(t *testing.T, cfg Config) *Hooks {
 		url = "postgres:///lidza_test?host=/var/run/postgresql"
 	}
 	ctx := context.Background()
-	pool, err := db.Open(ctx, db.Config{URL: url, MaxConns: 4, ConnectTimeout: 2 * time.Second})
+	// A schema of its own: the jobs pack's tests drop and create the same
+	// job table, and go test runs the packages at once.
+	admin, err := db.Open(ctx, db.Config{URL: url, MaxConns: 1, ConnectTimeout: 2 * time.Second})
 	if err != nil {
 		t.Skipf("no test database: %v", err)
 	}
-	t.Cleanup(pool.Close)
-	for _, tbl := range []string{"hook_delivery", "hook_endpoint", "job", "job_schedule"} {
-		pool.Exec(ctx, `DROP TABLE IF EXISTS `+tbl)
+	const schema = "lidza_test_hooks"
+	_, err = admin.Exec(ctx, `DROP SCHEMA IF EXISTS `+schema+` CASCADE; CREATE SCHEMA `+schema)
+	admin.Close()
+	if err != nil {
+		t.Fatal(err)
 	}
+	sep := "&"
+	if !strings.Contains(url, "?") {
+		sep = "?"
+	}
+	pool, err := db.Open(ctx, db.Config{URL: url + sep + "search_path=" + schema, MaxConns: 4, ConnectTimeout: 2 * time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(pool.Close)
 	if _, err := pool.Exec(ctx, EndpointTable+DeliveryTable+jobs.JobTable+jobs.ScheduleTable); err != nil {
 		t.Fatal(err)
 	}

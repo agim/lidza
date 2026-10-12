@@ -100,7 +100,8 @@ import package `main`. Preserve its tests and behavior during the move:
 | `lidza update [--migrate]` | brings the app's branch and the framework up to date together: a branch behind its upstream is pulled first when that is a clean fast-forward (nothing uncommitted, no local commits the upstream lacks), otherwise the update stops and says what to run (`--no-pull` stops instead of pulling); then the CLI and this app's framework module move to the newest release (never back to an older one; `--to <commit>` takes a release not tagged yet), it regenerates, refreshes the deployment files, then runs `lidza install`. It stops when the files it rewrites have uncommitted changes (`git stash push` sets them aside); `--commit` commits the update when done. In a team, one person makes the update and merges it; the others `git pull`, then `lidza update --cli-only` (`--to <go.mod's version>` when the app is behind the newest). While the CLI and `go.mod` differ, gen, dev and install leave the agent files alone and say so, and `lidza verify` fails. |
 | `lidza gen deploy [--force]` | the `Dockerfile`, `.dockerignore` and `deploy/{{.Name}}.service` from the current templates; a file the app changed is kept and named unless `--force`. |
 | `lidza pack add <name>` | enables an official pack: `db`, `auth`, `jobs`, `mail`, `llm`, `storage`, `cache`, `i18n`, `realtime`, `analytics`, `audit`, `hooks`, `billing`, `geo`, `media`. |
-| `lidza credentials set NAME=value` | seals a secret into `config/credentials.yml.enc` with `config/master.key`; `list` (names), `show` (every value, decrypted) or `show NAME`, `edit` (the whole file in `$EDITOR`), `unset`, `init`. |
+| `lidza settings set NAME=value` | saves app settings (keys, providers, addresses) in the app's database, sealed with the master key: `list` (where each comes from, names only), `get NAME`, `unset NAME`, `import` (the app settings in `.env`, `deploy/production.env`, the credentials file and the environment, into the database); `--production` for production's database. Infrastructure settings are refused: they are the environment's. |
+| `lidza credentials set NAME=value` | the development seed: seals a value into `config/credentials.yml.enc` with `config/master.key` (`dev.NAME` for one mode); `list` (names), `show` (every value, decrypted) or `show NAME`, `edit` (the whole file in `$EDITOR`), `unset`, `init`. |
 | `lidza admin add EMAIL...` | lets these users (emails or ids) open `/admin` besides the first account: `ADMIN_USERS` in the sealed credentials, read within seconds; in production after a commit and deploy of `config/credentials.yml.enc`. Admins added on the Users page, in the file and in the environment all count. `remove`, `list`. |
 | `lidza admin owner status\|rotate [--production]` | with `AUTH_OWNER_CLAIM=true`: whether the app waits for its owner and where the one-time token file is (never the token); `rotate` replaces an unclaimed token at once on every node. |
 | `lidza brief [--all] [--list]` | the kickoff interview in a terminal: the open questions of `docs/brief.md` one by one, each with suggestions to pick by number or your own answer; `--all` goes through every question, `--list` prints them. `lidza brief answer <id> "..."` records one; `lidza brief skip [id...]` skips questions for good (no ids: every open one), and `s` or `S` in the interview skips one or the rest. |
@@ -518,7 +519,7 @@ OAuth flow.
    (nothing is sent once it is verified, or with `NoVerifyEmail`).
 3. Providers: `AUTH_PROVIDERS=google,github` in `.env` or on the admin
    pages (section "Sign-in providers"); the client id and secret in the
-   credentials: `lidza credentials set AUTH_GOOGLE_CLIENT_ID=...
+   app's settings: `lidza settings set AUTH_GOOGLE_CLIENT_ID=...
    AUTH_GOOGLE_CLIENT_SECRET=...`. Register the callback
    `<APP_URL>/api/v1/auth/google/callback` with the provider. Microsoft
    takes `AUTH_MICROSOFT_TENANT`; another OIDC issuer takes
@@ -1137,7 +1138,7 @@ app's tools. The llm pack speaks the providers; the app never does.
    `EMBED_MODEL` and `EMBED_BASE_URL` as needed. Anthropic has no
    embedding model, so an Anthropic app that embeds sets it;
    `EMBED_PROVIDER=none` turns embeddings off. Keys go in the
-   credentials (`lidza credentials set EMBED_API_KEY=...`).
+   app's settings (`lidza settings set EMBED_API_KEY=...`).
 2. Declare the output in `schema.lidza` when the reply is data, not
    prose:
 
@@ -1693,7 +1694,7 @@ portal to manage, and the app checking what a plan includes.
 1. `lidza pack add billing` (MCP: `lidza_pack_add`; after `db`), then
    `lidza gen` and `lidza db migrate` (`billing_customer`,
    `billing_subscription`). The keys go in the credentials: `lidza
-   credentials set STRIPE_SECRET_KEY=sk_test_...
+   settings set STRIPE_SECRET_KEY=sk_test_...
    STRIPE_WEBHOOK_SECRET=whsec_...` (test mode in development, the live
    keys in `production.`). `APP_URL` is where Stripe sends customers
    back.
@@ -2372,29 +2373,40 @@ microphone=(), geolocation=()`. `lidza.App` in `main.go` sets the rest:
   every subdomain too: only when the app owns the whole domain.
   `middleware.NoHSTS` sends none.
 
-## Secrets
+## Settings and secrets
 
-Anything secret (API keys, SMTP URLs, storage keys, `AUTH_SECRET` in
-production) lives in `config/credentials.yml.enc`, sealed with
-AES-256-GCM under `config/master.key`, which git ignores. `lidza
-credentials set MAIL_API_KEY=...` (MCP: `lidza_credentials_set`) seals a
-value; `list` shows the names, `show` every value (`show NAME` one),
-`edit` the whole file in `$EDITOR`. Every pack reads the credentials by the same names as
-`.env`, between the `.env` files and the process environment, so nothing
-in the code changes. A value for one mode only goes in that mode's
-section: `lidza credentials set dev.STRIPE_SECRET_KEY=sk_test_...
-production.STRIPE_SECRET_KEY=sk_live_...` keeps the sandbox key for
-`lidza dev` and the live one for production in the same file; a mode
-reads the plain values and its section, which wins. The CLI reads as
-`dev` (`lidza test` as `test`), so a production value never reaches a
-development command. In production the key travels as
-`LIDZA_MASTER_KEY` (the file's contents) and the sealed file is deployed
-with the binary. A key, a token or a database URL with its password pasted into the Go or frontend source fails `lidza check` (L010). The admin pages save changes to the database, sealed
-with the same key, and the mail, llm and storage packs pick them up
-without a restart; settings a pack refuses are not kept. Saved values
-win over the file: `list` and `show` include them, and `unset NAME`
-clears one there too, the way out when a saved setting stops the app
-from starting (the start error names them).
+The app's configuration lives in the app, not in the environment. Its
+settings (API keys, the providers and models it uses, `APP_URL`,
+`MAIL_FROM`, buckets, `ADMIN_USERS`, `AUTH_SECRET`) are saved in its
+database, sealed with the master key: the admin pages edit every one
+(the pack pages and Settings), and `lidza settings set NAME=value`
+(MCP: `lidza_settings_set`) does it from a terminal; `lidza settings
+list` says where each value comes from, never the value. An app moved
+to another server takes its configuration along in its database: the
+environment holds only the deployment's settings, the database
+(`DATABASE_URL`), the master key (`LIDZA_MASTER_KEY`), addresses,
+logging, tracing and tuning (pool sizes, workers, timeouts, rate
+limits). `docs/configuration.md` marks each setting `app` or `infra`,
+and `lidza check` warns (L023) on an app setting in `.env`,
+`.env.<mode>`, `.env.example` or `deploy/production.env`;
+`lidza settings import` moves such values into the database (with
+`--production`, into production's). `AUTH_SECRET` is generated on the
+app's first start and kept in the database, the same on every node.
+An environment variable still wins over a saved value, for an
+emergency override.
+
+Development is seeded by `config/credentials.yml.enc`, sealed with
+AES-256-GCM under `config/master.key`, which git ignores: `lidza
+credentials set dev.STRIPE_SECRET_KEY=sk_test_...` (MCP:
+`lidza_credentials_set`) keeps a sandbox key for `lidza dev` without a
+database round; `list` shows the names, `show` every value, `edit` the
+file in `$EDITOR`. Values saved in the database win over the file, and
+`lidza credentials unset NAME` clears one there too, the way out when a
+saved setting stops the app from starting (the start error names them).
+Development has defaults for `APP_URL` (`http://` and `LIDZA_ADDR`) and
+`MAIL_FROM` (`dev@localhost`); `.env.test` carries the test suite's
+fixtures. A key, a token or a database URL with its password pasted
+into the Go or frontend source fails `lidza check` (L010).
 
 ## Models and migrations
 

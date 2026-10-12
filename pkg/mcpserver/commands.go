@@ -175,6 +175,20 @@ func addCommandTools(s *server.MCPServer, dir string, cfg *config.Config, after 
 		{"lidza_db_migrate", "Apply the pending migrations in db/migrations to DATABASE_URL from .env (db pack). A migration marked -- review can drop data. Refused when DATABASE_URL is on another host: the developer migrates a production database, never this tool.", destructive, 5 * time.Minute, false, true, fixed("db", "migrate")},
 		{"lidza_db_rollback", "Revert the last applied migration: its down script drops what the migration added, with the data in it. Refused when DATABASE_URL is on another host.", destructive, 5 * time.Minute, false, true, fixed("db", "rollback")},
 		{"lidza_db_status", "List the migrations and whether each is applied.", nil, time.Minute, false, false, fixed("db", "status")},
+		{"lidza_settings_list", "The app settings (keys, providers, addresses) and where each value comes from: saved in the app's database, the credentials file (the development seed), a .env file or the environment. Names only, never values.", nil, time.Minute, true, false, fixed("settings", "list", "--json")},
+		{"lidza_settings_set", "Save app settings (an API key, a provider, a sender, an address) in the development database, sealed with the master key, where the app reads them: the convention for the app's configuration, instead of .env. Infrastructure settings (the database, timeouts, workers) are refused: they belong in the environment. Never touches a database on another host.", []mcp.ToolOption{
+			mcp.WithObject("values", mcp.Required(), mcp.Description("NAME: value pairs, e.g. {\"MAIL_PROVIDER\": \"mailgun\"}."), mcp.AdditionalProperties(map[string]any{"type": "string"})),
+		}, time.Minute, false, true, func(req mcp.CallToolRequest) ([]string, error) {
+			raw, _ := req.GetArguments()["values"].(map[string]any)
+			if len(raw) == 0 {
+				return nil, errors.New("values: at least one NAME: value")
+			}
+			args := []string{"settings", "set"}
+			for k, v := range raw {
+				args = append(args, k+"="+fmt.Sprint(v))
+			}
+			return args, nil
+		}},
 		{"lidza_db_new", "Write a hand-written migration (a data backfill, an SQL step the schema cannot say) named after the newest migration; lidza gen never touches it. Then write its SQL and run lidza_db_migrate.", []mcp.ToolOption{
 			mcp.WithString("description", mcp.Required(), mcp.Description("What it does, e.g. \"backfill post slugs\"; it names the file.")),
 		}, time.Minute, false, true, func(req mcp.CallToolRequest) ([]string, error) {

@@ -31,6 +31,7 @@ var hints = map[string]hint{
 	"lidza_recipes":          reads,
 	"lidza_packs":            reads,
 	"lidza_credentials_list": reads,
+	"lidza_settings_list":    reads,
 	"lidza_brief":            reads,
 	"lidza_errors":           reads,
 	"lidza_llm_usage":        reads,
@@ -44,6 +45,7 @@ var hints = map[string]hint{
 	"lidza_brief_skip":       adds,
 	// Replaces a sealed value: the old one is gone.
 	"lidza_credentials_set": {destructive: true, idempotent: true},
+	"lidza_settings_set":    {destructive: true, idempotent: true},
 	// Sends a prompt to the configured model provider.
 	"lidza_llm": {openWorld: true},
 }

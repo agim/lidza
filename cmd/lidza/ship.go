@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/agim/lidza/pkg/env"
 	"os"
 	"path/filepath"
 	"slices"
@@ -141,12 +142,25 @@ func writeProductionEnv(dir string, cfg *config.Config) (string, error) {
 			names = append(names, k)
 		}
 		slices.Sort(names)
+		var app []string
 		for _, k := range names {
+			if env.Kind(k) == env.KindApp {
+				app = append(app, k)
+				continue
+			}
 			fmt.Fprintf(&b, "%s=%s\n", k, cfg.Deploy.Env[k])
+		}
+		if len(app) > 0 {
+			// Written as before, so a deploy keeps working; they belong in
+			// the production database (lidza check L023 names them).
+			b.WriteString("\n# App settings from deploy.env: they belong in the app's production database.\n# Move them once (lidza settings import --production), then drop them from deploy.env.\n")
+			for _, k := range app {
+				fmt.Fprintf(&b, "%s=%s\n", k, cfg.Deploy.Env[k])
+			}
 		}
 	}
 	if needs := productionNeeds(cfg, deployValues(cfg, productionCredentials(dir))); len(needs) > 0 {
-		b.WriteString("\n# The enabled packs need these, and neither the credentials nor lidza.json's\n# deploy.env hold them (lidza credentials set NAME=value for a secret,\n# deploy.env for a setting, or the environment where the process runs):\n")
+		b.WriteString("\n# The enabled packs need these, and neither the credentials nor lidza.json's\n# deploy.env hold them (lidza settings set --production NAME=value, or the\n# admin pages once the app runs):\n")
 		for _, line := range needs {
 			b.WriteString("# " + line + "\n")
 		}

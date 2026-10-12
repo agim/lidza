@@ -14,6 +14,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/agim/lidza/pkg/credentials"
 	"net/http"
 	"strings"
 	"sync"
@@ -35,8 +36,10 @@ import (
 // Config comes from the environment.
 type Config struct {
 	// Secret signs access tokens; at least 32 bytes, the same on every
-	// node. Rotating it logs everyone out.
-	Secret string `env:"AUTH_SECRET" required:"true"`
+	// node. Unset, the app generates one on its first start and keeps it
+	// in its database, sealed with the master key. Rotating it logs
+	// everyone out.
+	Secret string `env:"AUTH_SECRET"`
 	// AccessTTL bounds an access token; RefreshTTL a session.
 	AccessTTL  time.Duration `env:"AUTH_ACCESS_TTL" default:"15m"`
 	RefreshTTL time.Duration `env:"AUTH_REFRESH_TTL" default:"720h"`
@@ -127,6 +130,13 @@ func (a *Auth) Start(ctx context.Context, s *lidza.Services) error {
 	if !ok {
 		return errors.New("auth needs the db pack: list \"lidza/db\" before \"lidza/auth\" in lidza.json")
 	}
+	if cfg.Secret == "" {
+		secret, err := generatedSecret(ctx, s)
+		if err != nil {
+			return err
+		}
+		cfg.Secret = secret
+	}
 	built, err := New(cfg, pool.(*pgxpool.Pool))
 	if err != nil {
 		return err
@@ -141,6 +151,39 @@ func (a *Auth) Start(ctx context.Context, s *lidza.Services) error {
 
 // Stop implements lidza.Pack.
 func (a *Auth) Stop(context.Context) error { return nil }
+
+// secretEnsurer is the db pack's credential store: a value generated
+// once, sealed in the database, the same on every node.
+type secretEnsurer interface {
+	Ensure(ctx context.Context, name string, gen func() string) (string, error)
+}
+
+// generatedSecret is AUTH_SECRET when no setting gives one: generated on
+// the app's first start and kept in its database, sealed with the master
+// key, so it moves with the database and every node signs alike.
+// Without a master key there is nowhere safe to keep it.
+func generatedSecret(ctx context.Context, s *lidza.Services) (string, error) {
+	v, ok := s.Lookup(typeOf[credentials.Store]())
+	if !ok {
+		return "", errors.New("AUTH_SECRET is not set and the db pack's credential store is missing")
+	}
+	e, ok := v.(secretEnsurer)
+	if !ok {
+		return "", errors.New("AUTH_SECRET is not set and the credential store cannot keep a generated one")
+	}
+	secret, err := e.Ensure(ctx, "AUTH_SECRET", func() string {
+		b := make([]byte, 32)
+		rand.Read(b)
+		return hex.EncodeToString(b)
+	})
+	if errors.Is(err, credentials.ErrNoKey) {
+		return "", errors.New("AUTH_SECRET is not set and there is no master key to keep a generated one in the database: set LIDZA_MASTER_KEY (or config/master.key in development), or AUTH_SECRET")
+	}
+	if err != nil {
+		return "", fmt.Errorf("AUTH_SECRET: %w", err)
+	}
+	return secret, nil
+}
 
 // User is the authenticated principal.
 type User struct {

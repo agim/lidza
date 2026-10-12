@@ -20,7 +20,7 @@ app's tools. The llm pack speaks the providers; the app never does.
    `EMBED_MODEL` and `EMBED_BASE_URL` as needed. Anthropic has no
    embedding model, so an Anthropic app that embeds sets it;
    `EMBED_PROVIDER=none` turns embeddings off. Keys go in the
-   credentials (`lidza credentials set EMBED_API_KEY=...`).
+   app's settings (`lidza settings set EMBED_API_KEY=...`).
 2. Declare the output in `schema.lidza` when the reply is data, not
    prose:
 

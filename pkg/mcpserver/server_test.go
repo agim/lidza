@@ -354,7 +354,7 @@ func TestToolHints(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	destructive := map[string]bool{"lidza_db_migrate": true, "lidza_db_rollback": true, "lidza_credentials_set": true}
+	destructive := map[string]bool{"lidza_db_migrate": true, "lidza_db_rollback": true, "lidza_credentials_set": true, "lidza_settings_set": true}
 	seen := map[string]bool{}
 	for _, tl := range tools.Tools {
 		if !builtin(tl.Name) {

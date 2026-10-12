@@ -22,6 +22,14 @@ Gotchas:
 - A new CLI command or official Go pack gets its MCP tools, or a reason
   it has none, in `pkg/mcpserver/coverage.go`; `TestCoverage` fails
   otherwise. Inspection tools are read-only and never return secrets.
+- App settings live in the app, not the environment: a setting is
+  `env.KindApp` (keys, providers, addresses, senders: saved in the app's
+  database, edited on the admin pages and with `lidza settings`) unless
+  `env.Kind` says `infra` (the database, the master key, addresses,
+  logging, tracing, tuning). A new setting that tunes or locates the
+  deployment gets a name `env.Kind` recognises; never make an app
+  setting required in the environment, and never write one into the
+  `.env` files `lidza install` or a pack creates (L023 flags them).
 - A new or changed setting (an `env` tag, an `Env` constant, a name
   read with `os.Getenv`) is documented where it is declared; `go
   generate ./pkg/configref` rewrites `docs/configuration.md` and the

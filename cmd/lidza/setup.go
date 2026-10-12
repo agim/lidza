@@ -4,8 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -414,14 +412,6 @@ func withDatabase(raw, name string) string {
 	return u.String()
 }
 
-func randomHex(n int) string {
-	b := make([]byte, n)
-	if _, err := rand.Read(b); err != nil {
-		panic(err)
-	}
-	return hex.EncodeToString(b)
-}
-
 // writeEnvFromExample copies .env.example to .env, setting the keys in
 // values on their lines (commented or not) and appending the ones the
 // example lacks.
@@ -448,7 +438,7 @@ func writeEnvFromExample(dir string, values map[string]string) ([]string, error)
 		}
 		lines = append(lines, line)
 	}
-	for _, key := range []string{"DATABASE_URL", "AUTH_SECRET", "MAIL_FROM"} {
+	for _, key := range []string{"DATABASE_URL"} {
 		if v, want := values[key]; want && !seen[key] && needsKey(dir, key) {
 			lines = append(lines, key+"="+v)
 			written = append(written, key)
@@ -520,10 +510,6 @@ func needsKey(dir, key string) bool {
 	switch key {
 	case "DATABASE_URL":
 		return slices.Contains(cfg.Packs, pack.OfficialPrefix+"db")
-	case "AUTH_SECRET":
-		return slices.Contains(cfg.Packs, pack.OfficialPrefix+"auth")
-	case "MAIL_FROM":
-		return slices.Contains(cfg.Packs, pack.OfficialPrefix+"mail")
 	}
 	return false
 }
@@ -573,12 +559,13 @@ func heldMessage(name string) string {
 }
 
 // envDefaults are the values install writes for this machine when .env
-// lacks them: the database, a fresh secret, a sender, the cache.
+// lacks them: the database and the cache, the deployment's settings.
+// The app's own (AUTH_SECRET, the sender) are not the environment's: the
+// auth pack generates its secret into the database, and development has
+// defaults for the rest.
 func envDefaults(app, devURL string) map[string]string {
 	return map[string]string{
 		"DATABASE_URL": devURL,
-		"AUTH_SECRET":  randomHex(32),
-		"MAIL_FROM":    fmt.Sprintf("%q", app+" <"+app+"@example.com>"),
 		"CACHE_URL":    localCacheURL(),
 	}
 }

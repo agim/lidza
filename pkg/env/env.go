@@ -70,7 +70,27 @@ func Load(dir string, dst any) error {
 			values[k] = v
 		}
 	}
+	devDefaults(values)
 	return Fill(dst, values)
+}
+
+// devDefaults fills the app settings development and tests need but no
+// file should carry: the app's address and a sender. Production has
+// none; its values are the app's, saved in its database.
+func devDefaults(values map[string]string) {
+	if m := Mode(); m != "dev" && m != "test" {
+		return
+	}
+	if values["APP_URL"] == "" {
+		addr := values["LIDZA_ADDR"]
+		if addr == "" {
+			addr = "127.0.0.1:3000"
+		}
+		values["APP_URL"] = "http://" + addr
+	}
+	if values["MAIL_FROM"] == "" {
+		values["MAIL_FROM"] = "Development <dev@localhost>"
+	}
 }
 
 // Values returns everything Load would read, as a map: the .env files,
@@ -90,6 +110,7 @@ func Values(dir string) (map[string]string, error) {
 			values[k] = v
 		}
 	}
+	devDefaults(values)
 	return values, nil
 }
 

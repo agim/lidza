@@ -122,3 +122,34 @@ func (c *CredentialStore) Names(ctx context.Context) ([]string, error) {
 	sort.Strings(out)
 	return out, rows.Err()
 }
+
+// Ensure returns the stored value of name, storing gen()'s first when
+// there is none: the first node to start keeps its value, every other
+// node reads that one (a generated AUTH_SECRET). It fails without a
+// master key, which seals the value.
+func (c *CredentialStore) Ensure(ctx context.Context, name string, gen func() string) (string, error) {
+	key, err := credentials.Key(c.dir)
+	if err != nil {
+		return "", err
+	}
+	if err := c.ensure(ctx); err != nil {
+		return "", err
+	}
+	sealed, err := credentials.Encrypt(key, []byte(gen()))
+	if err != nil {
+		return "", err
+	}
+	if _, err := c.pool.Exec(ctx, `INSERT INTO credential (name, sealed) VALUES ($1, $2) ON CONFLICT (name) DO NOTHING`, name, sealed); err != nil {
+		return "", err
+	}
+	var stored string
+	if err := c.pool.QueryRow(ctx, `SELECT sealed FROM credential WHERE name = $1`, name).Scan(&stored); err != nil {
+		return "", err
+	}
+	plain, err := credentials.Decrypt(key, stored)
+	if err != nil {
+		return "", fmt.Errorf("credential %s: %w (wrong master key?)", name, err)
+	}
+	credentials.SetOverride(name, string(plain))
+	return string(plain), nil
+}

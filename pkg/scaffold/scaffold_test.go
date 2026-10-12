@@ -264,7 +264,7 @@ func TestRefreshTestEnv(t *testing.T) {
 		}
 	}
 	data, _ := os.ReadFile(p)
-	if string(data) != "DATABASE_URL=postgres:///demo_test\nCACHE_URL=memory\nLLM_PROVIDER=fake\nEMBED_PROVIDER=fake\n" {
+	if string(data) != "DATABASE_URL=postgres:///demo_test\nAUTH_SECRET=test-only-secret-never-used-outside-tests-0123456789\nCACHE_URL=memory\nLLM_PROVIDER=fake\nEMBED_PROVIDER=fake\n" {
 		t.Fatalf(".env.test: %q", data)
 	}
 }

@@ -10,7 +10,7 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
-## Unreleased
+## v0.1.114 (2026-10-13)
 
 - Authenticator-app two-factor authentication and purpose-bound step-up:
   `auth.Mount` serves enrollment, status, recovery-code and step-up routes;

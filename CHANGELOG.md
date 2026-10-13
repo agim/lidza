@@ -10,7 +10,7 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
-## Unreleased
+## v0.1.113 (2026-10-13)
 
 - Keeping app settings in the app is an option, not the rule: the
   guide, `docs/deploy.md` and the agent guidance describe the

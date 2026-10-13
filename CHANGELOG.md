@@ -10,7 +10,7 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
-## Unreleased
+## v0.1.117 (2026-10-13)
 
 - The destructive-migration development test now derives its temporary
   database connection from `LIDZA_TEST_DATABASE_URL`, so CI works with both

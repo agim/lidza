@@ -510,7 +510,8 @@ OAuth flow.
    `authVerifyResend()`: a new link to the signed-in user's address
    (nothing is sent once it is verified, or with `NoVerifyEmail`).
    Two-factor endpoints are mounted too: start enrollment with
-   `authTwoFactorSetup`, show its `otpauthUrl` or `secret`, confirm with
+   `authTwoFactorSetup`, show its local `qrCodeDataUrl` for scanning and keep
+   `otpauthUrl` and `secret` as fallbacks, then confirm with
    `authTwoFactorEnable({code})`, and show the returned recovery codes
    exactly once. Status is `authTwoFactorStatus`; disabling or regenerating
    recovery codes requires a current code. Once enabled, password login

@@ -7,12 +7,15 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base32"
+	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"net/url"
 	"strings"
 	"time"
+
+	qrcode "github.com/skip2/go-qrcode"
 )
 
 const (
@@ -75,6 +78,14 @@ func totpURL(secret, account, issuer string) string {
 	v.Set("digits", fmt.Sprint(totpDigits))
 	v.Set("period", fmt.Sprint(int(totpPeriod/time.Second)))
 	return "otpauth://totp/" + url.PathEscape(issuer) + ":" + url.PathEscape(account) + "?" + v.Encode()
+}
+
+func totpQRCodeDataURL(otpAuthURL string) (string, error) {
+	png, err := qrcode.Encode(otpAuthURL, qrcode.Medium, 256)
+	if err != nil {
+		return "", fmt.Errorf("auth: render authenticator QR code: %w", err)
+	}
+	return "data:image/png;base64," + base64.StdEncoding.EncodeToString(png), nil
 }
 
 func newBackupCodes() (codes, hashes []string, err error) {

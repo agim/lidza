@@ -46,8 +46,9 @@ type TwoFactorStatus struct {
 
 // TwoFactorSetup is shown once while an authenticator factor is enrolled.
 type TwoFactorSetup struct {
-	Secret     string `json:"secret"`
-	OTPAuthURL string `json:"otpauthUrl"`
+	Secret        string `json:"secret"`
+	OTPAuthURL    string `json:"otpauthUrl"`
+	QRCodeDataURL string `json:"qrCodeDataUrl"`
 }
 
 // TwoFactorCode carries an authenticator or recovery code.
@@ -254,7 +255,12 @@ ON CONFLICT (subject) DO UPDATE SET secret_sealed = EXCLUDED.secret_sealed, last
 	if account == "" {
 		account = p.Subject
 	}
-	return TwoFactorSetup{Secret: secret, OTPAuthURL: totpURL(secret, account, issuer)}, nil
+	otpAuthURL := totpURL(secret, account, issuer)
+	qrCodeDataURL, err := totpQRCodeDataURL(otpAuthURL)
+	if err != nil {
+		return TwoFactorSetup{}, err
+	}
+	return TwoFactorSetup{Secret: secret, OTPAuthURL: otpAuthURL, QRCodeDataURL: qrCodeDataURL}, nil
 }
 
 func (s *signin) authTwoFactorEnable(ctx context.Context, req *router.Request[TwoFactorCode]) (BackupCodes, error) {

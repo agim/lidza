@@ -1,7 +1,9 @@
 package auth
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -11,6 +13,7 @@ import (
 
 	"github.com/agim/lidza"
 	"github.com/agim/lidza/pkg/credentials"
+	qrcode "github.com/skip2/go-qrcode"
 )
 
 type fixedClock struct{ now time.Time }
@@ -55,8 +58,17 @@ func TestTwoFactorStepUp(t *testing.T) {
 		t.Fatal(err)
 	}
 	code, setup := call(t, client, http.MethodPost, api+"/two-factor/setup", map[string]any{})
-	if code != http.StatusOK || setup["secret"] == "" || !strings.HasPrefix(setup["otpauthUrl"].(string), "otpauth://totp/Example:") {
+	if code != http.StatusOK || setup["secret"] == "" || !strings.HasPrefix(setup["otpauthUrl"].(string), "otpauth://totp/Example:") || !strings.HasPrefix(setup["qrCodeDataUrl"].(string), "data:image/png;base64,") {
 		t.Fatalf("setup: %d %v", code, setup)
+	}
+	encoded := strings.TrimPrefix(setup["qrCodeDataUrl"].(string), "data:image/png;base64,")
+	image, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		t.Fatalf("QR image: %v", err)
+	}
+	wantImage, err := qrcode.Encode(setup["otpauthUrl"].(string), qrcode.Medium, 256)
+	if err != nil || !bytes.Equal(image, wantImage) {
+		t.Fatal("QR image does not encode the returned otpauth URL")
 	}
 	secret := setup["secret"].(string)
 	now := time.Now()

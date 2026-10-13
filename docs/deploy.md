@@ -93,12 +93,14 @@ verified at the provider).
 
 ## Settings and secrets
 
-The environment of the deployed process holds the deployment's settings
-only: `DATABASE_URL`, `LIDZA_MASTER_KEY` (the contents of
-`config/master.key`), addresses and TLS, logging, tracing and tuning.
-The app's configuration (API keys, providers, `APP_URL`, `MAIL_FROM`,
-buckets, admins) lives in its database, sealed with the master key, so
-moving the app is moving its database and the key. Put it there once:
+The environment of the deployed process needs the deployment's
+settings: `DATABASE_URL`, `LIDZA_MASTER_KEY` (the contents of
+`config/master.key`), and as needed addresses and TLS, logging, tracing
+and tuning. The app's configuration (API keys, providers, `APP_URL`,
+`MAIL_FROM`, buckets, admins) can be set there too, kept in the sealed
+credentials file, or saved in the app's database, sealed with the master
+key, where the admin pages switch it without a server login and it
+moves with the database. To keep it in the database:
 
 ```sh
 lidza settings import --production    # the app settings .env, deploy/production.env, the credentials file and the environment hold
@@ -107,10 +109,9 @@ lidza settings set --production MAIL_API_KEY=... STRIPE_SECRET_KEY=...
 
 or through the admin pages once the app runs. `AUTH_SECRET` is
 generated on the first start and kept there. `docs/configuration.md`
-marks every setting `app` or `infra`; the app logs at start which app
-settings the server's environment sets. An environment variable still
-wins over the saved value, as an emergency override, and locks its
-field on the admin pages until it is removed. A value saved on one node
+marks every setting `app` or `infra`. An environment variable wins over
+the saved value and shows read-only on the admin pages; the app notes
+at start which app settings the environment sets. A value saved on one node
 reaches the others within `DB_CREDENTIALS_POLL` (10 seconds).
 
 `config/credentials.yml.enc` ships with the app: the development seed,

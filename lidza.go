@@ -588,11 +588,10 @@ func envOr(key, def string) string {
 	return def
 }
 
-// warnAppSettingsInEnv logs, in production, the app settings the
+// warnAppSettingsInEnv notes, in production, the app settings the
 // process environment sets (a server's or a deploy platform's
-// variables): they win over the values saved in the app, so the admin
-// pages cannot switch them until they are removed there. Names only,
-// never values.
+// variables): they win over the values saved in the app, so their
+// fields on the admin pages are read-only. Names only, never values.
 func warnAppSettingsInEnv(log *slog.Logger) {
 	if env.Mode() != "production" {
 		return
@@ -611,6 +610,6 @@ func warnAppSettingsInEnv(log *slog.Logger) {
 		return
 	}
 	slices.Sort(from)
-	log.Warn("app settings set in the server's environment: they override the admin pages until removed there; keep them in the app instead (lidza settings import --production, or the admin pages)",
+	log.Info("app settings from the environment: they override the values saved in the app, and the admin pages show them read-only",
 		"settings", strings.Join(from, ", "))
 }

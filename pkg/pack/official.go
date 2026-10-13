@@ -221,7 +221,7 @@ var Officials = []Official{
 		Name:        "mail",
 		Description: "Transactional email behind one Send: Mailgun, SendGrid, Postmark, Resend or SMTP over plain HTTP, log and outbox providers for development and tests, templates in mail/, an outbox table with the db pack, background delivery with retries through the jobs pack.",
 		Env: []string{
-			"# lidza/mail (list lidza/db and lidza/jobs before it for the outbox and background delivery) (app settings, commented: store them in the app with the admin pages or lidza settings set NAME=value)",
+			"# lidza/mail (list lidza/db and lidza/jobs before it for the outbox and background delivery) (app settings: set them here, or keep them in the app with the admin pages or lidza settings set NAME=value)",
 			"# MAIL_PROVIDER=log        # log | outbox | smtp | mailgun | sendgrid | postmark | resend",
 			"# MAIL_FROM=\"App <app@example.com>\"   # development default: dev@localhost",
 			"# APP_URL=https://app.example.com   # where links in emails point; development default: http:// plus LIDZA_ADDR",
@@ -244,7 +244,7 @@ var Officials = []Official{
 		Name:        "llm",
 		Description: "Language models behind one Chat, Stream, Embed, Generate and Run: Anthropic, OpenAI, Google and Ollama spoken directly over HTTP, a fake provider for tests, structured output from schema types, the app's tools offered to the model, embeddings from the chat provider or another, retries, and token usage per call (chats and embeddings, by label) in llm_usage with the db pack.",
 		Env: []string{
-			"# lidza/llm (app settings, commented: store them in the app with the admin pages or lidza settings set NAME=value)",
+			"# lidza/llm (app settings: set them here, or keep them in the app with the admin pages or lidza settings set NAME=value)",
 			"# LLM_PROVIDER=fake        # fake | ollama | anthropic | openai | google | compatible",
 			"# LLM_MODEL=                # the provider's default when empty (claude-sonnet-5, gpt-5-mini, gemini-2.5-flash, llama3.2)",
 			"# LLM_API_KEY=              # anthropic, openai, google (a secret: lidza settings set)",
@@ -271,7 +271,7 @@ var Officials = []Official{
 		Name:        "storage",
 		Description: "Files behind one Put, Get, Stat, List, Delete and presigned URLs: any S3-compatible service (AWS S3, MinIO, Cloudflare R2, Backblaze B2, Wasabi, Spaces) spoken directly with Signature V4, and a local directory for development and tests.",
 		Env: []string{
-			"# lidza/storage (app settings, commented: store them in the app with the admin pages or lidza settings set NAME=value)",
+			"# lidza/storage (app settings: set them here, or keep them in the app with the admin pages or lidza settings set NAME=value)",
 			"# STORAGE_PROVIDER=local   # local | s3 | r2 | spaces | b2 | gcs | minio",
 			"# STORAGE_DIR=storage       # local: where the files go",
 			"# STORAGE_BUCKET=           # s3",

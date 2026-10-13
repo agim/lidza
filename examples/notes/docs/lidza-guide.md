@@ -2291,23 +2291,21 @@ microphone=(), geolocation=()`. `lidza.App` in `main.go` sets the rest:
 
 ## Settings and secrets
 
-The app's configuration lives in the app, not in the environment. Its
-settings (API keys, the providers and models it uses, `APP_URL`,
-`MAIL_FROM`, buckets, `ADMIN_USERS`, `AUTH_SECRET`) are saved in its
-database, sealed with the master key: the admin pages edit every one
-(the pack pages and Settings), and `lidza settings set NAME=value`
-(MCP: `lidza_settings_set`) does it from a terminal; `lidza settings
-list` says where each value comes from, never the value. An app moved
-to another server takes its configuration along in its database: the
-environment holds only the deployment's settings, the database
-(`DATABASE_URL`), the master key (`LIDZA_MASTER_KEY`), addresses,
-logging, tracing and tuning (pool sizes, workers, timeouts, rate
-limits). `docs/configuration.md` marks each setting `app` or `infra`;
-`lidza settings import` moves app settings found in the environment into the database (with
-`--production`, into production's). `AUTH_SECRET` is generated on the
-app's first start and kept in the database, the same on every node.
-An environment variable still wins over a saved value, for an
-emergency override.
+An app setting (API keys, the providers and models it uses, `APP_URL`,
+`MAIL_FROM`, buckets, `ADMIN_USERS`) can come from the environment, the
+sealed credentials file or the app's own database, and the environment
+wins. Kept in the database, sealed with the master key, a setting is
+switched on the admin pages (the pack pages and Settings) with no
+restart and no server login, reaches every node, and moves with the
+database; `lidza settings set NAME=value` (MCP: `lidza_settings_set`)
+does it from a terminal, `lidza settings list` says where each value
+comes from (never the value), and `lidza settings import` copies the
+values the environment and the files hold into the database (with
+`--production`, production's). The deployment's own settings (the
+database, the master key, addresses, logging, tracing, tuning) stay in
+the environment; `docs/configuration.md` marks each setting `app` or
+`infra`. `AUTH_SECRET` is generated on the app's first start and kept
+in the database, the same on every node.
 
 Development is seeded by `config/credentials.yml.enc`, sealed with
 AES-256-GCM under `config/master.key`, which git ignores: `lidza

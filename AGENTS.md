@@ -22,19 +22,17 @@ Gotchas:
 - A new CLI command or official Go pack gets its MCP tools, or a reason
   it has none, in `pkg/mcpserver/coverage.go`; `TestCoverage` fails
   otherwise. Inspection tools are read-only and never return secrets.
-- App settings live in the app, not the environment: a setting is
-  `env.KindApp` (keys, providers, addresses, senders: saved in the app's
-  database, edited on the admin pages and with `lidza settings`) unless
-  `env.Kind` says `infra` (the database, the master key, addresses,
-  logging, tracing, tuning). A new setting that tunes or locates the
-  deployment gets a name `env.Kind` recognises. The goal: an app's
-  credentials and settings are kept in the app, in its database
-  (switched from `/admin` without a server login) or in the sealed
-  credentials file it ships with, never only in a server's or deploy
-  platform's environment. So never make an app setting required in the
-  environment, never write one into the `.env` files `lidza install`
-  or a pack creates, and every app setting is editable on the admin
-  pages and takes effect without a restart (`Reconfigure`).
+- App settings can live in the app: a setting is `env.KindApp` (keys,
+  providers, addresses, senders) unless `env.Kind` says `infra` (the
+  database, the master key, addresses, logging, tracing, tuning). An app
+  setting may come from the environment, the sealed credentials file or
+  the app's database, and the framework supports all three: every app
+  setting is editable on the admin pages (saved in the database) and
+  takes effect without a restart (`Reconfigure`), so an app can be
+  run without a server login. A new setting that tunes or locates the
+  deployment gets a name `env.Kind` recognises; never make an app
+  setting required in the environment (generate it, as `AUTH_SECRET`,
+  or default it).
 - A new or changed setting (an `env` tag, an `Env` constant, a name
   read with `os.Getenv`) is documented where it is declared; `go
   generate ./pkg/configref` rewrites `docs/configuration.md` and the

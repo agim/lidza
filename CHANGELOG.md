@@ -10,6 +10,16 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
+## Unreleased
+
+- Keeping app settings in the app is an option, not the rule: the
+  guide, `docs/deploy.md` and the agent guidance describe the
+  environment, the credentials file and the database as equal homes
+  for an app setting (the environment wins). The production start note
+  on app settings from the environment is an Info line, and `lidza
+  ship` writes `deploy.env` as before, without the note to move app
+  settings.
+
 ## v0.1.112 (2026-10-13)
 
 - App settings live in the app (a convention, and the tools for it):

@@ -10,7 +10,7 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
-## Unreleased
+## v0.1.118 (2026-10-13)
 
 - Two-factor enrollment now returns a locally rendered `qrCodeDataUrl` for
   scanning from another device. The QR encodes the same `otpauthUrl`; the URI

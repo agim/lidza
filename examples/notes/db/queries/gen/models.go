@@ -40,6 +40,18 @@ type AuthConnection struct {
 	UpdatedAt     time.Time  `json:"updated_at"`
 }
 
+type AuthFactor struct {
+	Subject      string     `json:"subject"`
+	SecretSealed string     `json:"secret_sealed"`
+	LastStep     int64      `json:"last_step"`
+	BackupCodes  []string   `json:"backup_codes"`
+	EnabledAt    *time.Time `json:"enabled_at"`
+	FailedCount  int32      `json:"failed_count"`
+	FailedAt     *time.Time `json:"failed_at"`
+	CreatedAt    time.Time  `json:"created_at"`
+	UpdatedAt    time.Time  `json:"updated_at"`
+}
+
 type AuthIdentity struct {
 	ID              string    `json:"id"`
 	Provider        string    `json:"provider"`
@@ -93,6 +105,16 @@ type AuthSession struct {
 	RevokedAt       *time.Time `json:"revoked_at"`
 	Remember        bool       `json:"remember"`
 	CreatedAt       time.Time  `json:"created_at"`
+}
+
+type AuthStepUp struct {
+	ID        string    `json:"id"`
+	Subject   string    `json:"subject"`
+	SessionID string    `json:"session_id"`
+	Purpose   string    `json:"purpose"`
+	Target    string    `json:"target"`
+	ExpiresAt time.Time `json:"expires_at"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 type AuthToken struct {

@@ -527,7 +527,7 @@ OAuth flow.
    secrets are sealed in the database.
    For a credential or other sensitive value, post `{code, purpose, target}`
    to `authStepUp`; the grant is bound to this account and browser session,
-   that exact purpose and target, for at most ten minutes. The server route
+   that exact purpose and target, for at most 15 minutes. The server route
    must call `auth.AuthorizeStepUp(ctx, req.Raw, purpose, target)` immediately
    before returning the value. Its `OnEvent` entries
    (`EventStepUpGranted`, `EventStepUpAuthorized`, `EventStepUpRejected`)

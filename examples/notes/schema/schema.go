@@ -389,6 +389,57 @@ func (v AuthInvite) Validate() error {
 	return errs.Result()
 }
 
+// AuthFactor is a row of the auth_factor table.
+type AuthFactor struct {
+	Subject      string     `json:"subject" db:"subject"`
+	SecretSealed string     `json:"secretSealed" db:"secret_sealed"`
+	LastStep     int64      `json:"lastStep" db:"last_step"`
+	BackupCodes  []string   `json:"backupCodes" db:"backup_codes"`
+	EnabledAt    *time.Time `json:"enabledAt" db:"enabled_at"`
+	FailedCount  int        `json:"failedCount" db:"failed_count"`
+	FailedAt     *time.Time `json:"failedAt" db:"failed_at"`
+	CreatedAt    time.Time  `json:"createdAt" db:"created_at"`
+	UpdatedAt    time.Time  `json:"updatedAt" db:"updated_at"`
+}
+
+// Validate applies the rules of AuthFactor from schema.lidza.
+func (v AuthFactor) Validate() error {
+	var errs validate.Errors
+	if v.SecretSealed == "" {
+		errs.Add("secretSealed", "required", "required")
+	}
+	return errs.Result()
+}
+
+// AuthStepUp is a row of the auth_step_up table.
+type AuthStepUp struct {
+	ID        string    `json:"id" db:"id"`
+	Subject   string    `json:"subject" db:"subject"`
+	SessionID string    `json:"sessionId" db:"session_id"`
+	Purpose   string    `json:"purpose" db:"purpose"`
+	Target    string    `json:"target" db:"target"`
+	ExpiresAt time.Time `json:"expiresAt" db:"expires_at"`
+	CreatedAt time.Time `json:"createdAt" db:"created_at"`
+}
+
+// Validate applies the rules of AuthStepUp from schema.lidza.
+func (v AuthStepUp) Validate() error {
+	var errs validate.Errors
+	if v.Subject == "" {
+		errs.Add("subject", "required", "required")
+	}
+	if v.SessionID == "" {
+		errs.Add("sessionId", "required", "required")
+	}
+	if v.Purpose == "" {
+		errs.Add("purpose", "required", "required")
+	}
+	if v.Target == "" {
+		errs.Add("target", "required", "required")
+	}
+	return errs.Result()
+}
+
 // CreateNote is an API type.
 type CreateNote struct {
 	Title string  `json:"title"`

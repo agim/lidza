@@ -274,3 +274,31 @@ model AuthInvite @table("auth_invite") {
   createdAt  time   @default(now())
   @@index(workspace)
 }
+
+// An authenticator-app factor for an account. The secret is sealed with
+// LIDZA_MASTER_KEY; backup codes are one-way hashes and each TOTP time step
+// can be used only once.
+model AuthFactor @table("auth_factor") {
+  subject      string   @id
+  secretSealed string
+  lastStep     bigint   @default(0)
+  backupCodes  string[]
+  enabledAt    time?
+  failedCount  int      @default(0)
+  failedAt     time?
+  createdAt    time     @default(now())
+  updatedAt    time     @default(now())
+}
+
+// A fresh second-factor check, bound to one sign-in, purpose and target.
+// It is never a broad account unlock.
+model AuthStepUp @table("auth_step_up") {
+  id        uuid   @id @default(uuid())
+  subject   string
+  sessionId string @index
+  purpose   string
+  target    string @default("")
+  expiresAt time
+  createdAt time   @default(now())
+  @@unique(sessionId, purpose, target)
+}

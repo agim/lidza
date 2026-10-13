@@ -18,7 +18,7 @@ permissions:
   contents: read
 
 env:
-  STATICCHECK_VERSION: "2026.2.1"
+  STATICCHECK_VERSION: "2026.2.2"
   GOVULNCHECK_VERSION: "v1.8.0"
   SQLC_VERSION: "v1.31.1"
   LIDZA_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/lidza_test?sslmode=disable

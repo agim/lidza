@@ -15,7 +15,7 @@ under "Verification" passes.
 |---|---|---|
 | go | 1.27.2 | `/usr/local/go/bin/go`; `GOPATH=/home/agim/go` |
 | rustc, cargo | 1.98.1 | rustup, `stable`; `~/.cargo/bin`; targets `wasm32-wasip1`, `wasm32-unknown-unknown` |
-| staticcheck | 2026.2.1 | `~/go/bin` |
+| staticcheck | 2026.2.2 | `~/go/bin` |
 | golangci-lint | 2.14.0 | `~/go/bin` |
 | govulncheck | v1.8.0 | not installed: `go run golang.org/x/vuln/cmd/govulncheck@v1.8.0` from the module cache (`scripts/release.sh` and CI pin it) |
 | sqlc | 1.31.1 | `~/go/bin` |
@@ -99,17 +99,11 @@ Check: `cargo --version`, `rustc --version`,
 
 ### Helper tools
 
-Go 1.27.2 writes export data (version 5) that staticcheck 2026.2.1's
-pinned `golang.org/x/tools` cannot read: it reports "export data version
-5 is greater than maximum supported version 4" and checks nothing. Until
-a staticcheck release carries a newer `x/tools`, build that release
-against `x/tools` v0.51.0:
+Staticcheck 2026.2.2 supports Go 1.27 export data. Install the pinned
+release used by CI and `install.sh`:
 
 ```sh
-d=$(mktemp -d) && cd "$d" && go mod init scbuild
-go get honnef.co/go/tools/cmd/staticcheck@v0.8.1 golang.org/x/tools@v0.51.0
-go build -o "$(go env GOPATH)/bin/staticcheck" honnef.co/go/tools/cmd/staticcheck
-cd - && rm -rf "$d"
+go install honnef.co/go/tools/cmd/staticcheck@2026.2.2
 ```
 
 ```sh
@@ -119,9 +113,8 @@ cargo install wasm-tools --version 1.259.0 --locked
 ```
 
 Check: `staticcheck -version`, `golangci-lint --version`, `sqlc version`,
-`wasm-tools --version`; `go version -m $(which staticcheck) | grep x/tools`
-shows v0.51.0, and `staticcheck ./...` in this repository prints no
-"internal error".
+and `wasm-tools --version`; `staticcheck ./...` in this repository prints
+no internal error.
 
 ### k6
 

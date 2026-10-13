@@ -10,6 +10,13 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
+## Unreleased
+
+- CI and the installer use staticcheck 2026.2.2, whose Go analysis tools
+  understand Go 1.27 export data; the reference app's generated framework
+  files and snippets are refreshed with the current authentication schema,
+  migrations and 15-minute step-up guidance.
+
 ## v0.1.115 (2026-10-13)
 
 - Purpose-bound two-factor step-up grants now last 15 minutes, allowing sensitive consoles to show and extend a clear just-in-time access window.

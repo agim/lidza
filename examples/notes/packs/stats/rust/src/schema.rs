@@ -227,6 +227,41 @@ pub struct AuthInvite {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AuthFactor {
+    pub subject: String,
+    #[serde(rename = "secretSealed")]
+    pub secret_sealed: String,
+    #[serde(rename = "lastStep")]
+    pub last_step: i64,
+    #[serde(rename = "backupCodes")]
+    pub backup_codes: Vec<String>,
+    #[serde(rename = "enabledAt")]
+    pub enabled_at: Option<String>,
+    #[serde(rename = "failedCount")]
+    pub failed_count: i32,
+    #[serde(rename = "failedAt")]
+    pub failed_at: Option<String>,
+    #[serde(rename = "createdAt")]
+    pub created_at: String,
+    #[serde(rename = "updatedAt")]
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AuthStepUp {
+    pub id: String,
+    pub subject: String,
+    #[serde(rename = "sessionId")]
+    pub session_id: String,
+    pub purpose: String,
+    pub target: String,
+    #[serde(rename = "expiresAt")]
+    pub expires_at: String,
+    #[serde(rename = "createdAt")]
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CreateNote {
     pub title: String,
     pub body: Option<String>,

@@ -33,7 +33,7 @@ NODE_MIN_MAJOR=20
 NODE_VERSION=22.23.2
 # Helper tools, pinned: the versions the framework is developed and tested
 # with (docs/environment.md, .github/workflows/ci.yml).
-STATICCHECK_VERSION=2026.2.1
+STATICCHECK_VERSION=2026.2.2
 GOLANGCI_LINT_VERSION=v2.14.0
 SQLC_VERSION=v1.31.1
 WASM_TOOLS_VERSION=1.259.0

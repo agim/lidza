@@ -20,6 +20,24 @@
   function all(sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)) }
 
   document.addEventListener('DOMContentLoaded', function () {
+    // Admin pages never contain a sign-in form. Keep browsers and password
+    // managers out of operational settings, including app-provided pages.
+    all('form').forEach(function (form) {
+      form.setAttribute('autocomplete', 'off')
+      form.setAttribute('data-1p-ignore', '')
+      form.setAttribute('data-lpignore', 'true')
+      form.setAttribute('data-bwignore', '')
+      form.setAttribute('data-form-type', 'other')
+      all('input, select, textarea', form).forEach(function (control) {
+        control.setAttribute('data-1p-ignore', '')
+        control.setAttribute('data-lpignore', 'true')
+        control.setAttribute('data-bwignore', '')
+        control.setAttribute('data-form-type', 'other')
+        if (control.type === 'password') control.setAttribute('autocomplete', 'new-password')
+        else if (control.type !== 'hidden') control.setAttribute('autocomplete', 'off')
+      })
+    })
+
     // Keep the active item visible in long menus without scrolling the page.
     var nav = document.getElementById('admin-nav')
     function revealActive() {
@@ -125,6 +143,8 @@
           var wanted = el.getAttribute('data-for').split(',')
           var hit = wanted.some(function (v) { return values.indexOf(v) >= 0 })
           el.classList.toggle('d-none', !hit)
+          if (el.matches('fieldset')) el.disabled = !hit
+          else all('input, select, textarea, button', el).forEach(function (control) { control.disabled = !hit })
           if (hit && el.tagName === 'A') links++
         })
         aside.forEach(function (el) { el.classList.toggle('d-none', links > 0) })

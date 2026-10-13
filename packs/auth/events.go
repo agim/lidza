@@ -24,6 +24,12 @@ const (
 	EventDisconnected        = "disconnected"          // a connection removed and revoked at the provider
 	EventOwnerClaimed        = "owner_claimed"         // the signed-in account claimed the app with the owner token
 	EventOwnerClaimFailed    = "owner_claim_failed"    // Reason: bad_token, claimed (the token never appears)
+	EventTwoFactorEnabled    = "two_factor_enabled"    // an authenticator-app factor was enabled
+	EventTwoFactorDisabled   = "two_factor_disabled"   // the factor was removed after a valid code
+	EventBackupCodesChanged  = "backup_codes_changed"  // recovery codes were regenerated
+	EventStepUpGranted       = "step_up_granted"       // a fresh code granted one purpose and target
+	EventStepUpAuthorized    = "step_up_authorized"    // a protected operation used a live grant
+	EventStepUpRejected      = "step_up_rejected"      // Reason: setup_required, code_required, invalid, locked
 )
 
 // Event is one account event, as Options.OnEvent sees it.
@@ -39,6 +45,10 @@ type Event struct {
 	Method string
 	// Reason says why a sign-in failed; empty otherwise.
 	Reason string
+	// Purpose and Target identify a step-up protected operation. Target is
+	// an identifier such as an environment variable name, never its value.
+	Purpose string
+	Target  string
 	// Request is the request (the client address, the user agent).
 	Request *http.Request
 }

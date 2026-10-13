@@ -33,7 +33,9 @@ func testAuth(t *testing.T) *Auth {
 	pool.Exec(ctx, `DROP TABLE IF EXISTS auth_account`)
 	pool.Exec(ctx, `DROP TABLE IF EXISTS auth_user`)
 	pool.Exec(ctx, `DROP TABLE IF EXISTS auth_identity`)
-	if _, err := pool.Exec(ctx, SessionTable+TokenTable+AccountTable+UserTable+IdentityTable); err != nil {
+	pool.Exec(ctx, `DROP TABLE IF EXISTS auth_step_up`)
+	pool.Exec(ctx, `DROP TABLE IF EXISTS auth_factor`)
+	if _, err := pool.Exec(ctx, SessionTable+TokenTable+AccountTable+UserTable+IdentityTable+FactorTable); err != nil {
 		t.Fatal(err)
 	}
 	a, err := New(Config{Secret: testSecret, AccessTTL: time.Minute, RefreshTTL: time.Hour, LoginRPS: 1, LoginBurst: 2, MinPasswordLength: 10, TokenTTL: time.Hour}, pool)

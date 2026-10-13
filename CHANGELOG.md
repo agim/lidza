@@ -10,6 +10,20 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
+## Unreleased
+
+- Authenticator-app two-factor authentication and purpose-bound step-up:
+  `auth.Mount` serves enrollment, status, recovery-code and step-up routes;
+  password sign-in requires `X-Lidza-OTP` after enrollment; factors are
+  sealed with the master key; codes are single-use and brute-force bounded.
+  A step-up lasts at most ten minutes and is bound to the current account,
+  session, purpose and target. `auth.AuthorizeStepUp` gates a sensitive
+  route and emits allowed/rejected `OnEvent` records without the protected
+  value.
+- Admin setting forms opt out of browser/password-manager autofill. Secret
+  controls use `autocomplete=new-password`, and controls in a provider group
+  are disabled while the group is hidden, so they are not submitted.
+
 ## v0.1.113 (2026-10-13)
 
 - Keeping app settings in the app is an option, not the rule: the

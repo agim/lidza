@@ -26,6 +26,10 @@ import (
 // (Google, GitHub, Microsoft, any OIDC issuer) named by AUTH_PROVIDERS
 // and their credentials. Every field is optional.
 type Options struct {
+	// TwoFactorIssuer is the authenticator-app label. Title is used when
+	// this is empty, then "Lidza". Mount always serves the enrollment and
+	// purpose-bound step-up routes for signed-in accounts.
+	TwoFactorIssuer string
 	// Connectors are the external APIs a signed-in user connects (see
 	// Connector): nil reads AUTH_CONNECT and its credentials, as
 	// ConnectorsFromEnv says. With any, Mount serves the connect routes;
@@ -192,6 +196,12 @@ func Mount(r *router.Router, opt Options) {
 	router.Route(r, "GET /api/v1/auth/session", s.authSession, Optional())
 	router.Route(r, "GET /api/v1/auth/me", s.authMe, Require())
 	router.Route(r, "POST /api/v1/auth/logout", s.authLogout, Require())
+	router.Route(r, "GET /api/v1/auth/two-factor", s.authTwoFactorStatus, Require())
+	router.Route(r, "POST /api/v1/auth/two-factor/setup", s.authTwoFactorSetup, Throttle(), Require())
+	router.Route(r, "POST /api/v1/auth/two-factor/enable", s.authTwoFactorEnable, Throttle(), Require())
+	router.Route(r, "POST /api/v1/auth/two-factor/disable", s.authTwoFactorDisable, Throttle(), Require())
+	router.Route(r, "POST /api/v1/auth/two-factor/backup-codes", s.authBackupCodes, Throttle(), Require())
+	router.Route(r, "POST /api/v1/auth/step-up", s.authStepUp, Throttle(), Require())
 	if opt.OnDeleteUser != nil {
 		router.Route(r, "POST /api/v1/auth/delete", s.authDelete, Throttle(), Require())
 	}
@@ -908,6 +918,14 @@ func (s *signin) authLogin(ctx context.Context, req *router.Request[Credentials]
 	p, err := a.Profile(ctx, subject)
 	if err != nil {
 		return SignedIn{}, err
+	}
+	if on, err := a.TwoFactorEnabled(ctx, subject); err != nil {
+		return SignedIn{}, err
+	} else if on {
+		if err := a.CheckSecondFactor(ctx, subject, req.Raw.Header.Get(OTPHeader)); err != nil {
+			failed(factorReason(err))
+			return SignedIn{}, err
+		}
 	}
 	out, err := s.session(ctx, req, req.Raw, p, "", true, remembered(req.Body.Remember))
 	var si *signInError

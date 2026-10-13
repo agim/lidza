@@ -145,6 +145,14 @@ func TestCredentialsPage(t *testing.T) {
 	if !regexp.MustCompile(`d-none" data-for="smtp"`).MatchString(body) {
 		t.Fatal("the SMTP fields should be hidden while the provider is log")
 	}
+	for _, want := range []string{`autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other" data-admin-dirty`, `name="MAIL_SMTP_PASSWORD" autocomplete="new-password"`, `name="MAIL_SMTP_HOST" value="" autocomplete="off"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("safe admin form missing %q", want)
+		}
+	}
+	if !regexp.MustCompile(`fieldset[^>]*data-for="smtp"[^>]* disabled`).MatchString(body) {
+		t.Fatal("the hidden SMTP group should be disabled and absent from form submission")
+	}
 	if !strings.Contains(body, `data-placeholders="mailgun=`) || !strings.Contains(body, "https://app.mailgun.com") {
 		t.Fatal("placeholders and console links")
 	}

@@ -64,8 +64,8 @@
   </label>
   {{if eq .Kind "secret"}}
   <div class="input-group input-group-flat">
-    <input type="password" class="form-control" id="f-{{.Name}}" name="{{.Name}}" autocomplete="off" spellcheck="false"
-      placeholder="{{if .Set}}stored; leave empty to keep{{else}}{{or .PlaceholderNow "not set"}}{{end}}"{{if and .PlaceholdersAttr (not .Set)}} data-placeholders="{{.PlaceholdersAttr}}"{{end}}{{if .Locked}} disabled{{end}}>
+    <input type="password" class="form-control" id="f-{{.Name}}" name="{{.Name}}" autocomplete="new-password" spellcheck="false" data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other"
+      placeholder="{{if .Set}}stored; leave empty to keep{{else}}{{or .PlaceholderNow "not set"}}{{end}}"{{if and .PlaceholdersAttr (not .Set)}} data-placeholders="{{.PlaceholdersAttr}}"{{end}}{{if or .Locked (not .Applies)}} disabled{{end}}>
     <span class="input-group-text">
       <button type="button" class="btn btn-ghost-secondary btn-icon btn-sm" data-admin-reveal="f-{{.Name}}" aria-label="Show" aria-pressed="false">
         <span class="admin-when-hidden">{{icon "eye"}}</span><span class="admin-when-shown d-none">{{icon "eye-off"}}</span>
@@ -77,20 +77,20 @@
     <span class="form-check-label text-secondary">Remove the stored value</span>
   </label>{{end}}
   {{else if eq .Kind "multi"}}
-  {{$f := .}}<input type="hidden" name="present_{{.Name}}" value="1">
+  {{$f := .}}<input type="hidden" name="present_{{.Name}}" value="1"{{if not .Applies}} disabled{{end}}>
   <div id="f-{{.Name}}" role="group" aria-label="{{.Label}}">
     {{range .Opts}}<label class="form-check form-check-inline">
-      <input class="form-check-input" type="checkbox" name="{{$f.Name}}" value="{{.Value}}"{{if .Checked}} checked{{end}}{{if $f.Locked}} disabled{{end}}>
+      <input class="form-check-input" type="checkbox" name="{{$f.Name}}" value="{{.Value}}"{{if .Checked}} checked{{end}}{{if or $f.Locked (not $f.Applies)}} disabled{{end}} data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other">
       <span class="form-check-label">{{.Label}}{{if .Dev}} (development){{end}}</span>
     </label>{{end}}
   </div>
   {{else if eq .Kind "select"}}
-  <select class="form-select" id="f-{{.Name}}" name="{{.Name}}"{{if .Locked}} disabled{{end}}>
+  <select class="form-select" id="f-{{.Name}}" name="{{.Name}}"{{if or .Locked (not .Applies)}} disabled{{end}} data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other">
     {{range .Opts}}<option value="{{.Value}}"{{if .Checked}} selected{{end}}>{{.Label}}{{if .Dev}} (development){{end}}</option>{{end}}
   </select>
   {{else}}
-  <input type="{{if eq .Kind "number"}}number{{else}}text{{end}}" class="form-control" id="f-{{.Name}}" name="{{.Name}}" value="{{.Value}}" autocomplete="off" spellcheck="false"{{if eq .Kind "number"}} inputmode="numeric" min="0"{{end}}
-    placeholder="{{if .PlaceholderNow}}{{.PlaceholderNow}}{{else if .Default}}default: {{.Default}}{{end}}"{{if .PlaceholdersAttr}} data-placeholders="{{.PlaceholdersAttr}}"{{end}}{{if .Locked}} disabled{{end}}>
+  <input type="{{if eq .Kind "number"}}number{{else}}text{{end}}" class="form-control" id="f-{{.Name}}" name="{{.Name}}" value="{{.Value}}" autocomplete="off" spellcheck="false" data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other"{{if eq .Kind "number"}} inputmode="numeric" min="0"{{end}}
+    placeholder="{{if .PlaceholderNow}}{{.PlaceholderNow}}{{else if .Default}}default: {{.Default}}{{end}}"{{if .PlaceholdersAttr}} data-placeholders="{{.PlaceholdersAttr}}"{{end}}{{if or .Locked (not .Applies)}} disabled{{end}}>
   {{end}}
   {{if .Locked}}<div class="form-hint text-warning">{{icon "lock"}} Set in the process environment, which takes precedence. Change it where the app is deployed.</div>
   {{else if .Help}}<div class="form-hint">{{.Help}}</div>{{end}}
@@ -123,7 +123,7 @@
 {{/* section-form: a section's form. Takes (dict "S" section "Path" path). */}}
 {{define "section-form"}}
 {{$s := .S}}
-<form class="card" method="post" action="{{.Path}}/settings" data-admin-dirty{{if $s.Selector}} data-admin-selector="{{$s.Selector.Name}}"{{end}}>
+<form class="card" method="post" action="{{.Path}}/settings" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other" data-admin-dirty{{if $s.Selector}} data-admin-selector="{{$s.Selector.Name}}"{{end}}>
   <input type="hidden" name="section" value="{{$s.Key}}">
   <div class="card-header">
     <div class="d-flex align-items-center gap-3">
@@ -141,7 +141,7 @@
     {{with $s.Selector}}{{template "selector" .}}{{end}}
     {{range $s.Fields}}{{template "field" .}}{{end}}
     {{range $s.Groups}}
-    <fieldset class="border rounded-3 p-3 mb-3{{if not .Applies}} d-none{{end}}"{{if .ForAttr}} data-for="{{.ForAttr}}"{{end}}>
+    <fieldset class="border rounded-3 p-3 mb-3{{if not .Applies}} d-none{{end}}"{{if .ForAttr}} data-for="{{.ForAttr}}"{{end}}{{if not .Applies}} disabled{{end}}>
       <legend class="admin-group-title float-none w-auto px-2 fs-4 mb-2">{{if .Icon}}{{icon .Icon}}{{end}}{{.Title}}</legend>
       {{range .Fields}}{{template "field" .}}{{end}}
     </fieldset>

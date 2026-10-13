@@ -16,6 +16,32 @@ const SessionTable = `CREATE TABLE IF NOT EXISTS auth_session (
 );
 CREATE INDEX IF NOT EXISTS auth_session_subject_idx ON auth_session (subject);`
 
+// FactorTable is the DDL for authenticator-app factors and the narrowly
+// scoped, short-lived step-up grants they create. Secrets are sealed with
+// the app's master key; recovery codes are one-way hashes.
+const FactorTable = `CREATE TABLE IF NOT EXISTS auth_factor (
+  subject text PRIMARY KEY,
+  secret_sealed text NOT NULL,
+  last_step bigint NOT NULL DEFAULT 0,
+  backup_codes text[] NOT NULL DEFAULT '{}',
+  enabled_at timestamptz,
+  failed_count integer NOT NULL DEFAULT 0,
+  failed_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS auth_step_up (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  subject text NOT NULL,
+  session_id text NOT NULL,
+  purpose text NOT NULL,
+  target text NOT NULL DEFAULT '',
+  expires_at timestamptz NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (session_id, purpose, target)
+);
+CREATE INDEX IF NOT EXISTS auth_step_up_session_idx ON auth_step_up (session_id);`
+
 // AccountTable is the DDL of the accounts table (model AuthAccount,
 // table auth_account in the schema fragment). Tests create it directly.
 const AccountTable = `CREATE TABLE IF NOT EXISTS auth_account (

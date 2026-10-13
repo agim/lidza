@@ -4,8 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-
-	"github.com/agim/lidza/pkg/brief"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,6 +12,7 @@ import (
 	"time"
 
 	"github.com/agim/lidza/packs/db"
+	"github.com/agim/lidza/pkg/brief"
 )
 
 // An .env written with Linux's socket directory is repaired on a machine
@@ -209,16 +209,21 @@ func TestDevRepairRefusesHeldMigration(t *testing.T) {
 	}
 	defer pool.Close()
 	name := fmt.Sprintf("lidza_devrepair_%d", time.Now().UnixNano())
-	url := "postgres:///" + name + "?host=/var/run/postgresql"
+	testURL, err := url.Parse(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	testURL.Path = "/" + name
+	databaseURL := testURL.String()
 	t.Cleanup(func() { pool.Exec(ctx, "DROP DATABASE IF EXISTS "+name+" WITH (FORCE)") })
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "lidza.json"), []byte(`{"name":"demo","frontend":{"template":"htmx"},"packs":["lidza/db"]}`), 0o644)
-	os.WriteFile(filepath.Join(dir, ".env"), []byte("DATABASE_URL="+url+"\n"), 0o600)
+	os.WriteFile(filepath.Join(dir, ".env"), []byte("DATABASE_URL="+databaseURL+"\n"), 0o600)
 	migrations := filepath.Join(dir, "db", "migrations")
 	os.MkdirAll(migrations, 0o755)
 	os.WriteFile(filepath.Join(migrations, "0001_create_note.up.sql"), []byte("CREATE TABLE note (id int PRIMARY KEY, body text);\n"), 0o644)
-	t.Setenv("LIDZA_DATABASE_URL", url)
-	t.Setenv("DATABASE_URL", url)
+	t.Setenv("LIDZA_DATABASE_URL", databaseURL)
+	t.Setenv("DATABASE_URL", databaseURL)
 	_, cfg, err := loadProject(dir)
 	if err != nil {
 		t.Fatal(err)

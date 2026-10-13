@@ -10,6 +10,10 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
+## Unreleased
+
+- Purpose-bound two-factor step-up grants now last 15 minutes, allowing sensitive consoles to show and extend a clear just-in-time access window.
+
 ## v0.1.114 (2026-10-13)
 
 - Authenticator-app two-factor authentication and purpose-bound step-up:

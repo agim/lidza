@@ -22,7 +22,7 @@ const OTPHeader = "X-Lidza-OTP"
 
 // StepUpWindow is the maximum age of a purpose- and target-bound second
 // factor grant.
-const StepUpWindow = 10 * time.Minute
+const StepUpWindow = 15 * time.Minute
 
 const (
 	factorMaxFailures = 10

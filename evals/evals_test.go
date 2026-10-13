@@ -31,6 +31,7 @@ import (
 
 	"github.com/agim/lidza/pkg/config"
 	"github.com/agim/lidza/pkg/diag"
+	lidzaenv "github.com/agim/lidza/pkg/env"
 	"github.com/agim/lidza/pkg/mcpserver"
 )
 
@@ -735,8 +736,15 @@ func TestSetup(t *testing.T) {
 		}
 	}
 	env, _ := os.ReadFile(filepath.Join(dir, ".env"))
-	if !strings.Contains(string(env), "DATABASE_URL=") || !strings.Contains(string(env), "AUTH_SECRET=") || strings.Contains(string(env), "change-me") || !strings.Contains(string(env), "MAIL_FROM=\"setupapp <setupapp@example.com>\"") {
+	// The infrastructure only: app settings (AUTH_SECRET, MAIL_FROM) live
+	// in the app's database, and AUTH_SECRET is generated there.
+	if !strings.Contains(string(env), "DATABASE_URL=") || strings.Contains(string(env), "change-me") {
 		t.Errorf(".env:\n%s", env)
+	}
+	for _, line := range strings.Split(string(env), "\n") {
+		if k, _, ok := strings.Cut(strings.TrimSpace(line), "="); ok && !strings.HasPrefix(k, "#") && lidzaenv.AppSetting(k) {
+			t.Errorf(".env sets the app setting %s:\n%s", k, env)
+		}
 	}
 	envTest, _ := os.ReadFile(filepath.Join(dir, ".env.test"))
 	if !strings.Contains(string(envTest), "setupapp_test") || !strings.Contains(string(envTest), "MAIL_PROVIDER=outbox") {

@@ -10,7 +10,7 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
-## Unreleased
+## v0.1.116 (2026-10-13)
 
 - CI and the installer use staticcheck 2026.2.2, whose Go analysis tools
   understand Go 1.27 export data; the reference app's generated framework

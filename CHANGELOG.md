@@ -10,7 +10,7 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
-## Unreleased
+## v0.1.119 (2026-10-14)
 
 - WebSocket upgrades use the configured stream deadline (ten minutes by
   default), instead of disconnecting at the ordinary thirty-second API

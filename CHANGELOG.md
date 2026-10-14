@@ -10,6 +10,15 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
+## Unreleased
+
+- New and refreshed agent guidance makes live-update acceptance mandatory:
+  repeated updates, slow/failed reads, reconnects, pause/resume, retained
+  values/editors, stable ordering/geometry/colors and rendered desktop/phone
+  checks throughout the refresh interval. The Publish live updates recipe
+  carries the gate into generated skills. Explicit browser restrictions are
+  respected and missing rendered evidence must be reported as unverified.
+
 ## v0.1.119 (2026-10-14)
 
 - WebSocket upgrades use the configured stream deadline (ten minutes by

@@ -114,6 +114,13 @@ Working agreements (Agim's standing decisions):
 
 ## Shared agent guidance
 
+- Live-update acceptance is a required gate for realtime/polling UI work.
+  Require automated slow-read, failure, reconnection, retained-state, ordering
+  and layout coverage plus rendered desktop/phone checks throughout updates.
+  A successful refresh or final screenshot alone does not establish readiness.
+  Respect explicit browser restrictions and report rendered checks as
+  unverified when they cannot run; do not silently waive the gate.
+
 - A rule, working agreement or durable note changes in `AGENTS.md` only;
   `CLAUDE.md` and `GEMINI.md` import it. Recipes are edited in the guide
   and regenerated for Claude Code, Codex and Gemini together.

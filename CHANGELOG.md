@@ -10,7 +10,7 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
-## Unreleased
+## v0.1.120 (2026-10-14)
 
 - New and refreshed agent guidance makes live-update acceptance mandatory:
   repeated updates, slow/failed reads, reconnects, pause/resume, retained

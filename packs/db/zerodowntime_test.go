@@ -90,8 +90,14 @@ func TestZeroDowntimeMigration(t *testing.T) {
 	}
 
 	var invalid, checks int
-	pool.QueryRow(ctx, `SELECT count(*) FROM pg_index i JOIN pg_class c ON c.oid = i.indrelid WHERE c.relname = 'post' AND NOT i.indisvalid`).Scan(&invalid)
-	pool.QueryRow(ctx, `SELECT count(*) FROM pg_constraint WHERE conrelid = 'post'::regclass AND (NOT convalidated OR conname LIKE '%not_null')`).Scan(&checks)
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM pg_index i JOIN pg_class c ON c.oid = i.indrelid WHERE c.relname = 'post' AND NOT i.indisvalid`).Scan(&invalid); err != nil {
+		t.Fatal(err)
+	}
+	// PostgreSQL 18 records native NOT NULL constraints too. Those are valid
+	// final schema; only the temporary CHECK used during migration is leftover.
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM pg_constraint WHERE conrelid = 'post'::regclass AND (NOT convalidated OR (contype='c' AND conname LIKE '%not_null'))`).Scan(&checks); err != nil {
+		t.Fatal(err)
+	}
 	if invalid != 0 || checks != 0 {
 		t.Fatalf("%d invalid indexes, %d unvalidated or leftover constraints", invalid, checks)
 	}

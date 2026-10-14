@@ -201,13 +201,13 @@ func Timeout(d time.Duration) Middleware {
 }
 
 // StreamTimeout is Timeout with a second deadline, stream, for requests
-// that accept only server-sent events (Accept: text/event-stream, as the
-// generated clients send for a router.Stream operation).
+// that accept server-sent events (Accept: text/event-stream, as the generated
+// clients send for a router.Stream operation) or upgrade to a WebSocket.
 func StreamTimeout(d, stream time.Duration) Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			limit := d
-			if strings.HasPrefix(r.Header.Get("Accept"), "text/event-stream") {
+			if strings.HasPrefix(r.Header.Get("Accept"), "text/event-stream") || websocketUpgrade(r) {
 				limit = stream
 			}
 			ctx, cancel := context.WithTimeout(r.Context(), limit)
@@ -215,6 +215,23 @@ func StreamTimeout(d, stream time.Duration) Middleware {
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}
+
+// A WebSocket remains bounded by the configured stream lifetime, rather than
+// being disconnected by the ordinary API deadline. Both upgrade headers are
+// required; a plain request mentioning WebSocket is still an ordinary request.
+func websocketUpgrade(r *http.Request) bool {
+	if r.Method != http.MethodGet || !strings.EqualFold(r.Header.Get("Upgrade"), "websocket") {
+		return false
+	}
+	for _, value := range r.Header.Values("Connection") {
+		for _, token := range strings.Split(value, ",") {
+			if strings.EqualFold(strings.TrimSpace(token), "upgrade") {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // MaxBody caps the request body; reading past n fails with a

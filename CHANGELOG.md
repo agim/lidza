@@ -10,6 +10,16 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
+## Unreleased
+
+- WebSocket upgrades use the configured stream deadline (ten minutes by
+  default), instead of disconnecting at the ordinary thirty-second API
+  deadline. Ordinary API requests keep their deadline; stream connections
+  remain bounded and clients reconnect when the stream lifetime expires.
+- Migration tests distinguish PostgreSQL 18's validated native NOT NULL
+  constraints from temporary migration CHECK constraints, while still failing
+  on any invalid index, unvalidated constraint or leftover temporary check.
+
 ## v0.1.118 (2026-10-13)
 
 - Two-factor enrollment now returns a locally rendered `qrCodeDataUrl` for

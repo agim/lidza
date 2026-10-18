@@ -51,6 +51,12 @@ func runDoctor(ctx context.Context, args []string) error {
 		}
 		out, _ := exec.CommandContext(ctx, name, versionArg).CombinedOutput()
 		v := strings.TrimSpace(strings.SplitN(string(out), "\n", 2)[0])
+		for _, line := range strings.Split(string(out), "\n") {
+			// govulncheck prints the Go version first, its own after.
+			if _, after, found := strings.Cut(line, name+"@"); found {
+				v = strings.TrimSpace(after)
+			}
+		}
 		if len(v) > 60 {
 			v = v[:60]
 		}

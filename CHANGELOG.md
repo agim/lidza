@@ -10,7 +10,7 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
-## Unreleased
+## v0.1.121 (2026-10-18)
 
 - `lidza check` runs three vulnerability scanners: `govulncheck` (code
   that calls a vulnerable Go function, at the call site), `cargo deny

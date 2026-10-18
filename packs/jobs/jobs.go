@@ -546,7 +546,7 @@ func (q *Queue) runOne(ctx context.Context) (bool, error) {
 	var caps []int32
 	for _, k := range kinds {
 		if n, ok := q.limits[k]; ok {
-			limited, caps = append(limited, k), append(caps, int32(n))
+			limited, caps = append(limited, k), append(caps, int32(n)) //nolint:gosec // G115: a concurrency limit from configuration
 		} else {
 			free = append(free, k)
 		}

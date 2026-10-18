@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -239,6 +240,29 @@ func TestSecretInFrontend(t *testing.T) {
 			t.Errorf("L010 on the publishable key:\n%s", dump(r))
 		}
 	}
+}
+
+// A call into a module with a known vulnerability is a govulncheck
+// warning at the app's call site, naming the upgrade.
+func TestVulnerableDependency(t *testing.T) {
+	if _, err := exec.LookPath("govulncheck"); err != nil {
+		t.Skip("govulncheck not installed")
+	}
+	mod, _ := os.ReadFile(filepath.Join(app, "go.mod"))
+	sum, _ := os.ReadFile(filepath.Join(app, "go.sum"))
+	edit(t, map[string]string{
+		"go.mod":                        string(mod),
+		"go.sum":                        string(sum),
+		"internal/settings/settings.go": "package settings\n\nimport \"gopkg.in/yaml.v2\"\n\n// Parse reads settings written as YAML.\nfunc Parse(b []byte) (map[string]any, error) {\n\tvar m map[string]any\n\terr := yaml.Unmarshal(b, &m)\n\treturn m, err\n}\n",
+	})
+	if out, err := command(app, "go", "get", "gopkg.in/yaml.v2@v2.2.7"); err != nil {
+		t.Fatalf("go get: %v\n%s", err, out)
+	}
+	r := check(t)
+	if r.Status != "ok" {
+		t.Errorf("a vulnerability is a warning, status %s", r.Status)
+	}
+	expect(t, r, expectation{code: "GO-2020-0036", severity: "warning", layer: "go", file: "internal/settings/settings.go", message: "go get gopkg.in/yaml.v2@v"})
 }
 
 // A query on an owned table (a model with ownerId) that does not filter

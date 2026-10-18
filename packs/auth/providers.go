@@ -453,7 +453,7 @@ func (g *GitHubProvider) Exchange(ctx context.Context, p AuthParams, code string
 // HTTP helpers.
 
 func getJSON(ctx context.Context, client *http.Client, u, bearer string, dst any) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil) //nolint:gosec // G704: the provider's configured endpoint
 	if err != nil {
 		return err
 	}
@@ -465,7 +465,7 @@ func getJSON(ctx context.Context, client *http.Client, u, bearer string, dst any
 }
 
 func postForm(ctx context.Context, client *http.Client, u string, form url.Values, dst any) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, strings.NewReader(form.Encode()))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, strings.NewReader(form.Encode())) //nolint:gosec // G704: the provider's configured endpoint
 	if err != nil {
 		return err
 	}
@@ -478,7 +478,7 @@ func doJSON(client *http.Client, req *http.Request, dst any) error {
 	if client == nil {
 		client = http.DefaultClient
 	}
-	res, err := client.Do(req)
+	res, err := client.Do(req) //nolint:gosec // G704: the provider's configured endpoint
 	if err != nil {
 		return err
 	}
@@ -658,7 +658,7 @@ func (s *signin) start(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, "provider", err)
 		return
 	}
-	http.SetCookie(w, &http.Cookie{Name: StateCookie, Value: sealed, Path: Prefix + "/", HttpOnly: true, Secure: a.cfg.CookieSecure, SameSite: http.SameSiteLaxMode, MaxAge: 600})
+	http.SetCookie(w, &http.Cookie{Name: StateCookie, Value: sealed, Path: Prefix + "/", HttpOnly: true, Secure: a.cfg.CookieSecure, SameSite: http.SameSiteLaxMode, MaxAge: 600}) //nolint:gosec // G124: Secure follows the CookieSecure setting
 	http.Redirect(w, r, to, http.StatusFound)
 }
 
@@ -670,7 +670,7 @@ func (s *signin) callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a := From(r.Context())
-	clear := &http.Cookie{Name: StateCookie, Value: "", Path: Prefix + "/", HttpOnly: true, Secure: a.cfg.CookieSecure, SameSite: http.SameSiteLaxMode, MaxAge: -1}
+	clear := &http.Cookie{Name: StateCookie, Value: "", Path: Prefix + "/", HttpOnly: true, Secure: a.cfg.CookieSecure, SameSite: http.SameSiteLaxMode, MaxAge: -1} //nolint:gosec // G124: Secure follows the CookieSecure setting
 	http.SetCookie(w, clear)
 	c, err := r.Cookie(StateCookie)
 	if err != nil {

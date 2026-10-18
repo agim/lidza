@@ -50,7 +50,8 @@ error output, so:
   `lidza check` fails when the frontend no longer matches.
 - **Structured diagnostics.** `lidza check --json` merges `go vet`,
   `staticcheck`, `cargo check`, `tsc`, `svelte-check` and ESLint into one
-  list with layer, file, line and message, plus the framework's own rules.
+  list with layer, file, line and message, plus the framework's own rules
+  and the vulnerability scanners (`govulncheck`, `cargo deny`, `npm audit`).
 - **The project as data.** `lidza context` dumps routes, handler
   signatures, schemas and Rust exports; `lidza mcp` serves the same over
   MCP with diagnostics, logs and callable pack capabilities; `/llms.txt`

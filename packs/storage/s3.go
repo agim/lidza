@@ -204,7 +204,7 @@ func (p *s3) do(ctx context.Context, method string, u *url.URL, body []byte, hea
 		reader = bytes.NewReader(body)
 		payloadHash = hexSHA256(body)
 	}
-	req, err := http.NewRequestWithContext(ctx, method, u.String(), reader)
+	req, err := http.NewRequestWithContext(ctx, method, u.String(), reader) //nolint:gosec // G704: the configured storage endpoint
 	if err != nil {
 		return nil, err
 	}
@@ -219,7 +219,7 @@ func (p *s3) do(ctx context.Context, method string, u *url.URL, body []byte, hea
 	p.sign(req, payloadHash, p.now())
 	client := lidza.HTTPClient(ctx)
 	client.Timeout = 0
-	res, err := client.Do(req)
+	res, err := client.Do(req) //nolint:gosec // G704: the configured storage endpoint
 	if err != nil {
 		return nil, fmt.Errorf("storage: %s: %w", u.Host, err)
 	}

@@ -48,7 +48,7 @@ Commands:
   ship     verify, the browser suite, the production build: what must be green before a deploy
   dev      run the app with hot reload (frontend dev server proxied behind /api)
   build    build the frontend and compile one production binary
-  check    run go vet, staticcheck, cargo check and tsc; one diagnostics list
+  check    run go vet, staticcheck, cargo check, tsc and the vulnerability scanners; one diagnostics list
   gen      generate from schema.lidza (Go, SQL, migrations, Rust), the packs and the handlers (OpenAPI, @lidza/client);
            gen resource <Model>: queries, Create/Update types, handlers and routes for a model,
              signed-in and scoped to its owner (ownerId, userId, @ref(User)) unless --public;

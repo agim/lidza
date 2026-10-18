@@ -10,6 +10,26 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
+## Unreleased
+
+- `lidza check` runs three vulnerability scanners: `govulncheck` (code
+  that calls a vulnerable Go function, at the call site), `cargo deny
+  check advisories` (RustSec advisories in the app's Rust crates) and
+  `npm audit --omit=dev` (high and critical advisories in the packages the
+  frontend ships). Findings are warnings with the upgrade that fixes
+  them; `--strict` and `lidza verify --strict` fail on them. A scanner
+  that is not installed is skipped, and one that cannot reach its
+  database (offline) fails to run without failing the check.
+  `install.sh` installs `govulncheck` v1.9.0 and `cargo-deny` 0.20.2,
+  and `lidza doctor` reports them.
+- The framework's release gate and CI run gosec through `golangci-lint`
+  (`.golangci.yml`) and `cargo deny` on the Rust core and the official
+  packs (`deny.toml`: advisories, permissive licenses, crates.io only).
+  No finding was a vulnerability; the false positives carry
+  `//nolint:gosec` with the reason.
+- `examples/notes` agent files regenerated for the v0.1.120 live-update
+  guidance.
+
 ## v0.1.120 (2026-10-14)
 
 - New and refreshed agent guidance makes live-update acceptance mandatory:

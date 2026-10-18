@@ -159,7 +159,7 @@ func redirectToHTTPS(defaultHost string) http.Handler {
 		if host == "" {
 			host = defaultHost
 		}
-		http.Redirect(w, r, "https://"+host+r.URL.RequestURI(), http.StatusMovedPermanently)
+		http.Redirect(w, r, "https://"+host+r.URL.RequestURI(), http.StatusMovedPermanently) //nolint:gosec // G710: the client's own Host, on the same path, over HTTPS
 	})
 }
 

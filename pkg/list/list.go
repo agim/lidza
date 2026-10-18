@@ -76,14 +76,14 @@ func Read[In any](req *router.Request[In], o Options) (Params, error) {
 		o.MaxSearch = 200
 	}
 	var errs validate.Errors
-	p := Params{Limit: int32(min(o.Limit, o.MaxLimit)), Filters: map[string]string{}}
+	p := Params{Limit: int32(min(o.Limit, o.MaxLimit)), Filters: map[string]string{}} //nolint:gosec // G115: the app's configured page size
 	if v := req.Query("limit"); v != "" {
 		n, err := strconv.ParseInt(v, 10, 32)
 		switch {
 		case err != nil || n < 1:
 			errs.Add("limit", "min", "a whole number of at least 1")
 		default:
-			p.Limit = int32(min(int(n), o.MaxLimit))
+			p.Limit = int32(min(int(n), o.MaxLimit)) //nolint:gosec // G115: n parsed as 32 bits, MaxLimit is the app's configuration
 		}
 	}
 	if v := req.Query("offset"); v != "" {

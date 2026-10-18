@@ -137,7 +137,7 @@ func builtinSections() []Section {
 				{Name: "MAIL_DOMAIN", Label: "Sending domain", Kind: "text", For: []string{"mailgun"}, Placeholder: "mg.example.com"},
 				{Name: "MAIL_REGION", Label: "Region", Kind: "select", For: []string{"mailgun", "sendgrid"}, Default: "us", Options: mail.Regions,
 					Labels: map[string]string{"us": "United States", "eu": "European Union"}, Help: "Where the account's data lives."},
-				{Name: "MAIL_SMTP_URL", Label: "SMTP URL", Kind: "secret", For: []string{"smtp"}, Advanced: true, Placeholder: "smtp://user:pass@host:587",
+				{Name: "MAIL_SMTP_URL", Label: "SMTP URL", Kind: "secret", For: []string{"smtp"}, Advanced: true, Placeholder: "smtp://user:pass@host:587", //nolint:gosec // G101: a placeholder, not a credential
 					Help: "The server in one URL, instead of the fields above; it wins when set."},
 				{Name: "MAIL_BASE_URL", Label: "API address", Kind: "text", For: []string{"mailgun", "sendgrid", "postmark", "resend"}, Advanced: true, Help: "Only for a proxy in front of the provider's API."},
 			}},

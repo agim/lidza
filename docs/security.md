@@ -131,4 +131,17 @@ auditors and app authors.
   each one for a while.
 - `govulncheck` before every release and in CI; CodeQL code scanning (the
   repository's default setup) on every push to master and weekly.
+- gosec through `golangci-lint` (`.golangci.yml`) before every release
+  and in CI. Rules that do not fit a CLI writing the developer's own files
+  (paths, permissions, subprocess arguments) are off; every other
+  finding is fixed or carries `//nolint:gosec // <rule>: <why>`.
+- `cargo deny` (`deny.toml`) on the Rust core and the official packs
+  before every release and in CI: RustSec advisories, permissive licenses
+  only, crates.io as the only source.
+- Dependabot for Go modules, npm, Cargo and the workflow's actions.
+- In apps, `lidza check` runs `govulncheck` (calls into vulnerable
+  code), `cargo deny check advisories` (the app's Rust crates) and
+  `npm audit --omit=dev` (high and critical advisories in what the
+  frontend ships). Findings are warnings naming the upgrade that fixes
+  them, so `--strict` fails on them.
 - No external audit has been done yet.

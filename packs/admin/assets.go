@@ -70,7 +70,7 @@ func loadAssets() {
 		entries, _ := assetFiles.ReadDir("assets/icons")
 		for _, e := range entries {
 			data, _ := assetFiles.ReadFile("assets/icons/" + e.Name())
-			iconsByName[strings.TrimSuffix(e.Name(), ".svg")] = template.HTML(cleanIcon(string(data)))
+			iconsByName[strings.TrimSuffix(e.Name(), ".svg")] = template.HTML(cleanIcon(string(data))) //nolint:gosec // G203: the pack's own embedded icons
 		}
 	})
 }

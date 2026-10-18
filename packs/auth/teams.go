@@ -478,7 +478,7 @@ func (t *Teams) workspaceSwitch(ctx context.Context, req *router.Request[router.
 	if err != nil {
 		return w, err
 	}
-	req.SetCookie(&http.Cookie{Name: WorkspaceCookie, Value: w.ID, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode,
+	req.SetCookie(&http.Cookie{Name: WorkspaceCookie, Value: w.ID, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode, //nolint:gosec // G124: Secure follows the CookieSecure setting
 		Secure: From(ctx).cfg.CookieSecure, MaxAge: 365 * 24 * 3600})
 	return w, nil
 }

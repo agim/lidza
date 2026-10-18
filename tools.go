@@ -70,7 +70,7 @@ const (
 	EnvMCP = "LIDZA_MCP"
 	// EnvMCPToken enables /mcp on the running binary for clients that
 	// send it as a bearer token.
-	EnvMCPToken = "LIDZA_MCP_TOKEN"
+	EnvMCPToken = "LIDZA_MCP_TOKEN" //nolint:gosec // G101: a setting's name, not its value
 	// MCPPath is the Streamable HTTP endpoint.
 	MCPPath = "/mcp"
 )

@@ -3,7 +3,7 @@ package auth
 import (
 	"crypto/hmac"
 	"crypto/rand"
-	"crypto/sha1"
+	"crypto/sha1" //nolint:gosec // G505: RFC 6238 TOTP is HMAC-SHA1
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base32"
@@ -41,7 +41,7 @@ func totpCode(secret string, step int64) (string, error) {
 		return "", err
 	}
 	var msg [8]byte
-	binary.BigEndian.PutUint64(msg[:], uint64(step))
+	binary.BigEndian.PutUint64(msg[:], uint64(step)) //nolint:gosec // G115: step is a Unix time step, never negative
 	mac := hmac.New(sha1.New, key)
 	_, _ = mac.Write(msg[:])
 	sum := mac.Sum(nil)

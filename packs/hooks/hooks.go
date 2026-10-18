@@ -172,7 +172,7 @@ func (h *Hooks) Start(ctx context.Context, s *lidza.Services) error {
 	h.queue.Handle(JobKind, h.deliver)
 	h.stop = make(chan struct{})
 	if h.cfg.Retention > 0 {
-		go h.prune()
+		go h.prune() //nolint:gosec // G118: prune outlives the request: it runs until Close
 	}
 	lidza.Provide(s, h)
 	return nil

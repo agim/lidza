@@ -95,7 +95,7 @@ func (g *GitHubConnector) Refresh(ctx context.Context, client *http.Client, gr G
 // revokes every token of it for the user.
 func (g *GitHubConnector) Revoke(ctx context.Context, client *http.Client, gr Grant) error {
 	body, _ := json.Marshal(map[string]string{"access_token": gr.AccessToken()})
-	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, g.api+"/applications/"+url.PathEscape(g.clientID)+"/grant", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, g.api+"/applications/"+url.PathEscape(g.clientID)+"/grant", bytes.NewReader(body)) //nolint:gosec // G704: the connector's configured endpoint
 	if err != nil {
 		return err
 	}
@@ -216,7 +216,7 @@ func (o *OAuth2Connector) Revoke(ctx context.Context, client *http.Client, g Gra
 		token, hint = g.AccessToken(), "access_token"
 	}
 	form := url.Values{"token": {token}, "token_type_hint": {hint}}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, o.cfg.RevokeURL, strings.NewReader(form.Encode()))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, o.cfg.RevokeURL, strings.NewReader(form.Encode())) //nolint:gosec // G704: the connector's configured endpoint
 	if err != nil {
 		return err
 	}
@@ -253,7 +253,7 @@ func (t tokenReply) grant(provider, subject, login string, scopes []string) Gran
 // echo what was sent; invalid_grant and GitHub's bad_refresh_token are
 // ErrReconnect.
 func tokenRequest(ctx context.Context, client *http.Client, endpoint string, form url.Values, id, secret string) (tokenReply, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(form.Encode()))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(form.Encode())) //nolint:gosec // G704: the connector's configured endpoint
 	if err != nil {
 		return tokenReply{}, err
 	}
@@ -265,7 +265,7 @@ func tokenRequest(ctx context.Context, client *http.Client, endpoint string, for
 	if client == nil {
 		client = http.DefaultClient
 	}
-	res, err := client.Do(req)
+	res, err := client.Do(req) //nolint:gosec // G704: the connector's configured endpoint
 	if err != nil {
 		return tokenReply{}, err
 	}
@@ -294,7 +294,7 @@ func revokeDo(client *http.Client, req *http.Request, gone ...int) error {
 	if client == nil {
 		client = http.DefaultClient
 	}
-	res, err := client.Do(req)
+	res, err := client.Do(req) //nolint:gosec // G704: the connector's configured endpoint
 	if err != nil {
 		return err
 	}

@@ -1037,7 +1037,20 @@ the page subscribes and refetches.
    a dependency) with `lidzatest.Bearer`'s header on
    `ws://.../api/v1/realtime?topics=...`, make the change through the
    API, read one message. A signed-out dial must be refused.
-7. `lidza check`, then `lidza test`.
+7. **Live-update acceptance gate:** add regression fixtures for repeated updates,
+   slow and failed reads, short and sustained reconnects, and pause/resume.
+   Preserve current values during background reads, coalesce notifications
+   without repeatedly cancelling a slow read, and keep stable DOM identity,
+   panel order and reserved geometry, chart series identity/colors, scroll,
+   focused input and editor drafts. New data must actually appear; initial
+   loading and genuine failures remain visible. Keep query scopes separate.
+   Render on both desktop and phone and observe the whole refresh interval for
+   transient fetch/reconnect text; a successful refresh or final screenshot
+   alone is not sufficient. Check the socket after the ordinary API deadline.
+8. `lidza check`, `lidza test`, and `lidza test --e2e` with these fixtures before
+   calling the live UI ready. Respect explicit browser restrictions: when
+   rendered checks cannot run, record and report them as unverified. Nonbrowser
+   checks can proceed, but do not silently waive this acceptance gate.
 
 ### Add an LLM feature
 

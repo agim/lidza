@@ -518,14 +518,14 @@ func (a *Auth) Cookies(t Tokens) []*http.Cookie {
 		maxAge = 0
 	}
 	cookies := []*http.Cookie{
-		{Name: AccessCookie, Value: t.Access, Path: "/", HttpOnly: true, Secure: a.cfg.CookieSecure, SameSite: http.SameSiteLaxMode, MaxAge: maxAge},
+		{Name: AccessCookie, Value: t.Access, Path: "/", HttpOnly: true, Secure: a.cfg.CookieSecure, SameSite: http.SameSiteLaxMode, MaxAge: maxAge}, //nolint:gosec // G124: Secure follows the CookieSecure setting
 	}
 	if t.Refresh != "" {
 		// Lax like the access cookie: Strict withheld it on a link from
 		// another site, and a page rendered on the server then saw an
 		// expired access token and no way to renew it. It grants nothing
 		// the access cookie does not, and neither rides a cross-site POST.
-		cookies = append(cookies, &http.Cookie{Name: RefreshCookie, Value: t.Refresh, Path: "/", HttpOnly: true, Secure: a.cfg.CookieSecure, SameSite: http.SameSiteLaxMode, MaxAge: maxAge})
+		cookies = append(cookies, &http.Cookie{Name: RefreshCookie, Value: t.Refresh, Path: "/", HttpOnly: true, Secure: a.cfg.CookieSecure, SameSite: http.SameSiteLaxMode, MaxAge: maxAge}) //nolint:gosec // G124: Secure follows the CookieSecure setting
 	}
 	return cookies
 }
@@ -540,10 +540,10 @@ func (a *Auth) SetCookies(w http.ResponseWriter, t Tokens) {
 // ClearedCookies expire the token cookies; use on logout.
 func ClearedCookies() []*http.Cookie {
 	return []*http.Cookie{
-		{Name: AccessCookie, Value: "", Path: "/", HttpOnly: true, MaxAge: -1},
-		{Name: RefreshCookie, Value: "", Path: "/", HttpOnly: true, MaxAge: -1},
+		{Name: AccessCookie, Value: "", Path: "/", HttpOnly: true, MaxAge: -1},  //nolint:gosec // G124: a deletion: MaxAge -1 with no value
+		{Name: RefreshCookie, Value: "", Path: "/", HttpOnly: true, MaxAge: -1}, //nolint:gosec // G124: a deletion: MaxAge -1 with no value
 		// The refresh cookie's path before v0.1.3.
-		{Name: RefreshCookie, Value: "", Path: "/api/v1/auth", HttpOnly: true, MaxAge: -1},
+		{Name: RefreshCookie, Value: "", Path: "/api/v1/auth", HttpOnly: true, MaxAge: -1}, //nolint:gosec // G124: a deletion: MaxAge -1 with no value
 	}
 }
 
@@ -833,7 +833,7 @@ func CheckPassword(encoded, password string) bool {
 	if err != nil || len(want) < 16 || len(want) > 64 {
 		return false
 	}
-	got := argon2.IDKey([]byte(password), salt, iters, mem, par, uint32(len(want)))
+	got := argon2.IDKey([]byte(password), salt, iters, mem, par, uint32(len(want))) //nolint:gosec // G115: len(want) is checked to be at most 64
 	return subtle.ConstantTimeCompare(got, want) == 1
 }
 

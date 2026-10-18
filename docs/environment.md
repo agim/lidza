@@ -17,9 +17,10 @@ under "Verification" passes.
 | rustc, cargo | 1.98.1 | rustup, `stable`; `~/.cargo/bin`; targets `wasm32-wasip1`, `wasm32-unknown-unknown` |
 | staticcheck | 2026.2.2 | `~/go/bin` |
 | golangci-lint | 2.14.0 | `~/go/bin` |
-| govulncheck | v1.8.0 | not installed: `go run golang.org/x/vuln/cmd/govulncheck@v1.8.0` from the module cache (`scripts/release.sh` and CI pin it) |
+| govulncheck | v1.9.0 | `~/go/bin` (installed 2026-10-18; `lidza check` runs it on apps, `scripts/release.sh` and CI on the framework) |
 | sqlc | 1.31.1 | `~/go/bin` |
 | wasm-tools | 1.259.0 | `~/.cargo/bin` |
+| cargo-deny | 0.20.2 | `~/.cargo/bin`, the release binary (installed 2026-10-18; `lidza check` runs its advisory check on apps, `scripts/release.sh` and CI the full `deny.toml` on the framework) |
 | k6 | 2.3.0 | apt, `dl.k6.io` repository (installed 2026-09-25 for Phase 5) |
 | lidza | from this checkout | `~/go/bin/lidza`; `go install ./cmd/lidza` after pulling |
 | node | 22.23.2 | `/home/agim/.local/bin/node` |
@@ -108,13 +109,23 @@ go install honnef.co/go/tools/cmd/staticcheck@2026.2.2
 
 ```sh
 go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0
+go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
 go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1
 cargo install wasm-tools --version 1.259.0 --locked
+cargo install cargo-deny --version 0.20.2 --locked
 ```
 
-Check: `staticcheck -version`, `golangci-lint --version`, `sqlc version`,
-and `wasm-tools --version`; `staticcheck ./...` in this repository prints
+Check: `staticcheck -version`, `golangci-lint --version`,
+`govulncheck -version`, `sqlc version`, `wasm-tools --version` and
+`cargo deny --version`; `staticcheck ./...` in this repository prints
 no internal error.
+
+The security scanners: `golangci-lint` runs gosec on the framework
+(`.golangci.yml`); `cargo deny` checks the Rust crates against
+`deny.toml`; `lidza check` runs `govulncheck`, `cargo deny check
+advisories` and `npm audit --omit=dev` on an app. All three read an
+advisory database over the network; offline they fail to run and the
+rest of the check goes on.
 
 ### k6
 
@@ -185,7 +196,7 @@ lidza/
 ├── pkg/
 │   ├── config/       lidza.json
 │   ├── devserver/    reverse proxy, static SPA server, hot-reload coordinator
-│   ├── diag/         `lidza check`: go vet, staticcheck, cargo check, tsc, svelte-check
+│   ├── diag/         `lidza check`: go vet, staticcheck, cargo check, tsc, svelte-check, eslint, govulncheck, cargo deny, npm audit
 │   ├── engine/       wazero host: compiled module, bounded instance pool, JSON calls
 │   ├── env/          typed configuration from .env files and the environment
 │   ├── inspect/      routes and typed operations via go/ast and go/packages, OpenAPI, llms.txt
@@ -297,8 +308,8 @@ go version
 go env GOPATH
 cargo --version && rustc --version
 rustup target list --installed | grep -E 'wasm32-(wasip1|unknown-unknown)'
-staticcheck -version && golangci-lint --version && sqlc version
-wasm-tools --version && k6 version
+staticcheck -version && golangci-lint --version && govulncheck -version && sqlc version
+wasm-tools --version && cargo deny --version && k6 version
 psql -U agim -d postgres -c 'select version();'
 redis-cli -h 127.0.0.1 ping
 sg docker -c 'docker info --format "{{.ServerVersion}}"'
@@ -313,7 +324,10 @@ database fails the transactional mail regression instead of skipping it.
 
 ```sh
 gofmt -l . && go vet ./... && staticcheck ./... && go test ./...
-go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...   # known vulnerabilities in code Līdza calls
+govulncheck ./...      # known vulnerabilities in code Līdza calls
+golangci-lint run ./...   # gosec (.golangci.yml)
+for c in core pkg/pack/official/media/rust pkg/pack/official/geo/rust examples/notes/packs/stats/rust; do
+  cargo deny --manifest-path $c/Cargo.toml --config deny.toml check; done   # RustSec, licenses, sources
 (cd core && cargo test && cargo build --target wasm32-wasip1)
 go build -o bin/lidza ./cmd/lidza
 go test -tags evals -timeout 40m ./evals -v   # platform evals on a fresh app, about 10 minutes

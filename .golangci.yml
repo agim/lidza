@@ -1,0 +1,31 @@
+# golangci-lint runs gosec on the framework (scripts/release.sh and CI);
+# go vet and staticcheck run on their own. Findings that are not bugs
+# carry `//nolint:gosec // <rule>: <why>` on their line.
+version: "2"
+run:
+  tests: false
+linters:
+  default: none
+  enable: [gosec]
+  settings:
+    gosec:
+      excludes:
+        # The CLI's job is to read and write the developer's files and
+        # run their tools from paths and arguments they chose.
+        - G104 # unchecked errors: errcheck's job, and best-effort cleanup
+        - G204 # subprocess with a variable
+        - G702 # command from tainted input (the developer's arguments)
+        - G304 # file opened from a variable path
+        - G703 # path from tainted input (the developer's arguments)
+        - G122 # paths inside a filepath.Walk callback
+        - G301 # directories 0755: source trees
+        - G302 # chmod above 0600: source and executable files
+        - G306 # files 0644: source files; secrets are written 0600
+  exclusions:
+    paths:
+      - node_modules
+      - examples
+      - templates
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

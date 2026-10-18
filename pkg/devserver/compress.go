@@ -170,7 +170,7 @@ func writePage(w http.ResponseWriter, r *http.Request, status int, page []byte) 
 	h.Set("Content-Length", strconv.Itoa(len(body)))
 	w.WriteHeader(status)
 	if r.Method != http.MethodHead {
-		_, _ = w.Write(body)
+		_, _ = w.Write(body) //nolint:gosec // G705: the dev server relays the app's own response
 	}
 }
 

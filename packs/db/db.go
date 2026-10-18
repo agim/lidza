@@ -242,10 +242,10 @@ func Open(ctx context.Context, cfg Config) (*pgxpool.Pool, error) {
 		return nil, fmt.Errorf("DATABASE_URL: %w", err)
 	}
 	if cfg.MaxConns > 0 {
-		pc.MaxConns = int32(cfg.MaxConns)
+		pc.MaxConns = int32(cfg.MaxConns) //nolint:gosec // G115: a pool size from configuration
 	}
 	if cfg.MinConns > 0 {
-		pc.MinConns = int32(cfg.MinConns)
+		pc.MinConns = int32(cfg.MinConns) //nolint:gosec // G115: a pool size from configuration
 	}
 	if cfg.ConnectTimeout > 0 {
 		pc.ConnConfig.ConnectTimeout = cfg.ConnectTimeout

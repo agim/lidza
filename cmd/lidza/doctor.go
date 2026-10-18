@@ -77,8 +77,10 @@ func runDoctor(ctx context.Context, args []string) error {
 	if _, err := exec.LookPath("staticcheck"); err == nil && staticcheckTooOld(ctx) {
 		todo("staticcheck cannot read this Go version's packages (lidza check fails it)", diag.StaticcheckTooOldFix)
 	}
+	tool("govulncheck", "-version", "go install golang.org/x/vuln/cmd/govulncheck@latest; lidza check skips the Go vulnerability scan without it", false)
 	tool("sqlc", "version", "go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest", false)
 	tool("wasm-tools", "--version", "cargo install wasm-tools --locked", false)
+	tool("cargo-deny", "--version", "cargo install cargo-deny --locked; lidza check skips the Rust advisory scan without it", false)
 	tool("k6", "version", "see docs/environment.md (needed by lidza benchmark)", false)
 
 	fmt.Println("Services (Postgres for db, auth, jobs, mail, analytics; Valkey for cache, realtime):")

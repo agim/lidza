@@ -52,7 +52,7 @@ func (r *Request[In]) apply(w http.ResponseWriter) {
 	}
 	for _, c := range r.cookies {
 		if r.Raw != nil && r.Raw.TLS != nil && !c.Secure {
-			sc := *c
+			sc := *c //nolint:gosec // G124: the handler's cookie; Secure is forced over TLS below
 			sc.Secure = true
 			c = &sc
 		}

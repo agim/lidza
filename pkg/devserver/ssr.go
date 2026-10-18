@@ -158,7 +158,7 @@ func (s *Sidecar) Handler(next http.Handler) http.Handler {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Vary", "Cookie, Accept-Language")
 		w.WriteHeader(status)
-		_, _ = w.Write(html)
+		_, _ = w.Write(html) //nolint:gosec // G705: the app's server-rendered page
 	})
 }
 

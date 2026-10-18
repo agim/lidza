@@ -12,7 +12,9 @@
 # tags, such as an agent's cloud session.
 set -eu
 # govulncheck release run by the vulnerability check below.
-GOVULNCHECK_VERSION=${GOVULNCHECK_VERSION:-v1.8.0}
+GOVULNCHECK_VERSION=${GOVULNCHECK_VERSION:-v1.9.0}
+# The Rust crates cargo-deny checks (the ones Dependabot watches).
+RUST_CRATES="core pkg/pack/official/media/rust pkg/pack/official/geo/rust examples/notes/packs/stats/rust"
 ver=${1:-}
 tagger=${RELEASE_TAG:-local}
 case "$tagger" in local|ci) ;; *) echo "RELEASE_TAG is local or ci" >&2; exit 2 ;; esac
@@ -47,6 +49,26 @@ if ! out=$(go run golang.org/x/vuln/cmd/govulncheck@$GOVULNCHECK_VERSION ./... 2
 	*"affected by"*) echo "$out" >&2; echo "govulncheck failed: upgrade the module it names" >&2; exit 1 ;;
 	*) echo "govulncheck could not run (offline?); CI runs it: $out" | tail -3 >&2 ;;
 	esac
+fi
+# gosec through golangci-lint (.golangci.yml).
+if command -v golangci-lint >/dev/null; then
+	golangci-lint run ./... || { echo "golangci-lint (gosec) failed: fix it, or mark a false positive //nolint:gosec // <rule>: <why>" >&2; exit 1; }
+else
+	echo "golangci-lint not installed: CI will run it (sh install.sh)" >&2
+fi
+# RustSec advisories, licenses, bans and sources for the Rust crates
+# (deny.toml). Offline, it warns and CI runs it.
+if command -v cargo-deny >/dev/null; then
+	for c in $RUST_CRATES; do
+		if ! out=$(cargo deny --manifest-path "$c/Cargo.toml" --config deny.toml check 2>&1); then
+			case "$out" in
+			*FAILED*) echo "$out" >&2; echo "cargo deny failed in $c" >&2; exit 1 ;;
+			*) echo "cargo deny could not run in $c (offline?); CI runs it: $out" | tail -3 >&2 ;;
+			esac
+		fi
+	done
+else
+	echo "cargo-deny not installed: CI will run it (sh install.sh)" >&2
 fi
 today=$(date -u +%Y-%m-%d)
 sed -i.bak "s/^## Unreleased$/## $ver ($today)/" CHANGELOG.md && rm CHANGELOG.md.bak

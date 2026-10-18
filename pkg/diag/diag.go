@@ -20,7 +20,8 @@ type Diagnostic struct {
 	// Layer is "go", "rust" or "frontend".
 	Layer string `json:"layer"`
 	// Tool is the program that reported it: "go vet", "staticcheck",
-	// "cargo check", "tsc".
+	// "cargo check", "tsc", or a vulnerability scanner ("govulncheck",
+	// "cargo deny", "npm audit").
 	Tool string `json:"tool"`
 	// Severity is "error" or "warning".
 	Severity string `json:"severity"`
@@ -151,6 +152,9 @@ func Run(ctx context.Context, l Layers) Report {
 		{"tsc", "frontend", func(ctx context.Context) ([]Diagnostic, ToolRun) { return runTSC(ctx, l) }},
 		{"svelte-check", "frontend", func(ctx context.Context) ([]Diagnostic, ToolRun) { return runSvelteCheck(ctx, l) }},
 		{"eslint", "frontend", func(ctx context.Context) ([]Diagnostic, ToolRun) { return runESLint(ctx, l) }},
+		{"govulncheck", "go", func(ctx context.Context) ([]Diagnostic, ToolRun) { return runGovulncheck(ctx, l) }},
+		{"cargo deny", "rust", func(ctx context.Context) ([]Diagnostic, ToolRun) { return runCargoDeny(ctx, l) }},
+		{"npm audit", "frontend", func(ctx context.Context) ([]Diagnostic, ToolRun) { return runNpmAudit(ctx, l) }},
 		{"lidza rules", "go", func(ctx context.Context) ([]Diagnostic, ToolRun) {
 			if !l.Go {
 				return nil, skip("no go.mod")

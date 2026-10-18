@@ -20,7 +20,8 @@
 # --check     report what is present and missing, install nothing
 # --services  also install and start Postgres and Valkey, and create the
 #             database role (asked interactively when omitted)
-# --minimal   skip helper tools (staticcheck, golangci-lint, sqlc, wasm-tools)
+# --minimal   skip helper tools (staticcheck, golangci-lint, govulncheck,
+#             sqlc, wasm-tools, cargo-deny)
 # --no-sudo   never call sudo; Go goes to ~/.local/go, services are printed
 #             as commands instead of run
 # --yes       no confirmation prompt (implied when stdin is not a terminal)
@@ -35,8 +36,10 @@ NODE_VERSION=22.23.2
 # with (docs/environment.md, .github/workflows/ci.yml).
 STATICCHECK_VERSION=2026.2.2
 GOLANGCI_LINT_VERSION=v2.14.0
+GOVULNCHECK_VERSION=v1.9.0
 SQLC_VERSION=v1.31.1
 WASM_TOOLS_VERSION=1.259.0
+CARGO_DENY_VERSION=0.20.2
 # The CLI release this installer ships with (CHANGELOG.md). Override with
 # LIDZA_VERSION=<tag>, LIDZA_VERSION=master or LIDZA_VERSION=latest.
 LIDZA_VERSION="${LIDZA_VERSION:-v0.1.120}"
@@ -225,7 +228,7 @@ report() {
   status_node || true
   status_lidza || true
   echo "Helper tools:"
-  for t in staticcheck golangci-lint sqlc wasm-tools; do status_tool "$t" || true; done
+  for t in staticcheck golangci-lint govulncheck sqlc wasm-tools cargo-deny; do status_tool "$t" || true; done
   echo "Services (Postgres for the db, auth, jobs, mail and analytics packs; Valkey for cache and realtime):"
   status_service postgres 127.0.0.1 5432 || true
   status_service valkey 127.0.0.1 6379 || true
@@ -347,9 +350,11 @@ install_tools() {
   [ "$MINIMAL" -eq 0 ] || { skip "helper tools (--minimal)"; return 0; }
   have staticcheck   || go install honnef.co/go/tools/cmd/staticcheck@$STATICCHECK_VERSION
   have golangci-lint || go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$GOLANGCI_LINT_VERSION
+  have govulncheck   || go install golang.org/x/vuln/cmd/govulncheck@$GOVULNCHECK_VERSION
   have sqlc          || go install github.com/sqlc-dev/sqlc/cmd/sqlc@$SQLC_VERSION
   have wasm-tools    || cargo install wasm-tools --version "$WASM_TOOLS_VERSION" --locked
-  for t in staticcheck golangci-lint sqlc wasm-tools; do status_tool "$t" || true; done
+  have cargo-deny    || cargo install cargo-deny --version "$CARGO_DENY_VERSION" --locked
+  for t in staticcheck golangci-lint govulncheck sqlc wasm-tools cargo-deny; do status_tool "$t" || true; done
 }
 
 install_lidza() {

@@ -45,7 +45,7 @@ func Compile(ctx context.Context, wasm []byte, opt Options) (*Module, error) {
 	}
 	cfg := wazero.NewRuntimeConfig().
 		WithCloseOnContextDone(!opt.Uninterruptible).
-		WithMemoryLimitPages(uint32(opt.MemoryMB * 16)) // 64 KiB pages
+		WithMemoryLimitPages(uint32(opt.MemoryMB * 16)) //nolint:gosec // G115: 64 KiB pages; MemoryMB is the configured limit
 	rt := wazero.NewRuntimeWithConfig(ctx, cfg)
 	if _, err := wasi_snapshot_preview1.Instantiate(ctx, rt); err != nil {
 		rt.Close(ctx)
@@ -117,7 +117,7 @@ func (in *instance) call(ctx context.Context, fn string, input []byte) ([]byte, 
 	if err != nil {
 		return nil, err
 	}
-	inPtr := uint32(res[0])
+	inPtr := uint32(res[0]) //nolint:gosec // G115: wasm32 pointers are 32 bits
 	if len(input) > 0 && !mem.Write(inPtr, input) {
 		return nil, errors.New("input does not fit in module memory")
 	}
@@ -126,7 +126,7 @@ func (in *instance) call(ctx context.Context, fn string, input []byte) ([]byte, 
 		return nil, err
 	}
 	_, _ = in.free.Call(ctx, uint64(inPtr), uint64(len(input)))
-	outPtr, outLen := uint32(res[0]>>32), uint32(res[0])
+	outPtr, outLen := uint32(res[0]>>32), uint32(res[0]) //nolint:gosec // G115: the module packs a 32-bit pointer and length
 	data, ok := mem.Read(outPtr, outLen)
 	if !ok {
 		return nil, errors.New("output pointer is out of module memory")

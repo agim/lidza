@@ -201,7 +201,7 @@ func connectDone(w http.ResponseWriter, r *http.Request, to, provider, reason st
 	if strings.Contains(to, "?") {
 		sep = "&"
 	}
-	http.Redirect(w, r, to+sep+q.Encode(), http.StatusFound)
+	http.Redirect(w, r, to+sep+q.Encode(), http.StatusFound) //nolint:gosec // G710: to passed localPath
 }
 
 func (s *signin) connectStart(w http.ResponseWriter, r *http.Request) {
@@ -238,7 +238,7 @@ func (s *signin) connectStart(w http.ResponseWriter, r *http.Request) {
 		connectDone(w, r, to, name, "provider", err)
 		return
 	}
-	http.SetCookie(w, &http.Cookie{Name: ConnectCookie, Value: sealed, Path: Prefix + "/connect/", HttpOnly: true, Secure: a.cfg.CookieSecure, SameSite: http.SameSiteLaxMode, MaxAge: 600})
+	http.SetCookie(w, &http.Cookie{Name: ConnectCookie, Value: sealed, Path: Prefix + "/connect/", HttpOnly: true, Secure: a.cfg.CookieSecure, SameSite: http.SameSiteLaxMode, MaxAge: 600}) //nolint:gosec // G124: Secure follows the CookieSecure setting
 	http.Redirect(w, r, authURL, http.StatusFound)
 }
 
@@ -252,7 +252,7 @@ func (s *signin) connectCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := r.Context()
 	a := From(ctx)
-	http.SetCookie(w, &http.Cookie{Name: ConnectCookie, Value: "", Path: Prefix + "/connect/", HttpOnly: true, Secure: a.cfg.CookieSecure, SameSite: http.SameSiteLaxMode, MaxAge: -1})
+	http.SetCookie(w, &http.Cookie{Name: ConnectCookie, Value: "", Path: Prefix + "/connect/", HttpOnly: true, Secure: a.cfg.CookieSecure, SameSite: http.SameSiteLaxMode, MaxAge: -1}) //nolint:gosec // G124: Secure follows the CookieSecure setting
 	fail := func(to, reason string, err error) {
 		s.event(ctx, r, Event{Kind: EventConnectFailed, Subject: u.ID, Method: name, Reason: reason})
 		connectDone(w, r, to, name, reason, err)

@@ -760,9 +760,9 @@ func avatarColor(s string) string {
 	colors := []string{"primary", "pink", "red", "orange", "yellow", "lime", "green", "teal"}
 	var h uint32
 	for _, r := range s {
-		h = h*31 + uint32(r)
+		h = h*31 + uint32(r) //nolint:gosec // G115: a hash: wrapping is intended
 	}
-	return colors[h%uint32(len(colors))]
+	return colors[h%uint32(len(colors))] //nolint:gosec // G115: len(colors) is 8
 }
 
 // statusColor is the colour of a settings status.
@@ -823,7 +823,7 @@ func (h *Handler) redirect(w http.ResponseWriter, r *http.Request, to, flash, er
 	} else if errText != "" {
 		q = sep + "error=" + template.URLQueryEscaper(errText)
 	}
-	http.Redirect(w, r, h.path+to+q, http.StatusSeeOther)
+	http.Redirect(w, r, h.path+to+q, http.StatusSeeOther) //nolint:gosec // G710: h.path plus a path the handler chose
 }
 
 // templateFS exposes the embedded templates, for an app that wants to

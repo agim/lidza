@@ -54,7 +54,7 @@ type Config struct {
 
 // WebhookSecretSetting names the setting holding the endpoint's signing
 // secret (whsec_...), which webhook.Stripe reads.
-const WebhookSecretSetting = "STRIPE_WEBHOOK_SECRET"
+const WebhookSecretSetting = "STRIPE_WEBHOOK_SECRET" //nolint:gosec // G101: a setting's name, not its value
 
 // Plan is one of the app's plans.
 type Plan struct {

@@ -1,0 +1,39 @@
+# cargo-deny for the Rust core and the official packs:
+#   cargo deny --manifest-path <crate>/Cargo.toml --config deny.toml check
+# scripts/release.sh and CI run it on every crate Dependabot watches.
+
+[graph]
+# Packs build for wasm32-wasip1 and the core for the host.
+targets = ["x86_64-unknown-linux-gnu", "aarch64-apple-darwin", "wasm32-wasip1"]
+
+[advisories]
+# RustSec advisories: vulnerabilities, unsound and yanked crates.
+yanked = "deny"
+
+[licenses]
+# Permissive licenses compatible with Līdza's Apache-2.0.
+allow = [
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "MIT",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "ISC",
+  "Zlib",
+  "Unicode-3.0",
+]
+confidence-threshold = 0.9
+unused-allowed-license = "allow"
+
+[licenses.private]
+# The framework's own crates (publish = false) carry no license field.
+ignore = true
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+allow-wildcard-paths = true
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

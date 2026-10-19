@@ -160,9 +160,9 @@ func builtinSections() []Section {
 				{Name: "LLM_API_KEY", Label: "API key", Kind: "secret", For: []string{"anthropic", "openai", "google", "compatible"},
 					Placeholders: map[string]string{"anthropic": "sk-ant-…", "openai": "sk-…", "google": "AIza…", "compatible": "only if the server asks for one"}},
 				{Name: "LLM_MODEL", Label: "Model", Kind: "text", For: []string{"anthropic", "openai", "google", "compatible", "ollama"},
-					Placeholders: map[string]string{"anthropic": "claude-sonnet-5", "openai": "gpt-5-mini", "google": "gemini-2.5-flash", "compatible": "the model the server loaded", "ollama": "llama3.2"},
-					Help:         "Empty uses the placeholder's model."},
-				{Name: "LLM_MAX_TOKENS", Label: "Longest reply (tokens)", Kind: "number", For: []string{"anthropic", "openai", "google", "compatible", "ollama"}, Advanced: true, Default: "1024",
+					Placeholders: map[string]string{"anthropic": "claude-sonnet-5-5", "openai": "gpt-6-luna", "google": "gemini-3.8-flash", "compatible": "the model the server loaded", "ollama": "llama3.2"},
+					Help:         "Empty uses the placeholder's model, the provider's fast tier. The flagships: claude-opus-5-5, gpt-6-sol, gemini-4-argon."},
+				{Name: "LLM_MAX_TOKENS", Label: "Longest reply (tokens)", Kind: "number", For: []string{"anthropic", "openai", "google", "compatible", "ollama"}, Advanced: true, Default: "4096",
 					Help: "A request's own limit wins."},
 			}},
 		{Key: "embed", Page: "llm", Title: "Embeddings", Icon: "search", Selector: "EMBED_PROVIDER", None: "Same as the chat provider",
@@ -177,7 +177,7 @@ func builtinSections() []Section {
 				{Name: "EMBED_API_KEY", Label: "API key", Kind: "secret", For: []string{"openai", "google", "compatible"},
 					Placeholders: map[string]string{"openai": "sk-…", "google": "AIza…", "compatible": "only if the server asks for one"}},
 				{Name: "EMBED_MODEL", Label: "Model", Kind: "text", For: []string{"", "openai", "google", "compatible", "ollama"}, Placeholder: "the chat provider's default",
-					Placeholders: map[string]string{"": "the chat provider's default", "openai": "text-embedding-3-small", "google": "text-embedding-004", "compatible": "the model the server loaded", "ollama": "nomic-embed-text"},
+					Placeholders: map[string]string{"": "the chat provider's default", "openai": "text-embedding-3-small", "google": "gemini-embedding-001", "compatible": "the model the server loaded", "ollama": "nomic-embed-text"},
 					Help:         "Empty uses the placeholder's model. Replaces LLM_EMBED_MODEL, which is read when this is empty."},
 			}},
 		{Key: "storage", Page: "storage", Title: "File storage", Icon: "folder", Selector: "STORAGE_PROVIDER",
@@ -249,7 +249,7 @@ type fieldView struct {
 	Opts    []optionView
 	// PlaceholderNow is the placeholder for the selector's current
 	// value; PlaceholdersAttr lists them all for the script
-	// ("anthropic=claude-sonnet-5|openai=gpt-5-mini").
+	// ("anthropic=claude-sonnet-5-5|openai=gpt-6-luna").
 	PlaceholderNow   string
 	PlaceholdersAttr string
 }

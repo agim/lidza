@@ -170,7 +170,7 @@ database (the admin pages, `lidza settings set`), so the app moves with its data
 | `LLM_BASE_URL` | app |  | Overrides the provider's API base (a proxy, a region, Ollama on another host: http://127.0.0.1:11434 by default). |
 | `LLM_EMBED_MODEL` | app |  | The older name of EMBED_MODEL (LLM_EMBED_MODEL), read when EMBED_MODEL is empty. |
 | `LLM_MAX_ATTEMPTS` | infra | `3` | How many times a call is tried on 429, 5xx or a network error, with backoff (1s, 2s, 4s) and Retry-After honoured. |
-| `LLM_MAX_TOKENS` | infra | `1024` | Bounds a reply unless the request says otherwise. |
+| `LLM_MAX_TOKENS` | infra | `4096` | Bounds a reply unless the request says otherwise. The newest models think before answering, inside this bound. |
 | `LLM_MAX_TOOL_ROUNDS` | infra | `8` | Bounds Run: how many times the model may call tools before it must answer. |
 | `LLM_MODEL` | app |  | The chat model; each provider has a default. |
 | `LLM_PROVIDER` | app | `fake` | Fake (default; scripted replies for tests and a first run), ollama (a local model), anthropic, openai, google (Gemini) or compatible (any server speaking the OpenAI API: llama.cpp's llama-server, vLLM, LM Studio; LLM_BASE_URL required, the key optional). |

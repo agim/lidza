@@ -610,3 +610,27 @@ func TestAppSettingsSections(t *testing.T) {
 		t.Fatalf("saved: %q (%d)", v["APP_URL"], res.StatusCode)
 	}
 }
+
+// The model placeholders are the llm pack's defaults: what an empty
+// field runs.
+func TestModelPlaceholdersAreTheDefaults(t *testing.T) {
+	want := map[string]map[string]string{"LLM_MODEL": llm.DefaultModels, "EMBED_MODEL": llm.DefaultEmbedModels}
+	seen := 0
+	for _, s := range builtinSections() {
+		for _, f := range s.Fields {
+			defaults, ok := want[f.Name]
+			if !ok {
+				continue
+			}
+			seen++
+			for provider, model := range defaults {
+				if got := f.Placeholders[provider]; got != model {
+					t.Errorf("%s placeholder for %s is %q, the default is %q", f.Name, provider, got, model)
+				}
+			}
+		}
+	}
+	if seen != 2 {
+		t.Fatalf("found %d model fields, want 2", seen)
+	}
+}

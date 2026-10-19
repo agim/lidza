@@ -10,8 +10,14 @@ import (
 // google speaks the Gemini API: POST models/{model}:generateContent
 // (:streamGenerateContent?alt=sse when streaming) and
 // models/{model}:batchEmbedContents. A Schema goes in
-// generationConfig.responseSchema; function calls carry no ids.
-type google struct{ key, base, model, embedModel string }
+// generationConfig.responseSchema; function calls carry no ids but a
+// thought signature (Gemini 3), which goes back with the call.
+// embedDims, when set, asks the embedding model for that many
+// dimensions (the default model, kept at 768).
+type google struct {
+	key, base, model, embedModel string
+	embedDims                    int
+}
 
 func (p *google) Name() string { return "google" }
 
@@ -20,8 +26,12 @@ func (p *google) headers() map[string]string {
 }
 
 type googlePart struct {
-	Text         string `json:"text,omitempty"`
-	FunctionCall *struct {
+	Text string `json:"text,omitempty"`
+	// Thought marks a part that summarises the model's thinking, not
+	// the answer.
+	Thought          bool   `json:"thought,omitempty"`
+	ThoughtSignature string `json:"thoughtSignature,omitempty"`
+	FunctionCall     *struct {
 		Name string          `json:"name"`
 		Args json.RawMessage `json:"args"`
 	} `json:"functionCall,omitempty"`
@@ -57,7 +67,11 @@ func (p *google) Chat(ctx context.Context, req Request, stream func(string) erro
 				parts = append(parts, map[string]any{"text": m.Content})
 			}
 			for _, c := range m.ToolCalls {
-				parts = append(parts, map[string]any{"functionCall": map[string]any{"name": c.Name, "args": rawObject(c.Input)}})
+				part := map[string]any{"functionCall": map[string]any{"name": c.Name, "args": rawObject(c.Input)}}
+				if c.Signature != "" {
+					part["thoughtSignature"] = c.Signature
+				}
+				parts = append(parts, part)
 			}
 			contents = append(contents, map[string]any{"role": "model", "parts": parts})
 		default:
@@ -101,6 +115,9 @@ func (p *google) Chat(ctx context.Context, req Request, stream func(string) erro
 				Parts []googlePart `json:"parts"`
 			} `json:"content"`
 		} `json:"candidates"`
+		PromptFeedback struct {
+			BlockReason string `json:"blockReason"`
+		} `json:"promptFeedback"`
 		UsageMetadata struct {
 			Prompt     int `json:"promptTokenCount"`
 			Candidates int `json:"candidatesTokenCount"`
@@ -114,6 +131,9 @@ func (p *google) Chat(ctx context.Context, req Request, stream func(string) erro
 		if rp.ModelVersion != "" {
 			r.Model = rp.ModelVersion
 		}
+		if rp.PromptFeedback.BlockReason != "" {
+			reason = "BLOCKED"
+		}
 		if rp.UsageMetadata.Prompt > 0 || rp.UsageMetadata.Candidates > 0 {
 			r.Usage = Usage{Input: rp.UsageMetadata.Prompt, Output: rp.UsageMetadata.Candidates}
 		}
@@ -122,7 +142,7 @@ func (p *google) Chat(ctx context.Context, req Request, stream func(string) erro
 				reason = c.FinishReason
 			}
 			for _, part := range c.Content.Parts {
-				if part.Text != "" {
+				if part.Text != "" && !part.Thought {
 					text.WriteString(part.Text)
 					if emit {
 						if err := stream(part.Text); err != nil {
@@ -131,7 +151,7 @@ func (p *google) Chat(ctx context.Context, req Request, stream func(string) erro
 					}
 				}
 				if part.FunctionCall != nil {
-					r.ToolCalls = append(r.ToolCalls, ToolCall{ID: callID(len(r.ToolCalls) + 1), Name: part.FunctionCall.Name, Input: rawObject(part.FunctionCall.Args)})
+					r.ToolCalls = append(r.ToolCalls, ToolCall{ID: callID(len(r.ToolCalls) + 1), Name: part.FunctionCall.Name, Input: rawObject(part.FunctionCall.Args), Signature: part.ThoughtSignature})
 				}
 			}
 		}
@@ -159,6 +179,8 @@ func (p *google) Chat(ctx context.Context, req Request, stream func(string) erro
 	}
 	r.Text = text.String()
 	switch {
+	case googleRefusals[reason]:
+		r.Stop = "refusal"
 	case len(r.ToolCalls) > 0:
 		r.Stop = "tool"
 	case reason == "MAX_TOKENS":
@@ -166,6 +188,10 @@ func (p *google) Chat(ctx context.Context, req Request, stream func(string) erro
 	}
 	return r, nil
 }
+
+// googleRefusals are the finish reasons of a reply the safety checks
+// stopped; BLOCKED stands for a prompt they refused (promptFeedback).
+var googleRefusals = map[string]bool{"SAFETY": true, "RECITATION": true, "BLOCKLIST": true, "PROHIBITED_CONTENT": true, "SPII": true, "IMAGE_SAFETY": true, "BLOCKED": true}
 
 func (p *google) Embed(ctx context.Context, model string, texts []string) ([][]float32, error) {
 	r, err := p.embed(ctx, model, texts)
@@ -175,10 +201,17 @@ func (p *google) Embed(ctx context.Context, model string, texts []string) ([][]f
 // embed asks batchEmbedContents, which reports no token count: the
 // usage row of a Gemini embedding has zero tokens.
 func (p *google) embed(ctx context.Context, model string, texts []string) (embedResult, error) {
-	model = or(model, p.embedModel)
+	dims := 0
+	if model == "" {
+		model, dims = p.embedModel, p.embedDims
+	}
 	var requests []map[string]any
 	for _, t := range texts {
-		requests = append(requests, map[string]any{"model": "models/" + model, "content": map[string]any{"parts": []map[string]any{{"text": t}}}})
+		r := map[string]any{"model": "models/" + model, "content": map[string]any{"parts": []map[string]any{{"text": t}}}}
+		if dims > 0 {
+			r["outputDimensionality"] = dims
+		}
+		requests = append(requests, r)
 	}
 	var out struct {
 		Embeddings []struct {

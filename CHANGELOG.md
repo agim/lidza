@@ -10,6 +10,31 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
+## Unreleased
+
+- llm: the current models work end to end.
+  - Anthropic structured output (`Generate`) uses `output_config.format`
+    with a closed schema; the forced tool it used before is refused by
+    Claude Sonnet 5.5, Opus 5.5 and Fable 5.1.
+  - Thinking replies are kept whole in `Response.Raw` and sent back
+    unchanged by `Run` (`Message.Raw`): the newest Claude models think by
+    default and refuse a tool loop that drops their signed thinking.
+    Gemini 3's thought signatures ride on `ToolCall.Signature` the same
+    way.
+  - `Temperature` is not sent to models that refuse it (Claude Opus 4.7,
+    Sonnet 5 and later; OpenAI's reasoning models).
+  - A provider's safety decline is `Response.Stop` "refusal" (Anthropic
+    `stop_reason`, OpenAI `refusal` and `content_filter`, Gemini safety
+    finish and prompt blocks); `Generate` returns `llm.ErrRefused`.
+- llm defaults, when `LLM_MODEL` / `EMBED_MODEL` are empty: Anthropic
+  `claude-sonnet-5-5` (was `claude-sonnet-5`), OpenAI `gpt-6-luna` (was
+  `gpt-5-mini`), Google `gemini-3.8-flash` (was `gemini-2.5-flash`,
+  retiring) and embeddings `gemini-embedding-001` at 768 dimensions (was
+  `text-embedding-004`, shut down). `llm.DefaultModels` and
+  `llm.DefaultEmbedModels` list them; the admin page's placeholders
+  follow. `LLM_MAX_TOKENS` defaults to 4096 (was 1024): thinking counts
+  against it.
+
 ## v0.1.121 (2026-10-18)
 
 - `lidza check` runs three vulnerability scanners: `govulncheck` (code

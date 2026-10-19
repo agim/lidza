@@ -64,7 +64,8 @@ type Config struct {
 	// provider, empty uses BaseURL.
 	EmbedBaseURL string `env:"EMBED_BASE_URL"`
 	// MaxTokens bounds a reply unless the request says otherwise.
-	MaxTokens int `env:"LLM_MAX_TOKENS" default:"1024"`
+	// The newest models think before answering, inside this bound.
+	MaxTokens int `env:"LLM_MAX_TOKENS" default:"4096"`
 	// Timeout bounds one attempt of one call.
 	Timeout time.Duration `env:"LLM_TIMEOUT" default:"60s"`
 	// MaxAttempts is how many times a call is tried on 429, 5xx or a
@@ -96,6 +97,9 @@ type Message struct {
 	// ToolCallID and Name identify the call a ToolResult answers.
 	ToolCallID string `json:"toolCallId,omitempty"`
 	Name       string `json:"name,omitempty"`
+	// Raw is an assistant message's Response.Raw, passed back unchanged:
+	// when set, the provider sends it instead of Content and ToolCalls.
+	Raw []json.RawMessage `json:"raw,omitempty"`
 }
 
 // ToolCall is the model asking for a tool to run.
@@ -103,6 +107,9 @@ type ToolCall struct {
 	ID    string          `json:"id"`
 	Name  string          `json:"name"`
 	Input json.RawMessage `json:"input"`
+	// Signature is the provider's opaque record of the reasoning behind
+	// the call (Gemini's thought signature), sent back with it.
+	Signature string `json:"signature,omitempty"`
 }
 
 // Tool is a function offered to the model: ToolsOf builds them from the
@@ -129,7 +136,9 @@ type Request struct {
 	// Model overrides LLM_MODEL; MaxTokens overrides LLM_MAX_TOKENS.
 	Model     string `json:"model,omitempty"`
 	MaxTokens int    `json:"maxTokens,omitempty"`
-	// Temperature, when set, replaces the provider's default.
+	// Temperature, when set, replaces the provider's default. Models
+	// that take no sampling settings (Anthropic's from Claude Opus 4.7
+	// and Sonnet 5 on, OpenAI's reasoning models) are sent none.
 	Temperature *float64 `json:"temperature,omitempty"`
 	// Label names the feature making the call ("note.tags") for the usage
 	// report (llm_usage, with the db pack).
@@ -143,7 +152,14 @@ type Response struct {
 	Text string `json:"text"`
 	// ToolCalls the model wants run; empty when it answered.
 	ToolCalls []ToolCall `json:"toolCalls,omitempty"`
-	// Stop says why the model stopped: "end", "tool", "length".
+	// Raw is the reply as the provider wrote it, when it carries
+	// reasoning the provider needs back (Anthropic's content blocks with
+	// their signed thinking). A conversation continued after tool calls
+	// passes it back on the assistant message (Message.Raw), as Run does.
+	Raw []json.RawMessage `json:"raw,omitempty"`
+	// Stop says why the model stopped: "end", "tool", "length", or
+	// "refusal" when the provider's safety checks declined the request
+	// (Text is then empty or partial; Generate returns ErrRefused).
 	Stop  string `json:"stop"`
 	Model string `json:"model"`
 	Usage Usage  `json:"usage"`
@@ -202,6 +218,10 @@ var EmbedProviders = []string{"none", "openai", "google", "ollama", "compatible"
 // (anthropic) and no EMBED_PROVIDER. Test it with errors.Is to run a
 // feature without its vectors (search by keyword instead).
 var ErrNoEmbeddings = errors.New("llm: no embeddings provider")
+
+// ErrRefused is what Generate returns when the provider declined the
+// request (Response.Stop "refusal").
+var ErrRefused = errors.New("llm: the model declined the request")
 
 var (
 	errEmbedOff       = fmt.Errorf("%w: embeddings are off (EMBED_PROVIDER=none)", ErrNoEmbeddings)
@@ -293,7 +313,7 @@ func (l *LLM) defaults() {
 		l.cfg.Provider = "fake"
 	}
 	if l.cfg.MaxTokens <= 0 {
-		l.cfg.MaxTokens = 1024
+		l.cfg.MaxTokens = 4096
 	}
 	if l.cfg.Timeout <= 0 {
 		l.cfg.Timeout = 60 * time.Second
@@ -488,14 +508,17 @@ func (l *LLM) Embeddings(ctx context.Context, req EmbedRequest) (EmbedResponse, 
 
 // Generate asks for a T: the request's Schema is T's JSON Schema, the
 // reply is decoded into a T and validated when T implements
-// validate.Validator. Anthropic gets it through a forced tool, the others
-// through their JSON-schema output modes.
+// validate.Validator. Every provider gets it through its JSON-schema
+// output mode.
 func Generate[T any](ctx context.Context, l *LLM, req Request) (T, error) {
 	var out T
 	req.Schema = jsonschema.Of(out)
 	res, err := l.Chat(ctx, req)
 	if err != nil {
 		return out, err
+	}
+	if res.Stop == "refusal" {
+		return out, ErrRefused
 	}
 	if err := json.Unmarshal([]byte(stripFences(res.Text)), &out); err != nil {
 		return out, fmt.Errorf("llm: the reply is not the requested JSON: %w (%q)", err, res.Text)
@@ -540,7 +563,7 @@ func (l *LLM) Run(ctx context.Context, req Request, tools []lidza.Tool) (Respons
 		if rounds := l.config().MaxToolRounds; round+1 >= rounds {
 			return res, fmt.Errorf("llm: the model kept calling tools after %d rounds (LLM_MAX_TOOL_ROUNDS)", rounds)
 		}
-		req.Messages = append(req.Messages, Message{Role: Assistant, Content: res.Text, ToolCalls: res.ToolCalls})
+		req.Messages = append(req.Messages, Message{Role: Assistant, Content: res.Text, ToolCalls: res.ToolCalls, Raw: res.Raw})
 		for _, call := range res.ToolCalls {
 			result := runTool(ctx, byName, call)
 			req.Messages = append(req.Messages, Message{Role: ToolResult, ToolCallID: call.ID, Name: call.Name, Content: result})
@@ -688,6 +711,25 @@ var (
 	embedSettings = settingNames{"embeddings provider", "EMBED_API_KEY", "EMBED_BASE_URL"}
 )
 
+// DefaultModels is each provider's chat model when LLM_MODEL is empty:
+// its fast, low-cost tier. The flagships (claude-opus-5-5, gpt-6-sol,
+// gemini-4-argon) are one setting away.
+var DefaultModels = map[string]string{
+	"anthropic": "claude-sonnet-5-5",
+	"openai":    "gpt-6-luna",
+	"google":    "gemini-3.8-flash",
+	"ollama":    "llama3.2",
+}
+
+// DefaultEmbedModels is each provider's embedding model when
+// EMBED_MODEL is empty. Google's returns 768 dimensions, as the
+// text-embedding-004 it replaced did.
+var DefaultEmbedModels = map[string]string{
+	"openai": "text-embedding-3-small",
+	"google": "gemini-embedding-001",
+	"ollama": "nomic-embed-text",
+}
+
 func newProvider(cfg Config, names settingNames) (Provider, error) {
 	need := func() error {
 		if cfg.APIKey == "" {
@@ -699,17 +741,17 @@ func newProvider(cfg Config, names settingNames) (Provider, error) {
 	case "fake":
 		return NewFake(), nil
 	case "ollama":
-		return &ollama{base: or(cfg.BaseURL, "http://127.0.0.1:11434"), model: or(cfg.Model, "llama3.2"), embedModel: or(cfg.EmbedModel, "nomic-embed-text")}, nil
+		return &ollama{base: or(cfg.BaseURL, "http://127.0.0.1:11434"), model: or(cfg.Model, DefaultModels["ollama"]), embedModel: or(cfg.EmbedModel, DefaultEmbedModels["ollama"])}, nil
 	case "anthropic":
 		if err := need(); err != nil {
 			return nil, err
 		}
-		return &anthropic{key: cfg.APIKey, base: or(cfg.BaseURL, "https://api.anthropic.com"), model: or(cfg.Model, "claude-sonnet-5")}, nil
+		return &anthropic{key: cfg.APIKey, base: or(cfg.BaseURL, "https://api.anthropic.com"), model: or(cfg.Model, DefaultModels["anthropic"])}, nil
 	case "openai":
 		if err := need(); err != nil {
 			return nil, err
 		}
-		return &openai{key: cfg.APIKey, base: or(cfg.BaseURL, "https://api.openai.com"), model: or(cfg.Model, "gpt-5-mini"), embedModel: or(cfg.EmbedModel, "text-embedding-3-small")}, nil
+		return &openai{key: cfg.APIKey, base: or(cfg.BaseURL, "https://api.openai.com"), model: or(cfg.Model, DefaultModels["openai"]), embedModel: or(cfg.EmbedModel, DefaultEmbedModels["openai"])}, nil
 	case "compatible":
 		if cfg.BaseURL == "" {
 			return nil, fmt.Errorf("llm: %s compatible needs %s, the server's address (http://127.0.0.1:8080 for llama-server)", names.what, names.base)
@@ -721,7 +763,11 @@ func newProvider(cfg Config, names settingNames) (Provider, error) {
 		if err := need(); err != nil {
 			return nil, err
 		}
-		return &google{key: cfg.APIKey, base: or(cfg.BaseURL, "https://generativelanguage.googleapis.com"), model: or(cfg.Model, "gemini-2.5-flash"), embedModel: or(cfg.EmbedModel, "text-embedding-004")}, nil
+		g := &google{key: cfg.APIKey, base: or(cfg.BaseURL, "https://generativelanguage.googleapis.com"), model: or(cfg.Model, DefaultModels["google"]), embedModel: or(cfg.EmbedModel, DefaultEmbedModels["google"])}
+		if cfg.EmbedModel == "" {
+			g.embedDims = 768
+		}
+		return g, nil
 	}
 	return nil, fmt.Errorf("llm: unknown provider %q (one of %s)", cfg.Provider, strings.Join(Providers, ", "))
 }

@@ -68,7 +68,7 @@ func (p *openai) Chat(ctx context.Context, req Request, stream func(string) erro
 		}
 	}
 	body := map[string]any{"model": or(req.Model, p.model), "messages": msgs, "max_completion_tokens": req.MaxTokens}
-	if req.Temperature != nil {
+	if req.Temperature != nil && (p.Name() != "openai" || !openaiReasoning(or(req.Model, p.model))) {
 		body["temperature"] = *req.Temperature
 	}
 	if len(req.Tools) > 0 {
@@ -95,12 +95,14 @@ func (p *openai) Chat(ctx context.Context, req Request, stream func(string) erro
 		Prompt     int `json:"prompt_tokens"`
 		Completion int `json:"completion_tokens"`
 	}
-	finish := func(model, reason, text string, calls []openaiToolCall, u usage) Response {
+	finish := func(model, reason, text, refusal string, calls []openaiToolCall, u usage) Response {
 		r := Response{Text: text, Model: model, Usage: Usage{Input: u.Prompt, Output: u.Completion}, Stop: "end"}
 		for i, c := range calls {
 			r.ToolCalls = append(r.ToolCalls, ToolCall{ID: or(c.ID, callID(i+1)), Name: c.Function.Name, Input: rawObject(json.RawMessage(c.Function.Arguments))})
 		}
 		switch {
+		case refusal != "" || reason == "content_filter":
+			r.Stop = "refusal"
 		case len(r.ToolCalls) > 0:
 			r.Stop = "tool"
 		case reason == "length":
@@ -115,6 +117,7 @@ func (p *openai) Chat(ctx context.Context, req Request, stream func(string) erro
 				FinishReason string `json:"finish_reason"`
 				Message      struct {
 					Content   string           `json:"content"`
+					Refusal   string           `json:"refusal"`
 					ToolCalls []openaiToolCall `json:"tool_calls"`
 				} `json:"message"`
 			} `json:"choices"`
@@ -127,9 +130,9 @@ func (p *openai) Chat(ctx context.Context, req Request, stream func(string) erro
 			return Response{}, &Error{Provider: "openai", Status: 500, Body: "no choices in the reply"}
 		}
 		c := r.Choices[0]
-		return finish(r.Model, c.FinishReason, c.Message.Content, c.Message.ToolCalls, r.Usage), nil
+		return finish(r.Model, c.FinishReason, c.Message.Content, c.Message.Refusal, c.Message.ToolCalls, r.Usage), nil
 	}
-	var text strings.Builder
+	var text, refusal strings.Builder
 	calls := map[int]*openaiToolCall{}
 	var model, reason string
 	var u usage
@@ -140,6 +143,7 @@ func (p *openai) Chat(ctx context.Context, req Request, stream func(string) erro
 				FinishReason string `json:"finish_reason"`
 				Delta        struct {
 					Content   string           `json:"content"`
+					Refusal   string           `json:"refusal"`
 					ToolCalls []openaiToolCall `json:"tool_calls"`
 				} `json:"delta"`
 			} `json:"choices"`
@@ -158,6 +162,7 @@ func (p *openai) Chat(ctx context.Context, req Request, stream func(string) erro
 			if c.FinishReason != "" {
 				reason = c.FinishReason
 			}
+			refusal.WriteString(c.Delta.Refusal)
 			if c.Delta.Content != "" {
 				text.WriteString(c.Delta.Content)
 				if err := stream(c.Delta.Content); err != nil {
@@ -194,7 +199,7 @@ func (p *openai) Chat(ctx context.Context, req Request, stream func(string) erro
 	for _, i := range idx {
 		ordered = append(ordered, *calls[i])
 	}
-	return finish(model, reason, text.String(), ordered, u), nil
+	return finish(model, reason, text.String(), refusal.String(), ordered, u), nil
 }
 
 func (p *openai) Embed(ctx context.Context, model string, texts []string) ([][]float32, error) {
@@ -224,4 +229,15 @@ func (p *openai) embed(ctx context.Context, model string, texts []string) (embed
 		}
 	}
 	return embedResult{vectors: vectors, model: or(out.Model, model), usage: Usage{Input: out.Usage.PromptTokens}}, nil
+}
+
+// openaiReasoning reports an OpenAI reasoning model (the o-series, GPT-5
+// and later), which refuses a temperature other than its default.
+func openaiReasoning(model string) bool {
+	for _, prefix := range []string{"o1", "o3", "o4", "gpt-5", "gpt-6"} {
+		if strings.HasPrefix(model, prefix) {
+			return true
+		}
+	}
+	return false
 }

@@ -45,7 +45,7 @@ func TestFakeChatGenerateStream(t *testing.T) {
 	if res, _ := l.Chat(ctx, Request{Messages: []Message{{Role: User, Content: "x"}}}); res.Text != "scripted" {
 		t.Fatalf("scripted: %+v", res)
 	}
-	if calls := f.Calls(); len(calls) != 2 || calls[0].System != "Be brief." || calls[0].MaxTokens != 1024 {
+	if calls := f.Calls(); len(calls) != 2 || calls[0].System != "Be brief." || calls[0].MaxTokens != 4096 {
 		t.Fatalf("calls: %+v", calls)
 	}
 

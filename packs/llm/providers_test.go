@@ -3,11 +3,14 @@ package llm
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/agim/lidza"
 )
 
 // stub serves one provider's API: it records the last request body and
@@ -79,16 +82,32 @@ func TestAnthropicWire(t *testing.T) {
 		t.Fatalf("tool call: %+v", res)
 	}
 
-	// Structured output rides a forced tool.
+	// Structured output is output_config.format with a closed schema;
+	// forced tool use is refused by the current models.
 	s.reply = func(req map[string]any) (int, string, string) {
-		if req["tool_choice"].(map[string]any)["name"] != structuredTool {
-			return 400, "application/json", `{"error":"no forced tool"}`
+		if req["tool_choice"] != nil {
+			return 400, "application/json", `{"error":"tool_choice type tool is not supported for this model"}`
 		}
-		return 200, "application/json", `{"model":"claude-x","stop_reason":"tool_use","content":[{"type":"tool_use","id":"t","name":"structured_output","input":{"tags":["a"]}}],"usage":{"input_tokens":1,"output_tokens":1}}`
+		format, _ := req["output_config"].(map[string]any)["format"].(map[string]any)
+		if format["type"] != "json_schema" || format["schema"].(map[string]any)["additionalProperties"] != false {
+			return 400, "application/json", `{"error":"bad format"}`
+		}
+		return 200, "application/json", `{"model":"claude-x","stop_reason":"end_turn","content":[{"type":"thinking","thinking":"","signature":"sig"},{"type":"text","text":"{\"tags\":[\"a\"]}"}],"usage":{"input_tokens":1,"output_tokens":1}}`
 	}
 	got, err := Generate[tags](ctx, l, Request{Messages: []Message{{Role: User, Content: "x"}}})
 	if err != nil || len(got.Tags) != 1 || got.Tags[0] != "a" {
 		t.Fatalf("generate: %+v %v", got, err)
+	}
+
+	// A refusal is Stop "refusal"; Generate says so.
+	s.reply = func(map[string]any) (int, string, string) {
+		return 200, "application/json", `{"model":"claude-x","stop_reason":"refusal","stop_details":{"type":"refusal","category":"cyber"},"content":[],"usage":{"input_tokens":1,"output_tokens":0}}`
+	}
+	if res, err := l.Chat(ctx, conversation); err != nil || res.Stop != "refusal" {
+		t.Fatalf("refusal: %+v %v", res, err)
+	}
+	if _, err := Generate[tags](ctx, l, Request{Messages: []Message{{Role: User, Content: "x"}}}); !errors.Is(err, ErrRefused) {
+		t.Fatalf("generate refusal: %v", err)
 	}
 
 	// Streaming.
@@ -134,7 +153,7 @@ func TestOpenAIWire(t *testing.T) {
 		t.Fatalf("headers/path: %v %s", s.head, s.path)
 	}
 	msgs := s.last["messages"].([]any)
-	if len(msgs) != 4 || msgs[0].(map[string]any)["role"] != "system" || msgs[3].(map[string]any)["tool_call_id"] != "c1" || s.last["max_completion_tokens"] != float64(1024) {
+	if len(msgs) != 4 || msgs[0].(map[string]any)["role"] != "system" || msgs[3].(map[string]any)["tool_call_id"] != "c1" || s.last["max_completion_tokens"] != float64(4096) {
 		t.Fatalf("messages: %s", js(s.last))
 	}
 	if calls := msgs[2].(map[string]any)["tool_calls"].([]any); calls[0].(map[string]any)["function"].(map[string]any)["arguments"] != `{"city":"Tirana"}` {
@@ -253,15 +272,55 @@ func TestGoogleWire(t *testing.T) {
 		t.Fatalf("stream: %q %+v %v %s", streamed, res, err, s.path)
 	}
 
+	// The default embedding model, at the 768 dimensions of the one it
+	// replaced.
 	s.reply = func(req map[string]any) (int, string, string) {
-		if len(req["requests"].([]any)) != 2 {
+		reqs := req["requests"].([]any)
+		if len(reqs) != 2 || reqs[0].(map[string]any)["outputDimensionality"] != float64(768) {
 			return 400, "application/json", `{"error":"bad embed request"}`
 		}
 		return 200, "application/json", `{"embeddings":[{"values":[0.1,0.2]},{"values":[0.5]}]}`
 	}
 	vectors, err := l.Embed(ctx, []string{"a", "b"})
-	if err != nil || len(vectors) != 2 || vectors[1][0] != 0.5 || !strings.HasSuffix(s.path, "text-embedding-004:batchEmbedContents") {
+	if err != nil || len(vectors) != 2 || vectors[1][0] != 0.5 || !strings.HasSuffix(s.path, "gemini-embedding-001:batchEmbedContents") {
 		t.Fatalf("embed: %v %v %s", vectors, err, s.path)
+	}
+
+	// A safety stop is a refusal.
+	for _, reply := range []string{
+		`{"candidates":[{"finishReason":"SAFETY","content":{"parts":[]}}]}`,
+		`{"promptFeedback":{"blockReason":"PROHIBITED_CONTENT"}}`,
+	} {
+		s.reply = func(map[string]any) (int, string, string) { return 200, "application/json", reply }
+		if res, err := l.Chat(ctx, conversation); err != nil || res.Stop != "refusal" {
+			t.Errorf("%s: %+v %v", reply, res, err)
+		}
+	}
+}
+
+// Gemini 3 signs a function call; the signature goes back with it, and
+// thought parts are not the answer.
+func TestGoogleThoughtSignature(t *testing.T) {
+	s := newStub(t)
+	l, _ := New(Config{Provider: "google", APIKey: "k", BaseURL: s.srv.URL})
+	round := 0
+	s.reply = func(req map[string]any) (int, string, string) {
+		round++
+		if round == 1 {
+			return 200, "application/json", `{"candidates":[{"finishReason":"STOP","content":{"parts":[{"text":"Thinking about cities.","thought":true},{"functionCall":{"name":"weather","args":{"city":"Tirana"}},"thoughtSignature":"sig-1"}]}}]}`
+		}
+		call := req["contents"].([]any)[1].(map[string]any)["parts"].([]any)[0].(map[string]any)
+		if call["thoughtSignature"] != "sig-1" {
+			return 400, "application/json", `{"error":"Function call is missing a thought_signature"}`
+		}
+		return 200, "application/json", `{"candidates":[{"finishReason":"STOP","content":{"parts":[{"text":"21 degrees."}]}}]}`
+	}
+	res, err := l.Run(context.Background(), Request{Messages: []Message{{Role: User, Content: "weather?"}}}, []lidza.Tool{weatherTool()})
+	if err != nil || res.Text != "21 degrees." {
+		t.Fatalf("run: %+v %v", res, err)
+	}
+	if !strings.Contains(s.path, "/models/gemini-3.8-flash:") {
+		t.Errorf("default model: %s", s.path)
 	}
 }
 
@@ -270,7 +329,7 @@ func TestOllamaWire(t *testing.T) {
 	l, _ := New(Config{Provider: "ollama", BaseURL: s.srv.URL, Model: "m", EmbedModel: "e"})
 	ctx := context.Background()
 	s.reply = func(req map[string]any) (int, string, string) {
-		if req["stream"] != false || req["format"] == nil || req["options"].(map[string]any)["num_predict"] != float64(1024) {
+		if req["stream"] != false || req["format"] == nil || req["options"].(map[string]any)["num_predict"] != float64(4096) {
 			return 400, "application/json", `{"error":"bad request: ` + js(req) + `"}`
 		}
 		return 200, "application/json", `{"model":"m","message":{"role":"assistant","content":"{\"tags\":[\"a\"]}"},"done":true,"done_reason":"stop","prompt_eval_count":4,"eval_count":6}`
@@ -353,5 +412,139 @@ func TestCompatibleProvider(t *testing.T) {
 	l.Chat(context.Background(), Request{Messages: []Message{{Role: User, Content: "hello"}}})
 	if auth != "Bearer sk-local" || model != "default" {
 		t.Fatalf("with a key: %q %q", auth, model)
+	}
+}
+
+// A reply with thinking is sent back whole and in order on the next
+// turn: the blocks are signed against what precedes them, and a tool
+// loop that drops them is refused.
+func TestAnthropicThinkingReplay(t *testing.T) {
+	s := newStub(t)
+	l, _ := New(Config{Provider: "anthropic", APIKey: "k", BaseURL: s.srv.URL})
+	ctx := context.Background()
+	content := `[{"type":"thinking","thinking":"","signature":"s1"},{"type":"text","text":"Checking."},{"type":"tool_use","id":"t1","name":"weather","input":{"city":"Tirana"}},{"type":"thinking","thinking":"","signature":"s2"},{"type":"tool_use","id":"t2","name":"weather","input":{"city":"Durrës"}}]`
+	round := 0
+	s.reply = func(req map[string]any) (int, string, string) {
+		round++
+		if round == 1 {
+			return 200, "application/json", `{"model":"claude-sonnet-5-5","stop_reason":"tool_use","content":` + content + `,"usage":{"input_tokens":1,"output_tokens":1}}`
+		}
+		msgs := req["messages"].([]any)
+		var sent any
+		json.Unmarshal([]byte(content), &sent)
+		if got := js(msgs[1].(map[string]any)["content"]); got != js(sent) {
+			return 400, "application/json", `{"error":"thinking blocks changed: ` + strings.ReplaceAll(got, `"`, `'`) + `"}`
+		}
+		if results := msgs[2].(map[string]any)["content"].([]any); len(results) != 2 {
+			return 400, "application/json", `{"error":"want both results in one message"}`
+		}
+		return 200, "application/json", `{"model":"claude-sonnet-5-5","stop_reason":"end_turn","content":[{"type":"text","text":"21 and 24."}],"usage":{"input_tokens":1,"output_tokens":1}}`
+	}
+	res, err := l.Run(ctx, Request{Messages: []Message{{Role: User, Content: "weather?"}}}, []lidza.Tool{weatherTool()})
+	if err != nil || res.Text != "21 and 24." || round != 2 {
+		t.Fatalf("run: %+v %v (rounds %d)", res, err, round)
+	}
+	if s.last["model"] != "claude-sonnet-5-5" {
+		t.Errorf("default model %v", s.last["model"])
+	}
+
+	// The same reply streamed is rebuilt block for block.
+	s.reply = func(map[string]any) (int, string, string) {
+		return 200, "text/event-stream", strings.Join([]string{
+			`data: {"type":"message_start","message":{"model":"claude-sonnet-5-5","usage":{"input_tokens":5}}}`, ``,
+			`data: {"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":"","signature":""}}`, ``,
+			`data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"Two "}}`, ``,
+			`data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"cities."}}`, ``,
+			`data: {"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"s1"}}`, ``,
+			`data: {"type":"content_block_stop","index":0}`, ``,
+			`data: {"type":"content_block_start","index":1,"content_block":{"type":"redacted_thinking","data":"opaque"}}`, ``,
+			`data: {"type":"content_block_stop","index":1}`, ``,
+			`data: {"type":"content_block_start","index":2,"content_block":{"type":"text","text":""}}`, ``,
+			`data: {"type":"content_block_delta","index":2,"delta":{"type":"text_delta","text":"Checking."}}`, ``,
+			`data: {"type":"content_block_stop","index":2}`, ``,
+			`data: {"type":"content_block_start","index":3,"content_block":{"type":"tool_use","id":"t1","name":"weather","input":{}}}`, ``,
+			`data: {"type":"content_block_delta","index":3,"delta":{"type":"input_json_delta","partial_json":"{\"city\":\"Tirana\"}"}}`, ``,
+			`data: {"type":"content_block_stop","index":3}`, ``,
+			`data: {"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"output_tokens":7}}`, ``,
+		}, "\n")
+	}
+	res, err = l.Stream(ctx, conversation, func(string) error { return nil })
+	want := `[{"type":"thinking","thinking":"Two cities.","signature":"s1"},{"type":"redacted_thinking","data":"opaque"},{"type":"text","text":"Checking."},{"type":"tool_use","id":"t1","name":"weather","input":{"city":"Tirana"}}]`
+	if err != nil || js(res.Raw) != want || res.Text != "Checking." || res.Stop != "tool" {
+		t.Fatalf("stream raw:\n got %s\nwant %s\n%+v %v", js(res.Raw), want, res, err)
+	}
+	// A reply without thinking needs no Raw.
+	s.reply = func(map[string]any) (int, string, string) {
+		return 200, "application/json", `{"model":"claude-haiku-4-5","stop_reason":"end_turn","content":[{"type":"text","text":"hi"}],"usage":{"input_tokens":1,"output_tokens":1}}`
+	}
+	if res, _ := l.Chat(ctx, conversation); res.Raw != nil {
+		t.Errorf("raw without thinking: %s", js(res.Raw))
+	}
+}
+
+func TestAnthropicTemperature(t *testing.T) {
+	s := newStub(t)
+	s.reply = func(map[string]any) (int, string, string) {
+		return 200, "application/json", `{"model":"m","stop_reason":"end_turn","content":[{"type":"text","text":"ok"}],"usage":{}}`
+	}
+	ctx := context.Background()
+	temp := 0.2
+	for model, sent := range map[string]bool{"claude-sonnet-5-5": false, "claude-opus-5-5": false, "claude-opus-4-7": false, "claude-fable-5-1": false, "claude-haiku-4-5": true, "claude-sonnet-4-6": true, "claude-opus-4-6": true} {
+		l, _ := New(Config{Provider: "anthropic", APIKey: "k", BaseURL: s.srv.URL, Model: model})
+		if _, err := l.Chat(ctx, Request{Messages: []Message{{Role: User, Content: "x"}}, Temperature: &temp}); err != nil {
+			t.Fatal(err)
+		}
+		if _, ok := s.last["temperature"]; ok != sent {
+			t.Errorf("%s: temperature sent %v, want %v", model, ok, sent)
+		}
+	}
+}
+
+func TestAnthropicSchema(t *testing.T) {
+	in := map[string]any{"type": "object", "properties": map[string]any{
+		"name":  map[string]any{"type": "string", "maxLength": 80, "format": "email"},
+		"price": map[string]any{"type": "string", "format": "decimal"},
+		"blob":  map[string]any{"type": "string", "contentEncoding": "base64"},
+		"tags":  map[string]any{"type": "array", "maxItems": 5, "items": map[string]any{"type": "object", "properties": map[string]any{"n": map[string]any{"type": "integer", "minimum": 0}}}},
+	}, "required": []any{"name"}}
+	got := js(anthropicSchema(in))
+	want := `{"additionalProperties":false,"properties":{"blob":{"type":"string"},"name":{"format":"email","type":"string"},"price":{"type":"string"},"tags":{"items":{"additionalProperties":false,"properties":{"n":{"type":"integer"}},"type":"object"},"type":"array"}},"required":["name"],"type":"object"}`
+	if got != want {
+		t.Errorf("got  %s\nwant %s", got, want)
+	}
+}
+
+func weatherTool() lidza.Tool {
+	type in struct {
+		City string `json:"city"`
+	}
+	return lidza.ToolFunc("weather", "Weather in a city.", func(ctx context.Context, i in) (map[string]any, error) {
+		return map[string]any{"city": i.City, "temp": 21}, nil
+	})
+}
+
+func TestOpenAIRefusalAndTemperature(t *testing.T) {
+	s := newStub(t)
+	ctx := context.Background()
+	s.reply = func(map[string]any) (int, string, string) {
+		return 200, "application/json", `{"model":"gpt-6-luna","choices":[{"finish_reason":"stop","message":{"content":null,"refusal":"I can't help with that."}}],"usage":{}}`
+	}
+	l, _ := New(Config{Provider: "openai", APIKey: "k", BaseURL: s.srv.URL})
+	temp := 0.2
+	res, err := l.Chat(ctx, Request{Messages: []Message{{Role: User, Content: "x"}}, Temperature: &temp})
+	if err != nil || res.Stop != "refusal" {
+		t.Fatalf("refusal: %+v %v", res, err)
+	}
+	if s.last["model"] != "gpt-6-luna" {
+		t.Errorf("default model %v", s.last["model"])
+	}
+	if _, ok := s.last["temperature"]; ok {
+		t.Error("temperature sent to a reasoning model")
+	}
+	// A compatible server takes whatever model name it serves.
+	c, _ := New(Config{Provider: "compatible", BaseURL: s.srv.URL, Model: "gpt-5-local"})
+	c.Chat(ctx, Request{Messages: []Message{{Role: User, Content: "x"}}, Temperature: &temp})
+	if s.last["temperature"] != 0.2 {
+		t.Errorf("compatible: temperature %v", s.last["temperature"])
 	}
 }

@@ -10,7 +10,7 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
-## Unreleased
+## v0.1.122 (2026-10-19)
 
 - llm: the current models work end to end.
   - Anthropic structured output (`Generate`) uses `output_config.format`

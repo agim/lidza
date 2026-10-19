@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"strings"
 )
 
@@ -13,7 +14,7 @@ import (
 // generationConfig.responseSchema; function calls carry no ids but a
 // thought signature (Gemini 3), which goes back with the call.
 // embedDims, when set, asks the embedding model for that many
-// dimensions (the default model, kept at 768).
+// dimensions (the default model, kept at 768), normalised here.
 type google struct {
 	key, base, model, embedModel string
 	embedDims                    int
@@ -224,6 +225,11 @@ func (p *google) embed(ctx context.Context, model string, texts []string) (embed
 	vectors := make([][]float32, len(out.Embeddings))
 	for i, e := range out.Embeddings {
 		vectors[i] = e.Values
+		if dims > 0 {
+			// The API normalises only full-size vectors: a shortened one is
+			// scaled back to unit length, so dot product and cosine agree.
+			normalize(vectors[i])
+		}
 	}
 	return embedResult{vectors: vectors, model: model}, nil
 }
@@ -269,4 +275,19 @@ func googleSchema(s map[string]any) map[string]any {
 		}
 	}
 	return out
+}
+
+// normalize scales v to unit length in place.
+func normalize(v []float32) {
+	var sum float64
+	for _, x := range v {
+		sum += float64(x) * float64(x)
+	}
+	if sum == 0 {
+		return
+	}
+	n := float32(math.Sqrt(sum))
+	for i := range v {
+		v[i] /= n
+	}
 }

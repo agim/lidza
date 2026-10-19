@@ -137,8 +137,10 @@ type Request struct {
 	Model     string `json:"model,omitempty"`
 	MaxTokens int    `json:"maxTokens,omitempty"`
 	// Temperature, when set, replaces the provider's default. Models
-	// that take no sampling settings (Anthropic's from Claude Opus 4.7
-	// and Sonnet 5 on, OpenAI's reasoning models) are sent none.
+	// that refuse sampling settings are sent none: Anthropic's from
+	// Claude Opus 4.7 and Sonnet 5 on, and OpenAI's reasoning models
+	// (GPT-5, GPT-6, the o-series), which take one only with reasoning
+	// turned off.
 	Temperature *float64 `json:"temperature,omitempty"`
 	// Label names the feature making the call ("note.tags") for the usage
 	// report (llm_usage, with the db pack).

@@ -52,8 +52,19 @@ func (p *anthropic) Chat(ctx context.Context, req Request, stream func(string) e
 		}
 	}
 	body := map[string]any{"model": or(req.Model, p.model), "max_tokens": req.MaxTokens, "messages": msgs}
-	if req.System != "" {
-		body["system"] = req.System
+	system := req.System
+	if req.Schema != nil {
+		if schema, ok := anthropicSchema(req.Schema); ok {
+			body["output_config"] = map[string]any{"format": map[string]any{"type": "json_schema", "schema": schema}}
+		} else {
+			// A map has no closed schema, which structured outputs need:
+			// the schema goes in the prompt and Generate checks the reply.
+			doc, _ := json.Marshal(req.Schema)
+			system = strings.TrimSpace(system + "\n\nAnswer with only a JSON document matching this JSON Schema, and nothing else:\n" + string(doc))
+		}
+	}
+	if system != "" {
+		body["system"] = system
 	}
 	if req.Temperature != nil && anthropicSamples(or(req.Model, p.model)) {
 		body["temperature"] = *req.Temperature
@@ -61,9 +72,6 @@ func (p *anthropic) Chat(ctx context.Context, req Request, stream func(string) e
 	var tools []map[string]any
 	for _, t := range req.Tools {
 		tools = append(tools, map[string]any{"name": t.Name, "description": t.Description, "input_schema": t.Schema})
-	}
-	if req.Schema != nil {
-		body["output_config"] = map[string]any{"format": map[string]any{"type": "json_schema", "schema": anthropicSchema(req.Schema)}}
 	}
 	if len(tools) > 0 {
 		body["tools"] = tools
@@ -248,10 +256,18 @@ func anthropicSamples(model string) bool {
 }
 
 // anthropicSchema fits a JSON Schema to structured outputs: every object
-// closed (additionalProperties false, so a Go map comes back empty), no
-// numeric, length or count limits and only the formats the API knows.
-// Generate still checks the reply against the type's own rules.
-func anthropicSchema(s map[string]any) map[string]any {
+// closed (additionalProperties false), no numeric, length or count
+// limits and only the formats the API knows. Generate still checks the
+// reply against the type's own rules. ok is false for a schema with a
+// map (an object open to any key), which structured outputs cannot
+// express.
+func anthropicSchema(s map[string]any) (out map[string]any, ok bool) {
+	ok = true
+	out = fitSchema(s, &ok)
+	return out, ok
+}
+
+func fitSchema(s map[string]any, fits *bool) map[string]any {
 	out := map[string]any{}
 	for k, v := range s {
 		switch k {
@@ -268,7 +284,7 @@ func anthropicSchema(s map[string]any) map[string]any {
 				sub := map[string]any{}
 				for name, prop := range m {
 					if pm, ok := prop.(map[string]any); ok {
-						sub[name] = anthropicSchema(pm)
+						sub[name] = fitSchema(pm, fits)
 					} else {
 						sub[name] = prop
 					}
@@ -277,18 +293,22 @@ func anthropicSchema(s map[string]any) map[string]any {
 				continue
 			}
 			out[k] = v
-		case "items", "additionalProperties":
-			if m, ok := v.(map[string]any); ok {
-				out[k] = anthropicSchema(m)
+		case "items":
+			if m, isMap := v.(map[string]any); isMap {
+				out[k] = fitSchema(m, fits)
 				continue
 			}
 			out[k] = v
+		case "additionalProperties":
+			if v != false {
+				*fits = false
+			}
 		case "anyOf", "allOf", "oneOf":
 			if list, ok := v.([]any); ok {
 				subs := make([]any, len(list))
 				for i, item := range list {
 					if m, ok := item.(map[string]any); ok {
-						subs[i] = anthropicSchema(m)
+						subs[i] = fitSchema(m, fits)
 					} else {
 						subs[i] = item
 					}

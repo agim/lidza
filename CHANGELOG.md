@@ -10,6 +10,17 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
+## Unreleased
+
+- llm: Google embeddings from the default model (`gemini-embedding-001`
+  at 768 dimensions) are scaled to unit length: the API normalises only
+  full-size vectors, and an unnormalised one skews dot-product and L2
+  search.
+- llm: on Anthropic, `Generate` with a type that holds a map (an object
+  open to any key, which structured outputs cannot express) puts the
+  schema in the system prompt instead of `output_config`; the reply is
+  checked as before. It came back with the map empty.
+
 ## v0.1.122 (2026-10-19)
 
 - llm: the current models work end to end.

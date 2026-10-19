@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -279,11 +280,15 @@ func TestGoogleWire(t *testing.T) {
 		if len(reqs) != 2 || reqs[0].(map[string]any)["outputDimensionality"] != float64(768) {
 			return 400, "application/json", `{"error":"bad embed request"}`
 		}
-		return 200, "application/json", `{"embeddings":[{"values":[0.1,0.2]},{"values":[0.5]}]}`
+		return 200, "application/json", `{"embeddings":[{"values":[0.3,0.4]},{"values":[0.5]}]}`
 	}
 	vectors, err := l.Embed(ctx, []string{"a", "b"})
-	if err != nil || len(vectors) != 2 || vectors[1][0] != 0.5 || !strings.HasSuffix(s.path, "gemini-embedding-001:batchEmbedContents") {
+	if err != nil || len(vectors) != 2 || !strings.HasSuffix(s.path, "gemini-embedding-001:batchEmbedContents") {
 		t.Fatalf("embed: %v %v %s", vectors, err, s.path)
+	}
+	// Shortened vectors come back at unit length.
+	if v := vectors[0]; math.Abs(float64(v[0])-0.6) > 1e-6 || math.Abs(float64(v[1])-0.8) > 1e-6 || vectors[1][0] != 1 {
+		t.Errorf("not normalised: %v", vectors)
 	}
 
 	// A safety stop is a refusal.
@@ -507,7 +512,11 @@ func TestAnthropicSchema(t *testing.T) {
 		"blob":  map[string]any{"type": "string", "contentEncoding": "base64"},
 		"tags":  map[string]any{"type": "array", "maxItems": 5, "items": map[string]any{"type": "object", "properties": map[string]any{"n": map[string]any{"type": "integer", "minimum": 0}}}},
 	}, "required": []any{"name"}}
-	got := js(anthropicSchema(in))
+	fitted, ok := anthropicSchema(in)
+	got := js(fitted)
+	if !ok {
+		t.Error("a closed schema reported as not fitting")
+	}
 	want := `{"additionalProperties":false,"properties":{"blob":{"type":"string"},"name":{"format":"email","type":"string"},"price":{"type":"string"},"tags":{"items":{"additionalProperties":false,"properties":{"n":{"type":"integer"}},"type":"object"},"type":"array"}},"required":["name"],"type":"object"}`
 	if got != want {
 		t.Errorf("got  %s\nwant %s", got, want)
@@ -546,5 +555,29 @@ func TestOpenAIRefusalAndTemperature(t *testing.T) {
 	c.Chat(ctx, Request{Messages: []Message{{Role: User, Content: "x"}}, Temperature: &temp})
 	if s.last["temperature"] != 0.2 {
 		t.Errorf("compatible: temperature %v", s.last["temperature"])
+	}
+}
+
+// A type with a map has no closed schema: Anthropic gets the schema in
+// the system prompt instead of output_config, and Generate checks the
+// reply.
+func TestAnthropicMapSchema(t *testing.T) {
+	type counts struct {
+		ByTag map[string]int `json:"byTag"`
+	}
+	s := newStub(t)
+	s.reply = func(req map[string]any) (int, string, string) {
+		if req["output_config"] != nil {
+			return 400, "application/json", `{"error":"additionalProperties must be false"}`
+		}
+		if sys, _ := req["system"].(string); !strings.HasPrefix(sys, "Count tags.") || !strings.Contains(sys, `"byTag"`) {
+			return 400, "application/json", `{"error":"no schema in the prompt"}`
+		}
+		return 200, "application/json", `{"model":"m","stop_reason":"end_turn","content":[{"type":"text","text":"{\"byTag\":{\"go\":2}}"}],"usage":{}}`
+	}
+	l, _ := New(Config{Provider: "anthropic", APIKey: "k", BaseURL: s.srv.URL})
+	got, err := Generate[counts](context.Background(), l, Request{System: "Count tags.", Messages: []Message{{Role: User, Content: "go go"}}})
+	if err != nil || got.ByTag["go"] != 2 {
+		t.Fatalf("%+v %v", got, err)
 	}
 }

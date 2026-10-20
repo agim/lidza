@@ -112,3 +112,25 @@ body { background: var(--tblr-body-bg); color: var(--tblr-body-color); }
 .card-header { flex-wrap: wrap; row-gap: .5rem; }
 .card-header > .d-flex, .card-header > .d-flex > div { min-width: 0; }
 .card-header .text-secondary { overflow-wrap: anywhere; }
+
+/* Below 768 px a table (admin.js marks it admin-stack and labels its
+   cells) shows each row as a block: the first cell as its heading, the
+   others as label and value. No sideways scrolling, no column squeezed
+   until its values break mid-word: a word breaks only when it cannot fit
+   on a line of its own; a long key or path (monospace) wraps anywhere.
+   The cell rules name tbody and tr to outrank Tabler's card-table
+   padding. */
+@media (max-width: 767.98px) {
+  .table.admin-stack thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .table.admin-stack, .table.admin-stack tbody, .table.admin-stack tr, .table.admin-stack td { display: block; width: 100%; }
+  .table.admin-stack tbody tr { border-bottom: 1px solid var(--tblr-border-color); padding: .5rem 0; }
+  .table.admin-stack tbody tr:last-child { border-bottom: 0; }
+  .table.admin-stack tbody tr > td { position: relative; border: 0; padding: .25rem 1rem .25rem calc(38% + 1rem); text-align: left !important; white-space: normal; overflow-wrap: break-word; min-height: 1.75rem; }
+  .table.admin-stack tbody tr > td::before { content: attr(data-label); position: absolute; left: 1rem; width: calc(38% - 1rem); color: var(--tblr-secondary); font-weight: 500; white-space: normal; }
+  .table.admin-stack tbody tr > td:first-child, .table.admin-stack tbody tr > td[data-label=""], .table.admin-stack tbody tr > td:not([data-label]), .table.admin-stack tbody tr > td.admin-actions { padding-left: 1rem; }
+  .table.admin-stack tbody tr > td:first-child::before, .table.admin-stack tbody tr > td[data-label=""]::before, .table.admin-stack tbody tr > td:not([data-label])::before, .table.admin-stack tbody tr > td.admin-actions::before { content: none; }
+  .table.admin-stack tbody tr > td:first-child { font-weight: 500; padding-bottom: .5rem; }
+  .table.admin-stack td .font-monospace, .table.admin-stack td .admin-truncate, .table.admin-stack td .text-truncate { white-space: normal; overflow-wrap: anywhere; }
+  .table.admin-stack td .admin-truncate { max-width: 100%; }
+  .table.admin-stack tbody tr > td.admin-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+}

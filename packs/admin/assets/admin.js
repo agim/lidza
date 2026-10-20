@@ -38,6 +38,22 @@
       })
     })
 
+    // Tables stack on a phone (admin.css): each cell is labelled with its
+    // column's heading. The pack's tables and an app's own alike; a table
+    // with data-no-stack stays a grid.
+    all('table.table').forEach(function (table) {
+      if (table.hasAttribute('data-no-stack') || !table.tHead) return
+      var heads = all('th', table.tHead.rows[0]).map(function (th) { return th.textContent.trim() })
+      all('tbody tr', table).forEach(function (row) {
+        var col = 0
+        Array.prototype.forEach.call(row.cells, function (cell) {
+          if (!cell.hasAttribute('data-label') && cell.colSpan === 1) cell.setAttribute('data-label', heads[col] || '')
+          col += cell.colSpan
+        })
+      })
+      table.classList.add('admin-stack')
+    })
+
     // Keep the active item visible in long menus without scrolling the page.
     var nav = document.getElementById('admin-nav')
     function revealActive() {

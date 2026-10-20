@@ -278,6 +278,16 @@ func TestEmbedSettings(t *testing.T) {
 	if strings.Contains(body, "sk-embed") || !regexp.MustCompile(`<div class="mb-3" data-for="openai,google,compatible">`).MatchString(body) || !strings.Contains(body, `name="EMBED_PROVIDER" value="openai" class="form-selectgroup-input" checked`) {
 		t.Error("the key should show as stored, never its value, with openai chosen")
 	}
+	// A field the provider hides is not saved: a password manager fills
+	// the hidden address with the operator's email.
+	post(url.Values{"section": {"embed"}, "EMBED_PROVIDER": {"openai"}, "EMBED_BASE_URL": {"owner@example.com"}})
+	if vals := credentials.Values(dir); vals["EMBED_BASE_URL"] != "" {
+		t.Fatalf("hidden address saved: %q", vals["EMBED_BASE_URL"])
+	}
+	// Where it shows, an address is an http(s) URL.
+	if loc := post(url.Values{"section": {"embed"}, "EMBED_PROVIDER": {"compatible"}, "EMBED_BASE_URL": {"owner@example.com"}}); !strings.Contains(loc, "not+an+http") {
+		t.Fatalf("a non-URL address accepted: %s", loc)
+	}
 	// Off: Embed says so, chat is untouched.
 	post(url.Values{"section": {"embed"}, "EMBED_PROVIDER": {"none"}})
 	if _, err := l.Embed(context.Background(), []string{"x"}); !errors.Is(err, llm.ErrNoEmbeddings) || l.Provider() != "anthropic" {

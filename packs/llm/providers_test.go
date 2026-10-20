@@ -581,3 +581,25 @@ func TestAnthropicMapSchema(t *testing.T) {
 		t.Fatalf("%+v %v", got, err)
 	}
 }
+
+// A base URL that is no address (an email autofilled into a hidden
+// admin field) is ignored for a hosted provider and refused for a
+// server the app runs itself.
+func TestBaseURLMustBeAnAddress(t *testing.T) {
+	s := newStub(t)
+	s.reply = func(map[string]any) (int, string, string) {
+		return 200, "application/json", `{"model":"m","stop_reason":"end_turn","content":[{"type":"text","text":"ok"}],"usage":{}}`
+	}
+	p, err := newProvider(Config{Provider: "anthropic", APIKey: "k", BaseURL: "owner@example.com"}, chatSettings)
+	if err != nil || p.(*anthropic).base != "https://api.anthropic.com" {
+		t.Fatalf("hosted: %v %+v", err, p)
+	}
+	if p, _ := newProvider(Config{Provider: "anthropic", APIKey: "k", BaseURL: s.srv.URL}, chatSettings); p.(*anthropic).base != s.srv.URL {
+		t.Fatal("a proxy address is kept")
+	}
+	for _, provider := range []string{"compatible", "ollama"} {
+		if _, err := newProvider(Config{Provider: provider, BaseURL: "owner@example.com"}, chatSettings); err == nil || !strings.Contains(err.Error(), "LLM_BASE_URL") {
+			t.Errorf("%s: %v", provider, err)
+		}
+	}
+}

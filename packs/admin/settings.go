@@ -4,6 +4,7 @@ import (
 	"context"
 	"maps"
 	"net/http"
+	"net/url"
 	"slices"
 	"strings"
 
@@ -50,9 +51,9 @@ type Field struct {
 	// Name is the environment name (MAIL_API_KEY).
 	Name  string
 	Label string
-	// Kind is "text", "number", "secret" (never shown again once saved),
-	// "select" (one of Options) or "multi" (any of Options, saved
-	// comma-separated).
+	// Kind is "text", "number", "url" (an http or https address),
+	// "secret" (never shown again once saved), "select" (one of Options)
+	// or "multi" (any of Options, saved comma-separated).
 	Kind    string
 	Options []string
 	// Labels name options for people ("Cloudflare R2" for r2).
@@ -139,7 +140,7 @@ func builtinSections() []Section {
 					Labels: map[string]string{"us": "United States", "eu": "European Union"}, Help: "Where the account's data lives."},
 				{Name: "MAIL_SMTP_URL", Label: "SMTP URL", Kind: "secret", For: []string{"smtp"}, Advanced: true, Placeholder: "smtp://user:pass@host:587", //nolint:gosec // G101: a placeholder, not a credential
 					Help: "The server in one URL, instead of the fields above; it wins when set."},
-				{Name: "MAIL_BASE_URL", Label: "API address", Kind: "text", For: []string{"mailgun", "sendgrid", "postmark", "resend"}, Advanced: true, Help: "Only for a proxy in front of the provider's API."},
+				{Name: "MAIL_BASE_URL", Label: "API address", Kind: "url", For: []string{"mailgun", "sendgrid", "postmark", "resend"}, Advanced: true, Help: "Only for a proxy in front of the provider's API."},
 			}},
 		{Key: "llm", Page: "llm", Title: "Model provider", Icon: "sparkles", Selector: "LLM_PROVIDER",
 			Description: "The model behind the llm pack: chat, structured output, tools, and embeddings unless Embeddings below names another provider.",
@@ -155,7 +156,7 @@ func builtinSections() []Section {
 				{Name: "LLM_PROVIDER", Label: "Provider", Kind: "select", Options: []string{"anthropic", "openai", "google", "compatible", "ollama", "fake"}, Dev: []string{"fake"}, Default: "fake",
 					Labels: map[string]string{"anthropic": "Anthropic", "openai": "OpenAI", "google": "Google Gemini", "compatible": "Custom server", "ollama": "Ollama", "fake": "Fake"},
 					Help:   "Custom server is any server speaking the OpenAI API: llama.cpp's llama-server, vLLM, LM Studio. Fake answers with scripted replies, for tests."},
-				{Name: "LLM_BASE_URL", Label: "Server address", Kind: "text", For: []string{"compatible", "ollama"},
+				{Name: "LLM_BASE_URL", Label: "Server address", Kind: "url", For: []string{"compatible", "ollama"},
 					Placeholders: map[string]string{"compatible": "http://127.0.0.1:8080", "ollama": "http://127.0.0.1:11434"}, Help: "Where the server listens; /v1 may be left off."},
 				{Name: "LLM_API_KEY", Label: "API key", Kind: "secret", For: []string{"anthropic", "openai", "google", "compatible"},
 					Placeholders: map[string]string{"anthropic": "sk-ant-…", "openai": "sk-…", "google": "AIza…", "compatible": "only if the server asks for one"}},
@@ -172,7 +173,7 @@ func builtinSections() []Section {
 				{Name: "EMBED_PROVIDER", Label: "Provider", Kind: "select", Options: []string{"", "none", "openai", "google", "ollama", "compatible"},
 					Labels: map[string]string{"": "Same as chat", "none": "Off", "openai": "OpenAI", "google": "Google Gemini", "ollama": "Ollama", "compatible": "Custom server"},
 					Help:   "Same as chat embeds with the model provider above and its key. Off makes Embed return llm.ErrNoEmbeddings."},
-				{Name: "EMBED_BASE_URL", Label: "Server address", Kind: "text", For: []string{"compatible", "ollama"},
+				{Name: "EMBED_BASE_URL", Label: "Server address", Kind: "url", For: []string{"compatible", "ollama"},
 					Placeholders: map[string]string{"compatible": "http://127.0.0.1:8080", "ollama": "http://127.0.0.1:11434"}, Help: "Where the server listens; /v1 may be left off."},
 				{Name: "EMBED_API_KEY", Label: "API key", Kind: "secret", For: []string{"openai", "google", "compatible"},
 					Placeholders: map[string]string{"openai": "sk-…", "google": "AIza…", "compatible": "only if the server asks for one"}},
@@ -202,7 +203,7 @@ func builtinSections() []Section {
 				{Name: "STORAGE_BUCKET", Label: "Bucket", Kind: "text", For: []string{"s3", "r2", "spaces", "b2", "gcs", "minio"}},
 				{Name: "STORAGE_ACCESS_KEY", Label: "Access key ID", Kind: "text", For: []string{"s3", "r2", "spaces", "b2", "gcs", "minio"}},
 				{Name: "STORAGE_SECRET_KEY", Label: "Secret access key", Kind: "secret", For: []string{"s3", "r2", "spaces", "b2", "gcs", "minio"}},
-				{Name: "STORAGE_PUBLIC_URL", Label: "Public URL", Kind: "text", For: []string{"s3", "r2", "spaces", "b2", "gcs", "minio"}, Advanced: true,
+				{Name: "STORAGE_PUBLIC_URL", Label: "Public URL", Kind: "url", For: []string{"s3", "r2", "spaces", "b2", "gcs", "minio"}, Advanced: true,
 					Help: "A CDN or public bucket address for public files; leave empty to keep files private."},
 				{Name: "STORAGE_PREFIX", Label: "Folder", Kind: "text", For: []string{"s3", "r2", "spaces", "b2", "gcs", "minio"}, Advanced: true,
 					Help: "A folder every file goes under, for a bucket several apps share (for example the app's name)."},
@@ -586,8 +587,21 @@ func (h *Handler) saveSettings(w http.ResponseWriter, r *http.Request) {
 		}
 		return store.Save(ctx, name, value)
 	}
+	// The selector's value as submitted: a field it hides is not saved,
+	// whatever the browser sent (a password manager fills a hidden
+	// address field with the operator's email).
+	selected, sent := r.Form[sec.Selector]
+	if !sent && r.Form.Get("present_"+sec.Selector) == "" {
+		value := current[sec.Selector]
+		for _, f := range sec.Fields {
+			if f.Name == sec.Selector && value == "" {
+				value = f.Default
+			}
+		}
+		selected = strings.Split(value, ",")
+	}
 	for _, f := range sec.Fields {
-		if origins[f.Name] == env.OriginProcess {
+		if origins[f.Name] == env.OriginProcess || !appliesTo(f, selected) {
 			continue
 		}
 		var err error
@@ -628,6 +642,9 @@ func (h *Handler) saveSettings(w http.ResponseWriter, r *http.Request) {
 			case f.Kind == "number" && v != "" && !isNumber(v):
 				h.redirect(w, r, back, "", f.Label+": "+v+" is not a number")
 				return
+			case f.Kind == "url" && v != "" && !isHTTPURL(v):
+				h.redirect(w, r, back, "", f.Label+": "+v+" is not an http:// or https:// address")
+				return
 			case v == current[f.Name]:
 			case v == "" && f.Kind == "secret":
 				// An empty secret keeps the stored one.
@@ -663,6 +680,28 @@ func (h *Handler) saveSettings(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	h.redirect(w, r, back, sec.Title+" saved and applied", "")
+}
+
+// appliesTo reports whether the selector's values show f: a field
+// without For always applies.
+func appliesTo(f Field, selected []string) bool {
+	if len(f.For) == 0 {
+		return true
+	}
+	if len(selected) == 0 {
+		selected = []string{""}
+	}
+	for _, v := range selected {
+		if slices.Contains(f.For, strings.TrimSpace(v)) {
+			return true
+		}
+	}
+	return false
+}
+
+func isHTTPURL(s string) bool {
+	u, err := url.Parse(s)
+	return err == nil && (u.Scheme == "http" || u.Scheme == "https") && u.Host != ""
 }
 
 func isNumber(s string) bool {

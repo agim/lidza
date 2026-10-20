@@ -17,6 +17,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	"log/slog"
+	"net/url"
 	"slices"
 	"strings"
 	"sync"
@@ -739,6 +740,9 @@ func newProvider(cfg Config, names settingNames) (Provider, error) {
 		}
 		return nil
 	}
+	if (cfg.Provider == "compatible" || cfg.Provider == "ollama") && cfg.BaseURL != "" && !isHTTP(cfg.BaseURL) {
+		return nil, fmt.Errorf("llm: %s %s %q is not an http(s) address", names.what, names.base, cfg.BaseURL)
+	}
 	switch cfg.Provider {
 	case "fake":
 		return NewFake(), nil
@@ -748,12 +752,12 @@ func newProvider(cfg Config, names settingNames) (Provider, error) {
 		if err := need(); err != nil {
 			return nil, err
 		}
-		return &anthropic{key: cfg.APIKey, base: or(cfg.BaseURL, "https://api.anthropic.com"), model: or(cfg.Model, DefaultModels["anthropic"])}, nil
+		return &anthropic{key: cfg.APIKey, base: hostedBase("anthropic", names.base, cfg.BaseURL, "https://api.anthropic.com"), model: or(cfg.Model, DefaultModels["anthropic"])}, nil
 	case "openai":
 		if err := need(); err != nil {
 			return nil, err
 		}
-		return &openai{key: cfg.APIKey, base: or(cfg.BaseURL, "https://api.openai.com"), model: or(cfg.Model, DefaultModels["openai"]), embedModel: or(cfg.EmbedModel, DefaultEmbedModels["openai"])}, nil
+		return &openai{key: cfg.APIKey, base: hostedBase("openai", names.base, cfg.BaseURL, "https://api.openai.com"), model: or(cfg.Model, DefaultModels["openai"]), embedModel: or(cfg.EmbedModel, DefaultEmbedModels["openai"])}, nil
 	case "compatible":
 		if cfg.BaseURL == "" {
 			return nil, fmt.Errorf("llm: %s compatible needs %s, the server's address (http://127.0.0.1:8080 for llama-server)", names.what, names.base)
@@ -765,13 +769,33 @@ func newProvider(cfg Config, names settingNames) (Provider, error) {
 		if err := need(); err != nil {
 			return nil, err
 		}
-		g := &google{key: cfg.APIKey, base: or(cfg.BaseURL, "https://generativelanguage.googleapis.com"), model: or(cfg.Model, DefaultModels["google"]), embedModel: or(cfg.EmbedModel, DefaultEmbedModels["google"])}
+		g := &google{key: cfg.APIKey, base: hostedBase("google", names.base, cfg.BaseURL, "https://generativelanguage.googleapis.com"), model: or(cfg.Model, DefaultModels["google"]), embedModel: or(cfg.EmbedModel, DefaultEmbedModels["google"])}
 		if cfg.EmbedModel == "" {
 			g.embedDims = 768
 		}
 		return g, nil
 	}
 	return nil, fmt.Errorf("llm: unknown provider %q (one of %s)", cfg.Provider, strings.Join(Providers, ", "))
+}
+
+// hostedBase is a hosted provider's API base: the configured one (a
+// proxy, a region) when it is an http(s) address, else the provider's
+// own. A value that is no address (an email a password manager typed
+// into a hidden admin field) is ignored with a warning, not sent to.
+func hostedBase(provider, setting, configured, def string) string {
+	if configured == "" {
+		return def
+	}
+	if isHTTP(configured) {
+		return configured
+	}
+	slog.Warn("llm: ignoring "+setting+": not an http(s) address", "provider", provider, "value", configured)
+	return def
+}
+
+func isHTTP(s string) bool {
+	u, err := url.Parse(s)
+	return err == nil && (u.Scheme == "http" || u.Scheme == "https") && u.Host != ""
 }
 
 func or(a, b string) string {

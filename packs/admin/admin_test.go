@@ -105,7 +105,7 @@ func TestGateAndPages(t *testing.T) {
 		}
 		return res.Header.Get("Location")
 	}
-	if loc := post(url.Values{"section": {"llm"}, "LLM_API_KEY": {"sk-new"}, "LLM_MODEL": {"m2"}}); !strings.Contains(loc, "saved") {
+	if loc := post(url.Values{"section": {"llm"}, "LLM_PROVIDER": {"compatible"}, "LLM_BASE_URL": {"http://127.0.0.1:8080"}, "LLM_API_KEY": {"sk-new"}, "LLM_MODEL": {"m2"}}); !strings.Contains(loc, "saved") {
 		t.Fatalf("save: %s", loc)
 	}
 	vals, err := credentials.Read(dir)

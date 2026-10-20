@@ -13,12 +13,15 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/agim/lidza"
+	"github.com/agim/lidza/packs/db"
 	"github.com/agim/lidza/pkg/config"
 	"github.com/agim/lidza/pkg/devserver"
+	"github.com/agim/lidza/pkg/env"
 )
 
 // Server is a running app under test.
@@ -58,13 +61,20 @@ func WithTransport(rt http.RoundTripper) StartOption {
 
 // Start boots app with LIDZA_MODE=test from the project root (found by
 // walking up to lidza.json, so tests in sub-packages work) and serves it.
-// Everything stops when the test ends.
+// Each test package gets a database of its own, a copy of the test
+// database (see EnvSharedDatabase), so go test runs packages in parallel
+// without their rows colliding. Everything stops when the test ends.
 func Start(t testing.TB, app lidza.App, opts ...StartOption) *Server {
 	t.Helper()
-	if root := projectRoot(); root != "" {
+	pkgDir, _ := os.Getwd()
+	root := projectRoot()
+	if root != "" {
 		t.Chdir(root)
 	}
 	t.Setenv(devserver.EnvMode, "test")
+	if url := packageDatabase(t, root, pkgDir); url != "" {
+		t.Setenv("DATABASE_URL", url)
+	}
 	var o startOptions
 	for _, opt := range opts {
 		opt(&app, &o)
@@ -167,6 +177,52 @@ func (s *Server) JSON(t testing.TB, method, path string, body any, out any, opts
 		}
 	}
 	return res
+}
+
+// EnvSharedDatabase, set to 1, keeps every test package on the test
+// database itself (DATABASE_URL in .env.test) instead of a copy of its
+// own. A copy is made once per test package and run, from the test
+// database as lidza test migrated it, and only for a database named
+// *_test on this machine; lidza test drops the copies when it ends.
+const EnvSharedDatabase = "LIDZA_TEST_SHARED_DB"
+
+var pkgDB struct {
+	once sync.Once
+	url  string
+	err  error
+}
+
+// packageDatabase is this test package's copy of the test database, or
+// "" to use the test database itself (shared, no database, or a copy
+// that could not be made, said once).
+func packageDatabase(t testing.TB, root, pkgDir string) string {
+	pkgDB.once.Do(func() {
+		if os.Getenv(EnvSharedDatabase) == "1" || root == "" {
+			return
+		}
+		url := os.Getenv("DATABASE_URL")
+		if url == "" {
+			vals, err := env.Values(root)
+			if err != nil {
+				return
+			}
+			url = vals["DATABASE_URL"]
+		}
+		if url == "" {
+			return
+		}
+		key, err := filepath.Rel(root, pkgDir)
+		if err != nil {
+			key = filepath.Base(pkgDir)
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
+		pkgDB.url, pkgDB.err = db.CloneTestDatabase(ctx, url, filepath.ToSlash(key))
+		if pkgDB.err != nil {
+			t.Logf("lidzatest: this package shares the test database (%s=1 says so on purpose): %v", EnvSharedDatabase, pkgDB.err)
+		}
+	})
+	return pkgDB.url
 }
 
 // projectRoot walks up from the working directory to the lidza.json.

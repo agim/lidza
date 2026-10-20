@@ -10,6 +10,30 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
+## Unreleased
+
+- Each Go test package gets its own copy of the test database, so
+  `go test` runs an app's test packages in parallel without their rows
+  colliding: `lidzatest.Start` clones the migrated `.env.test` database
+  as `<app>_pkg_<package>_test` once per package and run (Postgres
+  `CREATE DATABASE ... TEMPLATE`, under a second), and `lidza test` drops
+  the copies at the end. Only a `*_test` database on this machine is
+  cloned; anything else, or `LIDZA_TEST_SHARED_DB=1`, keeps the shared
+  database. `lidza test -p N` caps the packages run at once (#71).
+- admin: tables stack on a phone, below 768 px: each row a block with
+  the first cell as its heading and the others as label and value,
+  labelled from the column headings by the pack's script, on the pack's
+  pages and an app's own alike. `data-no-stack` keeps a table a grid
+  (#67, #63).
+- admin: `Options.Version` shows the app's own version beside Līdza's in
+  the footer and on the Overview (#59).
+- admin: a setting hidden for the selected provider is not saved (a
+  password manager filled the hidden Server address with the operator's
+  email and Anthropic calls went to it), and address fields take only an
+  http(s) URL. The llm pack ignores, with a warning, a base URL for
+  Anthropic, OpenAI or Google that is no address, and refuses one for a
+  compatible server or Ollama (#62).
+
 ## v0.1.123 (2026-10-19)
 
 - llm: Google embeddings from the default model (`gemini-embedding-001`

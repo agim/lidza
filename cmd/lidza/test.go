@@ -31,6 +31,7 @@ func runTest(ctx context.Context, args []string) error {
 	install := fs.Bool("install", false, "with --e2e: install the browser when it is missing")
 	verbose := fs.Bool("v", false, "go test -v: every test by name as it runs")
 	runOnly := fs.String("run", "", "only the Go tests matching this regexp (go test -run)")
+	parallel := fs.Int("p", 0, "how many test packages run at once (go test -p); each has its own copy of the test database")
 	fresh := fs.Bool("fresh", false, "drop and recreate the test database first (a migration from another branch left in it)")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -41,6 +42,9 @@ func runTest(ctx context.Context, args []string) error {
 	}
 	if *verbose {
 		extra = append([]string{"-v"}, extra...)
+	}
+	if *parallel > 0 {
+		extra = append([]string{"-p", strconv.Itoa(*parallel)}, extra...)
 	}
 	abs, cfg, err := loadProject(*dir)
 	if err != nil {
@@ -71,6 +75,18 @@ func runTest(ctx context.Context, args []string) error {
 		}
 	}
 	return nil
+}
+
+// dropTestClones drops the test packages' copies of the test database
+// (lidzatest makes one per package) once go test is done.
+func dropTestClones(dir string) {
+	var cfg db.Config
+	if env.Load(dir, &cfg) != nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	db.DropTestClones(ctx, cfg.URL)
 }
 
 // freshTestDB is lidza test --fresh: the test database is recreated.

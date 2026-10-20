@@ -273,6 +273,7 @@ func goTest(ctx context.Context, dir string, cfg *config.Config, extra []string,
 				if err := prepareTestDB(ctx, dir); err != nil {
 					return err
 				}
+				defer dropTestClones(dir)
 			}
 		}
 	}

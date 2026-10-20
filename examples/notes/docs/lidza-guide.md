@@ -104,7 +104,7 @@ import package `main`. Preserve its tests and behavior during the move:
 | `lidza admin owner status\|rotate [--production]` | with `AUTH_OWNER_CLAIM=true`: whether the app waits for its owner and where the one-time token file is (never the token); `rotate` replaces an unclaimed token at once on every node. |
 | `lidza brief [--all] [--list]` | the kickoff interview in a terminal: the open questions of `docs/brief.md` one by one, each with suggestions to pick by number or your own answer; `--all` goes through every question, `--list` prints them. `lidza brief answer <id> "..."` records one; `lidza brief skip [id...]` skips questions for good (no ids: every open one), and `s` or `S` in the interview skips one or the rest. |
 | `lidza note add "..."` | a lasting fact about this app in the agent files' Team notes, shared through git. |
-| `lidza test [-v] [--run Regexp] [--fresh] [go test flags]` | creates and migrates the `.env.test` database (`--fresh` drops and recreates it first, after a migration from another branch), runs `go test ./...` with `LIDZA_MODE=test`, then the frontend check. Tests never see the master key or a variable named like one of the app's credentials: they run on `.env.test` and the test providers; a test that needs a key sets `LIDZA_MASTER_KEY` itself. |
+| `lidza test [-v] [--run Regexp] [-p N] [--fresh] [go test flags]` | creates and migrates the `.env.test` database (`--fresh` drops and recreates it first, after a migration from another branch), runs `go test ./...` with `LIDZA_MODE=test` (each test package on its own copy of that database, `-p` packages at once), then the frontend check. Tests never see the master key or a variable named like one of the app's credentials: they run on `.env.test` and the test providers; a test that needs a key sets `LIDZA_MASTER_KEY` itself. |
 | `lidza test --e2e [--install]` | builds the app, starts the binary with `.env.test`, runs the Playwright suite in `e2e/`; `--install` fetches the browser when missing. The sign-in and analytics rate limits are raised for the run (every account signs up from 127.0.0.1) unless `.env.test` sets them; the Go tests keep the real limits. Rows the suite needs that no page creates (data a sync job would fetch) go in `e2e/seed.sql`, loaded into the test database before each run; write it to be rerun (`ON CONFLICT DO NOTHING`). |
 | `lidza install [--packs db,auth,mail] [--agent claude]` | on an existing app: enables the packs (db added when one needs it), writes `.env` from `.env.example` with a random `AUTH_SECRET` and the app's database, writes `.env.test`, generates, creates and migrates the dev and test databases, installs `node_modules`, installs the agent CLI when asked, makes the first commit. On a clone or after a pull it adds to `.env` what packs enabled since need and applies new migrations; one that drops data (`-- review: data loss`) waits for `--migrate`. `lidza new --packs ...` runs it for a new app; `lidza setup` is its former name. Rerunning is safe. |
 | `lidza ship [--domains a.example.com] [--email ops@example.com] [--no-e2e]` | before a deploy: `lidza verify`, the browser suite against the built binary, the production build, `deploy/production.env`; stops at the first failure. Then it names the settings the enabled packs need in production that neither the credentials nor `deploy.env` hold, or hold with a development-only value (`CACHE_URL`, `APP_URL`, `LLM_PROVIDER=fake`). The app's production settings that are not secrets (`MAIL_PROVIDER`, `STORAGE_BUCKET`, `STORAGE_PREFIX`) go in `lidza.json` under `deploy.env`, which ship writes into `deploy/production.env` on every run; a name that looks like a secret there is refused. |
@@ -271,6 +271,17 @@ the rest.
 boots the app with its packs (`.env.test`, `LIDZA_MODE=test`) and
 `srv.JSON(t, method, path, body, &out, lidzatest.Bearer(token))` calls it.
 Run `lidza test`.
+
+Many tests run faster split by area into packages (`tests/billing/`,
+`tests/sites/`): `go test` runs packages in parallel, and a change reruns
+only the packages it touches. Each package gets its own copy of the test
+database (`<app>_pkg_tests_billing_test`, cloned from the migrated
+`.env.test` database when its first test starts), so their rows never
+collide; `lidza test` drops the copies at the end, and `lidza test -p 4`
+caps how many packages run at once. Tests inside one package share their
+copy and run one after another (`lidzatest.Start` sets the working
+directory and environment, which a `t.Parallel` test cannot).
+`LIDZA_TEST_SHARED_DB=1` keeps every package on the one database.
 
 Time and outbound HTTP are testable when handlers use `lidza.Now(ctx)`
 instead of `time.Now()` and `lidza.HTTPClient(ctx)` instead of

@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -587,5 +588,20 @@ func TestWebhooksPage(t *testing.T) {
 	pool.QueryRow(ctx, `SELECT count(*) FROM hook_delivery WHERE status = 'pending'`).Scan(&pending)
 	if pending != 1 {
 		t.Errorf("%d pending deliveries after replay", pending)
+	}
+}
+
+// Options.Version shows the app's own version beside Līdza's.
+func TestAppVersion(t *testing.T) {
+	dir := t.TempDir()
+	s := lidza.NewServices()
+	srv := serve(t, Options{Auth: noAuth, Allow: func(context.Context) bool { return true }, Title: "shop", Version: "v2.3.1", CredentialsDir: dir, Dir: dir}, s)
+	_, body := get(t, srv, "/admin/")
+	if !strings.Contains(body, "shop v2.3.1 · Līdza ") || !regexp.MustCompile(`datagrid-title">App</div><div class="datagrid-content">v2.3.1<`).MatchString(body) {
+		t.Errorf("app version missing:\n%s", body)
+	}
+	bare := serve(t, Options{Auth: noAuth, Allow: func(context.Context) bool { return true }, Title: "shop", CredentialsDir: dir, Dir: dir}, s)
+	if _, body := get(t, bare, "/admin/"); !strings.Contains(body, "shop · Līdza ") || strings.Contains(body, `datagrid-title">App<`) {
+		t.Error("an unset version should leave Līdza's alone")
 	}
 }

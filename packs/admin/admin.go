@@ -57,6 +57,10 @@ type Options struct {
 	// Title heads every page; the app's name is a good one. "Admin" by
 	// default.
 	Title string
+	// Version is the app's own version ("v1.4.0", a build id), shown
+	// beside Līdza's in the footer and on the Overview; empty shows
+	// Līdza's alone.
+	Version string
 	// Auth protects the pages; auth.Require() by default. Tests pass a
 	// no-op.
 	Auth middleware.Middleware
@@ -305,14 +309,16 @@ func (h *Handler) theme(w http.ResponseWriter, r *http.Request) {
 
 // page is what every template receives.
 type page struct {
-	Title    string
-	App      string
-	Path     string
-	Version  string
-	Active   string
-	Sections []navGroup
-	Flash    string
-	Error    string
+	Title   string
+	App     string
+	Path    string
+	Version string
+	// AppVersion is Options.Version.
+	AppVersion string
+	Active     string
+	Sections   []navGroup
+	Flash      string
+	Error      string
 	// Problem is an app page's Data error, shown instead of its content.
 	Problem string
 	Tabs    []tab
@@ -575,7 +581,7 @@ func (h *Handler) renderStatus(w http.ResponseWriter, r *http.Request, status in
 // the frame: the pack's own file, or an app page's.
 func (h *Handler) renderWith(w http.ResponseWriter, r *http.Request, status int, name, active string, data any, addContent func(*template.Template) (*template.Template, error)) {
 	ctx := r.Context()
-	p := page{Title: h.opt.Title, App: h.opt.Title, Path: h.path, Version: version.String(), Active: active, Data: data,
+	p := page{Title: h.opt.Title, App: h.opt.Title, Path: h.path, Version: version.String(), AppVersion: h.opt.Version, Active: active, Data: data,
 		Flash: r.URL.Query().Get("saved"), Error: r.URL.Query().Get("error"), Back: viewQuery("?" + r.URL.RawQuery)}
 	if d, ok := data.(appPageData); ok {
 		p.Data = d.Data

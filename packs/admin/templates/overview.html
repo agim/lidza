@@ -138,6 +138,7 @@
           <div class="datagrid-item"><div class="datagrid-title">Public URL</div><div class="datagrid-content font-monospace small">{{or $d.AppURL "not set"}}</div></div>
           <div class="datagrid-item"><div class="datagrid-title">TLS domains</div><div class="datagrid-content font-monospace small">{{or $d.TLSDomains "not set (behind a proxy)"}}</div></div>
           <div class="datagrid-item"><div class="datagrid-title">Credentials</div><div class="datagrid-content">{{$d.Credentials}} sealed, in the {{$d.Store}}{{if not $d.HasKey}} <span class="badge bg-yellow-lt">no master key</span>{{end}}</div></div>
+          {{with .AppVersion}}<div class="datagrid-item"><div class="datagrid-title">App</div><div class="datagrid-content">{{.}}</div></div>{{end}}
           <div class="datagrid-item"><div class="datagrid-title">Framework</div><div class="datagrid-content">Līdza {{.Version}}</div></div>
           <div class="datagrid-item"><div class="datagrid-title">Packs</div><div class="datagrid-content">{{range $d.Packs}}<span class="badge bg-secondary-lt me-1 mb-1">{{.}}</span>{{end}}</div></div>
         </div>

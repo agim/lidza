@@ -10,7 +10,7 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
-## Unreleased
+## v0.1.125 (2026-10-21)
 
 - Build with Go1.27.3 to fix GO-2026-6809 in certificate verification;
   release and application builds must use this patched toolchain or newer.

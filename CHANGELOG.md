@@ -10,6 +10,15 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
+## Unreleased
+
+- Add explicit verified gateway transport (`pkg/gateway`): authenticated TLS1.3
+  hops, authorized peer keys and authority, request-bound bounded metadata,
+  shared atomic replay protection and native TLS-edge integration. Evidence
+  stays separate from direct request TLS; forwarded headers alone are not proof.
+  `App.PrivateTLS` supports a dedicated mTLS backend without plaintext fallback.
+  See docs/gateway-transport.md for the opt-in contract and trust boundaries.
+
 ## v0.1.124 (2026-10-21)
 
 - Each Go test package gets its own copy of the test database, so

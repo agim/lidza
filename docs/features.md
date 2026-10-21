@@ -116,3 +116,8 @@ Query. Apps that need per-user HTML before JavaScript runs set
 `LIDZA_SSR=1`: the binary runs the Node sidecar from `dist/.server` and
 falls back to the static page whenever it cannot render. Those
 deployments need Node beside the binary.
+
+Verified gateway transport: `pkg/gateway` and `App.PrivateTLS` provide explicit
+authenticated protected hops for TLS-requiring protocols; see
+[gateway transport](gateway-transport.md). Backend TLS and forwarded headers
+alone do not establish original-client transport.

@@ -5,6 +5,7 @@ package lidza
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -118,6 +119,18 @@ type App struct {
 	// (the frontend, /api) to the app's own domains. Behind a terminator
 	// that issues certificates itself, TLSAllowPath asks it the same way.
 	TLSHosts func(ctx context.Context, host string) error
+
+	// PrivateTLS serves the normal LIDZA_ADDR listener using explicit TLS1.3
+	// and required verified client certificates (for a trusted gateway). Build
+	// it with gateway.ServerTLS. It is mutually exclusive with ACME TLS and
+	// opens no plaintext fallback. Gateway evidence still needs route middleware;
+	// a backend TLS handshake alone does not prove original-client transport.
+	PrivateTLS *tls.Config
+	// PrivateTLSAddr optionally opens PrivateTLS on a second listener instead of
+	// LIDZA_ADDR, retaining the ordinary listener for internal HTTP services.
+	// Sensitive routes must enforce gateway.Verify on both listeners; the
+	// ordinary listener never acquires verified gateway evidence implicitly.
+	PrivateTLSAddr string
 
 	// ReadyTimeout bounds the checks behind /readyz; default 3s.
 	ReadyTimeout time.Duration
@@ -288,9 +301,21 @@ func Serve(ctx context.Context, app App) error {
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	if app.PrivateTLSAddr != "" && app.PrivateTLS == nil {
+		return errors.New("PrivateTLSAddr requires PrivateTLS")
+	}
 	tlsCfg, err := tlsFromEnv()
 	if err != nil {
 		return err
+	}
+	if app.PrivateTLS != nil {
+		if tlsCfg != nil {
+			return errors.New("PrivateTLS and ACME TLS cannot both be enabled")
+		}
+		c := app.PrivateTLS
+		if (c.MaxVersion != 0 && c.MaxVersion < tls.VersionTLS13) || c.MinVersion < tls.VersionTLS13 || c.ClientAuth != tls.RequireAndVerifyClientCert || c.ClientCAs == nil || len(c.Certificates) == 0 || len(c.Certificates[0].Certificate) == 0 || c.Certificates[0].PrivateKey == nil || c.GetConfigForClient != nil {
+			return errors.New("PrivateTLS requires TLS1.3, client certificate verification and explicit server certificate")
+		}
 	}
 	if tlsCfg != nil {
 		tlsCfg.deriveEnv()
@@ -320,21 +345,61 @@ func Serve(ctx context.Context, app App) error {
 	if os.Getenv(devserver.EnvMode) == "dev" {
 		mode = "dev"
 	}
-	log.Info("listening", "app", name(app), "addr", "http://"+ln.Addr().String(), "mode", mode)
+	scheme := "http"
+	if app.PrivateTLS != nil && app.PrivateTLSAddr == "" {
+		scheme = "https"
+		srv.TLSConfig = app.PrivateTLS.Clone()
+	}
+	log.Info("listening", "app", name(app), "addr", scheme+"://"+ln.Addr().String(), "mode", mode)
+
+	var private *http.Server
+	var privateListener net.Listener
+	if app.PrivateTLSAddr != "" {
+		if app.PrivateTLS == nil {
+			ln.Close()
+			booted.Close(ctx)
+			return errors.New("PrivateTLSAddr requires PrivateTLS")
+		}
+		privateListener, err = net.Listen("tcp", app.PrivateTLSAddr)
+		if err != nil {
+			ln.Close()
+			booted.Close(ctx)
+			return err
+		}
+		private = &http.Server{Handler: h, TLSConfig: app.PrivateTLS.Clone(), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 2 * time.Minute, ErrorLog: srv.ErrorLog}
+	}
 	if app.OnReady != nil {
 		app.OnReady()
 	}
-
-	errc := make(chan error, 1)
-	go func() { errc <- srv.Serve(ln) }()
+	errc := make(chan error, 2)
+	go func() {
+		if app.PrivateTLS != nil && app.PrivateTLSAddr == "" {
+			errc <- srv.ServeTLS(ln, "", "")
+			return
+		}
+		errc <- srv.Serve(ln)
+	}()
+	if private != nil {
+		go func() { errc <- private.ServeTLS(privateListener, "", "") }()
+	}
 
 	select {
 	case err := <-errc:
+		srv.Close()
+		if private != nil {
+			private.Close()
+		}
+		booted.Close(ctx)
 		return err
 	case <-ctx.Done():
 	}
 	shutdown, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+	if private != nil {
+		if err := private.Shutdown(shutdown); err != nil {
+			private.Close()
+		}
+	}
 	if err := srv.Shutdown(shutdown); err != nil && !errors.Is(err, context.DeadlineExceeded) {
 		booted.Close(shutdown)
 		return err

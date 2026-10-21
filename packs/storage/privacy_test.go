@@ -120,7 +120,10 @@ func TestPrivacy(t *testing.T) {
 	if probe, _ := s.PrivacyProbe(ctx, "backups/probe.dump"); !probe.Public || !probe.Probe {
 		t.Fatalf("probe .dump: %s", outcomes(probe))
 	}
-	if _, ok := f.objects["backups/probe.txt"]; ok {
+	f.mu.Lock()
+	_, probeRemains := f.objects["backups/probe.txt"]
+	f.mu.Unlock()
+	if probeRemains {
 		t.Fatal("the probe was left behind")
 	}
 	if _, err := s.PrivacyProbe(ctx, "backups/notes.txt"); err == nil || !strings.Contains(err.Error(), "exists") {
@@ -140,7 +143,10 @@ func TestPrivacy(t *testing.T) {
 		t.Fatalf("timeout: %+v", r.Checks[0])
 	}
 	// No anonymous request carried credentials, a signature or cookies.
-	for _, a := range f.anon {
+	f.mu.Lock()
+	anonymous := append([]*http.Request(nil), f.anon...)
+	f.mu.Unlock()
+	for _, a := range anonymous {
 		if a.Header.Get("Authorization") != "" || a.Header.Get("Cookie") != "" || strings.Contains(a.URL.RawQuery, "X-Amz") || a.Header.Get("X-Amz-Content-Sha256") != "" {
 			t.Fatalf("an anonymous request carried credentials: %s %v", a.URL, a.Header)
 		}

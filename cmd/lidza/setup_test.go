@@ -30,6 +30,10 @@ func TestRepairEnvSocket(t *testing.T) {
 	dir := t.TempDir()
 	env := filepath.Join(dir, ".env.test")
 	os.WriteFile(env, []byte("# test\nDATABASE_URL=postgres:///app_test?host=/var/run/postgresql-nowhere\nMAIL_PROVIDER=outbox\n"), 0o644)
+	// Set the fixture mode explicitly; creation is affected by the host umask.
+	if err := os.Chmod(env, 0o644); err != nil {
+		t.Fatal(err)
+	}
 	from, to, err := db.RepairEnvFile(env)
 	if err != nil || from != "postgres:///app_test?host=/var/run/postgresql-nowhere" || to != "postgres:///app_test?host="+sock {
 		t.Fatalf("repair: %q %q %v", from, to, err)

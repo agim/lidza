@@ -10,7 +10,7 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
-## Unreleased
+## v0.1.124 (2026-10-21)
 
 - Each Go test package gets its own copy of the test database, so
   `go test` runs an app's test packages in parallel without their rows

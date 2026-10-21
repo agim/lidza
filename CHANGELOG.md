@@ -12,6 +12,9 @@ these rules cover.
 
 ## Unreleased
 
+- Build with Go1.27.3 to fix GO-2026-6809 in certificate verification;
+  release and application builds must use this patched toolchain or newer.
+
 - Add explicit verified gateway transport (`pkg/gateway`): authenticated TLS1.3
   hops, authorized peer keys and authority, request-bound bounded metadata,
   shared atomic replay protection and native TLS-edge integration. Evidence

@@ -359,3 +359,11 @@ lidza build && ./bin/demo                   # one binary, Node not running
 - Shared rules: `CLAUDE.md` (committed).
 - Remote: `https://github.com/agim/lidza.git`, public, branch `master`.
   Push straight to `master`.
+
+## Release toolchain security floor
+
+Release builds require Go1.27.3 or newer (GO-2026-6809, compromised
+intermediate certificate distrust). The module toolchain directive selects
+Go1.27.3; CI follows go.mod. The host inventory above is historical, not
+evidence that an operator host has already upgraded. Go toolchain auto-selection
+fetches the pinned official toolchain where the installed compiler is older.

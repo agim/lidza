@@ -68,9 +68,9 @@ Commands:
   credentials the development seed: secrets sealed in config/credentials.yml.enc with config/master.key; dev.NAME and production.NAME are for one mode
   admin    who may open the admin pages besides the first account: ADMIN_USERS in the credentials, read within seconds
   update   in a project, first the branch pulled when it is a clean fast-forward; then the CLI to the newest release and the module to the same version: go get, tidy, Dockerfile pin, lidza gen, then lidza install
-  decision record why the app is built a way (a pack, Rust, a dependency, a schema tradeoff) in docs/decisions.md, or list the decisions
+  decision record why the app is built a way (a pack, Rust, a dependency, a schema tradeoff) in docs/decisions.md, or list them (--grep)
   brief    the kickoff interview: what the app is for, who owns the data, the design, the services, the working agreements; answers go to docs/brief.md and where they act
-  note     add a lasting fact about this app for the team and every agent (the agent files' Team notes)
+  note     add a lasting fact about this app for the team and every agent (docs/notes.md), or list them (--grep)
   snippet  print a file of the reference app (examples/notes): auth routes, an owned resource, a page, tests, a tool
   mcp      serve routes, context, diagnostics, dev logs, the API and the guide's recipes over MCP on stdio
   version  print the framework version

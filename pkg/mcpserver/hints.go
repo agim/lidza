@@ -41,6 +41,8 @@ var hints = map[string]hint{
 	"lidza_recipe_add":       adds,
 	"lidza_decision_add":     adds,
 	"lidza_note_add":         adds,
+	"lidza_notes":            reads,
+	"lidza_decisions":        reads,
 	"lidza_brief_answer":     adds,
 	"lidza_brief_skip":       adds,
 	// Replaces a sealed value: the old one is gone.

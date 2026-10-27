@@ -156,14 +156,64 @@ func TestNotes(t *testing.T) {
 	if _, err := AddNote(dir, "The data provider asks for a User-Agent with a contact."); err != nil {
 		t.Fatal(err)
 	}
-	data, _ := os.ReadFile(filepath.Join(dir, AgentFile))
+	data, _ := os.ReadFile(filepath.Join(dir, NotesFile))
 	s := string(data)
-	i := strings.Index(s, "## Team notes")
-	if i < 0 || !strings.Contains(s[i:], ": Prices are in euros, always with VAT.\n- ") || !strings.HasSuffix(s, "with a contact.\n") || strings.Count(s, "## Working agreements") != 1 {
+	if !strings.HasPrefix(s, "# Team notes") || !strings.Contains(s, ": Prices are in euros, always with VAT.\n- ") || !strings.HasSuffix(s, "with a contact.\n") {
 		t.Fatalf("notes: %s", s)
+	}
+	// The agent file points at them and holds none.
+	data, _ = os.ReadFile(filepath.Join(dir, AgentFile))
+	if a := string(data); !strings.Contains(a, NotesPointer) || strings.Contains(a, "euros") || strings.Count(a, "## Working agreements") != 1 {
+		t.Fatalf("agent file: %s", a)
 	}
 	if _, err := AddNote(dir, "  "); err == nil {
 		t.Fatal("empty note accepted")
+	}
+	notes, _ := LoadNotes(dir)
+	if len(notes) != 2 || notes[0].Text != "Prices are in euros, always with VAT" || len(FilterNotes(notes, "user-agent", "")) != 1 || len(FilterNotes(notes, "", "2999-01-01")) != 0 {
+		t.Fatalf("load: %+v", notes)
+	}
+}
+
+// Notes written into the agent files by earlier releases move to
+// docs/notes.md once, in order, without duplicates; what else the
+// section said stays.
+func TestMigrateNotes(t *testing.T) {
+	dir := app(t)
+	if _, err := EnsureAgentSections(dir); err != nil {
+		t.Fatal(err)
+	}
+	p := filepath.Join(dir, AgentFile)
+	data, _ := os.ReadFile(p)
+	old := strings.Replace(string(data), NotesPointer, oldNotesPointer+"\n\n- 2026-09-29: Prices are in euros.\n- 2026-10-01: Deploys on Fridays are fine.\nThe app's own remark.", 1)
+	old += "\n## After\n\nA later section.\n"
+	os.WriteFile(p, []byte(old), 0o644)
+	os.WriteFile(filepath.Join(dir, "GEMINI.md"), []byte(old), 0o644) // a copy, not a stub
+	moved, changed, err := MigrateNotes(dir)
+	if err != nil || moved != 2 || len(changed) != 3 {
+		t.Fatalf("moved %d changed %v err %v", moved, changed, err)
+	}
+	notes, _ := LoadNotes(dir)
+	if len(notes) != 2 || notes[1].Text != "Deploys on Fridays are fine" {
+		t.Fatalf("notes: %+v", notes)
+	}
+	data, _ = os.ReadFile(p)
+	s := string(data)
+	if strings.Contains(s, "euros") || !strings.Contains(s, NotesPointer) || !strings.Contains(s, "The app's own remark.") || !strings.Contains(s, "## After\n\nA later section.") || strings.Contains(s, oldNotesPointer) {
+		t.Fatalf("agent file after: %s", s)
+	}
+	// Again: nothing to do.
+	if moved, changed, _ := MigrateNotes(dir); moved != 0 || len(changed) != 0 {
+		t.Fatalf("second run: %d %v", moved, changed)
+	}
+	// A note added now lands in the file, not the section.
+	AddNote(dir, "Invoices are monthly")
+	data, _ = os.ReadFile(p)
+	if strings.Contains(string(data), "Invoices") {
+		t.Fatal("the note went into the agent file")
+	}
+	if notes, _ := LoadNotes(dir); len(notes) != 3 {
+		t.Fatalf("notes: %+v", notes)
 	}
 }
 
@@ -299,9 +349,12 @@ func TestConvertAgentStubs(t *testing.T) {
 	if _, err := AddNote(dir, "Deploys on Fridays are fine"); err != nil {
 		t.Fatal(err)
 	}
+	if data, _ := os.ReadFile(filepath.Join(dir, NotesFile)); !strings.Contains(string(data), "Deploys on Fridays are fine") {
+		t.Error("docs/notes.md has no note")
+	}
 	for _, f := range []string{AgentFile, "GEMINI.md"} {
-		if data, _ := os.ReadFile(filepath.Join(dir, f)); !strings.Contains(string(data), "Deploys on Fridays are fine") {
-			t.Errorf("%s has no note", f)
+		if data, _ := os.ReadFile(filepath.Join(dir, f)); strings.Contains(string(data), "Deploys on Fridays") || !strings.Contains(string(data), NotesPointer) {
+			t.Errorf("%s: the note should be a pointer away", f)
 		}
 	}
 	if data, _ := os.ReadFile(filepath.Join(dir, "CLAUDE.md")); !IsAgentStub(data) {

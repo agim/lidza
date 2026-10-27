@@ -21,9 +21,9 @@ var CommandTools = map[string][]string{
 	"credentials": {"lidza_credentials_list", "lidza_credentials_set"},
 	"settings":    {"lidza_settings_list", "lidza_settings_set"},
 	"admin":       {"lidza_admins", "lidza_owner_status"},
-	"decision":    {"lidza_decision_add"},
+	"decision":    {"lidza_decision_add", "lidza_decisions"},
 	"brief":       {"lidza_brief", "lidza_brief_answer", "lidza_brief_skip"},
-	"note":        {"lidza_note_add"},
+	"note":        {"lidza_note_add", "lidza_notes"},
 	"recipe":      {"lidza_recipe_add", "lidza_recipes"},
 }
 

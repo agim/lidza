@@ -19,6 +19,7 @@ func runDecision(_ context.Context, args []string) error {
 	case "list":
 		fs := flags("decision list")
 		dir := fs.String("dir", ".", "project directory")
+		grep := fs.String("grep", "", "only decisions mentioning this word (case-insensitive), with their reasons")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
@@ -30,8 +31,14 @@ func runDecision(_ context.Context, args []string) error {
 		if err != nil {
 			return err
 		}
-		for _, e := range es {
+		for _, e := range decisions.Filter(es, *grep) {
 			fmt.Printf("%s  %s\n", e.Date, e.Title)
+			if *grep != "" {
+				fmt.Printf("    why: %s\n", e.Why)
+				if e.Touches != "" {
+					fmt.Printf("    touches: %s\n", e.Touches)
+				}
+			}
 		}
 		return nil
 	case "add":

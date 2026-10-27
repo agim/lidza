@@ -480,7 +480,7 @@ func TestGuidanceSurfaces(t *testing.T) {
 	for _, tl := range tools.Tools {
 		names[tl.Name] = true
 	}
-	for _, want := range []string{"lidza_routes", "lidza_check", "lidza_api", "lidza_snippet", "lidza_logs", "lidza_gen", "lidza_gen_resource", "lidza_verify", "lidza_test", "lidza_ship", "lidza_recipe_add", "lidza_recipes", "lidza_decision_add", "lidza_brief", "lidza_brief_answer", "lidza_brief_skip", "lidza_note_add", "lidza_credentials_set", "lidza_credentials_list", "lidza_audit_layout", "lidza_audit_performance", "lidza_db_new", "lidza_gen_llms", "lidza_admins", "lidza_owner_status"} {
+	for _, want := range []string{"lidza_routes", "lidza_check", "lidza_api", "lidza_snippet", "lidza_logs", "lidza_gen", "lidza_gen_resource", "lidza_verify", "lidza_test", "lidza_ship", "lidza_recipe_add", "lidza_recipes", "lidza_decision_add", "lidza_decisions", "lidza_brief", "lidza_brief_answer", "lidza_brief_skip", "lidza_note_add", "lidza_notes", "lidza_credentials_set", "lidza_credentials_list", "lidza_audit_layout", "lidza_audit_performance", "lidza_db_new", "lidza_gen_llms", "lidza_admins", "lidza_owner_status"} {
 		if !names[want] {
 			t.Errorf("tool %s missing", want)
 		}
@@ -690,8 +690,15 @@ func TestBrief(t *testing.T) {
 	if b := mustRead(t, "docs/brief.md"); !strings.Contains(b, "A place to keep project notes") {
 		t.Errorf("brief.md:\n%s", b)
 	}
-	if s := mustRead(t, "AGENTS.md"); !strings.Contains(s, "- Pushing: After every verified commit.") || !strings.Contains(s, ": Prices are shown in euros.") {
+	if s := mustRead(t, "AGENTS.md"); !strings.Contains(s, "- Pushing: After every verified commit.") || strings.Contains(s, "Prices are shown in euros") || !strings.Contains(s, "docs/notes.md") {
 		t.Errorf("AGENTS.md:\n%s", s)
+	}
+	// The note is in docs/notes.md, not in the file every session reads.
+	if n := mustRead(t, "docs/notes.md"); !strings.Contains(n, ": Prices are shown in euros.") {
+		t.Errorf("docs/notes.md:\n%s", n)
+	}
+	if out, err := command(app, lidza, "note", "list", "--grep", "euros"); err != nil || !strings.Contains(string(out), "Prices are shown in euros") {
+		t.Errorf("note list: %v\n%s", err, out)
 	}
 	for _, f := range []string{"CLAUDE.md", "GEMINI.md"} {
 		if s := mustRead(t, f); s != "@AGENTS.md\n" {

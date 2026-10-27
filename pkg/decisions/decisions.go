@@ -30,8 +30,9 @@ var header = `# Decisions
 
 What shaped %s and why, one entry each, newest last: a pack added, Rust
 chosen for a module, a dependency taken, a schema tradeoff, an
-integration. Read this before working in those areas. Record yours in the
-same commit as the change: ` + "`lidza decision add \"Title\" --why \"...\"`" + `
+integration. Before working in an area, find its decisions:
+` + "`lidza decision list --grep <area>`" + ` (MCP ` + "`lidza_decisions`" + `). Record yours in
+the same commit as the change: ` + "`lidza decision add \"Title\" --why \"...\"`" + `
 (MCP: ` + "`lidza_decision_add`" + `). A recipe in docs/lidza-guide.md says how
 this app does something; a decision here says why it is done that way.
 `
@@ -84,6 +85,22 @@ func format(e Entry) string {
 }
 
 var heading = regexp.MustCompile(`(?m)^## (\d{4}-\d{2}-\d{2}): (.+)$`)
+
+// Filter keeps the entries mentioning q in their title, reason or
+// touches, ignoring case; an empty q keeps all.
+func Filter(es []Entry, q string) []Entry {
+	q = strings.ToLower(strings.TrimSpace(q))
+	if q == "" {
+		return es
+	}
+	var out []Entry
+	for _, e := range es {
+		if strings.Contains(strings.ToLower(e.Title+" "+e.Why+" "+e.Touches), q) {
+			out = append(out, e)
+		}
+	}
+	return out
+}
 
 // Load reads the entries, oldest first; no log is no entries.
 func Load(dir string) ([]Entry, error) {

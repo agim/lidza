@@ -10,6 +10,19 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
+## Unreleased
+
+- Team notes live in `docs/notes.md`, not in the agent files: `lidza
+  note add` writes there, `lidza note list [--grep word] [--since date]`
+  (MCP `lidza_notes`) finds the ones for an area, and `lidza gen` (so
+  `lidza update`) moves the notes an app's `AGENTS.md` holds there once,
+  leaving a pointer. `AGENTS.md` is read whole at the start of every
+  session; one app had 147 notes in it, 57 KB of a 67 KB file. `lidza
+  decision list --grep word` (MCP `lidza_decisions`) finds the decisions
+  for an area the same way; the guidance says to query, not to read the
+  log. Rule L024 warns when an agent instruction file is over 16 KB or
+  still holds notes.
+
 ## v0.1.126 (2026-10-27)
 
 - admin: the Model fields on the Language model page offer the

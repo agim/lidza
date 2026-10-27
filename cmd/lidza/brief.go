@@ -247,11 +247,35 @@ func isTerminal(f *os.File) bool {
 	return term.IsTerminal(int(f.Fd()))
 }
 
-// runNote is `lidza note add "..."`: a lasting fact for the team, in the
-// agent files' Team notes.
+// runNote is `lidza note add "..."`, a lasting fact for the team in
+// docs/notes.md, and `lidza note list [--grep word] [--since date]`.
 func runNote(_ context.Context, args []string) error {
-	if len(args) == 0 || args[0] != "add" {
-		return errors.New("note add \"text\": a lasting fact about this app for the team and every agent, in AGENTS.md")
+	if len(args) == 0 {
+		return errors.New("note add \"text\" (a lasting fact about this app for the team and every agent, in docs/notes.md), or note list [--grep word] [--since 2026-01-01]")
+	}
+	if args[0] == "list" {
+		fs := flags("note list")
+		dir := fs.String("dir", ".", "project directory")
+		grep := fs.String("grep", "", "only notes containing this word (case-insensitive)")
+		since := fs.String("since", "", "only notes from this date on (YYYY-MM-DD)")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		abs, _, err := loadProject(*dir)
+		if err != nil {
+			return err
+		}
+		notes, err := brief.LoadNotes(abs)
+		if err != nil {
+			return err
+		}
+		for _, n := range brief.FilterNotes(notes, *grep, *since) {
+			fmt.Printf("%s  %s\n", n.Date, n.Text)
+		}
+		return nil
+	}
+	if args[0] != "add" {
+		return fmt.Errorf("note: unknown subcommand %q (add, list)", args[0])
 	}
 	fs := flags("note add")
 	dir := fs.String("dir", ".", "project directory")

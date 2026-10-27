@@ -126,7 +126,7 @@ func addDecisionTool(s *server.MCPServer, dir string, cfg *config.Config) {
 		return
 	}
 	s.AddTool(mcp.NewTool("lidza_decision_add",
-		mcp.WithDescription("Record why this app is built a way in docs/decisions.md: a pack added, Rust chosen for a module (say which of contained input, a crate Go lacks, or heap pressure), a dependency taken, a schema tradeoff, an integration. Call it in the same change, before lidza_verify. Read the file first (lidza://decisions or Read) when working in those areas."),
+		mcp.WithDescription("Record why this app is built a way in docs/decisions.md: a pack added, Rust chosen for a module (say which of contained input, a crate Go lacks, or heap pressure), a dependency taken, a schema tradeoff, an integration. Call it in the same change, before lidza_verify. Before working in an area, lidza_decisions with a grep finds its decisions."),
 		mcp.WithString("title", mcp.Required(), mcp.Description("What was decided, e.g. \"Word statistics in a Rust pack\".")),
 		mcp.WithString("why", mcp.Required(), mcp.Description("The reason, one or two sentences, with the alternative that was not taken.")),
 		mcp.WithString("touches", mcp.Description("The files, packs or tables it concerns.")),
@@ -136,6 +136,26 @@ func addDecisionTool(s *server.MCPServer, dir string, cfg *config.Config) {
 			return mcp.NewToolResultErrorFromErr("decision", err), nil
 		}
 		return jsonResult(map[string]any{"file": decisions.File, "date": e.Date, "title": e.Title})
+	})
+	s.AddTool(mcp.NewTool("lidza_decisions",
+		mcp.WithDescription("The decisions behind an area of this app, from docs/decisions.md: why it is built the way it is. Call it with a grep (a pack, a table, a feature, a vendor) before working in that area, instead of reading the whole log."),
+		mcp.WithString("grep", mcp.Description("A word the decision's title, reason or touches must contain, ignoring case; empty lists every decision's date and title.")),
+	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		es, err := decisions.Load(dir)
+		if err != nil {
+			return mcp.NewToolResultErrorFromErr("decisions", err), nil
+		}
+		q := req.GetString("grep", "")
+		es = decisions.Filter(es, q)
+		if q == "" {
+			for i := range es {
+				es[i].Why, es[i].Touches = "", ""
+			}
+		}
+		if es == nil {
+			es = []decisions.Entry{}
+		}
+		return jsonResult(map[string]any{"file": decisions.File, "decisions": es})
 	})
 	s.AddResource(mcp.NewResource("lidza://decisions", "decisions", mcp.WithResourceDescription("This app's decision log, docs/decisions.md: why it is built the way it is."), mcp.WithMIMEType("text/markdown")),
 		func(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
@@ -212,7 +232,7 @@ func addBriefTools(s *server.MCPServer, dir string, cfg *config.Config) {
 		return jsonResult(map[string]any{"skipped": done, "file": brief.File})
 	})
 	s.AddTool(mcp.NewTool("lidza_note_add",
-		mcp.WithDescription("Record a lasting fact about this app that the team and every agent should know (a preference, a constraint, a convention the developer states) in the Team notes of AGENTS.md (which CLAUDE.md and GEMINI.md import), shared through git. Use it instead of an agent's local memory for anything about this app; a convention with steps is a recipe (lidza_recipe_add), a choice with a reason a decision (lidza_decision_add)."),
+		mcp.WithDescription("Record a lasting fact about this app that the team and every agent should know (a preference, a constraint, a convention the developer states) in docs/notes.md, shared through git. Use it instead of an agent's local memory for anything about this app; a convention with steps is a recipe (lidza_recipe_add), a choice with a reason a decision (lidza_decision_add). lidza_notes finds the notes for an area."),
 		mcp.WithString("text", mcp.Required(), mcp.Description("The fact, one sentence.")),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		files, err := brief.AddNote(dir, req.GetString("text", ""))
@@ -220,6 +240,21 @@ func addBriefTools(s *server.MCPServer, dir string, cfg *config.Config) {
 			return mcp.NewToolResultErrorFromErr("note", err), nil
 		}
 		return jsonResult(map[string]any{"files": files})
+	})
+	s.AddTool(mcp.NewTool("lidza_notes",
+		mcp.WithDescription("The team notes about this app from docs/notes.md: lasting facts the developer stated (preferences, constraints, conventions). Call it with a grep for the area you work in, instead of reading the whole file."),
+		mcp.WithString("grep", mcp.Description("A word the note must contain, ignoring case; empty lists every note.")),
+		mcp.WithString("since", mcp.Description("Only notes from this date on (YYYY-MM-DD).")),
+	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		notes, err := brief.LoadNotes(dir)
+		if err != nil {
+			return mcp.NewToolResultErrorFromErr("notes", err), nil
+		}
+		notes = brief.FilterNotes(notes, req.GetString("grep", ""), req.GetString("since", ""))
+		if notes == nil {
+			notes = []brief.Note{}
+		}
+		return jsonResult(map[string]any{"file": brief.NotesFile, "notes": notes})
 	})
 	s.AddResource(mcp.NewResource("lidza://brief", "brief", mcp.WithResourceDescription("This app's brief, docs/brief.md: what it is for, who owns the data, the design, the services, the working agreements."), mcp.WithMIMEType("text/markdown")),
 		func(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {

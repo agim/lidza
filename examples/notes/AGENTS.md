@@ -6,7 +6,7 @@ commands and the rules.
 
 <!-- lidza:framework -->
 <!-- The framework writes this block: lidza gen and lidza update replace it. A wrong line here is a framework bug to report; the app's own instructions go below it. -->
-- Read `docs/brief.md` first: what the app is for, who owns the data, the design, the services and the working agreements below. While it has open questions, start a session with the interview (recipe "Start with the brief": MCP `lidza_brief` and `lidza_brief_answer`; `lidza brief` in a terminal), asking the developer with suggestions, offering to skip any question or the whole brief, and never inventing an answer; a skipped question is never asked again. Lasting facts the developer states go in the Team notes below (`lidza note add`, MCP `lidza_note_add`), never in an agent's local memory: these files and `docs/` are shared through git.
+- Read `docs/brief.md` first: what the app is for, who owns the data, the design, the services and the working agreements below. While it has open questions, start a session with the interview (recipe "Start with the brief": MCP `lidza_brief` and `lidza_brief_answer`; `lidza brief` in a terminal), asking the developer with suggestions, offering to skip any question or the whole brief, and never inventing an answer; a skipped question is never asked again. Lasting facts the developer states go in `docs/notes.md` (`lidza note add`, MCP `lidza_note_add`; `lidza note list --grep word`, MCP `lidza_notes`, finds the ones for an area), never in an agent's local memory: these files and `docs/` are shared through git.
 - App-owned Go packages: business logic in `internal/<feature>/`, vendor clients in `internal/providers/<vendor>/`, shared infrastructure in `internal/platform/<name>/`. Keep handlers in `handlers/`; `appDir` holds application wiring and embedded assets. Keep the root clean: integration tests in `tests/`, unit tests beside their non-root package, browser specs in `e2e/`, documentation in `docs/`, scripts in `scripts/`, scratch/build output in `.lidza/` or `bin/`. Root tests and stray files fail L020; use the importable app factory, never import package main. Models and API shapes stay in `schema.lidza`, SQL in `db/queries/*.sql`; generated `schema/` and `db/queries/gen/` are never moved or edited. Recipe: Organize application packages.
 - Shared agent guidance: `AGENTS.md` is the one instructions file; `CLAUDE.md` and `GEMINI.md` are the line `@AGENTS.md`, which Claude Code and Gemini CLI expand, and stay that way. Update rules, working agreements and team notes here. Edit recipes in `docs/lidza-guide.md`, then run `lidza gen` to refresh the skills of Claude Code, Codex and Gemini CLI together.
 
@@ -19,7 +19,7 @@ commands and the rules.
 - `lidza build`: production binary at `bin/notes`.
 - MCP server `lidza mcp` (configured in `.mcp.json`, `.gemini/settings.json` and `.codex/config.toml`): `lidza_routes`, `lidza_context`, `lidza_check`, `lidza_logs`, `lidza_config`, `lidza_api` (the framework's Go API; read it before calling a lidza function), `lidza_snippet` (verified code from the reference app; read it before writing a handler, page, test or tool).
 - Task recipes, step by step, in `docs/lidza-guide.md` under "Recipes", as `lidza mcp` prompts, as skills in `.claude/skills/` (Claude Code) and `.agents/skills/` (Codex, `$name`; Gemini CLI, `/name`): <!-- lidza:recipes -->`start-with-brief`, `add-api-route`, `add-resource`, `add-sign-in`, `scope-query-to-signed-in-user`, `add-page`, `set-head-of-page`, `add-responsive-image`, `add-pack-capability`, `add-mcp-tool`, `send-email`, `add-background-job`, `publish-live-updates`, `add-llm-feature`, `store-file`, `receive-webhook`, `send-webhooks`, `connect-external-account`, `add-paginated-filterable-list`, `dates-and-time-zones`, `roles-and-permissions`, `add-teams-and-invitations`, `add-payments`, `sell-feature-to-teams`, `record-audit-event`, `add-admin-pages`, `extend-admin-pages`, `add-recipe`, `write-test`, `organize-application-packages`; this app's own: `scope-query-in-this-app`, `style-page-to-match-app`<!-- /lidza:recipes -->. A pattern this app uses twice is a recipe: `lidza recipe add "Title"`.
-- Why the app is built a way (a pack added, Rust for a module, a dependency, a schema tradeoff) is recorded in `docs/decisions.md`: read it before working in those areas, and record yours in the same commit with `lidza decision add "Title" --why "..."` (MCP `lidza_decision_add`).
+- Why the app is built a way (a pack added, Rust for a module, a dependency, a schema tradeoff) is recorded in `docs/decisions.md`: `lidza decision list --grep <area>` (MCP `lidza_decisions`) finds the ones for an area before you work in it, and record yours in the same commit with `lidza decision add "Title" --why "..."` (MCP `lidza_decision_add`).
 - Go owns `/api` (`app/routes.go`, `router.Route` with typed handlers); the frontend never defines API routes and calls them only through `@lidza/client`.
 - Data shapes live in `schema.lidza`; `schema/`, `db/`, `app/packs.go`, `packs/*/pack.go` and `.lidza/` are generated, never edited.
 - Add agent-callable functions in `app/tools.go` (`lidza.ToolFunc`); they show up in `lidza mcp` as `app_<name>`.
@@ -39,9 +39,10 @@ From the brief (docs/brief.md); follow them in every session.
 
 ## Team notes
 
-Lasting facts about this app that the team and every agent should know, shared
-through git: `lidza note add "..."` (MCP `lidza_note_add`). Record them here,
-never in an agent's local memory.
+Lasting facts about this app that the team and every agent should know are in
+`docs/notes.md`, shared through git: `lidza note add "..."` (MCP `lidza_note_add`)
+records one; `lidza note list --grep word` (MCP `lidza_notes`) finds the ones for an
+area. Never in an agent's local memory.
 
 - Mail inline files use `Attachment.ContentID` (a bare, unique safe ASCII ID,
   at most 127 bytes) referenced as `cid:<ID>` from HTML. `ReplyTo` accepts an

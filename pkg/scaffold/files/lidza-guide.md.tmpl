@@ -105,7 +105,7 @@ import package `main`. Preserve its tests and behavior during the move:
 | `lidza admin add EMAIL...` | lets these users (emails or ids) open `/admin` besides the first account: `ADMIN_USERS` in the sealed credentials, read within seconds; in production after a commit and deploy of `config/credentials.yml.enc`. Admins added on the Users page, in the file and in the environment all count. `remove`, `list`. |
 | `lidza admin owner status\|rotate [--production]` | with `AUTH_OWNER_CLAIM=true`: whether the app waits for its owner and where the one-time token file is (never the token); `rotate` replaces an unclaimed token at once on every node. |
 | `lidza brief [--all] [--list]` | the kickoff interview in a terminal: the open questions of `docs/brief.md` one by one, each with suggestions to pick by number or your own answer; `--all` goes through every question, `--list` prints them. `lidza brief answer <id> "..."` records one; `lidza brief skip [id...]` skips questions for good (no ids: every open one), and `s` or `S` in the interview skips one or the rest. |
-| `lidza note add "..."` | a lasting fact about this app in the agent files' Team notes, shared through git. |
+| `lidza note add "..."` | a lasting fact about this app in `docs/notes.md`, shared through git; `lidza note list [--grep word] [--since date]` finds the ones for an area. |
 | `lidza test [-v] [--run Regexp] [-p N] [--fresh] [go test flags]` | creates and migrates the `.env.test` database (`--fresh` drops and recreates it first, after a migration from another branch), runs `go test ./...` with `LIDZA_MODE=test` (each test package on its own copy of that database, `-p` packages at once), then the frontend check. Tests never see the master key or a variable named like one of the app's credentials: they run on `.env.test` and the test providers; a test that needs a key sets `LIDZA_MASTER_KEY` itself. |
 | `lidza test --e2e [--install]` | builds the app, starts the binary with `.env.test`, runs the Playwright suite in `e2e/`; `--install` fetches the browser when missing. The sign-in and analytics rate limits are raised for the run (every account signs up from 127.0.0.1) unless `.env.test` sets them; the Go tests keep the real limits. Rows the suite needs that no page creates (data a sync job would fetch) go in `e2e/seed.sql`, loaded into the test database before each run; write it to be rerun (`ON CONFLICT DO NOTHING`). |
 | `lidza install [--packs db,auth,mail] [--agent claude]` | on an existing app: enables the packs (db added when one needs it), writes `.env` from `.env.example` with a random `AUTH_SECRET` and the app's database, writes `.env.test`, generates, creates and migrates the dev and test databases, installs `node_modules`, installs the agent CLI when asked, makes the first commit. On a clone or after a pull it adds to `.env` what packs enabled since need and applies new migrations; one that drops data (`-- review: data loss`) waits for `--migrate`. `lidza new --packs ...` runs it for a new app; `lidza setup` is its former name. Rerunning is safe. |
@@ -141,7 +141,8 @@ agent needs no shell here. Its tools:
 | `lidza_config` | `lidza.json` |
 | `lidza_gen`, `lidza_gen_resource` (`model`, `force`), `lidza_pack_add` (`name`), `lidza_pack_scaffold`, `lidza_pack_build`, `lidza_db_migrate`, `lidza_db_rollback`, `lidza_db_status`, `lidza_test` (`e2e`, `install`, `run`, `verbose`), `lidza_verify` (`no_test`), `lidza_build`, `lidza_ship` (`domains`, `email`, `no_e2e`), `lidza_doctor` | the CLI command of the same name run for you, in this project: one JSON result with `ok`, `exit`, the parsed `report` (check, verify) or the `output`. Prefer these over a shell. |
 | `lidza_recipes`, `lidza_recipe_add` | the recipes with their scope; record one of this app's conventions (title, description, steps) |
-| `lidza_decision_add` | record why the app is built a way (a pack, Rust, a dependency, a schema tradeoff) in `docs/decisions.md`; `lidza://decisions` reads the log |
+| `lidza_decisions` (`grep`), `lidza_decision_add` | the decisions behind an area, by a word in them; record why the app is built a way (a pack, Rust, a dependency, a schema tradeoff) in `docs/decisions.md` |
+| `lidza_notes` (`grep`, `since`) | the team notes for an area, from `docs/notes.md` |
 | `lidza_brief` (`open_only`), `lidza_brief_answer` (`id`, `answer`), `lidza_brief_skip` (`ids`), `lidza_note_add` (`text`) | the brief: its questions with suggestions and answers, one answer recorded and applied (a decision, the working agreements, the palette, a seeded recipe); a lasting fact in the Team notes. `lidza://brief` reads `docs/brief.md` |
 | `lidza_credentials_set`, `lidza_credentials_list` | seal secrets into `config/credentials.yml.enc` by their environment names; list the names |
 | `lidza_mail`, `lidza_llm`, `lidza_llm_usage`, `lidza_storage`, `lidza_errors` | with the pack enabled: the outbox; a prompt against the configured model; token usage; stored objects; captured errors |
@@ -216,16 +217,17 @@ result says so while that is the case.
    written here, read the matching snippet (`lidza snippet` or the MCP
    tool `lidza_snippet`): it is the reference app's code, verified by its
    tests.
-12. The brief (`docs/brief.md`) and the working agreements and Team
-   notes at the end of `AGENTS.md` are this
-   app's shared memory: read them first, fill the brief with the
-   developer while it has open questions (recipe "Start with the
-   brief"), and record a lasting fact with `lidza note add` (MCP
+12. The brief (`docs/brief.md`), the working agreements in `AGENTS.md`
+   and the team notes in `docs/notes.md` are this app's shared memory:
+   `lidza note list --grep word` (MCP `lidza_notes`) finds the notes for
+   the area you work in; fill the
+   brief with the developer while it has open questions (recipe "Start
+   with the brief"), and record a lasting fact with `lidza note add` (MCP
    `lidza_note_add`), never in an agent's local memory. `lidza check`
    L015 warns while a required question is open.
 13. A pack (Rust or official), a dependency, an integration or a schema
-   tradeoff is a decision: read `docs/decisions.md` before changing those
-   areas and record yours in the same commit (`lidza decision add
+   tradeoff is a decision: `lidza decision list --grep <area>` (MCP
+   `lidza_decisions`) before changing an area, and record yours in the same commit (`lidza decision add
    "Title" --why "..."`, MCP `lidza_decision_add`; `lidza pack add --why`
    records it for a pack). `lidza check` L012 flags a pack or a direct
    dependency no decision names, and L011 a pack no code uses; CI runs

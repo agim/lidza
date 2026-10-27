@@ -251,11 +251,11 @@ func moduleVersion() string {
 // BriefLine is the agent files' first line: the brief, the interview
 // while it is open, and the rule that app knowledge is shared through git;
 // Refresh adds it to apps that predate it.
-const BriefLine = "Read `" + brief.File + "` first: what the app is for, who owns the data, the design, the services and the working agreements below. While it has open questions, start a session with the interview (recipe \"Start with the brief\": MCP `lidza_brief` and `lidza_brief_answer`; `lidza brief` in a terminal), asking the developer with suggestions, offering to skip any question or the whole brief, and never inventing an answer; a skipped question is never asked again. Lasting facts the developer states go in the Team notes below (`lidza note add`, MCP `lidza_note_add`), never in an agent's local memory: these files and `docs/` are shared through git."
+const BriefLine = "Read `" + brief.File + "` first: what the app is for, who owns the data, the design, the services and the working agreements below. While it has open questions, start a session with the interview (recipe \"Start with the brief\": MCP `lidza_brief` and `lidza_brief_answer`; `lidza brief` in a terminal), asking the developer with suggestions, offering to skip any question or the whole brief, and never inventing an answer; a skipped question is never asked again. Lasting facts the developer states go in `docs/notes.md` (`lidza note add`, MCP `lidza_note_add`; `lidza note list --grep word`, MCP `lidza_notes`, finds the ones for an area), never in an agent's local memory: these files and `docs/` are shared through git."
 
 // DecisionsLine is the agent files' line about the decision log; Refresh
 // adds it to apps that predate it.
-const DecisionsLine = "Why the app is built a way (a pack added, Rust for a module, a dependency, a schema tradeoff) is recorded in `docs/decisions.md`: read it before working in those areas, and record yours in the same commit with `lidza decision add \"Title\" --why \"...\"` (MCP `lidza_decision_add`)."
+const DecisionsLine = "Why the app is built a way (a pack added, Rust for a module, a dependency, a schema tradeoff) is recorded in `docs/decisions.md`: `lidza decision list --grep <area>` (MCP `lidza_decisions`) finds the ones for an area before you work in it, and record yours in the same commit with `lidza decision add \"Title\" --why \"...\"` (MCP `lidza_decision_add`)."
 
 // LayoutLine places app-owned Go code without moving generated contracts.
 const LayoutLine = "App-owned Go packages: business logic in `internal/<feature>/`, vendor clients in `internal/providers/<vendor>/`, shared infrastructure in `internal/platform/<name>/`. Keep handlers in `handlers/`; `appDir` holds application wiring and embedded assets. Keep the root clean: integration tests in `tests/`, unit tests beside their non-root package, browser specs in `e2e/`, documentation in `docs/`, scripts in `scripts/`, scratch/build output in `.lidza/` or `bin/`. Root tests and stray files fail L020; use the importable app factory, never import package main. Models and API shapes stay in `schema.lidza`, SQL in `db/queries/*.sql`; generated `schema/` and `db/queries/gen/` are never moved or edited. Recipe: Organize application packages."
@@ -343,6 +343,15 @@ func Refresh(dir string, cfg *config.Config) ([]string, error) {
 	}
 	if files, err := brief.EnsureAgentSections(dir); err != nil {
 		return nil, err
+	} else {
+		changed = append(changed, files...)
+	}
+	// Notes written into the agent files by earlier releases move to
+	// docs/notes.md: the agent files are read whole every session.
+	if moved, files, err := brief.MigrateNotes(dir); err != nil {
+		return nil, err
+	} else if moved > 0 {
+		changed = append(changed, fmt.Sprintf("%s (%d team notes moved from %s)", brief.NotesFile, moved, strings.Join(files[:len(files)-1], ", ")))
 	} else {
 		changed = append(changed, files...)
 	}

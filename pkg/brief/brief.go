@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -390,7 +391,28 @@ func ConvertAgentStubs(dir string) (changed, kept []string, err error) {
 // Sections the agent files end with: the working agreements the brief
 // writes, and the team's notes.
 const agentSections = "\n## Working agreements\n\n" + agreementsOpen + "\n_Set by the brief interview: `lidza brief`, or the recipe \"Start with the brief\"._\n" + agreementsClose + "\n\n" +
-	notesHeading + "\n\nLasting facts about this app that the team and every agent should know, shared\nthrough git: `lidza note add \"...\"` (MCP `lidza_note_add`). Record them here,\nnever in an agent's local memory.\n"
+	notesHeading + "\n\n" + NotesPointer + "\n"
+
+// NotesFile holds the team notes: lasting facts about the app, one dated
+// line each. They were in the agent files' Team notes before, which every
+// session reads whole; MigrateNotes moves them here.
+const NotesFile = "docs/notes.md"
+
+// NotesPointer is the Team notes section of an agent file: where the
+// notes are and how to add and find them.
+const NotesPointer = "Lasting facts about this app that the team and every agent should know are in\n`docs/notes.md`, shared through git: `lidza note add \"...\"` (MCP `lidza_note_add`)\nrecords one; `lidza note list --grep word` (MCP `lidza_notes`) finds the ones for an\narea. Never in an agent's local memory."
+
+// oldNotesPointer is what the section said when the notes lived in it.
+const oldNotesPointer = "Lasting facts about this app that the team and every agent should know, shared\nthrough git: `lidza note add \"...\"` (MCP `lidza_note_add`). Record them here,\nnever in an agent's local memory."
+
+const notesHeader = `# Team notes
+
+Lasting facts about this app that the team and every agent should know, one
+dated line each, newest last: ` + "`lidza note add \"...\"`" + ` (MCP ` + "`lidza_note_add`" + `)
+records one; ` + "`lidza note list --grep word`" + ` (MCP ` + "`lidza_notes`" + `) finds the ones
+for an area. A convention with steps is a recipe, a choice with a reason a
+decision (docs/decisions.md).
+`
 
 // EnsureAgentSections gives agent files from before the brief their two
 // closing sections; it returns the files it changed.
@@ -453,8 +475,9 @@ func SyncAgreements(dir string, b Brief) ([]string, error) {
 	return changed, nil
 }
 
-// AddNote appends a dated note to the Team notes of every agent file; it
-// returns the files it changed.
+// AddNote appends a dated note to NotesFile (created with its header when
+// missing; notes still in the agent files move there first) and returns
+// the files it changed.
 func AddNote(dir, text string) ([]string, error) {
 	text = oneLine(strings.TrimSpace(text))
 	if text == "" {
@@ -463,8 +486,106 @@ func AddNote(dir, text string) ([]string, error) {
 	if _, err := EnsureAgentSections(dir); err != nil {
 		return nil, err
 	}
+	_, changed, err := MigrateNotes(dir)
+	if err != nil {
+		return nil, err
+	}
 	line := "- " + time.Now().Format("2006-01-02") + ": " + text + "."
-	var changed []string
+	if err := appendNotes(dir, []string{line}); err != nil {
+		return nil, err
+	}
+	if !slices.Contains(changed, NotesFile) {
+		changed = append(changed, NotesFile)
+	}
+	return changed, nil
+}
+
+// Note is one team note.
+type Note struct {
+	Date string `json:"date"`
+	Text string `json:"text"`
+}
+
+var noteLine = regexp.MustCompile(`^- (\d{4}-\d{2}-\d{2}): (.*)$`)
+
+// LoadNotes reads the notes, oldest first: NotesFile's, then any still
+// in the agent files (an app not yet regenerated), without moving them.
+// No notes anywhere is none.
+func LoadNotes(dir string) ([]Note, error) {
+	data, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(NotesFile)))
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
+	var out []Note
+	seen := map[string]bool{}
+	add := func(lines []string) {
+		for _, l := range lines {
+			if m := noteLine.FindStringSubmatch(l); m != nil && !seen[l] {
+				seen[l] = true
+				out = append(out, Note{Date: m[1], Text: strings.TrimSuffix(m[2], ".")})
+			}
+		}
+	}
+	add(strings.Split(string(data), "\n"))
+	for _, name := range AgentFiles(dir) {
+		if data, err := os.ReadFile(filepath.Join(dir, name)); err == nil {
+			notes, _, _, _ := notesSection(string(data))
+			add(notes)
+		}
+	}
+	return out, nil
+}
+
+// notesSection splits an agent file at its Team notes heading: the note
+// lines in the section, the other lines of its body (the old pointer
+// removed), and the section's bounds; ok is false without the heading.
+func notesSection(s string) (notes, rest []string, bounds [2]int, ok bool) {
+	k := strings.Index(s, notesHeading)
+	if k < 0 {
+		return nil, nil, bounds, false
+	}
+	start := k + len(notesHeading)
+	end := len(s)
+	if next := strings.Index(s[start:], "\n## "); next >= 0 {
+		end = start + next + 1
+	}
+	body := s[start:end]
+	for _, l := range strings.Split(strings.TrimSpace(strings.ReplaceAll(body, oldNotesPointer, "")), "\n") {
+		switch {
+		case noteLine.MatchString(l):
+			notes = append(notes, l)
+		case strings.TrimSpace(l) == "":
+		default:
+			rest = append(rest, l)
+		}
+	}
+	return notes, rest, [2]int{start, end}, true
+}
+
+// FilterNotes keeps the notes containing q (ignoring case) and dated on
+// or after since (YYYY-MM-DD); an empty q or since keeps all.
+func FilterNotes(notes []Note, q, since string) []Note {
+	q = strings.ToLower(strings.TrimSpace(q))
+	var out []Note
+	for _, n := range notes {
+		if q != "" && !strings.Contains(strings.ToLower(n.Text), q) {
+			continue
+		}
+		if since != "" && n.Date < since {
+			continue
+		}
+		out = append(out, n)
+	}
+	return out
+}
+
+// MigrateNotes moves the notes written under the agent files' Team notes
+// into NotesFile, leaving NotesPointer in their place: the agent files
+// are read whole at the start of every session, the notes on demand. It
+// reports how many notes moved and the files it changed; nothing to move
+// changes nothing.
+func MigrateNotes(dir string) (moved int, changed []string, err error) {
+	var lines []string
 	for _, name := range AgentFiles(dir) {
 		p := filepath.Join(dir, name)
 		data, err := os.ReadFile(p)
@@ -472,33 +593,73 @@ func AddNote(dir, text string) ([]string, error) {
 			continue
 		}
 		s := string(data)
-		k := strings.Index(s, notesHeading)
-		if k < 0 {
-			s = strings.TrimRight(s, "\n") + "\n\n" + notesHeading + "\n"
-			k = strings.Index(s, notesHeading)
+		notes, rest, bounds, ok := notesSection(s)
+		if !ok {
+			continue
 		}
-		// The notes run to the next section or the end of the file.
-		end := len(s)
-		if next := strings.Index(s[k+len(notesHeading):], "\n## "); next >= 0 {
-			end = k + len(notesHeading) + next + 1
+		start, end := bounds[0], bounds[1]
+		pointed := strings.Contains(s[start:end], NotesPointer)
+		if len(notes) == 0 && pointed {
+			continue
 		}
-		notes := strings.TrimRight(s[k:end], "\n")
-		sep := "\n\n"
-		if lines := strings.Split(notes, "\n"); strings.HasPrefix(lines[len(lines)-1], "- ") {
-			sep = "\n" // right after the previous note
+		for _, n := range notes {
+			if !slices.Contains(lines, n) {
+				lines = append(lines, n)
+			}
 		}
-		rest := s[end:]
-		if rest != "" {
-			rest = "\n" + rest
+		section := NotesPointer
+		if len(rest) > 0 && !pointed {
+			section += "\n\n" + strings.Join(rest, "\n")
+		} else if pointed {
+			section = strings.TrimSpace(strings.Join(rest, "\n"))
+			if !strings.Contains(section, NotesPointer) {
+				section = NotesPointer + "\n\n" + section
+			}
 		}
-		s = s[:k] + notes + sep + line + "\n" + rest
-		if err := os.WriteFile(p, []byte(s), 0o644); err != nil {
-			return nil, err
+		next := s[:start] + "\n\n" + strings.TrimSpace(section) + "\n"
+		if end < len(s) {
+			next += "\n" + s[end:]
+		}
+		if next == s {
+			continue
+		}
+		if err := os.WriteFile(p, []byte(next), 0o644); err != nil {
+			return 0, nil, err
 		}
 		changed = append(changed, name)
 	}
-	if len(changed) == 0 {
-		return nil, errors.New("note: no " + AgentFile + " in the project")
+	if len(lines) > 0 {
+		if err := appendNotes(dir, lines); err != nil {
+			return 0, nil, err
+		}
+		changed = append(changed, NotesFile)
 	}
-	return changed, nil
+	return len(lines), changed, nil
+}
+
+// appendNotes adds the lines NotesFile lacks, creating it with its header.
+func appendNotes(dir string, lines []string) error {
+	p := filepath.Join(dir, filepath.FromSlash(NotesFile))
+	data, err := os.ReadFile(p)
+	if errors.Is(err, os.ErrNotExist) {
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			return err
+		}
+		data = []byte(notesHeader)
+	} else if err != nil {
+		return err
+	}
+	s := strings.TrimRight(string(data), "\n")
+	have := strings.Split(s, "\n")
+	added := false
+	for _, l := range lines {
+		if !slices.Contains(have, l) {
+			s += "\n" + l
+			added = true
+		}
+	}
+	if !added && !errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	return os.WriteFile(p, []byte(s+"\n"), 0o644)
 }

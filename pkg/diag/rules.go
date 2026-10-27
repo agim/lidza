@@ -106,6 +106,11 @@ import (
 //     another scheme than https, in the app's templates and components:
 //     mixed content on an https page (forms.go). Links are not forms.
 //
+//   - L024: an agent instruction file (AGENTS.md, or a CLAUDE.md or
+//     GEMINI.md that is not the one-line import) over 16 KB, or one still
+//     holding team notes; every session reads it whole, so lasting facts
+//     go in docs/notes.md and an area's documentation in docs/;
+//
 // Except for L004, L019 and L020 the findings are warnings: they point at the pattern,
 // the author decides. A comment "lidza:ignore L001" on the line, or the
 // line before, exempts that line from the rule it names.
@@ -163,6 +168,7 @@ func Rules(ctx context.Context, root string) []Diagnostic {
 	out = append(out, migrationSafety(root)...)
 	out = append(out, formTargets(root)...)
 	out = append(out, rootLayout(root)...)
+	out = append(out, agentFileSize(root)...)
 	return out
 }
 

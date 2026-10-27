@@ -135,7 +135,9 @@ func secureProxy(t *testing.T, target string, ca authority, cert tls.Certificate
 		if err := Forward(p.Out, p.In); err != nil {
 			p.Out.URL.Scheme = "invalid"
 		}
-	}, ErrorHandler: func(w http.ResponseWriter, _ *http.Request, _ error) { http.Error(w, "proxy refused", 502) }}
+	}, ErrorHandler: func(w http.ResponseWriter, _ *http.Request, _ error) {
+		http.Error(w, "proxy refused", http.StatusBadGateway)
+	}}
 }
 func publicClient(t *testing.T, ca authority, version uint16) *http.Client {
 	t.Helper()
@@ -164,7 +166,7 @@ func TestRealProtectedGatewayChain(t *testing.T) {
 			t.Error("wire evidence leaked to application")
 		}
 		if !RequireTLS13(r) {
-			http.Error(w, "original TLS 1.3 required", 403)
+			http.Error(w, "original TLS 1.3 required", http.StatusForbidden)
 			return
 		}
 		body, _ := io.ReadAll(r.Body)

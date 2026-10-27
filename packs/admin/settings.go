@@ -2,14 +2,19 @@ package admin
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"maps"
 	"net/http"
 	"net/url"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/agim/lidza"
 	"github.com/agim/lidza/packs/auth"
+	"github.com/agim/lidza/packs/llm"
 	"github.com/agim/lidza/packs/mail"
 	"github.com/agim/lidza/pkg/credentials"
 	"github.com/agim/lidza/pkg/env"
@@ -79,6 +84,64 @@ type Field struct {
 	// Advanced folds the field away under "Advanced" (a proxy address, a
 	// token limit): rarely needed, never required.
 	Advanced bool
+	// Choices, when set, lists what the field may hold given the
+	// section's other values as they stand on the page (a provider's
+	// models for its key): the page suggests them as the operator types,
+	// and a value outside the list is refused on Save with the nearest
+	// ones named. An error (no key yet, the provider unreachable) leaves
+	// the field free text; llm.ErrNoModelList means there is no list.
+	Choices func(ctx context.Context, values map[string]string) ([]Choice, error)
+}
+
+// Choice is one value a field may hold, with a label when the source
+// gives one.
+type Choice struct {
+	Value string `json:"value"`
+	Label string `json:"label,omitempty"`
+}
+
+// chatModels lists the chat provider's models for the values on the
+// page, the llm section's Choices.
+func chatModels(ctx context.Context, v map[string]string) ([]Choice, error) {
+	ms, err := llm.ListModels(ctx, llm.Config{Provider: v["LLM_PROVIDER"], APIKey: v["LLM_API_KEY"], BaseURL: v["LLM_BASE_URL"]})
+	return modelChoices(ms, err, func(m llm.Model) bool { return m.Chat })
+}
+
+// embedModels lists the embeddings provider's models: the chat
+// provider's, with its key and address, when none of its own is chosen.
+func embedModels(ctx context.Context, v map[string]string) ([]Choice, error) {
+	cfg := llm.Config{Provider: v["EMBED_PROVIDER"], APIKey: v["EMBED_API_KEY"], BaseURL: v["EMBED_BASE_URL"]}
+	if cfg.Provider == "" {
+		cfg.Provider = v["LLM_PROVIDER"]
+	}
+	if cfg.Provider == v["LLM_PROVIDER"] {
+		cfg.APIKey, cfg.BaseURL = or(cfg.APIKey, v["LLM_API_KEY"]), or(cfg.BaseURL, v["LLM_BASE_URL"])
+	}
+	if cfg.Provider == "none" || cfg.Provider == "anthropic" {
+		return nil, llm.ErrNoModelList
+	}
+	ms, err := llm.ListEmbedModels(ctx, cfg)
+	return modelChoices(ms, err, func(m llm.Model) bool { return m.Embed })
+}
+
+func modelChoices(ms []llm.Model, err error, keep func(llm.Model) bool) ([]Choice, error) {
+	if err != nil {
+		return nil, err
+	}
+	var out []Choice
+	for _, m := range ms {
+		if keep(m) {
+			out = append(out, Choice{Value: m.ID, Label: m.Name})
+		}
+	}
+	return out, nil
+}
+
+func or(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
 }
 
 // Link is a pointer to a provider's console, shown next to the
@@ -162,7 +225,7 @@ func builtinSections() []Section {
 					Placeholders: map[string]string{"anthropic": "sk-ant-…", "openai": "sk-…", "google": "AIza…", "compatible": "only if the server asks for one"}},
 				{Name: "LLM_MODEL", Label: "Model", Kind: "text", For: []string{"anthropic", "openai", "google", "compatible", "ollama"},
 					Placeholders: map[string]string{"anthropic": "claude-sonnet-5-5", "openai": "gpt-6-luna", "google": "gemini-3.8-flash", "compatible": "the model the server loaded", "ollama": "llama3.2"},
-					Help:         "Empty uses the placeholder's model, the provider's fast tier. The flagships: claude-opus-5-5, gpt-6-sol, gemini-4-argon."},
+					Help:         "Empty uses the placeholder's model, the provider's fast tier. The flagships: claude-opus-5-5, gpt-6-sol, gemini-4-argon.", Choices: chatModels},
 				{Name: "LLM_MAX_TOKENS", Label: "Longest reply (tokens)", Kind: "number", For: []string{"anthropic", "openai", "google", "compatible", "ollama"}, Advanced: true, Default: "4096",
 					Help: "A request's own limit wins."},
 			}},
@@ -179,7 +242,7 @@ func builtinSections() []Section {
 					Placeholders: map[string]string{"openai": "sk-…", "google": "AIza…", "compatible": "only if the server asks for one"}},
 				{Name: "EMBED_MODEL", Label: "Model", Kind: "text", For: []string{"", "openai", "google", "compatible", "ollama"}, Placeholder: "the chat provider's default",
 					Placeholders: map[string]string{"": "the chat provider's default", "openai": "text-embedding-3-small", "google": "gemini-embedding-001", "compatible": "the model the server loaded", "ollama": "nomic-embed-text"},
-					Help:         "Empty uses the placeholder's model. Replaces LLM_EMBED_MODEL, which is read when this is empty."},
+					Help:         "Empty uses the placeholder's model. Replaces LLM_EMBED_MODEL, which is read when this is empty.", Choices: embedModels},
 			}},
 		{Key: "storage", Page: "storage", Title: "File storage", Icon: "folder", Selector: "STORAGE_PROVIDER",
 			Description: "Where the storage pack keeps uploads and generated files.",
@@ -253,6 +316,8 @@ type fieldView struct {
 	// ("anthropic=claude-sonnet-5-5|openai=gpt-6-luna").
 	PlaceholderNow   string
 	PlaceholdersAttr string
+	// HasChoices marks a field the page offers a list for (Field.Choices).
+	HasChoices bool
 }
 
 type linkView struct {
@@ -324,7 +389,7 @@ func view(s Section, values, origins map[string]string) sectionView {
 	secrets, secretsSet := 0, 0
 	for _, f := range s.Fields {
 		search = append(search, strings.ToLower(f.Name), strings.ToLower(f.Label), strings.ToLower(f.Group))
-		fv := fieldView{Field: f, Value: values[f.Name], Origin: origins[f.Name], Applies: applies(f), ForAttr: strings.Join(f.For, ","), PlaceholderNow: f.Placeholder}
+		fv := fieldView{Field: f, Value: values[f.Name], Origin: origins[f.Name], Applies: applies(f), ForAttr: strings.Join(f.For, ","), PlaceholderNow: f.Placeholder, HasChoices: f.Choices != nil}
 		if len(f.Placeholders) > 0 {
 			var parts []string
 			for _, k := range slices.Sorted(maps.Keys(f.Placeholders)) {
@@ -600,6 +665,15 @@ func (h *Handler) saveSettings(w http.ResponseWriter, r *http.Request) {
 		}
 		selected = strings.Split(value, ",")
 	}
+	// A field with a list is checked against it once, with the page's
+	// values.
+	verdicts := map[string]string{}
+	refused := func(f Field, v string) string {
+		if _, ok := verdicts[f.Name]; !ok {
+			verdicts[f.Name] = refusedChoice(ctx, f, v, merged(sec, current, r.Form))
+		}
+		return verdicts[f.Name]
+	}
 	for _, f := range sec.Fields {
 		if origins[f.Name] == env.OriginProcess || !appliesTo(f, selected) {
 			continue
@@ -645,6 +719,9 @@ func (h *Handler) saveSettings(w http.ResponseWriter, r *http.Request) {
 			case f.Kind == "url" && v != "" && !isHTTPURL(v):
 				h.redirect(w, r, back, "", f.Label+": "+v+" is not an http:// or https:// address")
 				return
+			case f.Choices != nil && v != "" && v != current[f.Name] && refused(f, v) != "":
+				h.redirect(w, r, back, "", refused(f, v))
+				return
 			case v == current[f.Name]:
 			case v == "" && f.Kind == "secret":
 				// An empty secret keeps the stored one.
@@ -680,6 +757,114 @@ func (h *Handler) saveSettings(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	h.redirect(w, r, back, sec.Title+" saved and applied", "")
+}
+
+// merged is the section's values as the page has them: what the form
+// sends over what is stored (an empty secret keeps the stored one).
+func merged(sec *Section, current map[string]string, form url.Values) map[string]string {
+	out := map[string]string{}
+	for _, f := range sec.Fields {
+		out[f.Name] = current[f.Name]
+		if v := strings.TrimSpace(form.Get(f.Name)); v != "" {
+			out[f.Name] = v
+		}
+	}
+	// The embeddings section reads the chat provider's settings too.
+	for _, name := range []string{"LLM_PROVIDER", "LLM_API_KEY", "LLM_BASE_URL"} {
+		if _, ok := out[name]; !ok {
+			out[name] = current[name]
+		}
+	}
+	return out
+}
+
+// refusedChoice says why v is not one of f's choices, or "" when it is,
+// or when the list cannot be had (the value is then taken as typed).
+func refusedChoice(ctx context.Context, f Field, v string, values map[string]string) string {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	choices, err := f.Choices(ctx, values)
+	if err != nil || len(choices) == 0 {
+		return ""
+	}
+	var models []llm.Model
+	for _, c := range choices {
+		if c.Value == v {
+			return ""
+		}
+		models = append(models, llm.Model{ID: c.Value})
+	}
+	if llm.HasModel(models, v) {
+		return ""
+	}
+	msg := f.Label + ": " + v + " is not one of this provider's"
+	if near := llm.Closest(models, v, 3); len(near) > 0 {
+		msg += "; nearest: " + strings.Join(near, ", ")
+	}
+	return msg
+}
+
+// choices answers the page's request for a field's list (Field.Choices)
+// with the form's values as they stand: {"choices": [...], "error":
+// "..."}; no list and no error when the source has none.
+func (h *Handler) choices(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	answer := func(choices []Choice, err string) {
+		if choices == nil {
+			choices = []Choice{}
+		}
+		json.NewEncoder(w).Encode(map[string]any{"choices": choices, "error": err})
+	}
+	if err := r.ParseForm(); err != nil {
+		answer(nil, "bad form")
+		return
+	}
+	var field *Field
+	for _, s := range h.enabledSections(ctx) {
+		if s.Key != r.Form.Get("section") {
+			continue
+		}
+		s := s
+		for i := range s.Fields {
+			if s.Fields[i].Name == r.Form.Get("field") && s.Fields[i].Choices != nil {
+				field = &s.Fields[i]
+			}
+		}
+		if field != nil {
+			current, _ := env.Values(h.opt.CredentialsDir)
+			ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			defer cancel()
+			choices, err := field.Choices(ctx, merged(&s, current, r.Form))
+			switch {
+			case errors.Is(err, llm.ErrNoModelList):
+				answer(nil, "")
+			case err != nil:
+				answer(nil, chooseError(err))
+			default:
+				answer(choices, "")
+			}
+			return
+		}
+	}
+	answer(nil, "no such field")
+}
+
+// chooseError is a provider's refusal in the operator's terms.
+func chooseError(err error) string {
+	var e *llm.Error
+	if errors.As(err, &e) {
+		switch {
+		case e.Status == 401 || e.Status == 403:
+			return "the key was refused"
+		case e.Status == 0:
+			return "the server could not be reached"
+		case e.Status > 0:
+			return fmt.Sprintf("the provider answered %d", e.Status)
+		}
+	}
+	return err.Error()
 }
 
 // appliesTo reports whether the selector's values show f: a field

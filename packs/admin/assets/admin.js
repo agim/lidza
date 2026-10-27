@@ -180,6 +180,51 @@
       run()
     })
 
+    // A field with a list (a provider's models for the key on the page)
+    // fills its datalist from the server with the form as it stands, and
+    // again when the provider, key or address changes. The field stays
+    // free text: the list suggests, the server checks on Save.
+    all('input[data-admin-choices]').forEach(function (input) {
+      var form = input.form
+      var list = document.getElementById(input.getAttribute('list'))
+      var state = form.querySelector('[data-admin-choices-state="' + input.name + '"]')
+      if (!form || !list) return
+      var timer = null, last = ''
+      function say(text, warn) {
+        if (!state) return
+        state.textContent = text
+        state.hidden = !text
+        state.classList.toggle('text-warning', !!warn)
+      }
+      function load() {
+        var data = new FormData(form)
+        data.set('field', input.name)
+        var body = new URLSearchParams(data)
+        var key = body.toString()
+        if (key === last) return
+        last = key
+        fetch(form.getAttribute('data-admin-choices-url'), { method: 'POST', credentials: 'same-origin', body: body, headers: { Accept: 'application/json' } })
+          .then(function (res) { return res.json() })
+          .then(function (r) {
+            while (list.firstChild) list.removeChild(list.firstChild)
+            ;(r.choices || []).forEach(function (c) {
+              var o = document.createElement('option')
+              o.value = c.value
+              if (c.label && c.label !== c.value) o.label = c.label
+              list.appendChild(o)
+            })
+            if (r.error) say('Could not list the models: ' + r.error, true)
+            else if (r.choices && r.choices.length) say(r.choices.length + ' models available to this key; type to search.')
+            else say('')
+          })
+          .catch(function () { say('') })
+      }
+      function soon() { clearTimeout(timer); timer = setTimeout(load, 400) }
+      input.addEventListener('focus', load)
+      form.addEventListener('change', function (e) { if (e.target !== input) soon() })
+      form.addEventListener('input', function (e) { if (e.target !== input && e.target.type === 'password') soon() })
+    })
+
     // Unsaved changes: say so, and ask before leaving the page.
     all('form[data-admin-dirty]').forEach(function (form) {
       var dirty = false

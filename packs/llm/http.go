@@ -26,11 +26,19 @@ func send(ctx context.Context, provider, url string, headers map[string]string, 
 	if err := enc.Encode(v); err != nil {
 		return nil, err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, &buf)
+	return do(ctx, provider, http.MethodPost, url, headers, &buf)
+}
+
+// do sends one request with the provider's headers; a reply outside 2xx
+// is an *Error.
+func do(ctx context.Context, provider, method, url string, headers map[string]string, body io.Reader) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, method, url, body)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Content-Type", "application/json")
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
 	req.Header.Set("Accept", "application/json")
 	for k, val := range headers {
 		req.Header.Set(k, val)
@@ -137,4 +145,21 @@ func rawObject(v json.RawMessage) json.RawMessage {
 		return json.RawMessage("{}")
 	}
 	return v
+}
+
+// getJSON gets url and decodes the reply into out.
+func getJSON(ctx context.Context, provider, url string, headers map[string]string, out any) error {
+	res, err := do(ctx, provider, http.MethodGet, url, headers, nil)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(res.Body, 8<<20))
+	if err != nil {
+		return &Error{Provider: provider, Err: err}
+	}
+	if err := json.Unmarshal(body, out); err != nil {
+		return fmt.Errorf("llm: %s: decode reply: %w", provider, err)
+	}
+	return nil
 }

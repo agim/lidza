@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"regexp"
 	"strconv"
@@ -642,5 +643,82 @@ func TestModelPlaceholdersAreTheDefaults(t *testing.T) {
 	}
 	if seen != 2 {
 		t.Fatalf("found %d model fields, want 2", seen)
+	}
+}
+
+// The Model field offers the provider's models for the key on the page
+// (POST /admin/choices) and refuses a name outside the list on Save,
+// with the nearest ones; a list that cannot be had leaves the name as
+// typed.
+func TestModelChoices(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	t.Setenv(credentials.EnvMasterKey, "")
+	t.Setenv("LIDZA_MODE", "test")
+	t.Cleanup(func() { credentials.SetOverrides(nil) })
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer sk-good" {
+			http.Error(w, `{"error":"bad key"}`, http.StatusUnauthorized)
+			return
+		}
+		fmt.Fprint(w, `{"data":[{"id":"gpt-6-luna"},{"id":"gpt-6-sol"},{"id":"text-embedding-3-small"}]}`)
+	}))
+	defer provider.Close()
+	// A hosted provider's address is not on the page (a proxy goes in
+	// the environment); the stub's is, so no call leaves the test.
+	t.Setenv("LLM_BASE_URL", provider.URL)
+	l, _ := llm.New(llm.Config{Provider: "fake"})
+	s := lidza.NewServices()
+	lidza.Provide(s, l)
+	srv := serve(t, Options{Auth: noAuth, Allow: func(context.Context) bool { return true }, CredentialsDir: dir, Dir: dir}, s)
+	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	post := func(path string, form url.Values) (int, string, string) {
+		t.Helper()
+		res, err := client.PostForm(srv.URL+path, form)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		body, _ := io.ReadAll(res.Body)
+		return res.StatusCode, res.Header.Get("Location"), string(body)
+	}
+	_, body := get(t, srv, "/admin/llm/settings")
+	if !strings.Contains(body, `data-admin-choices="LLM_MODEL"`) || !strings.Contains(body, `<datalist id="dl-LLM_MODEL">`) || !strings.Contains(body, `data-admin-choices-url="/admin/choices"`) {
+		t.Fatal("the model field offers no list")
+	}
+
+	// The page's values, the key among them, before anything is saved.
+	form := url.Values{"section": {"llm"}, "field": {"LLM_MODEL"}, "LLM_PROVIDER": {"openai"}, "LLM_API_KEY": {"sk-good"}}
+	if _, _, body := post("/admin/choices", form); !strings.Contains(body, `"value":"gpt-6-luna"`) || strings.Contains(body, "embedding") {
+		t.Fatalf("choices: %s", body)
+	}
+	form.Set("LLM_API_KEY", "sk-bad")
+	if _, _, body := post("/admin/choices", form); !strings.Contains(body, `"error":"the key was refused"`) {
+		t.Fatalf("refused key: %s", body)
+	}
+	if _, _, body := post("/admin/choices", url.Values{"section": {"llm"}, "field": {"LLM_MODEL"}, "LLM_PROVIDER": {"fake"}}); !strings.Contains(body, `"choices":[],"error":""`) {
+		t.Fatalf("no list: %s", body)
+	}
+
+	// Save: a typo is refused with the nearest names; the right name goes
+	// through; the key is read from the store once saved.
+	save := url.Values{"section": {"llm"}, "LLM_PROVIDER": {"openai"}, "LLM_API_KEY": {"sk-good"}, "LLM_MODEL": {"gpt-6-lunar"}}
+	if _, loc, _ := post("/admin/settings", save); !strings.Contains(loc, "not+one+of+this+provider") || !strings.Contains(loc, "gpt-6-luna") {
+		t.Fatalf("typo accepted: %s", loc)
+	}
+	save.Set("LLM_MODEL", "gpt-6-sol")
+	if _, loc, _ := post("/admin/settings", save); !strings.Contains(loc, "saved") {
+		t.Fatalf("right name refused: %s", loc)
+	}
+	if _, loc, _ := post("/admin/settings", url.Values{"section": {"llm"}, "LLM_PROVIDER": {"openai"}, "LLM_MODEL": {"gpt-6-sole"}}); !strings.Contains(loc, "nearest") {
+		t.Fatalf("typo with the stored key accepted: %s", loc)
+	}
+	// Embeddings follow the chat provider's key; only embedding models.
+	if _, _, body := post("/admin/choices", url.Values{"section": {"embed"}, "field": {"EMBED_MODEL"}, "EMBED_PROVIDER": {""}}); !strings.Contains(body, "text-embedding-3-small") || strings.Contains(body, "gpt-6") {
+		t.Fatalf("embed choices: %s", body)
+	}
+	// The list cannot be had (the key is wrong): the name is taken as typed.
+	if _, loc, _ := post("/admin/settings", url.Values{"section": {"llm"}, "LLM_PROVIDER": {"openai"}, "LLM_API_KEY": {"sk-bad"}, "LLM_MODEL": {"gpt-7"}}); !strings.Contains(loc, "saved") {
+		t.Fatalf("free text without a list: %s", loc)
 	}
 }

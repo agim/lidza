@@ -10,6 +10,18 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
+## Unreleased
+
+- admin: the Model fields on the Language model page offer the
+  provider's own models for the key on the page, saved or just typed,
+  and Save refuses a name the provider does not have, naming the nearest
+  ones (a typo, a retired ID, a name guessed from the placeholder's
+  pattern). When the list cannot be had (no key yet, the key refused,
+  the server unreachable) the field stays free text and says why.
+  `llm.ListModels` and `llm.ListEmbedModels` list a provider's models
+  (Anthropic, OpenAI and compatible servers, Google, Ollama; `fake` has
+  none); `admin.Field.Choices` is the hook any section can use (#62).
+
 ## v0.1.125 (2026-10-21)
 
 - Build with Go1.27.3 to fix GO-2026-6809 in certificate verification;

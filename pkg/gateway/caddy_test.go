@@ -34,7 +34,7 @@ func TestRealNativeTLSEdge(t *testing.T) {
 	}
 	app := privateServer(t, ca, appCert, appVerify(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !RequireTLS13(r) {
-			http.Error(w, "original TLS 1.3 required", 403)
+			http.Error(w, "original TLS 1.3 required", http.StatusForbidden)
 			return
 		}
 		e, _ := From(r.Context())

@@ -171,6 +171,7 @@ func New(opt Options) *Handler {
 	h.mux.HandleFunc("POST "+p+"/users/{subject}/{action}", h.userAction)
 	h.mux.HandleFunc("GET "+p+"/settings", h.appSettings)
 	h.mux.HandleFunc("POST "+p+"/settings", h.saveSettings)
+	h.mux.HandleFunc("POST "+p+"/choices", h.choices)
 	h.mux.HandleFunc("GET "+p+"/credentials", h.credentialsRedirect)
 	h.mux.HandleFunc("POST "+p+"/credentials", h.saveSettings)
 	h.mux.HandleFunc("GET "+p+"/llm", h.llm)

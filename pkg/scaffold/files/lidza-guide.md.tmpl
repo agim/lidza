@@ -1171,7 +1171,9 @@ app's tools. The llm pack speaks the providers; the app never does.
 1. `lidza pack add llm` (MCP: `lidza_pack_add`). `.env` gets
    `LLM_PROVIDER=fake`; set `ollama` for a local model, or `anthropic`,
    `openai` or `google` with `LLM_API_KEY` and, when the default does not
-   suit, `LLM_MODEL`. `.env.test` keeps `fake`. Try the setup with the
+   suit, `LLM_MODEL` (on the admin Language model page the field lists
+   the provider's models for the key and refuses a name it does not
+   have). `.env.test` keeps `fake`. Try the setup with the
    MCP tool `lidza_llm` before writing code. Embeddings come from the
    chat provider unless `EMBED_PROVIDER` names another: `openai`,
    `google`, `ollama` or `compatible`, with `EMBED_API_KEY`,

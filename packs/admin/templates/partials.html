@@ -90,7 +90,8 @@
   </select>
   {{else}}
   <input type="{{if eq .Kind "number"}}number{{else}}text{{end}}" class="form-control" id="f-{{.Name}}" name="{{.Name}}" value="{{.Value}}" autocomplete="off" spellcheck="false" data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other"{{if eq .Kind "number"}} inputmode="numeric" min="0"{{end}}
-    placeholder="{{if .PlaceholderNow}}{{.PlaceholderNow}}{{else if .Default}}default: {{.Default}}{{end}}"{{if .PlaceholdersAttr}} data-placeholders="{{.PlaceholdersAttr}}"{{end}}{{if or .Locked (not .Applies)}} disabled{{end}}>
+    placeholder="{{if .PlaceholderNow}}{{.PlaceholderNow}}{{else if .Default}}default: {{.Default}}{{end}}"{{if .PlaceholdersAttr}} data-placeholders="{{.PlaceholdersAttr}}"{{end}}{{if .HasChoices}} list="dl-{{.Name}}" data-admin-choices="{{.Name}}"{{end}}{{if or .Locked (not .Applies)}} disabled{{end}}>
+  {{if .HasChoices}}<datalist id="dl-{{.Name}}"></datalist><div class="form-hint admin-choices-state" data-admin-choices-state="{{.Name}}" hidden></div>{{end}}
   {{end}}
   {{if .Locked}}<div class="form-hint text-warning">{{icon "lock"}} Set in the process environment, which takes precedence. Change it where the app is deployed.</div>
   {{else if .Help}}<div class="form-hint">{{.Help}}</div>{{end}}
@@ -123,7 +124,7 @@
 {{/* section-form: a section's form. Takes (dict "S" section "Path" path). */}}
 {{define "section-form"}}
 {{$s := .S}}
-<form class="card" method="post" action="{{.Path}}/settings" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other" data-admin-dirty{{if $s.Selector}} data-admin-selector="{{$s.Selector.Name}}"{{end}}>
+<form class="card" method="post" action="{{.Path}}/settings" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other" data-admin-dirty data-admin-choices-url="{{.Path}}/choices"{{if $s.Selector}} data-admin-selector="{{$s.Selector.Name}}"{{end}}>
   <input type="hidden" name="section" value="{{$s.Key}}">
   <div class="card-header">
     <div class="d-flex align-items-center gap-3">

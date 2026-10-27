@@ -10,7 +10,7 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
-## Unreleased
+## v0.1.127 (2026-10-27)
 
 - `lidza mcp` lists the framework tools at once and builds and starts
   the app's own tools in the background, announcing them when they are

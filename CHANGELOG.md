@@ -10,7 +10,7 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
-## Unreleased
+## v0.1.126 (2026-10-27)
 
 - admin: the Model fields on the Language model page offer the
   provider's own models for the key on the page, saved or just typed,

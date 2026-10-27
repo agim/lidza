@@ -6,9 +6,14 @@ package diag
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -139,28 +144,82 @@ func fileExists(p string) bool {
 	return err == nil
 }
 
-// Run executes every applicable checker, in parallel, and merges the results.
-func Run(ctx context.Context, l Layers) Report {
+// Security says when Run scans the dependencies for known
+// vulnerabilities (govulncheck, cargo deny, npm audit): the scanners read
+// a database over the network and take seconds to minutes, so they run
+// when the dependencies changed, not after every edit.
+type Security int
+
+const (
+	// SecurityWhenChanged scans when a lock file (go.sum, Cargo.lock,
+	// package-lock.json) changed since the last scan, or that scan is a
+	// day old; otherwise the scanners are skipped, saying so. The default.
+	SecurityWhenChanged Security = iota
+	// SecurityAlways scans every time (CI, lidza verify --strict).
+	SecurityAlways
+	// SecurityNever runs no scanner.
+	SecurityNever
+)
+
+// Options tune Run.
+type Options struct {
+	Security Security
+	// Jobs bounds how many of the heavy checkers (the ones that compile
+	// or type-check the whole program: go vet, staticcheck, govulncheck,
+	// the rules, cargo check) run at once; 0 is half the CPUs, at least
+	// one. The frontend checkers run alongside. Every tool running at
+	// once on a small machine makes each one many times slower.
+	Jobs int
+}
+
+// Run executes every applicable checker and merges the results.
+func Run(ctx context.Context, l Layers, opts ...Options) Report {
+	var o Options
+	if len(opts) > 0 {
+		o = opts[0]
+	}
+	if o.Jobs <= 0 {
+		o.Jobs = max(1, runtime.NumCPU()/2)
+	}
+	heavy := make(chan struct{}, o.Jobs)
+	bounded := func(run func(context.Context) ([]Diagnostic, ToolRun)) func(context.Context) ([]Diagnostic, ToolRun) {
+		return func(ctx context.Context) ([]Diagnostic, ToolRun) {
+			select {
+			case heavy <- struct{}{}:
+			case <-ctx.Done():
+				return nil, ToolRun{Failed: true, Reason: ctx.Err().Error()}
+			}
+			defer func() { <-heavy }()
+			return run(ctx)
+		}
+	}
+	scan, scanReason := securityDue(l, o.Security)
+	scanner := func(run func(context.Context) ([]Diagnostic, ToolRun)) func(context.Context) ([]Diagnostic, ToolRun) {
+		if !scan {
+			return func(context.Context) ([]Diagnostic, ToolRun) { return nil, skip(scanReason) }
+		}
+		return bounded(run)
+	}
 	type job struct {
 		tool, layer string
 		run         func(context.Context) ([]Diagnostic, ToolRun)
 	}
 	jobs := []job{
-		{"go vet", "go", func(ctx context.Context) ([]Diagnostic, ToolRun) { return runGoVet(ctx, l) }},
-		{"staticcheck", "go", func(ctx context.Context) ([]Diagnostic, ToolRun) { return runStaticcheck(ctx, l) }},
-		{"cargo check", "rust", func(ctx context.Context) ([]Diagnostic, ToolRun) { return runCargo(ctx, l) }},
+		{"go vet", "go", bounded(func(ctx context.Context) ([]Diagnostic, ToolRun) { return runGoVet(ctx, l) })},
+		{"staticcheck", "go", bounded(func(ctx context.Context) ([]Diagnostic, ToolRun) { return runStaticcheck(ctx, l) })},
+		{"cargo check", "rust", bounded(func(ctx context.Context) ([]Diagnostic, ToolRun) { return runCargo(ctx, l) })},
 		{"tsc", "frontend", func(ctx context.Context) ([]Diagnostic, ToolRun) { return runTSC(ctx, l) }},
 		{"svelte-check", "frontend", func(ctx context.Context) ([]Diagnostic, ToolRun) { return runSvelteCheck(ctx, l) }},
 		{"eslint", "frontend", func(ctx context.Context) ([]Diagnostic, ToolRun) { return runESLint(ctx, l) }},
-		{"govulncheck", "go", func(ctx context.Context) ([]Diagnostic, ToolRun) { return runGovulncheck(ctx, l) }},
-		{"cargo deny", "rust", func(ctx context.Context) ([]Diagnostic, ToolRun) { return runCargoDeny(ctx, l) }},
-		{"npm audit", "frontend", func(ctx context.Context) ([]Diagnostic, ToolRun) { return runNpmAudit(ctx, l) }},
-		{"lidza rules", "go", func(ctx context.Context) ([]Diagnostic, ToolRun) {
+		{"govulncheck", "go", scanner(func(ctx context.Context) ([]Diagnostic, ToolRun) { return runGovulncheck(ctx, l) })},
+		{"cargo deny", "rust", scanner(func(ctx context.Context) ([]Diagnostic, ToolRun) { return runCargoDeny(ctx, l) })},
+		{"npm audit", "frontend", scanner(func(ctx context.Context) ([]Diagnostic, ToolRun) { return runNpmAudit(ctx, l) })},
+		{"lidza rules", "go", bounded(func(ctx context.Context) ([]Diagnostic, ToolRun) {
 			if !l.Go {
 				return nil, skip("no go.mod")
 			}
 			return Rules(ctx, l.Dir), ToolRun{}
-		}},
+		})},
 		{"lidza rules", "frontend", func(ctx context.Context) ([]Diagnostic, ToolRun) {
 			if !l.TSConfig {
 				return nil, skip("no tsconfig.json")
@@ -206,7 +265,79 @@ func Run(ctx context.Context, l Layers) Report {
 	if r.Errors() > 0 {
 		r.Status = "error"
 	}
+	if scan {
+		recordScan(l, runs)
+	}
 	return r
+}
+
+// scanStamp records the last vulnerability scan: the lock files' hash
+// and when, in .lidza/security-scan.json.
+type scanStamp struct {
+	Locks string    `json:"locks"`
+	At    time.Time `json:"at"`
+}
+
+const scanStampFile = ".lidza/security-scan.json"
+
+// securityDue decides whether the scanners run this time, and says why
+// not when they do not.
+func securityDue(l Layers, mode Security) (bool, string) {
+	switch mode {
+	case SecurityAlways:
+		return true, ""
+	case SecurityNever:
+		return false, "vulnerability scan off"
+	}
+	locks := lockHash(l.Dir)
+	data, err := os.ReadFile(filepath.Join(l.Dir, filepath.FromSlash(scanStampFile)))
+	if err != nil {
+		return true, ""
+	}
+	var st scanStamp
+	if json.Unmarshal(data, &st) != nil || st.Locks != locks {
+		return true, ""
+	}
+	if time.Since(st.At) > 24*time.Hour {
+		return true, ""
+	}
+	return false, fmt.Sprintf("dependencies unchanged since the last scan, %s ago (lidza check --security scans now; lidza verify --strict always does)", time.Since(st.At).Round(time.Minute))
+}
+
+// recordScan writes the stamp when every scanner that ran completed.
+func recordScan(l Layers, runs []ToolRun) {
+	for _, t := range runs {
+		switch t.Tool {
+		case "govulncheck", "cargo deny", "npm audit":
+			if t.Failed {
+				return
+			}
+		}
+	}
+	data, _ := json.Marshal(scanStamp{Locks: lockHash(l.Dir), At: time.Now()})
+	p := filepath.Join(l.Dir, filepath.FromSlash(scanStampFile))
+	if os.MkdirAll(filepath.Dir(p), 0o755) == nil {
+		_ = os.WriteFile(p, data, 0o644)
+	}
+}
+
+// lockHash hashes the lock files that pin the dependencies.
+func lockHash(dir string) string {
+	h := sha256.New()
+	files := []string{"go.sum", "package-lock.json", "Cargo.lock", "core/Cargo.lock"}
+	matches, _ := filepath.Glob(filepath.Join(dir, "packs", "*", "*", "Cargo.lock"))
+	for _, m := range matches {
+		if rel, err := filepath.Rel(dir, m); err == nil {
+			files = append(files, rel)
+		}
+	}
+	for _, f := range files {
+		if data, err := os.ReadFile(filepath.Join(dir, f)); err == nil {
+			h.Write([]byte(f))
+			h.Write(data)
+		}
+	}
+	return hex.EncodeToString(h.Sum(nil))[:16]
 }
 
 // dropSuperseded removes the go tool's "no required module provides

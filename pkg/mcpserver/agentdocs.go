@@ -344,7 +344,7 @@ func addAPI(s *server.MCPServer, dir string) {
 
 // apiBudget is the size of a whole-package answer above which lidza_api
 // returns the signatures instead (about 6000 tokens).
-const apiBudget = 24000
+const apiBudget = apidoc.Budget
 
 // apiPackage maps "all" to apidoc.Resolve's every-package selection.
 func apiPackage(pkg string) string {

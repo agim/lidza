@@ -69,13 +69,13 @@ func New(dir string, cfg *config.Config) *Server {
 	srv := &Server{MCPServer: s, dir: dir, cfg: cfg, packs: newGroup(s), app: newGroup(s), recipes: newGroup(s), stamps: map[string]time.Time{}}
 
 	s.AddTool(mcp.NewTool("lidza_routes",
-		mcp.WithDescription("List the API routes: method, path, handler name, file and line, signature. Built-in routes are marked."),
+		mcp.WithDescription("List the routes registered in the app's Go source: method, path, handler name, file and line, in milliseconds (no type-check). Built-in routes are marked. For handler signatures, typed operations' schemas and a mounted pack's routes, lidza_context."),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		c, err := inspect.Project(dir, cfg)
+		routes, err := inspect.Routes(dir, cfg)
 		if err != nil {
 			return mcp.NewToolResultErrorFromErr("inspect", err), nil
 		}
-		return jsonResult(c.Routes)
+		return jsonResult(routes)
 	})
 
 	s.AddTool(mcp.NewTool("lidza_context",

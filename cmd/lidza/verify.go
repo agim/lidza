@@ -20,6 +20,7 @@ import (
 	"github.com/agim/lidza/pkg/recipes"
 	"github.com/agim/lidza/pkg/scaffold"
 	"github.com/agim/lidza/pkg/schema"
+	"github.com/agim/lidza/pkg/version"
 )
 
 // HookDir is the git hooks directory `lidza new` writes and points
@@ -33,7 +34,7 @@ const hookScript = `#!/bin/sh
 # assertions, lidza check clean, tests passing. Confirm a deliberate test
 # change with LIDZA_ALLOW_TEST_CHANGES=1 git commit; skip once with
 # git commit --no-verify.
-exec lidza verify
+exec lidza verify --hook
 `
 
 // verifyStep is one stage of `lidza verify`.
@@ -63,6 +64,7 @@ func runVerify(ctx context.Context, args []string) error {
 	noTest := fs.Bool("no-test", false, "skip the Go tests")
 	strict := fs.Bool("strict", false, "warnings fail the check step too (for CI)")
 	installHook := fs.Bool("install-hook", false, "write .githooks/pre-commit and point git at it, then exit")
+	hook := fs.Bool("hook", false, "run as the pre-commit hook: a verify that passed on the tree being committed is not repeated (git's own environment says so too)")
 	allowTests := fs.Bool("allow-test-changes", false, "confirm staged changes that delete a test file, skip a test or remove assertions (from the hook: "+EnvAllowTestChanges+"=1 git commit)")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -100,6 +102,23 @@ func runVerify(ctx context.Context, args []string) error {
 		return s.Status != "failed"
 	}
 
+	// From the hook, a verify that already passed on exactly the index
+	// being committed is done: the agent's own verify counts once.
+	if (*hook || inGitHook()) && !*strict {
+		if st, ok := readStamp(abs, "verified"); ok && st.Staged != "" && st.Staged == stagedTree(abs) && st.Lidza == version.String() {
+			fmt.Fprintf(out, "[lidza] verify: passed %s on the tree being committed; not repeated\n", ago(time.Since(st.At)))
+			return nil
+		}
+	}
+	// The tree as checked and tested: computed after generation, since
+	// generated files are part of it.
+	var treeNow string
+	tree := func() string {
+		if treeNow == "" {
+			treeNow = workTree(abs)
+		}
+		return treeNow
+	}
 	// One machine's CLI must not commit another release's agent files:
 	// the pre-commit hook stops here until the CLI matches go.mod.
 	step("framework version", func() (string, error) {
@@ -128,8 +147,15 @@ func runVerify(ctx context.Context, args []string) error {
 	})
 	os.Setenv("LIDZA_MODE", "test")
 	checkOK := step("check", func() (string, error) {
+		if d, ok := passedOn(abs, "checked", tree()); ok && !*strict {
+			return "passed " + ago(d) + " on this tree; not repeated", nil
+		}
 		layers := diag.Detect(abs)
-		r := diag.Run(ctx, layers)
+		opts := diag.Options{}
+		if *strict {
+			opts.Security = diag.SecurityAlways
+		}
+		r := diag.Run(ctx, layers, opts)
 		if cfg != nil {
 			r.Diagnostics = append(r.Diagnostics, packDiagnostics(ctx, abs, cfg)...)
 		}
@@ -147,6 +173,7 @@ func runVerify(ctx context.Context, args []string) error {
 		if n := len(r.Diagnostics) - r.Warnings(); n > 0 {
 			notes = fmt.Sprintf(", %d note(s)", n)
 		}
+		markChecked(abs)
 		return fmt.Sprintf("%d warning(s)%s", r.Warnings(), notes), nil
 	})
 	step("test", func() (string, error) {
@@ -156,7 +183,14 @@ func runVerify(ctx context.Context, args []string) error {
 		if !checkOK {
 			return "check failed", errSkipped
 		}
-		return "", goTest(ctx, abs, cfg, nil, out)
+		if d, ok := passedOn(abs, "tested", tree()); ok {
+			return "passed " + ago(d) + " on this tree; not repeated", nil
+		}
+		if err := goTest(ctx, abs, cfg, nil, out); err != nil {
+			return "", err
+		}
+		markTested(abs)
+		return "", nil
 	})
 
 	if *asJSON {
@@ -174,6 +208,7 @@ func runVerify(ctx context.Context, args []string) error {
 	if rep.Status != "ok" {
 		return errCheckFailed
 	}
+	markVerified(abs)
 	return nil
 }
 

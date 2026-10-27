@@ -63,17 +63,12 @@ func runTest(ctx context.Context, args []string) error {
 			return err
 		}
 	}
+	// The frontend's type-check and lint are lidza check's (tsc, eslint):
+	// running them here too doubled every test cycle.
 	if err := goTest(ctx, abs, cfg, extra, os.Stdout); err != nil {
 		return err
 	}
-	if cfg != nil && cfg.Frontend.Dist != "" {
-		if _, err := os.Stat(filepath.Join(abs, "node_modules")); err == nil {
-			fmt.Println("[lidza] npm run check")
-			if err := run(ctx, abs, "npm", "run", "check"); err != nil {
-				return fmt.Errorf("frontend check failed")
-			}
-		}
-	}
+	markTested(abs)
 	return nil
 }
 

@@ -3,6 +3,7 @@ package mcpserver
 import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
+	"sync"
 )
 
 // group registers tools, prompts and resources on the server and
@@ -10,6 +11,7 @@ import (
 // current set: the pack tools follow lidza.json, the prompts follow the
 // guide, the app tools follow tools.go.
 type group struct {
+	mu        sync.Mutex
 	s         *server.MCPServer
 	tools     []string
 	prompts   []string
@@ -20,7 +22,9 @@ type group struct {
 func newGroup(s *server.MCPServer) *group { return &group{s: s} }
 
 func (g *group) AddTool(t mcp.Tool, h server.ToolHandlerFunc) {
+	g.mu.Lock()
 	g.tools = append(g.tools, t.Name)
+	g.mu.Unlock()
 	g.s.AddTool(t, h)
 }
 
@@ -35,7 +39,11 @@ func (g *group) AddResource(r mcp.Resource, h server.ResourceHandlerFunc) {
 }
 
 // onClose runs when the group is cleared (a client to close).
-func (g *group) onClose(f func()) { g.closers = append(g.closers, f) }
+func (g *group) onClose(f func()) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.closers = append(g.closers, f)
+}
 
 // clear removes everything the group registered; the server tells
 // connected clients the lists changed.

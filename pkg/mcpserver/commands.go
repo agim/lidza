@@ -198,7 +198,7 @@ func addCommandTools(s *server.MCPServer, dir string, cfg *config.Config, after 
 			}
 			return []string{"db", "new", d}, nil
 		}},
-		{"lidza_test", "Run the Go tests (the test database is created and migrated, LIDZA_MODE=test), then the frontend check; or the browser suite with e2e.", []mcp.ToolOption{
+		{"lidza_test", "Run the Go tests (the test database is created and migrated, LIDZA_MODE=test), or the browser suite with e2e. The frontend type-check and lint are lidza_check's.", []mcp.ToolOption{
 			mcp.WithBoolean("e2e", mcp.Description("Build the app and run the Playwright suite instead of the Go tests.")),
 			mcp.WithBoolean("install", mcp.Description("With e2e: install the browser when it is missing.")),
 			mcp.WithString("run", mcp.Description("Only Go tests matching this regexp (go test -run).")),

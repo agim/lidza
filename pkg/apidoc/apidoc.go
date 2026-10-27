@@ -366,7 +366,6 @@ func (s Source) renderPackage(rel, filter string, index bool) (string, error) {
 	pr := &renderer{fset: fset, files: files, filter: filter, out: &b, index: index}
 	if index {
 		b.WriteString("```go\n")
-		defer b.WriteString("```\n")
 	}
 	for _, c := range d.Consts {
 		pr.decl(c.Decl, c.Doc, c.Names...)
@@ -380,10 +379,23 @@ func (s Source) renderPackage(rel, filter string, index bool) (string, error) {
 	for _, f := range d.Funcs {
 		pr.fn(f)
 	}
+	if index {
+		b.WriteString("```\n")
+	}
+	// A filter that matches nothing in this package: no header for it.
+	if filter != "" && pr.hits == 0 {
+		return "", nil
+	}
 	return b.String(), nil
 }
 
+// Budget is the size of a whole-package rendering above which a reader
+// is better served by Index and a filter (about 6,000 tokens).
+const Budget = 24000
+
 type renderer struct {
+	// hits counts the declarations the filter let through.
+	hits   int
 	fset   *token.FileSet
 	files  map[string]*ast.File
 	filter string
@@ -394,10 +406,12 @@ type renderer struct {
 
 func (r *renderer) matches(names ...string) bool {
 	if r.filter == "" {
+		r.hits++
 		return true
 	}
 	for _, n := range names {
 		if strings.Contains(strings.ToLower(n), r.filter) {
+			r.hits++
 			return true
 		}
 	}

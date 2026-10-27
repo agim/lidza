@@ -12,6 +12,37 @@ these rules cover.
 
 ## Unreleased
 
+- `lidza mcp` lists the framework tools at once and builds and starts
+  the app's own tools in the background, announcing them when they are
+  up: the build ran inside the server's start before, and on a loaded
+  machine it outran Claude Code's start-up timeout, which dropped every
+  tool for the session.
+- `lidza check` runs the whole-program checkers (go vet, staticcheck,
+  govulncheck, the rules, cargo check) at most half-the-CPUs at a time
+  (`--jobs N`): all at once on a 4-core machine made each of them take
+  minutes instead of seconds. The dependency scanners run when a lock
+  file changed or the last scan is a day old (`.lidza/security-scan.json`),
+  not on every check; `--security` and `lidza verify --strict` run them
+  always.
+- A check, a test run and a verify that passed are recorded with the
+  tree they passed on (`.lidza/checked.json`, `tested.json`,
+  `verified.json`): `lidza verify` does not repeat a check or tests that
+  passed on the unchanged tree, and the pre-commit hook does not repeat
+  a verify that passed on the index being committed (`lidza verify
+  --hook`; git's own environment marks the hook for hooks written
+  earlier). Before, an agent's check, test and verify ran the same
+  tools three times before every commit; on one app the hook alone
+  took ten minutes.
+- `lidza test` no longer runs the frontend type-check and lint after the
+  Go tests; `lidza check` owns them.
+- `lidza_routes` lists the routes from the source alone, in
+  milliseconds; the type-check that gave handler signatures took
+  seconds on every call and is `lidza_context`'s.
+- `lidza api <package>` on the CLI gives the signatures with a hint,
+  like the MCP tool, when the whole package would be over 24 KB; a
+  `--filter` prints only the packages with a match.
+- The generated `AGENTS.md` says to read the guide's section a task
+  needs, not the file, and to run `lidza check` once per batch of edits.
 - Team notes live in `docs/notes.md`, not in the agent files: `lidza
   note add` writes there, `lidza note list [--grep word] [--since date]`
   (MCP `lidza_notes`) finds the ones for an area, and `lidza gen` (so

@@ -26,6 +26,8 @@ func runCheck(ctx context.Context, args []string) error {
 	fs := flags("check")
 	dir := fs.String("dir", ".", "project directory")
 	asJSON := fs.Bool("json", false, "print one JSON report instead of text")
+	security := fs.Bool("security", false, "scan the dependencies for known vulnerabilities now (otherwise when a lock file changed or the last scan is a day old)")
+	jobs := fs.Int("jobs", 0, "how many whole-program checkers run at once (default: half the CPUs)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -45,7 +47,11 @@ func runCheck(ctx context.Context, args []string) error {
 	if _, cfg, err := loadProject(abs); err == nil {
 		generateErr = generateAll(abs, cfg, io.Discard)
 	}
-	report := diag.Run(ctx, layers)
+	opts := diag.Options{Jobs: *jobs}
+	if *security {
+		opts.Security = diag.SecurityAlways
+	}
+	report := diag.Run(ctx, layers, opts)
 	if generateErr != nil {
 		report.Diagnostics = append([]diag.Diagnostic{generateDiagnostic(generateErr)}, report.Diagnostics...)
 		report.Status = "error"
@@ -69,6 +75,7 @@ func runCheck(ctx context.Context, args []string) error {
 	if report.Status != "ok" {
 		return errCheckFailed
 	}
+	markChecked(abs)
 	return nil
 }
 

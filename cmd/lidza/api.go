@@ -56,10 +56,27 @@ func runAPI(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	// A whole package too large to read: its signatures, and a filter for
+	// the rest, as the MCP tool answers.
+	if *filter == "" && len(text) > apidoc.Budget {
+		if index, err := src.Index(rels, ""); err == nil && len(index) < len(text) {
+			fmt.Printf("The full API is %d characters; these are its signatures. lidza api %s --filter <name> prints the doc comments of what you need.\n\n%s", len(text), pkgArg(pkg), index)
+			return nil
+		}
+	}
 	if strings.TrimSpace(text) == "" {
 		fmt.Fprintln(os.Stderr, "no declaration matches")
 		return nil
 	}
 	fmt.Print(text)
 	return nil
+}
+
+// pkgArg is the package as the command line names it: "all" for every
+// package.
+func pkgArg(pkg string) string {
+	if pkg == "" {
+		return "all"
+	}
+	return pkg
 }

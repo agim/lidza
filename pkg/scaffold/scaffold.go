@@ -248,6 +248,14 @@ func moduleVersion() string {
 	return "latest"
 }
 
+// oldGuideIntro and newGuideIntro are the agent file's opening sentences
+// before and after v0.1.127, above the framework block: Refresh replaces
+// the old ones when the app kept them as written.
+const (
+	oldGuideIntro = "Read `docs/lidza-guide.md` before changing anything; it has the layout, the\ncommands and the rules.\n"
+	newGuideIntro = "`docs/lidza-guide.md` has the layout, the commands and the rules; read the\nsection a task needs, not the file (its recipes are the skills). This file is\nread whole at the start of every session: keep it short, and put lasting\nfacts in `docs/notes.md`, reasons in `docs/decisions.md`, area notes in `docs/`.\n"
+)
+
 // BriefLine is the agent files' first line: the brief, the interview
 // while it is open, and the rule that app knowledge is shared through git;
 // Refresh adds it to apps that predate it.
@@ -391,7 +399,9 @@ func Refresh(dir string, cfg *config.Config) ([]string, error) {
 			continue
 		}
 		text := string(data)
-		next := refreshFramework(text, block)
+		// The opening paragraph from before the guide grew: the new one,
+		// when the app kept it as written.
+		next := strings.Replace(refreshFramework(text, block), oldGuideIntro, newGuideIntro, 1)
 		if next == text {
 			continue
 		}

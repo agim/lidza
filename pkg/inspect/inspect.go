@@ -100,6 +100,29 @@ type Export struct {
 	Signature string `json:"signature"`
 }
 
+// Routes lists the app's routes from its source alone: the built-in
+// ones and every pattern registered in Go, with handler names and
+// positions, in milliseconds. The typed operations' schemas, the handler
+// signatures and the routes a mounted pack brings need the type-check
+// Project does.
+func Routes(dir string, cfg *config.Config) ([]Route, error) {
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return nil, err
+	}
+	var out []Route
+	for _, p := range router.Builtins() {
+		method, path := splitPattern(p)
+		out = append(out, Route{Method: method, Path: path, Pattern: p, Builtin: true, Typed: true,
+			Handler: Handler{Name: "lidza/pkg/router", Signature: "func(w http.ResponseWriter, r *http.Request)"}})
+	}
+	routes, err := goRoutes(abs)
+	if err != nil {
+		return nil, err
+	}
+	return append(out, routes...), nil
+}
+
 // Project reads everything in dir. cfg may be nil for a plain Go module.
 func Project(dir string, cfg *config.Config) (*Context, error) {
 	abs, err := filepath.Abs(dir)

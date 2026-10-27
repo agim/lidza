@@ -29,7 +29,7 @@ browser test.
    `lidzatest.WithRecorder("name")` when it uses `lidza.HTTPClient(ctx)`
    (recorded once with `LIDZA_RECORD=1 lidza test`).
 2. Run `lidza test` (MCP: `lidza_test`): it creates and migrates the
-   test database, runs `go test ./...`, then the frontend check.
+   test database and runs `go test ./...`.
 3. Page: in `e2e/<name>.spec.ts` (Playwright) load the page, assert on
    text or roles, and assert no `window` errors (see `e2e/home.spec.ts`).
    Run `lidza test --e2e` (add `--install` once if the browser is

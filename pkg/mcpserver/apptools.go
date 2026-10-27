@@ -26,6 +26,10 @@ const appToolPrefix = "app_"
 // lidza dev does), and a call after a Go source changed rebuilds and
 // restarts it first, so a tool never runs yesterday's code. Failures are
 // reported on stderr and leave the framework tools working.
+// The build and the start run in the background: the framework tools are
+// listed at once, the app's join the list when it is up (the server
+// announces the change), so a slow build never delays or loses the
+// session's tools.
 func addAppTools(s *group, dir string, cfg *config.Config) {
 	if cfg == nil {
 		return
@@ -33,6 +37,10 @@ func addAppTools(s *group, dir string, cfg *config.Config) {
 	if _, err := os.Stat(filepath.Join(dir, cfg.AppPath("tools.go"))); err != nil {
 		return
 	}
+	go startAppTools(s, dir)
+}
+
+func startAppTools(s *group, dir string) {
 	a := &appInstance{dir: dir, bin: filepath.Join(dir, devserver.BuildDir, "mcp-app")}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()

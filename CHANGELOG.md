@@ -10,7 +10,7 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
-## Unreleased
+## v0.1.128 (2026-10-27)
 
 - The recipes leave the guide: `docs/lidza-recipes.md` holds the
   framework's recipes (refreshed by `lidza gen`) and the app's own

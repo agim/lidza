@@ -609,7 +609,7 @@ func TestPackCapability(t *testing.T) {
 // a skill for each agent, a prompt after restart, and a line in
 // AGENTS.md; the framework's own recipes stay separate.
 func TestRecipeAdd(t *testing.T) {
-	edit(t, map[string]string{"docs/lidza-guide.md": mustRead(t, "docs/lidza-guide.md"), "CLAUDE.md": mustRead(t, "CLAUDE.md"), "AGENTS.md": mustRead(t, "AGENTS.md"), "GEMINI.md": mustRead(t, "GEMINI.md")})
+	edit(t, map[string]string{"docs/lidza-guide.md": mustRead(t, "docs/lidza-guide.md"), "docs/lidza-recipes.md": mustRead(t, "docs/lidza-recipes.md"), "CLAUDE.md": mustRead(t, "CLAUDE.md"), "AGENTS.md": mustRead(t, "AGENTS.md"), "GEMINI.md": mustRead(t, "GEMINI.md")})
 	t.Cleanup(func() {
 		os.RemoveAll(filepath.Join(app, ".claude", "skills", "paginate-list"))
 		os.RemoveAll(filepath.Join(app, ".agents", "skills", "paginate-list"))
@@ -623,9 +623,13 @@ func TestRecipeAdd(t *testing.T) {
 			t.Errorf("%s missing", p)
 		}
 	}
-	guide := mustRead(t, "docs/lidza-guide.md")
-	if !strings.Contains(guide, "## App recipes") || !strings.Contains(guide, "### Paginate a list") || strings.Index(guide, "## Recipes") > strings.Index(guide, "### Paginate a list") {
-		t.Errorf("guide:\n%s", guide)
+	rf := mustRead(t, "docs/lidza-recipes.md")
+	if !strings.Contains(rf, "## App recipes") || !strings.Contains(rf, "### Paginate a list") || strings.Index(rf, "## Recipes") > strings.Index(rf, "### Paginate a list") {
+		t.Errorf("recipes file:\n%s", rf)
+	}
+	// The guide holds no recipes: they are the skills and the recipes file.
+	if guide := mustRead(t, "docs/lidza-guide.md"); strings.Contains(guide, "### Paginate a list") || strings.Contains(guide, "\n## Recipes\n") {
+		t.Errorf("the guide still carries recipes")
 	}
 	if !strings.Contains(mustRead(t, "AGENTS.md"), "this app's own: `paginate-list`") {
 		t.Errorf("AGENTS.md does not list the app recipe")

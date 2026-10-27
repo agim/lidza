@@ -11,7 +11,7 @@ import (
 )
 
 // runRecipe is `lidza recipe add "<title>" [--description ...] [--step ...]`
-// and `lidza recipe list`: the app's recipes in docs/lidza-guide.md, from
+// and `lidza recipe list`: the app's recipes in docs/lidza-recipes.md, from
 // which the prompts, skills and commands are generated.
 func runRecipe(_ context.Context, args []string) error {
 	if len(args) == 0 {
@@ -69,14 +69,14 @@ func runRecipe(_ context.Context, args []string) error {
 		}
 		if frameworkDrift(abs) != nil {
 			// Another release's agent files stay; the new recipe's skill
-			// is written from the guide.
+			// is written from the recipes file.
 			if _, err := recipes.Sync(abs); err != nil {
 				return err
 			}
 		} else if _, err := scaffold.Refresh(abs, cfg); err != nil {
 			return err
 		}
-		fmt.Printf("added %s (%s) to %s under \"%s\"; skills and commands written", r.Name, r.Title, recipes.GuideFile, strings.TrimPrefix(recipes.AppHeading, "## "))
+		fmt.Printf("added %s (%s) to %s under \"%s\"; skills and commands written", r.Name, r.Title, recipes.File, strings.TrimPrefix(recipes.AppHeading, "## "))
 		if len(steps) == 0 {
 			fmt.Print("; fill in the steps")
 		}

@@ -148,6 +148,7 @@ func (srv *Server) watched() []string {
 	return []string{
 		filepath.Join(srv.dir, config.FileName),
 		filepath.Join(srv.dir, filepath.FromSlash(recipes.GuideFile)),
+		filepath.Join(srv.dir, filepath.FromSlash(recipes.File)),
 		filepath.Join(srv.dir, srv.toolsFile()),
 	}
 }
@@ -182,7 +183,7 @@ func (srv *Server) Refresh() {
 		p := filepath.Join(srv.dir, name)
 		return !now[p].Equal(srv.stamps[p])
 	}
-	cfgChanged, guideChanged, toolsChanged := changed(config.FileName), changed(filepath.FromSlash(recipes.GuideFile)), changed(srv.toolsFile())
+	cfgChanged, guideChanged, toolsChanged := changed(config.FileName), changed(filepath.FromSlash(recipes.GuideFile)) || changed(filepath.FromSlash(recipes.File)), changed(srv.toolsFile())
 	srv.stamps = now
 	if cfgChanged {
 		if cfg, err := config.Load(srv.dir); err == nil {

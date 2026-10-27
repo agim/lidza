@@ -231,7 +231,7 @@ func printBriefResult(out io.Writer, res brief.Result) {
 		fmt.Fprintf(out, "  decision recorded: %s\n", res.Decision)
 	}
 	if res.Recipe != "" {
-		fmt.Fprintf(out, "  recipe seeded: %s (docs/lidza-guide.md, App recipes)\n", res.Recipe)
+		fmt.Fprintf(out, "  recipe seeded: %s (docs/lidza-recipes.md, App recipes)\n", res.Recipe)
 	}
 	if len(res.Files) > 1 {
 		fmt.Fprintf(out, "  files: %s\n", strings.Join(res.Files, ", "))

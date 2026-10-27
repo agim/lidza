@@ -120,9 +120,13 @@ func TestScopesAddAndReplace(t *testing.T) {
 	if len(rs) != 2 || rs[0].Scope != ScopeFramework || rs[1].Name != "paginate-list" || !strings.Contains(rs[1].Body, "1. Use PageParams.") {
 		t.Fatalf("recipes: %+v", rs)
 	}
-	guide, _ := os.ReadFile(filepath.Join(dir, GuideFile))
-	if i, j, k := strings.Index(string(guide), Heading), strings.Index(string(guide), AppHeading), strings.Index(string(guide), "## Packs"); !(i < j && j < k) {
-		t.Fatalf("section order:\n%s", guide)
+	// The recipes moved to their file (Split), the guide keeps the rest.
+	file, _ := os.ReadFile(filepath.Join(dir, File))
+	if i, j := strings.Index(string(file), Heading), strings.Index(string(file), AppHeading); !(0 <= i && i < j) || !strings.Contains(string(file), "Old body.") {
+		t.Fatalf("section order:\n%s", file)
+	}
+	if guide, _ := os.ReadFile(filepath.Join(dir, GuideFile)); strings.Contains(string(guide), Heading) || !strings.Contains(string(guide), "## Packs\n\nText.") {
+		t.Fatalf("guide after split:\n%s", guide)
 	}
 	if _, err := Add(dir, "Paginate a list", "", nil); err == nil {
 		t.Fatal("duplicate accepted")
@@ -152,8 +156,7 @@ func TestScopesAddAndReplace(t *testing.T) {
 	if again, _ := ReplaceFramework(dir, "Fresh intro.\n\n### Add an API route\n\nNew body.\n\n### Write a test\n\nBoot."); again {
 		t.Fatal("replace reported a change on identical content")
 	}
-	guide, _ = os.ReadFile(filepath.Join(dir, GuideFile))
-	if !strings.Contains(string(guide), "## Packs\n\nText.") {
+	if guide, _ := os.ReadFile(filepath.Join(dir, GuideFile)); !strings.Contains(string(guide), "## Packs\n\nText.") {
 		t.Fatalf("later section damaged:\n%s", guide)
 	}
 }
@@ -187,24 +190,44 @@ func TestGeminiCommandsRemoved(t *testing.T) {
 	}
 }
 
-// RefreshGuide brings the framework's guide whole and keeps the app's
-// own recipes.
+// RefreshGuide brings the framework's guide whole; an app's recipes that
+// were in it move to the recipes file (Split), where RefreshRecipes
+// brings the framework's recipes and keeps the app's own.
 func TestRefreshGuide(t *testing.T) {
 	dir := t.TempDir()
 	os.MkdirAll(filepath.Join(dir, "docs"), 0o755)
-	old := "# Guide\n\n## Rules\n\nOld rule.\n\n" + AppHeading + "\n\nIntro.\n\n### Deploy on Fridays\n\nNever.\n\n## Packs\n\nOld packs.\n"
+	old := "# Guide\n\n## Rules\n\nOld rule.\n\n" + Heading + "\n\nIntro.\n\n### Add an API route\n\nOld body.\n\n" + AppHeading + "\n\nIntro.\n\n### Deploy on Fridays\n\nNever.\n\n## Packs\n\nOld packs.\n"
 	os.WriteFile(filepath.Join(dir, GuideFile), []byte(old), 0o644)
-	fresh := "# Guide\n\n## Rules\n\nNew rule.\n\n## Secrets\n\nSealed.\n\n" + AppHeading + "\n\nTemplate intro.\n\n## Packs\n\nNew packs.\n"
+	fresh := "# Guide\n\n## Rules\n\nNew rule.\n\n## Secrets\n\nSealed.\n\n## Packs\n\nNew packs.\n"
 	changed, err := RefreshGuide(dir, fresh)
 	if err != nil || !changed {
 		t.Fatal(changed, err)
 	}
-	got, _ := os.ReadFile(filepath.Join(dir, GuideFile))
-	want := "# Guide\n\n## Rules\n\nNew rule.\n\n## Secrets\n\nSealed.\n\n" + AppHeading + "\n\nIntro.\n\n### Deploy on Fridays\n\nNever.\n\n## Packs\n\nNew packs.\n"
-	if string(got) != want {
+	if got, _ := os.ReadFile(filepath.Join(dir, GuideFile)); string(got) != fresh {
 		t.Fatalf("guide:\n%s", got)
 	}
+	file, _ := os.ReadFile(filepath.Join(dir, File))
+	if !strings.Contains(string(file), "### Deploy on Fridays\n\nNever.") || !strings.Contains(string(file), "Old body.") || strings.Index(string(file), Heading) > strings.Index(string(file), AppHeading) {
+		t.Fatalf("recipes file after split:\n%s", file)
+	}
+	rendered := "# Recipes\n\n" + Heading + "\n\nFresh intro.\n\n### Add an API route\n\nNew body.\n\n" + AppHeading + "\n\nTemplate intro.\n"
+	changed, err = RefreshRecipes(dir, rendered)
+	if err != nil || !changed {
+		t.Fatal(changed, err)
+	}
+	file, _ = os.ReadFile(filepath.Join(dir, File))
+	want := "# Recipes\n\n" + Heading + "\n\nFresh intro.\n\n### Add an API route\n\nNew body.\n\n" + AppHeading + "\n\nIntro.\n\n### Deploy on Fridays\n\nNever.\n"
+	if string(file) != want {
+		t.Fatalf("recipes file:\n%q\nwant\n%q", file, want)
+	}
 	if again, _ := RefreshGuide(dir, fresh); again {
-		t.Fatal("second refresh changed it")
+		t.Fatal("second guide refresh changed it")
+	}
+	if again, _ := RefreshRecipes(dir, rendered); again {
+		t.Fatal("second recipes refresh changed it")
+	}
+	rs, _ := Load(dir)
+	if len(rs) != 2 || rs[0].Scope != ScopeFramework || rs[1].Name != "deploy-on-fridays" {
+		t.Fatalf("load: %+v", rs)
 	}
 }

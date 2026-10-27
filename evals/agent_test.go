@@ -76,9 +76,9 @@ var tasks = []task{
 			if _, err := os.Stat(filepath.Join(dir, ".claude", "skills", "paginate-list", "SKILL.md")); err != nil {
 				return "no skill .claude/skills/paginate-list/SKILL.md (was the recipe added under App recipes and lidza gen run?)"
 			}
-			guide, _ := os.ReadFile(filepath.Join(dir, "docs", "lidza-guide.md"))
+			guide, _ := os.ReadFile(filepath.Join(dir, "docs", "lidza-recipes.md"))
 			if !strings.Contains(string(guide), "### Paginate a list") {
-				return "docs/lidza-guide.md has no '### Paginate a list'"
+				return "docs/lidza-recipes.md has no '### Paginate a list'"
 			}
 			return ""
 		},

@@ -63,7 +63,7 @@ Commands:
   doctor   report the toolchain, services and the project's prerequisites, each with its fix
   context  write .lidza/context.json: routes, handler signatures, Rust exports
   api      print the framework's public Go API as the project resolves it: the package list, one package, a --filter search, or all
-  recipe   add one of this app's conventions to docs/lidza-guide.md as a recipe (prompt, skills, command), or list the recipes
+  recipe   add one of this app's conventions to docs/lidza-recipes.md as a recipe (prompt, skills, command), or list the recipes
   settings  the app's settings (keys, providers, addresses), saved in its database so the app moves with it: list, get, set, unset, import from .env and the environment
   credentials the development seed: secrets sealed in config/credentials.yml.enc with config/master.key; dev.NAME and production.NAME are for one mode
   admin    who may open the admin pages besides the first account: ADMIN_USERS in the credentials, read within seconds

@@ -97,13 +97,17 @@ func TestNewReact(t *testing.T) {
 		t.Error("app recipe has no skill")
 	}
 	// A framework recipe edited by hand comes back on refresh; the app's stays.
-	guide := read("docs/lidza-guide.md")
-	os.WriteFile(filepath.Join(dir, "docs", "lidza-guide.md"), []byte(strings.Replace(guide, "### Add an MCP tool", "### Add an MCP tool (edited)", 1)), 0o644)
-	if changed, _ := Refresh(dir, cfg); strings.Join(changed, ",") != "docs/lidza-guide.md" {
+	rf := read("docs/lidza-recipes.md")
+	os.WriteFile(filepath.Join(dir, "docs", "lidza-recipes.md"), []byte(strings.Replace(rf, "### Add an MCP tool", "### Add an MCP tool (edited)", 1)), 0o644)
+	if changed, _ := Refresh(dir, cfg); strings.Join(changed, ",") != "docs/lidza-recipes.md" {
 		t.Errorf("framework recipes not refreshed: %v", changed)
 	}
-	if g := read("docs/lidza-guide.md"); strings.Contains(g, "(edited)") || !strings.Contains(g, "### Paginate a list") {
+	if g := read("docs/lidza-recipes.md"); strings.Contains(g, "(edited)") || !strings.Contains(g, "### Paginate a list") {
 		t.Errorf("refresh: %s", g)
+	}
+	// The guide carries no recipes, and says where they are.
+	if g := read("docs/lidza-guide.md"); strings.Contains(g, "### Add an MCP tool") || !strings.Contains(g, "## Recipes and skills") {
+		t.Errorf("guide: %s", g)
 	}
 	if skill := read(".claude/skills/add-page/SKILL.md"); !strings.Contains(skill, "name: add-page\n") || !strings.Contains(skill, "src/router.tsx") || strings.Contains(skill, "{{") {
 		t.Errorf("skill: %s", skill)
@@ -462,7 +466,7 @@ func TestAddPageRecipePerTemplate(t *testing.T) {
 		"htmx":   "pageTemplates",
 	} {
 		cfg := config.Default("shop", template)
-		guide, err := renderBytes("lidza-guide.md.tmpl", dataFor(&cfg, ""))
+		guide, err := renderBytes("lidza-recipes.md.tmpl", dataFor(&cfg, ""))
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -126,6 +126,7 @@ func New(ctx context.Context, opt Options) error {
 		{"routes_test.go.tmpl", "tests/routes_test.go"},
 		{"tools.go.tmpl", "app/tools.go"},
 		{"lidza-guide.md.tmpl", filepath.FromSlash(recipes.GuideFile)},
+		{"lidza-recipes.md.tmpl", filepath.FromSlash(recipes.File)},
 		{"decisions.md.tmpl", filepath.FromSlash(decisions.File)},
 		{"README.md.tmpl", "README.md"},
 		{"ci.yml.tmpl", filepath.Join(".github", "workflows", "ci.yml")},
@@ -270,7 +271,7 @@ const LayoutLine = "App-owned Go packages: business logic in `internal/<feature>
 
 // AgentGuidanceLine says where durable instructions go: one file every
 // agent reads.
-const AgentGuidanceLine = "Shared agent guidance: `AGENTS.md` is the one instructions file; `CLAUDE.md` and `GEMINI.md` are the line `@AGENTS.md`, which Claude Code and Gemini CLI expand, and stay that way. Update rules, working agreements and team notes here. Edit recipes in `docs/lidza-guide.md`, then run `lidza gen` to refresh the skills of Claude Code, Codex and Gemini CLI together."
+const AgentGuidanceLine = "Shared agent guidance: `AGENTS.md` is the one instructions file; `CLAUDE.md` and `GEMINI.md` are the line `@AGENTS.md`, which Claude Code and Gemini CLI expand, and stay that way. Update rules, working agreements and team notes here. Edit recipes in `docs/lidza-recipes.md`, then run `lidza gen` to refresh the skills of Claude Code, Codex and Gemini CLI together."
 
 // RecipesLine lists recipe names for the agent files: the framework's,
 // then the app's own.
@@ -363,8 +364,14 @@ func Refresh(dir string, cfg *config.Config) ([]string, error) {
 	} else {
 		changed = append(changed, files...)
 	}
-	// The guide is the framework's but for the app's own recipes: it
-	// follows the release whole.
+	// The guide is the framework's and follows the release whole; the
+	// recipes file too, but for the app's own recipes. An app from before
+	// the recipes file has its recipe sections moved out of the guide.
+	if moved, err := recipes.Split(dir); err != nil {
+		return nil, err
+	} else if moved {
+		changed = append(changed, recipes.File+" (recipes moved out of the guide)")
+	}
 	if guide, err := renderBytes("lidza-guide.md.tmpl", dataFor(cfg, "")); err == nil {
 		replaced, err := recipes.RefreshGuide(dir, string(guide))
 		if err != nil {
@@ -372,6 +379,15 @@ func Refresh(dir string, cfg *config.Config) ([]string, error) {
 		}
 		if replaced {
 			changed = append(changed, recipes.GuideFile)
+		}
+	}
+	if rendered, err := renderBytes("lidza-recipes.md.tmpl", dataFor(cfg, "")); err == nil {
+		replaced, err := recipes.RefreshRecipes(dir, string(rendered))
+		if err != nil {
+			return nil, err
+		}
+		if replaced {
+			changed = append(changed, recipes.File)
 		}
 	}
 	rs, err := recipes.Sync(dir)
@@ -445,7 +461,7 @@ const (
 
 // AgentPaths are the files the framework keeps current for the agents:
 // the instructions, the guide, each agent's MCP configuration.
-var AgentPaths = []string{brief.AgentFile, "CLAUDE.md", "GEMINI.md", recipes.GuideFile, ".mcp.json", ".gemini/settings.json", ".codex/config.toml"}
+var AgentPaths = []string{brief.AgentFile, "CLAUDE.md", "GEMINI.md", recipes.GuideFile, recipes.File, ".mcp.json", ".gemini/settings.json", ".codex/config.toml"}
 
 // Release is the framework release this CLI is, "" for a build from
 // source (a pseudo-version): only a release is recorded in the agent

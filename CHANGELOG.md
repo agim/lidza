@@ -10,6 +10,16 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
+## Unreleased
+
+- The recipes leave the guide: `docs/lidza-recipes.md` holds the
+  framework's recipes (refreshed by `lidza gen`) and the app's own
+  (`lidza recipe add`), and `docs/lidza-guide.md` keeps the layout, the
+  commands and the rules, 66 KB instead of 158 KB in the template. Every
+  recipe was already a skill and an MCP prompt; the guide now says so and
+  lists where they are. `lidza gen` (so `lidza update`) moves an app's
+  recipe sections out of its guide once, keeping its own recipes.
+
 ## v0.1.127 (2026-10-27)
 
 - `lidza mcp` lists the framework tools at once and builds and starts

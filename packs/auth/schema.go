@@ -1,5 +1,14 @@
 package auth
 
+// PreferenceTable stores non-sensitive account choices independently of sessions.
+// The subject also supports applications that use Login with their own user table.
+const PreferenceTable = `CREATE TABLE IF NOT EXISTS auth_preference (
+  subject text PRIMARY KEY,
+  values jsonb NOT NULL DEFAULT '{}',
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CHECK (jsonb_typeof(values) = 'object' AND octet_length(values::text) <= 65536)
+);`
+
 // SessionTable is the DDL of the sessions table, matching the schema
 // fragment `lidza pack add auth` appends to schema.lidza (model
 // AuthSession, table auth_session). Tests create it directly.

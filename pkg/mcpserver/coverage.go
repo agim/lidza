@@ -43,7 +43,9 @@ var TerminalOnly = map[string]string{
 // PackTools maps each official Go pack to the tools that show what it
 // holds or does.
 var PackTools = map[string][]string{
-	"db":        {"lidza_db_status"},
+	"db": {"lidza_db_status"},
+	// Personal preferences are caller-only HTTP/Go APIs, not cross-account
+	// administrative inspection; no MCP preference reader is exposed.
 	"auth":      {"lidza_workspaces", "lidza_owner_status", "lidza_admins"},
 	"jobs":      {"lidza_jobs"},
 	"mail":      {"lidza_mail"},

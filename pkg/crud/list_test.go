@@ -110,10 +110,14 @@ func TestList(t *testing.T) {
 	if got := list(queries.ListItemsParams{Since: &since, Until: &until, Sort: "createdAt"}); got != "Banana bread|apple tart 100%" {
 		t.Fatalf("range: %s", got)
 	}
-	// Sort by title both ways; a page of two after the first.
-	// (The database's collation orders "apple tart" with "Apple pie".)
-	if got := list(queries.ListItemsParams{Sort: "title", Desc: true, Lim: 2, Off: 1}); got != "Banana bread|apple tart 100%" {
-		t.Fatalf("sorted page: %s", got)
+	// Verify generated sorting/paging against the database's own collation,
+	// which can put lowercase titles after uppercase titles on another host.
+	var sortedPage string
+	if err := pool.QueryRow(ctx, "SELECT string_agg(title, '|' ORDER BY title DESC) FROM (SELECT title FROM item ORDER BY title DESC LIMIT 2 OFFSET 1) page").Scan(&sortedPage); err != nil {
+		t.Fatal(err)
+	}
+	if got := list(queries.ListItemsParams{Sort: "title", Desc: true, Lim: 2, Off: 1}); got != sortedPage {
+		t.Fatalf("sorted page: %s, want %s", got, sortedPage)
 	}
 	total, err := q.CountItems(ctx, queries.CountItemsParams{Q: str("apple")})
 	if err != nil || total != 2 {

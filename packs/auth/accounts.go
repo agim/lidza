@@ -192,6 +192,15 @@ func (a *Auth) DeleteUserTx(ctx context.Context, tx pgx.Tx, subject string) erro
 		}
 	}
 	keys := []string{subject}
+	var preferences bool
+	if err := tx.QueryRow(ctx, `SELECT to_regclass('auth_preference') IS NOT NULL`).Scan(&preferences); err != nil {
+		return fmt.Errorf("auth: delete preferences: %w", err)
+	}
+	if preferences {
+		if _, err := tx.Exec(ctx, `DELETE FROM auth_preference WHERE subject=$1`, subject); err != nil {
+			return fmt.Errorf("auth: delete preferences: %w", err)
+		}
+	}
 	for _, k := range []string{email, label} {
 		if k != "" {
 			keys = append(keys, k)

@@ -141,6 +141,13 @@ model AuthWorkspace @table("auth_workspace") {
   updatedAt time   @default(now())
 }
 
+// Account-owned non-sensitive choices; never session claims or credentials.
+model AuthPreference @table("auth_preference") {
+  subject   string @id
+  values    json
+  updatedAt time @default(now())
+}
+
 // An invitation to a workspace, bound to an email address; the token is
 // kept as its hash.
 model AuthInvite @table("auth_invite") {

@@ -195,6 +195,8 @@ func Mount(r *router.Router, opt Options) {
 	}
 	router.Route(r, "GET /api/v1/auth/session", s.authSession, Optional())
 	router.Route(r, "GET /api/v1/auth/me", s.authMe, Require())
+	router.Route(r, "GET /api/v1/auth/preferences", s.authPreferences, preferenceRequestLimit, Require())
+	router.Route(r, "PATCH /api/v1/auth/preferences", s.authPatchPreferences, preferenceRequestLimit, Require())
 	router.Route(r, "POST /api/v1/auth/logout", s.authLogout, Require())
 	router.Route(r, "GET /api/v1/auth/two-factor", s.authTwoFactorStatus, Require())
 	router.Route(r, "POST /api/v1/auth/two-factor/setup", s.authTwoFactorSetup, Throttle(), Require())

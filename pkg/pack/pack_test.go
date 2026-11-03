@@ -165,12 +165,12 @@ func TestSyncFragments(t *testing.T) {
 	// AuthSession is there but behind the pack's current declaration (no
 	// prevRefreshHash): it is updated in place; AuthToken is added.
 	added, err := SyncFragments(dir, []string{"lidza/db", "lidza/auth"})
-	if err != nil || strings.Join(added, ",") != "AuthSession,AuthFactor,AuthStepUp,AuthToken,AuthAccount,AuthUser,AuthIdentity,AuthConnection,AuthMember,AuthOwnerClaim,AuthWorkspace,AuthInvite" {
+	if err != nil || strings.Join(added, ",") != "AuthSession,AuthFactor,AuthStepUp,AuthToken,AuthAccount,AuthUser,AuthIdentity,AuthConnection,AuthMember,AuthOwnerClaim,AuthWorkspace,AuthPreference,AuthInvite" {
 		t.Fatalf("synced %v, %v", added, err)
 	}
 	src, _ := os.ReadFile(filepath.Join(dir, "schema.lidza"))
 	if !strings.Contains(string(src), "model AuthToken @table(\"auth_token\")") || strings.Count(string(src), "model AuthSession") != 1 ||
-		!strings.Contains(string(src), "prevRefreshHash") || !strings.HasPrefix(string(src), "type Greeting {") {
+		!strings.Contains(string(src), "prevRefreshHash") || strings.Count(string(src), "model AuthPreference") != 1 || !strings.HasPrefix(string(src), "type Greeting {") {
 		t.Fatalf("schema:\n%s", src)
 	}
 	if again, err := SyncFragments(dir, []string{"lidza/auth"}); err != nil || again != nil {

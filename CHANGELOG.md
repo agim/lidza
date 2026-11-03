@@ -10,7 +10,7 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
-## Unreleased
+## v0.1.130 (2026-11-03)
 
 - Test support an app keeps beside its tests (packages under `tests/`,
   or a `testkit`, `testutil` or `testsupport` directory: helpers and

@@ -10,7 +10,7 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
-## Unreleased
+## v0.1.129 (2026-11-03)
 
 - The auth pack now stores bounded account display preferences in PostgreSQL,
   independently of sessions and browsers. Caller-only GET/PATCH routes and Go

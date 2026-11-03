@@ -10,7 +10,7 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
-## Unreleased
+## v0.1.131 (2026-11-03)
 
 - `jobs.Cron(expression, zone)`: a schedule from a five-field cron
   expression in a time zone, with lists, ranges, steps, month and weekday

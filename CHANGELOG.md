@@ -10,6 +10,11 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
+## Unreleased
+
+- `storage.PutMultipart` streams large private objects to S3-compatible
+  stores with one buffered part and aborts incomplete uploads on error.
+
 ## v0.1.131 (2026-11-03)
 
 - `jobs.Cron(expression, zone)`: a schedule from a five-field cron

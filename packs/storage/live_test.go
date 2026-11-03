@@ -94,6 +94,31 @@ func TestS3Live(t *testing.T) {
 	if st, err := s.Stat(ctx, key+".up"); err != nil || st.Size != 3 {
 		t.Fatalf("uploaded through the presigned URL: %+v %v", st, err)
 	}
+	t.Run("multipart", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+		defer cancel()
+		objectKey := key + ".multipart"
+		t.Cleanup(func() {
+			if err := s.Delete(context.Background(), objectKey); err != nil {
+				t.Error(err)
+			}
+		})
+		payload := strings.Repeat("multipart fixture\n", multipartPartSize/18+1)
+		size := int64(len(payload))
+		obj, err := s.PutMultipart(ctx, objectKey, strings.NewReader(payload), size, PutOptions{ContentType: "text/plain", CacheControl: "private"})
+		if err != nil || obj.Size != size || obj.ETag == "" {
+			t.Fatalf("multipart: %+v %v", obj, err)
+		}
+		rc, obj, err := s.Get(ctx, objectKey)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rc.Close()
+		got, err := io.ReadAll(io.LimitReader(rc, size+1))
+		if err != nil || string(got) != payload || obj.Size != size || obj.ContentType != "text/plain" {
+			t.Fatalf("multipart round trip: bytes=%d, object=%+v, error=%v", len(got), obj, err)
+		}
+	})
 	for _, k := range []string{key, key + ".up"} {
 		if err := s.Delete(ctx, k); err != nil {
 			t.Fatal(err)

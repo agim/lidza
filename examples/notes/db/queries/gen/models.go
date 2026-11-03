@@ -95,6 +95,12 @@ type AuthOwnerClaim struct {
 	UpdatedAt time.Time  `json:"updated_at"`
 }
 
+type AuthPreference struct {
+	Subject   string    `json:"subject"`
+	Values    []byte    `json:"values"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
 type AuthSession struct {
 	ID              string     `json:"id"`
 	Subject         string     `json:"subject"`

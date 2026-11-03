@@ -197,3 +197,9 @@ CREATE TABLE auth_step_up (
 CREATE INDEX auth_step_up_session_id_idx ON auth_step_up (session_id);
 CREATE UNIQUE INDEX auth_step_up_session_id_purpose_target_key ON auth_step_up (session_id, purpose, target);
 
+CREATE TABLE auth_preference (
+  subject text PRIMARY KEY,
+  values jsonb NOT NULL,
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+

@@ -262,6 +262,14 @@ pub struct AuthStepUp {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AuthPreference {
+    pub subject: String,
+    pub values: serde_json::Value,
+    #[serde(rename = "updatedAt")]
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CreateNote {
     pub title: String,
     pub body: Option<String>,

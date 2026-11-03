@@ -440,6 +440,19 @@ func (v AuthStepUp) Validate() error {
 	return errs.Result()
 }
 
+// AuthPreference is a row of the auth_preference table.
+type AuthPreference struct {
+	Subject   string          `json:"subject" db:"subject"`
+	Values    json.RawMessage `json:"values" db:"values"`
+	UpdatedAt time.Time       `json:"updatedAt" db:"updated_at"`
+}
+
+// Validate applies the rules of AuthPreference from schema.lidza.
+func (v AuthPreference) Validate() error {
+	var errs validate.Errors
+	return errs.Result()
+}
+
 // CreateNote is an API type.
 type CreateNote struct {
 	Title string  `json:"title"`

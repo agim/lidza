@@ -302,3 +302,10 @@ model AuthStepUp @table("auth_step_up") {
   createdAt time   @default(now())
   @@unique(sessionId, purpose, target)
 }
+
+// Account-owned non-sensitive choices; never session claims or credentials.
+model AuthPreference @table("auth_preference") {
+  subject   string @id
+  values    json
+  updatedAt time @default(now())
+}

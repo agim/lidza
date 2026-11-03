@@ -1,9 +1,12 @@
 package main
 
 import (
+	"context"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -70,5 +73,33 @@ func TestStamps(t *testing.T) {
 	// Outside a repository: no tree, so nothing matches.
 	if workTree(t.TempDir()) != "" {
 		t.Fatal("a tree outside git")
+	}
+}
+
+// --install-hook writes lidza's hook, rewrites it when the mode changes
+// (--full), and leaves a hook the developer wrote alone.
+func TestInstallGitHookModes(t *testing.T) {
+	dir := gitRepo(t)
+	ctx := context.Background()
+	hook := filepath.Join(dir, HookDir, "pre-commit")
+	read := func() string { b, _ := os.ReadFile(hook); return strings.TrimSpace(string(b)) }
+	if err := installGitHook(ctx, dir, io.Discard, false, false); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasSuffix(read(), "exec lidza verify --hook") {
+		t.Fatalf("fast hook: %q", read())
+	}
+	installGitHook(ctx, dir, io.Discard, false, true)
+	if !strings.HasSuffix(read(), "exec lidza verify --hook --full") {
+		t.Fatalf("full hook: %q", read())
+	}
+	installGitHook(ctx, dir, io.Discard, false, false)
+	if !strings.HasSuffix(read(), "exec lidza verify --hook") {
+		t.Fatalf("back to fast: %q", read())
+	}
+	os.WriteFile(hook, []byte("#!/bin/sh\necho mine\n"), 0o755)
+	installGitHook(ctx, dir, io.Discard, false, true)
+	if read() != "#!/bin/sh\necho mine" {
+		t.Fatalf("the developer's hook was replaced: %q", read())
 	}
 }

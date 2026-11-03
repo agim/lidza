@@ -22,17 +22,6 @@ these rules cover.
   reappear under the same names in other files, and an assertion removed
   from one file and added word for word to another, are moves, noted in
   the report, not deletions (#75).
-
-## v0.1.129 (2026-11-03)
-
-- The auth pack now stores bounded account display preferences in PostgreSQL,
-  independently of sessions and browsers. Caller-only GET/PATCH routes and Go
-  methods merge partial updates without losing unrelated concurrent changes;
-  validation, request/query limits and account-deletion cleanup are included.
-  Generate and migrate the additive `auth_preference` table before using them.
-  See `docs/account-preferences.md`. Closes #78.
-## Unreleased
-
 - `lidza verify` tests what the staged change reaches: the changed
   packages and every test package that imports one of them, through its
   dependencies (a change to `go.mod`, `schema.lidza`, `db/`, `packs/` or
@@ -44,6 +33,14 @@ these rules cover.
   same selection on its own. On an app with ten test packages, a
   one-package change ran all ten, 235 s of a 287 s verify (#72, #75).
 
+## v0.1.129 (2026-11-03)
+
+- The auth pack now stores bounded account display preferences in PostgreSQL,
+  independently of sessions and browsers. Caller-only GET/PATCH routes and Go
+  methods merge partial updates without losing unrelated concurrent changes;
+  validation, request/query limits and account-deletion cleanup are included.
+  Generate and migrate the additive `auth_preference` table before using them.
+  See `docs/account-preferences.md`. Closes #78.
 ## v0.1.128 (2026-10-27)
 
 - The recipes leave the guide: `docs/lidza-recipes.md` holds the

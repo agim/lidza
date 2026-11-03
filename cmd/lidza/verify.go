@@ -393,12 +393,15 @@ func installGitHook(ctx context.Context, dir string, out io.Writer, init, full b
 	if err := os.MkdirAll(filepath.Dir(hook), 0o755); err != nil {
 		return err
 	}
-	if _, err := os.Stat(hook); err != nil {
-		mode := ""
-		if full {
-			mode = " --full"
-		}
-		if err := os.WriteFile(hook, []byte(fmt.Sprintf(hookScript, mode)), 0o755); err != nil {
+	mode := ""
+	if full {
+		mode = " --full"
+	}
+	want := fmt.Sprintf(hookScript, mode)
+	// Written when missing, and rewritten when it is lidza's own and the
+	// mode changed; a hook the developer wrote stays.
+	if old, err := os.ReadFile(hook); err != nil || (strings.Contains(string(old), "Written by lidza new") && string(old) != want) {
+		if err := os.WriteFile(hook, []byte(want), 0o755); err != nil {
 			return err
 		}
 	}

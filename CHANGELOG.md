@@ -10,6 +10,19 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
+## Unreleased
+
+- `jobs.Cron(expression, zone)`: a schedule from a five-field cron
+  expression in a time zone, with lists, ranges, steps, month and weekday
+  names, Sunday as 0 or 7, and the @hourly, @daily, @weekly, @monthly and
+  @yearly aliases; a day-of-month and a day-of-week together mean either,
+  as cron reads them. A malformed expression, an unknown zone, @reboot
+  and an expression that is never due are errors, so an app validates
+  before it stores one. Clock changes are met as `Daily` meets them: a
+  skipped time runs at the instant the clocks jump to, a repeated one
+  runs once. Durable scheduling, one run per due time across nodes and
+  one catch-up after downtime come with it, as with every schedule (#76).
+
 ## v0.1.130 (2026-11-03)
 
 - Test support an app keeps beside its tests (packages under `tests/`,

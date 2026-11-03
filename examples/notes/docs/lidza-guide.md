@@ -455,7 +455,8 @@ Official Go packs, configured from `.env` (see `.env.example` after
   `EnqueueTx(ctx, tx, ...)` inside a transaction; recurring work with
   `jobs.FromServices(s).Schedule("kind", jobs.Weekly(time.Monday,
   "09:00", "Europe/Tirane"), payload)` (or `jobs.Every(d)`,
-  `jobs.Daily("06:30", zone)`), one job per due time across nodes. The
+  `jobs.Daily("06:30", zone)`, `jobs.Cron("0 9 * * 1-5", zone)` for a
+  five-field cron expression, validated), one job per due time across nodes. The
   handler's context carries the packs (`db.From(ctx)`, `mail.From(ctx)`)
   and is cancelled at shutdown after `JOBS_DRAIN`, the job going back to
   pending. Recipe: "Add a background job".

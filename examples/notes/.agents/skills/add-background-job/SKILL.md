@@ -63,7 +63,11 @@ the handler later with retries, on this node or another. Recurring work
    `jobs.Daily("06:30", zone)` and `jobs.Weekly(day, "09:00", zone)`
    run at a clock time in a time zone ("" is UTC), once on the days the
    clocks change; `jobs.DailyAt(zone, "02:00", "10:00", "18:00")` runs
-   at several clock times a day. The payload (here `nil`) goes with every run. However
+   at several clock times a day; `jobs.Cron("0 9 * * 1-5", zone)` reads
+   a five-field cron expression (lists, ranges, steps, names, the
+   @daily-style aliases; a day-of-month and a day-of-week together mean
+   either, as cron always has) and refuses one that is malformed or never
+   due, so validate a user's expression with it before storing it. The payload (here `nil`) goes with every run. However
    many nodes run, one job is enqueued per due time; after downtime one
    missed run is enqueued, not one per missed time. The `job_schedule`
    table, like the job table's `uniqueKey` column, comes from

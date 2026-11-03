@@ -33,6 +33,8 @@ func runTest(ctx context.Context, args []string) error {
 	runOnly := fs.String("run", "", "only the Go tests matching this regexp (go test -run)")
 	parallel := fs.Int("p", 0, "how many test packages run at once (go test -p); each has its own copy of the test database")
 	fresh := fs.Bool("fresh", false, "drop and recreate the test database first (a migration from another branch left in it)")
+	var changed optString
+	fs.Var(&changed, "changed", "only the packages the working tree's changes reach (against HEAD), or against a ref: --changed=master for a branch")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -65,11 +67,43 @@ func runTest(ctx context.Context, args []string) error {
 	}
 	// The frontend's type-check and lint are lidza check's (tsc, eslint):
 	// running them here too doubled every test cycle.
-	if err := goTest(ctx, abs, cfg, extra, os.Stdout); err != nil {
+	var pkgs []string
+	if changed.set {
+		a, _ := affectedPackages(ctx, abs, changed.ref(), false)
+		fmt.Printf("[lidza] --changed: %s\n", a)
+		if !a.All {
+			if len(a.Packages) == 0 {
+				return nil
+			}
+			pkgs = a.Packages
+		}
+	}
+	if err := goTest(ctx, abs, cfg, extra, pkgs, os.Stdout); err != nil {
 		return err
 	}
-	markTested(abs)
+	if pkgs == nil && *runOnly == "" {
+		markTested(abs)
+	}
 	return nil
+}
+
+// optString is a flag with an optional value: --changed alone, or
+// --changed=master.
+type optString struct {
+	set   bool
+	value string
+}
+
+func (o *optString) String() string     { return o.value }
+func (o *optString) IsBoolFlag() bool   { return true }
+func (o *optString) Set(v string) error { o.set = true; o.value = v; return nil }
+
+// ref is the base to compare against: "" (HEAD) for a bare flag.
+func (o *optString) ref() string {
+	if o.value == "true" {
+		return ""
+	}
+	return o.value
 }
 
 // dropTestClones drops the test packages' copies of the test database

@@ -65,7 +65,7 @@ func runNew(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := installGitHook(ctx, abs, os.Stdout, true); err != nil {
+	if err := installGitHook(ctx, abs, os.Stdout, true, false); err != nil {
 		fmt.Printf("pre-commit hook not installed: %v\n", err)
 	}
 	if *noSetup {

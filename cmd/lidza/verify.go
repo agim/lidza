@@ -34,7 +34,7 @@ const hookScript = `#!/bin/sh
 # assertions, lidza check clean, tests passing. Confirm a deliberate test
 # change with LIDZA_ALLOW_TEST_CHANGES=1 git commit; skip once with
 # git commit --no-verify.
-exec lidza verify --hook
+exec lidza verify --hook%s
 `
 
 // verifyStep is one stage of `lidza verify`.
@@ -47,8 +47,13 @@ type verifyStep struct {
 }
 
 type verifyReport struct {
-	Status      string            `json:"status"`
-	Steps       []verifyStep      `json:"steps"`
+	Status string `json:"status"`
+	// Mode is "fast" (the tests the staged change reaches) or "full"
+	// (every package: --full, --strict, lidza ship, CI).
+	Mode  string       `json:"mode"`
+	Steps []verifyStep `json:"steps"`
+	// Tested lists the packages the fast mode ran; empty in full mode.
+	Tested      []string          `json:"tested,omitempty"`
 	Diagnostics []diag.Diagnostic `json:"diagnostics"`
 }
 
@@ -62,7 +67,8 @@ func runVerify(ctx context.Context, args []string) error {
 	dir := fs.String("dir", ".", "project directory")
 	asJSON := fs.Bool("json", false, "print one JSON report instead of text")
 	noTest := fs.Bool("no-test", false, "skip the Go tests")
-	strict := fs.Bool("strict", false, "warnings fail the check step too (for CI)")
+	strict := fs.Bool("strict", false, "warnings fail the check step too, every package is tested and the dependencies scanned (for CI)")
+	full := fs.Bool("full", false, "test every package, not only the ones the staged change reaches (lidza ship and CI do)")
 	installHook := fs.Bool("install-hook", false, "write .githooks/pre-commit and point git at it, then exit")
 	hook := fs.Bool("hook", false, "run as the pre-commit hook: a verify that passed on the tree being committed is not repeated (git's own environment says so too)")
 	allowTests := fs.Bool("allow-test-changes", false, "confirm staged changes that delete a test file, skip a test or remove assertions (from the hook: "+EnvAllowTestChanges+"=1 git commit)")
@@ -74,8 +80,9 @@ func runVerify(ctx context.Context, args []string) error {
 		return err
 	}
 	if *installHook {
-		return installGitHook(ctx, abs, os.Stdout, true)
+		return installGitHook(ctx, abs, os.Stdout, true, *full)
 	}
+	*full = *full || *strict
 	out := io.Writer(os.Stdout)
 	if *asJSON {
 		out = io.Discard
@@ -176,6 +183,10 @@ func runVerify(ctx context.Context, args []string) error {
 		markChecked(abs)
 		return fmt.Sprintf("%d warning(s)%s", r.Warnings(), notes), nil
 	})
+	rep.Mode = "fast"
+	if *full {
+		rep.Mode = "full"
+	}
 	step("test", func() (string, error) {
 		if *noTest {
 			return "--no-test", errSkipped
@@ -186,11 +197,31 @@ func runVerify(ctx context.Context, args []string) error {
 		if d, ok := passedOn(abs, "tested", tree()); ok {
 			return "passed " + ago(d) + " on this tree; not repeated", nil
 		}
-		if err := goTest(ctx, abs, cfg, nil, out); err != nil {
+		// Fast: the packages the staged change reaches. The full run,
+		// and only it, stamps the tree as tested.
+		var pkgs []string
+		scope := "every package"
+		if !*full {
+			a, _ := affectedPackages(ctx, abs, "", true)
+			scope = a.String()
+			if !a.All {
+				if len(a.Packages) == 0 {
+					return scope + "; --full tests every package", nil
+				}
+				pkgs = a.Packages
+				rep.Tested = a.Packages
+			}
+		}
+		if err := goTest(ctx, abs, cfg, nil, pkgs, out); err != nil {
 			return "", err
 		}
-		markTested(abs)
-		return "", nil
+		if pkgs == nil {
+			markTested(abs)
+		}
+		if !*full {
+			scope += "; --full tests every package"
+		}
+		return scope, nil
 	})
 
 	if *asJSON {
@@ -300,7 +331,9 @@ func staleGenerated(ctx context.Context, dir string, cfg *config.Config) (string
 
 // goTest prepares the test database when the db pack is enabled and runs
 // `go test ./...` with extra arguments.
-func goTest(ctx context.Context, dir string, cfg *config.Config, extra []string, out io.Writer) error {
+// goTest runs the tests of pkgs (import paths; nil is every package)
+// with extra go test flags.
+func goTest(ctx context.Context, dir string, cfg *config.Config, extra, pkgs []string, out io.Writer) error {
 	diag.IsolateNodeModules(dir)
 	if cfg != nil {
 		for _, p := range cfg.Packs {
@@ -312,8 +345,12 @@ func goTest(ctx context.Context, dir string, cfg *config.Config, extra []string,
 			}
 		}
 	}
-	fmt.Fprintln(out, "[lidza] go test ./...")
-	cmd := exec.CommandContext(ctx, "go", append([]string{"test", "./..."}, extra...)...)
+	targets := []string{"./..."}
+	if len(pkgs) > 0 {
+		targets = pkgs
+	}
+	fmt.Fprintf(out, "[lidza] go test %s\n", strings.Join(targets, " "))
+	cmd := exec.CommandContext(ctx, "go", append(append([]string{"test"}, extra...), targets...)...)
 	cmd.Dir = dir
 	cmd.Env = testEnv(dir)
 	cmd.Stdout = out
@@ -327,7 +364,7 @@ func goTest(ctx context.Context, dir string, cfg *config.Config, extra []string,
 // installGitHook writes .githooks/pre-commit and sets core.hooksPath for
 // the repository rooted at dir. With init, a directory outside any
 // repository becomes one first.
-func installGitHook(ctx context.Context, dir string, out io.Writer, init bool) error {
+func installGitHook(ctx context.Context, dir string, out io.Writer, init, full bool) error {
 	if _, err := exec.LookPath("git"); err != nil {
 		return errors.New("git is not installed")
 	}
@@ -357,7 +394,11 @@ func installGitHook(ctx context.Context, dir string, out io.Writer, init bool) e
 		return err
 	}
 	if _, err := os.Stat(hook); err != nil {
-		if err := os.WriteFile(hook, []byte(hookScript), 0o755); err != nil {
+		mode := ""
+		if full {
+			mode = " --full"
+		}
+		if err := os.WriteFile(hook, []byte(fmt.Sprintf(hookScript, mode)), 0o755); err != nil {
 			return err
 		}
 	}

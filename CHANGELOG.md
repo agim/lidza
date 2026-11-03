@@ -31,6 +31,18 @@ these rules cover.
   validation, request/query limits and account-deletion cleanup are included.
   Generate and migrate the additive `auth_preference` table before using them.
   See `docs/account-preferences.md`. Closes #78.
+## Unreleased
+
+- `lidza verify` tests what the staged change reaches: the changed
+  packages and every test package that imports one of them, through its
+  dependencies (a change to `go.mod`, `schema.lidza`, `db/`, `packs/` or
+  the test environment reaches all); the report carries the mode and the
+  packages. `--full` tests every package, as `lidza ship`, `--strict` and
+  the generated CI do, and only a full run stamps the tree as tested;
+  `lidza verify --install-hook --full` writes a hook that always does.
+  `lidza test --changed` (or `--changed=master` for a branch) runs the
+  same selection on its own. On an app with ten test packages, a
+  one-package change ran all ten, 235 s of a 287 s verify (#72, #75).
 
 ## v0.1.128 (2026-10-27)
 

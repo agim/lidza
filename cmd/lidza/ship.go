@@ -57,7 +57,7 @@ func runShip(ctx context.Context, args []string) error {
 		}
 		return nil
 	}
-	if err := stage("lidza verify", "verify", "--dir", abs); err != nil {
+	if err := stage("lidza verify --full", "verify", "--full", "--dir", abs); err != nil {
 		return err
 	}
 	if !*noE2E {

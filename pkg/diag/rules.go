@@ -381,7 +381,13 @@ func unusedPacks(root string, imported map[string]bool) []Diagnostic {
 	return out
 }
 
-var skipRuleDirs = map[string]bool{"node_modules": true, "dist": true, "bin": true, "target": true, "vendor": true, "testdata": true}
+// skipRuleDirs are left out of the application rules: build output and
+// dependencies, and the test support an app keeps beside its tests
+// (tests/, or a testkit, testutil or testsupport directory): helpers and
+// provider stubs that only tests import are test code, like _test.go
+// files, not the application the rules describe.
+var skipRuleDirs = map[string]bool{"node_modules": true, "dist": true, "bin": true, "target": true, "vendor": true, "testdata": true,
+	"tests": true, "testkit": true, "testutil": true, "testsupport": true}
 
 func checkFile(fset *token.FileSet, f *ast.File, rel, moduleDir string) []Diagnostic {
 	var out []Diagnostic

@@ -107,8 +107,16 @@ func weakenedTests(ctx context.Context, dir string) ([]testFinding, string, erro
 
 // fileDiff collects one file's changes while the diff is read.
 type fileDiff struct {
-	path            string
-	deleted         bool
+	path    string
+	deleted bool
+	// removedTests and addedTests are the test functions (Go) or cases
+	// (JS) the hunks remove and add: a test removed here and added in
+	// another file moved, with a split of the tests into packages.
+	removedTests, addedTests []string
+	// Unpaired after the file's own pairing, for the pass across files.
+	keptRemoved     []testFinding
+	keptText        []string
+	unusedAdded     []string
 	removedSkips    map[string]int
 	addedSkips      []testFinding
 	addedSkipText   []string
@@ -194,16 +202,17 @@ func parseTestDiffNotes(diff []byte) ([]testFinding, []string) {
 	var oldLine, newLine int
 	var inHunk bool
 	var prevAdded string
+	var files []*fileDiff
 	flush := func() {
-		if cur == nil || !isTestFile(cur.path) {
-			return
+		if cur != nil && isTestFile(cur.path) {
+			files = append(files, cur)
 		}
-		if cur.deleted {
-			findings = append(findings, testFinding{File: cur.path, Message: "test file deleted"})
-			return
-		}
-		// A skip that was already there and only moved or re-indented
-		// is not a new one.
+	}
+	// judge is a file's own pairing: skips moved within it, assertions
+	// paired with one of the same shape (only the expected text changed:
+	// reported, allowed) or one that swapped its matcher for a loose one
+	// (refused). What stays unpaired waits for the pass across files.
+	judge := func(cur *fileDiff) {
 		for i, f := range cur.addedSkips {
 			key := cur.addedSkipText[i]
 			if cur.removedSkips[key] > 0 {
@@ -212,11 +221,7 @@ func parseTestDiffNotes(diff []byte) ([]testFinding, []string) {
 			}
 			findings = append(findings, f)
 		}
-		// Pair each removed assertion with an added one of the same shape
-		// (only the expected text changed: reported, allowed), or with one
-		// that swapped its matcher for a loose one (refused).
 		used := make([]bool, len(cur.addedAssert))
-		var kept []testFinding
 		for i, f := range cur.removedAsserts {
 			old := cur.removedAssertText[i]
 			paired := false
@@ -239,20 +244,65 @@ func parseTestDiffNotes(diff []byte) ([]testFinding, []string) {
 				}
 			}
 			if !paired {
-				kept = append(kept, f)
+				cur.keptRemoved = append(cur.keptRemoved, f)
+				cur.keptText = append(cur.keptText, strings.TrimSpace(old))
 			}
 		}
-		cur.removedAsserts = kept
 		cur.addedAssertions = 0
-		for j := range cur.addedAssert {
+		for j, a := range cur.addedAssert {
 			if !used[j] {
 				cur.addedAssertions++
+				cur.unusedAdded = append(cur.unusedAdded, a.text)
 			}
 		}
-		if n := len(cur.removedAsserts); n > cur.addedAssertions {
-			for _, f := range cur.removedAsserts {
-				f.Message = fmt.Sprintf("assertion removed (%d removed, %d added in this file)", n, cur.addedAssertions)
-				findings = append(findings, f)
+	}
+	// across pairs what one file lost with what another gained: a test
+	// function or case added under the same name elsewhere, an assertion
+	// added elsewhere word for word. Tests split into packages move whole
+	// files and functions; neither is a weakening.
+	across := func() {
+		addedTests := map[string]int{}
+		addedAsserts := map[string]int{}
+		for _, f := range files {
+			for _, name := range f.addedTests {
+				addedTests[name]++
+			}
+			for _, text := range f.unusedAdded {
+				addedAsserts[text]++
+			}
+		}
+		for _, f := range files {
+			if f.deleted {
+				moved := len(f.removedTests) > 0
+				for _, name := range f.removedTests {
+					if addedTests[name] == 0 {
+						moved = false
+						break
+					}
+				}
+				if moved {
+					for _, name := range f.removedTests {
+						addedTests[name]--
+					}
+					notes = append(notes, fmt.Sprintf("%s: its %d test(s) moved to other files", f.path, len(f.removedTests)))
+				} else {
+					findings = append(findings, testFinding{File: f.path, Message: "test file deleted"})
+				}
+				continue
+			}
+			var kept []testFinding
+			for i, finding := range f.keptRemoved {
+				if addedAsserts[f.keptText[i]] > 0 {
+					addedAsserts[f.keptText[i]]--
+					continue
+				}
+				kept = append(kept, finding)
+			}
+			if n := len(kept); n > f.addedAssertions {
+				for _, finding := range kept {
+					finding.Message = fmt.Sprintf("assertion removed (%d removed, %d added in this file)", n, f.addedAssertions)
+					findings = append(findings, finding)
+				}
 			}
 		}
 	}
@@ -303,6 +353,9 @@ func parseTestDiffNotes(diff []byte) ([]testFinding, []string) {
 		text := line[1:]
 		switch line[0] {
 		case '-':
+			if name := testName(goFile, text); name != "" {
+				cur.removedTests = append(cur.removedTests, name)
+			}
 			if !isComment(text) {
 				if skip.MatchString(text) {
 					cur.removedSkips[strings.TrimSpace(text)]++
@@ -314,6 +367,9 @@ func parseTestDiffNotes(diff []byte) ([]testFinding, []string) {
 			}
 			oldLine++
 		case '+':
+			if name := testName(goFile, text); name != "" {
+				cur.addedTests = append(cur.addedTests, name)
+			}
 			if !isComment(text) {
 				if skip.MatchString(text) && !allowSkip.MatchString(text) && !(isComment(prevAdded) && allowSkip.MatchString(prevAdded)) {
 					what := "skip added"
@@ -333,7 +389,37 @@ func parseTestDiffNotes(diff []byte) ([]testFinding, []string) {
 		}
 	}
 	flush()
+	for _, f := range files {
+		if !f.deleted {
+			judge(f)
+		}
+	}
+	across()
 	return findings, notes
+}
+
+// goTestFunc and jsTestCase name a test as its line declares it.
+var (
+	goTestFunc = regexp.MustCompile(`^func ((?:Test|Fuzz|Benchmark)\w*)\(`)
+	jsTestCase = regexp.MustCompile(`^\s*(?:test|it)\(\s*(?:"([^"]+)"|'([^']+)'|` + "`([^`]+)`" + `)`)
+)
+
+// testName is the test a line declares, or "".
+func testName(goFile bool, text string) string {
+	if goFile {
+		if m := goTestFunc.FindStringSubmatch(text); m != nil {
+			return m[1]
+		}
+		return ""
+	}
+	if m := jsTestCase.FindStringSubmatch(text); m != nil {
+		for _, name := range m[1:] {
+			if name != "" {
+				return name
+			}
+		}
+	}
+	return ""
 }
 
 // testGuard is the verify step: the findings fail it unless the change

@@ -288,3 +288,35 @@ diff --git a/routes_test.go b/routes_test.go
 		t.Fatal("different subjects share a shape")
 	}
 }
+
+// Tests split into packages move files and functions: a deleted file
+// whose tests reappear elsewhere, and an assertion removed from one file
+// and added word for word to another, are moves, not weakenings. A
+// deletion whose tests vanish stays one.
+func TestParseTestDiffMovedBetweenFiles(t *testing.T) {
+	diff := "diff --git a/tests/a_test.go b/tests/a_test.go\n" +
+		"deleted file mode 100644\n--- a/tests/a_test.go\n+++ /dev/null\n@@ -1,9 +0,0 @@\n" +
+		"-package tests\n-\n-import \"testing\"\n-\n-func TestCreate(t *testing.T) {\n-\tif got != 1 {\n-\t\tt.Fatalf(\"got %d\", got)\n-\t}\n-}\n" +
+		"diff --git a/tests/orders/a_test.go b/tests/orders/a_test.go\n" +
+		"new file mode 100644\n--- /dev/null\n+++ b/tests/orders/a_test.go\n@@ -0,0 +1,9 @@\n" +
+		"+package orders\n+\n+import \"testing\"\n+\n+func TestCreate(t *testing.T) {\n+\tif got != 1 {\n+\t\tt.Fatalf(\"got %d\", got)\n+\t}\n+}\n" +
+		// An assertion moved from one existing file to another.
+		"diff --git a/tests/b_test.go b/tests/b_test.go\n--- a/tests/b_test.go\n+++ b/tests/b_test.go\n@@ -7,3 +7,0 @@\n" +
+		"-\tif res.StatusCode != 404 {\n-\t\tt.Fatalf(\"status %d\", res.StatusCode)\n-\t}\n" +
+		"diff --git a/tests/orders/b_test.go b/tests/orders/b_test.go\n--- a/tests/orders/b_test.go\n+++ b/tests/orders/b_test.go\n@@ -4,0 +5,3 @@\n" +
+		"+\tif res.StatusCode != 404 {\n+\t\tt.Fatalf(\"status %d\", res.StatusCode)\n+\t}\n"
+	findings, notes := parseTestDiffNotes([]byte(diff))
+	if len(findings) != 0 {
+		t.Fatalf("findings %v", findings)
+	}
+	if len(notes) != 1 || !strings.Contains(notes[0], "tests/a_test.go: its 1 test(s) moved") {
+		t.Fatalf("notes %v", notes)
+	}
+	// The same deletion with the test gone for good.
+	gone := "diff --git a/tests/a_test.go b/tests/a_test.go\n" +
+		"deleted file mode 100644\n--- a/tests/a_test.go\n+++ /dev/null\n@@ -1,5 +0,0 @@\n" +
+		"-package tests\n-\n-import \"testing\"\n-\n-func TestCreate(t *testing.T) {}\n"
+	if f := parseTestDiff([]byte(gone)); len(f) != 1 || f[0].Message != "test file deleted" {
+		t.Fatalf("gone: %v", f)
+	}
+}

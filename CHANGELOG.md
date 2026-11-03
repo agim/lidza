@@ -10,6 +10,19 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
+## Unreleased
+
+- Test support an app keeps beside its tests (packages under `tests/`,
+  or a `testkit`, `testutil` or `testsupport` directory: helpers and
+  provider stubs only tests import) is test code to the application
+  rules, like `_test.go` files: L001, L016 and L017 leave it alone. An app
+  that split its tests by area got 193 findings on its stubs (#75).
+- `lidza verify`'s "tests not weakened" step reads a split of the tests
+  into packages as the move it is: a deleted test file whose tests
+  reappear under the same names in other files, and an assertion removed
+  from one file and added word for word to another, are moves, noted in
+  the report, not deletions (#75).
+
 ## v0.1.129 (2026-11-03)
 
 - The auth pack now stores bounded account display preferences in PostgreSQL,

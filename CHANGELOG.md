@@ -10,6 +10,29 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
+## Unreleased
+
+- `usePreferences` in the react template (`src/preferences.ts`): an
+  account's display choices (a list's order, a view, a collapsed panel)
+  from the auth pack's preference routes, read once into the query cache
+  under the account's id, shown at once when changed, sent in order,
+  rolled back and reported when refused, and flushed before sign-out; a
+  stored value of another type than the default reads as the default.
+  With it the recipe "Remember a display preference" (every template),
+  the guide's "State" section on where state lives (rows, the query
+  cache, the address, preferences, the component; no global store), and
+  `lidza snippet preferences` and `preference-handlers` from the
+  reference app, which keeps the order of its notes this way.
+- The generated client typed a `json.RawMessage` as a base64 string on
+  Go 1.25 and later, where it is an alias of `jsontext.Value`: the auth
+  pack's preference values came out as `Record<string, string>`. They
+  are any JSON value (`unknown`) again.
+- Rule L005 accepts an official pack's API types in an app's handler
+  (`auth.PreferencePatch`, `auth.PreferenceState`): they are validated
+  and reach the client as the schema's types do.
+- The recipe "Add a recipe" named the guide as where an app recipe is
+  appended; it is `docs/lidza-recipes.md`.
+
 ## v0.1.132 (2026-11-03)
 
 - `storage.PutMultipart` streams large private objects to S3-compatible

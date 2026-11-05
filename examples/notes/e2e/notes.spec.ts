@@ -37,6 +37,34 @@ test('register, add a note, keep it across a reload, sign out', async ({ page })
   expect(windowErrors).toEqual([])
 })
 
+// A display choice (the order of the list) is a preference of the account:
+// it survives a reload and a new session, since the auth pack stores it.
+test('the order of the list follows the account', async ({ page }) => {
+  await page.goto('/')
+  await page.getByLabel('Email').fill(`e2e-order-${Date.now()}@example.com`)
+  await page.getByLabel('Password').fill('correct horse battery')
+  await page.getByRole('button', { name: 'Register' }).click()
+  await expect(page.getByRole('heading', { name: 'Your notes' })).toBeVisible()
+
+  for (const title of ['First note', 'Second note']) {
+    await page.getByLabel('Title').fill(title)
+    await page.getByRole('button', { name: 'Add note' }).click()
+    await expect(page.getByText(title)).toBeVisible()
+  }
+  const rows = page.getByRole('listitem')
+  await expect(rows.first()).toContainText('Second note')
+
+  await page.getByLabel('Order').selectOption('oldest')
+  await expect(rows.first()).toContainText('First note')
+
+  await page.reload()
+  await expect(page.getByLabel('Order')).toHaveValue('oldest')
+  await expect(rows.first()).toContainText('First note')
+
+  await page.getByRole('button', { name: 'Sign out' }).click()
+  await expect(page.getByRole('button', { name: 'Register' })).toBeVisible()
+})
+
 // Nothing scrolls sideways on a phone (lidza audit layout checks every
 // page this way).
 test('the home page fits a phone', async ({ page }) => {

@@ -43,6 +43,7 @@ func (v CreatePost) Validate() error { var e validate.Errors; return e.Result() 
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"demo/schema"
@@ -57,6 +58,7 @@ type Post struct {
 	Tags      []string        `+"`json:\"tags\"`"+`
 	CreatedAt time.Time       `+"`json:\"createdAt\"`"+`
 	Counts    map[string]int  `+"`json:\"counts\"`"+`
+	Extra     map[string]json.RawMessage `+"`json:\"extra\"`"+`
 	Meta      `+"`json:\"-\"`"+`
 	secret    string
 }
@@ -175,11 +177,14 @@ func main() { _ = routes }
 	if props["status"].(map[string]any)["$ref"] != "#/components/schemas/Status" {
 		t.Errorf("status: %v", props["status"])
 	}
+	if extra := props["extra"].(map[string]any)["additionalProperties"].(map[string]any); len(extra) != 0 {
+		t.Errorf("a json.RawMessage value is any JSON value, got %v", extra)
+	}
 	if props["counts"].(map[string]any)["additionalProperties"].(map[string]any)["type"] != "integer" {
 		t.Errorf("counts: %v", props["counts"])
 	}
 	required := post["required"].([]string)
-	if strings.Join(required, ",") != "id,title,status,tags,createdAt,counts" {
+	if strings.Join(required, ",") != "id,title,status,tags,createdAt,counts,extra" {
 		t.Errorf("required: %v", required)
 	}
 	if st := c.Schemas["Status"].(map[string]any); st["enum"].([]string)[1] != "published" {

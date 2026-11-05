@@ -353,7 +353,9 @@ func (b *schemaBuilder) named(n *types.Named) map[string]any {
 	switch obj.Pkg().Path() + "." + obj.Name() {
 	case "time.Time":
 		return map[string]any{"type": "string", "format": "date-time"}
-	case "encoding/json.RawMessage":
+	case "encoding/json.RawMessage", "encoding/json/jsontext.Value":
+		// Any JSON value (json.RawMessage is an alias of jsontext.Value
+		// since Go 1.25): never a base64 string, which []byte would be.
 		return map[string]any{}
 	case "github.com/agim/lidza/pkg/decimal.Decimal":
 		return map[string]any{"type": "string", "format": "decimal"}

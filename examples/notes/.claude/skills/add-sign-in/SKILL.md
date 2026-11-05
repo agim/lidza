@@ -16,7 +16,9 @@ OAuth flow.
    `auth.Mount(r, auth.Options{Title: "notes"})`. `lidza gen` then
    writes the client: `api.authRegister`, `authLogin`, `authLogout`,
    `authSession`, `authMe`, `authVerify`, `authForgot`, `authReset`,
-   `authPassword`, `authDelete`, `authProviders`. Accounts live in
+   `authPassword`, `authDelete`, `authProviders`, `authPreferences` and
+   `authPatchPreferences` (recipe "Remember a display preference").
+   Accounts live in
    `auth_user`; the app's rows carry the user's id,
    `auth.CurrentUser(ctx).ID` (recipe "Scope a query to the signed-in
    user").

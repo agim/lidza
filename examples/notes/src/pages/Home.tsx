@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, validators, type Credentials, type FieldError, type Session } from '@lidza/client'
+import { usePreferences } from '../preferences'
 
 // Every request goes through the generated client: api.currentSession, api.login,
 // api.listNotes, ... are typed from the Go handlers, and lidza check fails
@@ -75,11 +76,25 @@ function SignIn() {
   )
 }
 
+// The order of the list is a display choice of the account, kept by the
+// auth pack (src/preferences.ts): it follows the user to another browser.
+type NoteOrder = 'newest' | 'oldest'
+const noteOrders: NoteOrder[] = ['newest', 'oldest']
+
 // Notes lists the signed-in user's notes and adds or deletes one. Every
 // mutation invalidates the list, which refetches through the client.
 function Notes({ session }: { session: Session }) {
   const queryClient = useQueryClient()
   const notes = useQuery({ queryKey: ['notes'], queryFn: () => api.listNotes() })
+  const prefs = usePreferences(
+    { read: api.preferences, write: api.patchPreferences },
+    session.userId,
+    { 'notes.order': 'newest' as NoteOrder },
+    { accept: (_, value) => noteOrders.includes(value as NoteOrder) },
+  )
+  const order = prefs.values['notes.order']
+  const items = notes.data?.items ?? []
+  const shown = order === 'oldest' ? [...items].reverse() : items
   const [title, setTitle] = useState('')
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['notes'] })
   const create = useMutation({
@@ -91,7 +106,11 @@ function Notes({ session }: { session: Session }) {
   })
   const remove = useMutation({ mutationFn: (id: string) => api.deleteNote({ id }), onSuccess: refresh })
   const signOut = useMutation({
-    mutationFn: () => api.logout(),
+    // The last choice is stored before the session ends.
+    mutationFn: async () => {
+      await prefs.flush()
+      return api.logout()
+    },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['session'] }),
   })
   const add = (event: FormEvent) => {
@@ -129,8 +148,23 @@ function Notes({ session }: { session: Session }) {
       {notes.isPending && <p className="text-muted">Loading…</p>}
       {notes.isError && <p className="text-danger">{String(notes.error)}</p>}
       {notes.data && notes.data.total === 0 && <p className="text-muted">No notes yet.</p>}
+      {notes.data && notes.data.total > 0 && (
+        <label className="flex items-center gap-2 text-sm text-muted">
+          Order
+          <select
+            name="order"
+            value={order}
+            onChange={(e) => prefs.set({ 'notes.order': e.target.value as NoteOrder })}
+            className="rounded border border-line bg-white px-2 py-1 text-ink"
+          >
+            <option value="newest">Newest first</option>
+            <option value="oldest">Oldest first</option>
+          </select>
+        </label>
+      )}
+      {prefs.error && <p className="text-sm text-danger">{prefs.error.message}</p>}
       <ul className="divide-y divide-line rounded-lg border border-line bg-white">
-        {notes.data?.items.map((note) => (
+        {shown.map((note) => (
           <li key={note.id} className="flex items-center justify-between px-4 py-3">
             <span>{note.title}</span>
             <button type="button" className="text-sm text-muted underline" onClick={() => remove.mutate(note.id)}>

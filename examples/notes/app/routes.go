@@ -43,6 +43,10 @@ func routes(r *router.Router) {
 	account := r.Group("/api/v1/auth", auth.Require())
 	router.Route(account, "GET /api/v1/auth/me", handlers.Me)
 	router.Route(account, "POST /api/v1/auth/logout", handlers.Logout)
+	// The account's display choices (the auth pack's preferences), for
+	// src/preferences.ts; auth.Mount would register these itself.
+	router.Route(account, "GET /api/v1/auth/preferences", handlers.Preferences)
+	router.Route(account, "PATCH /api/v1/auth/preferences", handlers.PatchPreferences)
 
 	notes := r.Group("/api/v1/notes", auth.Require())
 	handlers.NoteRoutes(notes)

@@ -43,7 +43,9 @@ var Index = []Snippet{
 	{"llm-handler", "handlers/tags.go", "A route that asks the language model for a schema type through the llm pack: llm.Generate over the note the user may read, the prompt in the handler, the reply validated by the type's rules."},
 	{"pack-capability", "packs/stats/rust/src/lib.rs", "A Rust pack capability (lidza_export!) over types from schema.lidza: one CPU pass over user text, no I/O; the handler noteStats in resource-handlers calls it through the generated wrapper."},
 	{"pack-manifest", "packs/stats/pack.lidza.json", "The pack manifest: capability names with their input and output types, the pool size, memory cap, timeout, and uninterruptible for input-bounded loops."},
-	{"page", "src/pages/Home.tsx", "A React page on @lidza/client only: useQuery and useMutation with api.*, validators.* before a request, labelled inputs, sign in and sign out."},
+	{"page", "src/pages/Home.tsx", "A React page on @lidza/client only: useQuery and useMutation with api.*, validators.* before a request, labelled inputs, sign in and sign out, and a display choice (the list's order) kept with usePreferences."},
+	{"preferences", "src/preferences.ts", "usePreferences (react template): an account's display choices from the auth pack's preference routes, read once into the query cache, changed optimistically, sent in order, rolled back when refused, flushed before sign-out; for an app created before it existed, `lidza snippet preferences > src/preferences.ts`."},
+	{"preference-handlers", "handlers/preferences.go", "The auth pack's preference routes in an app with its own sign-in routes: two handlers over auth.From(ctx).Preferences and PatchPreferences, with the pack's types, behind auth.Require()."},
 	{"browser-test", "e2e/notes.spec.ts", "A Playwright test: register, add a note, reload, sign out, and no console or window errors."},
 }
 

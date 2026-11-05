@@ -35,6 +35,15 @@ The table has no session foreign key and supports `Login` with an app-owned user
 table. `DeleteUser`/`DeleteUserTx` remove preferences in the account transaction;
 deletion still works on a schema that has not adopted preferences yet.
 
+In the react template, `usePreferences` (`src/preferences.ts`, recipe "Remember
+a display preference") does the frontend's part: the document is read once into
+the query cache under the account's id, a change shows at once and is sent in
+order behind the one before, a refused write is rolled back and reported, a
+stored value of another type than the default (or one the page's `accept`
+refuses) reads as the default, and `flush()` stores the last change before
+sign-out. An app with its own sign-in routes passes its own two operations
+over the pack's methods (`lidza snippet preference-handlers`).
+
 A frontend should load the account document before applying its defaults,
 validate stored values, merge edits made during a slow initial read, serialize
 pending patches, and flush pending display choices before ordinary navigation

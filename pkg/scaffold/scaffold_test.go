@@ -76,7 +76,7 @@ func TestNewReact(t *testing.T) {
 	if read("CLAUDE.md") != "@AGENTS.md\n" || read("GEMINI.md") != "@AGENTS.md\n" {
 		t.Errorf("CLAUDE.md and GEMINI.md should be the line @AGENTS.md: %q %q", read("CLAUDE.md"), read("GEMINI.md"))
 	}
-	if !strings.Contains(read("AGENTS.md"), "<!-- lidza:recipes -->`start-with-brief`, `add-api-route`, `add-resource`, `add-sign-in`, `scope-query-to-signed-in-user`, `add-page`, `set-head-of-page`, `add-responsive-image`, `add-pack-capability`, `add-mcp-tool`, `send-email`, `add-background-job`, `publish-live-updates`, `add-llm-feature`, `store-file`, `receive-webhook`, `send-webhooks`, `connect-external-account`, `add-paginated-filterable-list`, `dates-and-time-zones`, `roles-and-permissions`, `add-teams-and-invitations`, `add-payments`, `sell-feature-to-teams`, `record-audit-event`, `add-admin-pages`, `extend-admin-pages`, `add-recipe`, `write-test`, `organize-application-packages`<!-- /lidza:recipes -->") {
+	if !strings.Contains(read("AGENTS.md"), "<!-- lidza:recipes -->`start-with-brief`, `add-api-route`, `add-resource`, `add-sign-in`, `scope-query-to-signed-in-user`, `add-page`, `set-head-of-page`, `add-responsive-image`, `add-pack-capability`, `add-mcp-tool`, `send-email`, `add-background-job`, `publish-live-updates`, `add-llm-feature`, `store-file`, `receive-webhook`, `send-webhooks`, `connect-external-account`, `add-paginated-filterable-list`, `remember-display-preference`, `dates-and-time-zones`, `roles-and-permissions`, `add-teams-and-invitations`, `add-payments`, `sell-feature-to-teams`, `record-audit-event`, `add-admin-pages`, `extend-admin-pages`, `add-recipe`, `write-test`, `organize-application-packages`<!-- /lidza:recipes -->") {
 		t.Errorf("AGENTS.md should list the recipes: %s", read("AGENTS.md"))
 	}
 	// An app recipe: added to the guide, generated, listed in the agent files.
@@ -481,6 +481,35 @@ func TestAddPageRecipePerTemplate(t *testing.T) {
 		}
 		if body := recipes.Skill(page[0]); !strings.Contains(body, want) {
 			t.Errorf("%s: add-page does not mention %s:\n%s", template, want, body)
+		}
+	}
+}
+
+// The preference recipe shows the hook in the react template and the
+// plain calls elsewhere.
+func TestPreferenceRecipeFollowsTemplate(t *testing.T) {
+	for template, want := range map[string]string{
+		"react":  "usePreferences",
+		"svelte": "read the document once",
+		"astro":  "read the document once",
+		"htmx":   "read the document once",
+	} {
+		cfg := config.Default("shop", template)
+		guide, err := renderBytes("lidza-recipes.md.tmpl", dataFor(&cfg, ""))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var found []recipes.Recipe
+		for _, r := range recipes.Parse(string(guide)) {
+			if r.Name == "remember-display-preference" {
+				found = append(found, r)
+			}
+		}
+		if len(found) != 1 {
+			t.Fatalf("%s: %d remember-display-preference recipes", template, len(found))
+		}
+		if body := recipes.Skill(found[0]); !strings.Contains(body, want) || !strings.Contains(body, "authPatchPreferences") {
+			t.Errorf("%s: remember-display-preference does not mention %s:\n%s", template, want, body)
 		}
 	}
 }

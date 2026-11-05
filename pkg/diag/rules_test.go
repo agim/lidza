@@ -52,6 +52,7 @@ var apiKey = "sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789"
 import (
 	"context"
 
+	"github.com/agim/lidza/packs/auth"
 	"github.com/agim/lidza/pkg/orm"
 	"github.com/agim/lidza/pkg/router"
 	_ "github.com/sendgrid/sendgrid-go/helpers/mail"
@@ -73,6 +74,7 @@ func helper[In any](req *router.Request[In], n int) (In, error) { var z In; retu
 func stream(ctx context.Context, req *router.Request[router.None], send func(adHoc) error) error { return nil }
 func streamOK(ctx context.Context, req *router.Request[schema.CreateThing], send func(string) error) error { return nil }
 func upload(ctx context.Context, req *router.Request[router.File]) (router.None, error) { return router.None{}, nil }
+func packType(ctx context.Context, req *router.Request[auth.PreferencePatch]) (auth.PreferenceState, error) { return auth.PreferenceState{}, nil }
 `)
 	// A RoundTripper takes *http.Request and returns two values; it is not a
 	// typed handler, so L005 stays silent.
@@ -89,7 +91,7 @@ func upload(ctx context.Context, req *router.Request[router.File]) (router.None,
 		lines = append(lines, d.Code+" "+d.File+":"+itoa(d.Line)+" "+d.Severity)
 	}
 	want := "L001 app.go:10 warning,L001 app.go:11 warning,L001 app.go:14 warning,L002 app.go:19 warning,L002 app.go:23 warning,L009 app.go:27 warning,L010 app.go:29 warning," +
-		"L004 handlers/things.go:6 error,L006 handlers/things.go:8 warning,L007 handlers/things.go:9 warning,L008 handlers/things.go:10 warning,L013 handlers/things.go:11 warning,L005 handlers/things.go:21 warning,L005 handlers/things.go:21 warning,L005 handlers/things.go:22 warning,L005 handlers/things.go:22 warning,L005 handlers/things.go:24 warning"
+		"L004 handlers/things.go:7 error,L006 handlers/things.go:9 warning,L007 handlers/things.go:10 warning,L008 handlers/things.go:11 warning,L013 handlers/things.go:12 warning,L005 handlers/things.go:22 warning,L005 handlers/things.go:22 warning,L005 handlers/things.go:23 warning,L005 handlers/things.go:23 warning,L005 handlers/things.go:25 warning"
 	if strings.Join(lines, ",") != want {
 		t.Fatalf("got %v\nwant %s", lines, want)
 	}
@@ -100,7 +102,7 @@ func upload(ctx context.Context, req *router.Request[router.File]) (router.None,
 		if d.Code == "L004" && !strings.Contains(d.Message, "did you mean github.com/agim/lidza/pkg/router") && !strings.Contains(d.Message, "does not exist") {
 			t.Fatalf("L004 message: %s", d.Message)
 		}
-		if d.Code == "L005" && d.Line == 22 && !strings.Contains(d.Message, "struct{...}") && !strings.Contains(d.Message, "any") {
+		if d.Code == "L005" && d.Line == 23 && !strings.Contains(d.Message, "struct{...}") && !strings.Contains(d.Message, "any") {
 			t.Fatalf("L005 message: %s", d.Message)
 		}
 	}

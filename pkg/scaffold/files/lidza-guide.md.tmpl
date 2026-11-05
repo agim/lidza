@@ -241,7 +241,7 @@ What each frontend template ships; the API contract, `lidza check`,
 | | react | svelte | astro | htmx |
 |---|---|---|---|---|
 | Rendering | client routes, prerendered at build; per-request SSR with `LIDZA_SSR=1` | one page, prerendered at build, hydrated | static pages at build | Go templates per request |
-| Data | `@lidza/client` with TanStack Query, live refetch via `useLive` | `@lidza/client` in components | `@lidza/client` in page scripts | Go handlers, htmx partials |
+| Data | `@lidza/client` with TanStack Query, live refetch via `useLive`, account preferences via `usePreferences` | `@lidza/client` in components | `@lidza/client` in page scripts | Go handlers, htmx partials |
 | Accessibility | `jsx-a11y`, errors | Svelte compiler a11y checks, errors | `jsx-a11y` through `eslint-plugin-astro`, errors | none automated |
 | Browser tests | `e2e/` (Playwright), `lidza test --e2e` | same | same | `pages_test.go` in Go |
 | Time zone cookie | `src/timezone.ts` | same | same | inline in `views/layout.html` |
@@ -250,6 +250,33 @@ What each frontend template ships; the API contract, `lidza check`,
 | Styling | Tailwind v4 | `app.css` | `<style is:global>` in the layout | `static/app.css` |
 
 This app uses the **{{.Template}}** template.
+
+## State
+
+Where state lives, from the server out; nothing else holds it.
+
+- Rows, accounts and sessions: Postgres, through the packs. A value or a
+  counter every node shares: the `cache` pack. Never process memory
+  (rule L001): any node serves any request.
+- What the server knows, in the page: the query cache (`@lidza/client`
+  with TanStack Query in the react template). A write invalidates the
+  queries it changes; the realtime pack's `useLive` invalidates them on
+  every open page (recipe "Publish live updates").
+- A list's page, search, filters, range and sort: the address
+  (`useListState` in `src/list.tsx`), so the view can be linked, reloaded
+  and gone back to.
+- An account's display choices (a list's order, a view, a collapsed
+  panel): the auth pack's preferences, `usePreferences` in
+  `src/preferences.ts` in the react template (recipe "Remember a display
+  preference"); they follow the account to every browser and device. A
+  choice in the address wins over a stored one.
+- An open menu, a draft, a wizard's step: the component, or the address
+  when a reload should keep it.
+
+There is no global store: the query cache and the address hold what
+outlives a component, preferences what outlives a browser. A client-only
+domain (an editor's document, offline drafts) is the app's own store
+under `src/`, kept apart from what the server knows.
 
 ## Parallel work
 
@@ -805,7 +832,7 @@ maps or slices (L001) and goroutines started in handlers (L002), because
 state belongs in Postgres or Valkey and background work in a bounded
 worker or the jobs pack; hand-written `fetch` of `/api` (L003); imports
 of packages that do not exist or are not declared (L004); handler types
-not declared in `schema.lidza` (L005); a call whose error is dropped, as
+not declared in `schema.lidza` or an official pack (L005); a call whose error is dropped, as
 a statement or assigned to `_` (L016: handle it or return it; deferred
 calls, a `Close` before a `return`, printing to the terminal and writes
 to a buffer or a hash are exempt); and a run of at least 8 statements

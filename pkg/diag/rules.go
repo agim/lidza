@@ -37,8 +37,9 @@ import (
 //     not compile, and `go get` cannot help);
 //
 //   - L005: a typed handler whose input, output or stream event type is
-//     not declared in schema.lidza, so it is neither validated nor known
-//     to the client;
+//     not declared in schema.lidza (or an official pack's API type, as
+//     auth.PreferencePatch), so it is neither validated nor known to the
+//     client;
 //
 //   - L006: an import of an email vendor SDK; the mail pack speaks those
 //     APIs already, with the outbox, templates and retries;
@@ -401,6 +402,10 @@ func checkFile(fset *token.FileSet, f *ast.File, rel, moduleDir string) []Diagno
 	}
 	warn := func(pos token.Pos, code, msg string) { report(pos, "warning", code, msg) }
 	schemaPkg, routerPkg := "", "router"
+	// An official pack's API types (auth.PreferencePatch) are validated
+	// and reach the client as the schema's do: a handler that wraps a
+	// pack's method takes and returns them.
+	packPkgs := map[string]bool{}
 	for _, imp := range f.Imports {
 		path, _ := strconv.Unquote(imp.Path.Value)
 		name := ""
@@ -412,6 +417,11 @@ func checkFile(fset *token.FileSet, f *ast.File, rel, moduleDir string) []Diagno
 			if name != "" {
 				routerPkg = name
 			}
+		case strings.HasPrefix(path, apidoc.Module+"/packs/"):
+			if name == "" {
+				name = path[strings.LastIndex(path, "/")+1:]
+			}
+			packPkgs[name] = true
 		case strings.HasSuffix(path, "/schema") && !strings.HasPrefix(path, apidoc.Module+"/"):
 			schemaPkg = "schema"
 			if name != "" {
@@ -459,8 +469,8 @@ func checkFile(fset *token.FileSet, f *ast.File, rel, moduleDir string) []Diagno
 			if d.Body == nil || !isHandler(d.Type) {
 				continue
 			}
-			for _, bad := range foreignTypes(d.Type, routerPkg, schemaPkg) {
-				warn(bad.Pos(), "L005", "handler "+d.Name.Name+": "+exprText(bad)+" is not a type from schema.lidza; declare it there so it is validated and reaches the generated client")
+			for _, bad := range foreignTypes(d.Type, routerPkg, schemaPkg, packPkgs) {
+				warn(bad.Pos(), "L005", "handler "+d.Name.Name+": "+exprText(bad)+" is not a type from schema.lidza or an official pack; declare it in schema.lidza so it is validated and reaches the generated client")
 			}
 			ast.Inspect(d.Body, func(n ast.Node) bool {
 				if g, ok := n.(*ast.GoStmt); ok {
@@ -648,7 +658,7 @@ func ignoreComments(fset *token.FileSet, f *ast.File) map[int]map[string]bool {
 
 // foreignTypes returns the In and Out types of a typed handler signature
 // that are not router.None, a schema.lidza type, or a basic type.
-func foreignTypes(ft *ast.FuncType, routerPkg, schemaPkg string) []ast.Expr {
+func foreignTypes(ft *ast.FuncType, routerPkg, schemaPkg string, packPkgs map[string]bool) []ast.Expr {
 	var out []ast.Expr
 	// A generic helper over *router.Request[In] is not a handler.
 	typeParams := map[string]bool{}
@@ -663,7 +673,7 @@ func foreignTypes(ft *ast.FuncType, routerPkg, schemaPkg string) []ast.Expr {
 		if id, ok := e.(*ast.Ident); ok && typeParams[id.Name] {
 			return
 		}
-		if e != nil && !contractType(e, routerPkg, schemaPkg) {
+		if e != nil && !contractType(e, routerPkg, schemaPkg, packPkgs) {
 			out = append(out, e)
 		}
 	}
@@ -695,20 +705,20 @@ func foreignTypes(ft *ast.FuncType, routerPkg, schemaPkg string) []ast.Expr {
 	return out
 }
 
-func contractType(e ast.Expr, routerPkg, schemaPkg string) bool {
+func contractType(e ast.Expr, routerPkg, schemaPkg string, packPkgs map[string]bool) bool {
 	switch x := e.(type) {
 	case *ast.Ident:
 		return basicTypes[x.Name]
 	case *ast.SelectorExpr:
 		pkg := exprText(x.X)
 		// router.File is an upload's body: the file, not a JSON shape.
-		return pkg == schemaPkg || (pkg == routerPkg && (x.Sel.Name == "None" || x.Sel.Name == "File"))
+		return pkg == schemaPkg || packPkgs[pkg] || (pkg == routerPkg && (x.Sel.Name == "None" || x.Sel.Name == "File"))
 	case *ast.StarExpr:
-		return contractType(x.X, routerPkg, schemaPkg)
+		return contractType(x.X, routerPkg, schemaPkg, packPkgs)
 	case *ast.ArrayType:
-		return contractType(x.Elt, routerPkg, schemaPkg)
+		return contractType(x.Elt, routerPkg, schemaPkg, packPkgs)
 	case *ast.MapType:
-		return contractType(x.Value, routerPkg, schemaPkg)
+		return contractType(x.Value, routerPkg, schemaPkg, packPkgs)
 	}
 	return false
 }

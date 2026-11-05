@@ -11,7 +11,7 @@ used twice (how lists paginate, how ownership is checked, how a webhook
 is verified, how a report is built) is a recipe.
 
 1. `lidza recipe add "Paginate a list"` appends a skeleton under "App
-   recipes" in `docs/lidza-guide.md` (or write the `###` section by hand;
+   recipes" in `docs/lidza-recipes.md` (or write the `###` section by hand;
    from an agent, the MCP tool `lidza_recipe_add` takes the title,
    description and steps).
 2. Fill it in: one sentence on when it applies, then numbered steps that

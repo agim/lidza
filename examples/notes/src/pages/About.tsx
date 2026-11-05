@@ -1,4 +1,7 @@
+import { useTitle } from '../navigation'
+
 export function About() {
+  useTitle('About')
   return (
     <div className="space-y-4">
       <h1 className="text-3xl font-semibold tracking-tight">About</h1>

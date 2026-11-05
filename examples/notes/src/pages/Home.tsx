@@ -2,12 +2,14 @@ import { useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, validators, type Credentials, type FieldError, type Session } from '@lidza/client'
 import { usePreferences } from '../preferences'
+import { useTitle } from '../navigation'
 
 // Every request goes through the generated client: api.currentSession, api.login,
 // api.listNotes, ... are typed from the Go handlers, and lidza check fails
 // here when a handler changes shape. currentSession answers 200 for a
 // visitor too (user null), so the page never produces an error to ask.
 export function Home() {
+  useTitle()
   const session = useQuery({ queryKey: ['session'], queryFn: () => api.currentSession() })
   if (session.isPending) return <p className="text-muted">Loading…</p>
   if (session.isError) return <p className="text-danger">{String(session.error)}</p>

@@ -53,3 +53,43 @@ pre {
   border: 1px solid #b3261e;
   border-radius: 4px;
 }
+
+/* The items pages (src/pages/items): a list with a filter, an item with tabs. */
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.toolbar input {
+  flex: 1;
+  min-width: 12rem;
+}
+
+.list {
+  padding: 0;
+  list-style: none;
+}
+
+.list li {
+  padding: 0.5rem 0;
+  border-bottom: 1px solid #e0d6cb;
+}
+
+.list p {
+  margin: 0;
+  color: #6b5f62;
+}
+
+.back {
+  color: #6b5f62;
+  font-size: 0.875rem;
+}
+
+nav.tabs {
+  padding: 0;
+}
+
+nav.tabs a[data-status='active'] {
+  border-bottom: 2px solid #8a2c5a;
+}

@@ -106,6 +106,7 @@ bin/lidza new demo --lidza-dir "$PWD"   # an app pointed at this checkout
 - `docs/features.md`: feature matrix, what is done, what comes when, open decisions.
 - `docs/scalability.md`: the scalable-by-default primitives and the rules every change follows.
 - `docs/design.md`: why Līdza is built the way it is.
+- `docs/navigation.md`: addresses, Back, reload and shared links in every app; the helpers per template and how an existing app moves over.
 - `docs/configuration.md`: every setting an app reads, generated from the source.
 - `docs/security.md`: what Līdza defends against and what it leaves to the app.
 - `CONTRIBUTING.md`: how to propose a change, the checks, the conventions.

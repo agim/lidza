@@ -24,6 +24,8 @@ var (
 	pageTemplates = map[string]*template.Template{
 		"index": template.Must(template.ParseFS(assets, "views/layout.html", "views/index.html")),
 		"about": template.Must(template.ParseFS(assets, "views/layout.html", "views/about.html")),
+		"items": template.Must(template.ParseFS(assets, "views/layout.html", "views/items.html")),
+		"item":  template.Must(template.ParseFS(assets, "views/layout.html", "views/item.html")),
 	}
 	partials = template.Must(template.ParseFS(assets, "views/partials/*.html"))
 )
@@ -48,6 +50,39 @@ func pages() http.Handler {
 	mux.HandleFunc("GET /about", func(w http.ResponseWriter, r *http.Request) {
 		renderPage(w, "about", map[string]any{"Title": "About"})
 	})
+	// The items pages show the navigation conventions (docs/lidza-guide.md,
+	// "Navigation"): the list's filter is a search parameter
+	// (/items?category=seating), an item has a path by its slug
+	// (/items/desk-lamp) and each tab one of its own (/items/desk-lamp/specs).
+	// Replace them with the app's own.
+	mux.HandleFunc("GET /items", func(w http.ResponseWriter, r *http.Request) {
+		category := r.URL.Query().Get("category")
+		var shown []item
+		for _, it := range sampleItems() {
+			if category == "" || it.Category == category {
+				shown = append(shown, it)
+			}
+		}
+		renderPage(w, "items", map[string]any{"Title": "Items", "Category": category, "Categories": []string{"lighting", "seating", "storage"}, "Items": shown})
+	})
+	itemPage := func(tab string) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			it, ok := findItem(r.PathValue("slug"))
+			if !ok {
+				// An unknown slug is a page too, with status 404 and a
+				// link to the parent.
+				renderPageStatus(w, http.StatusNotFound, "item", map[string]any{"Title": "Not found"})
+				return
+			}
+			title := it.Name
+			if tab == "specs" {
+				title = "Specs · " + it.Name
+			}
+			renderPage(w, "item", map[string]any{"Title": title, "Item": it, "Tab": tab})
+		}
+	}
+	mux.HandleFunc("GET /items/{slug}", itemPage("overview"))
+	mux.HandleFunc("GET /items/{slug}/specs", itemPage("specs"))
 	// A partial calls the same handler function as the JSON API, so the
 	// HTML and the API cannot disagree.
 	mux.HandleFunc("GET /partials/hello", func(w http.ResponseWriter, r *http.Request) {
@@ -71,9 +106,45 @@ func pages() http.Handler {
 // .env; nothing is sent otherwise.
 var analyticsEnabled = os.Getenv("ANALYTICS_FRONTEND") == "1"
 
+// item is a sample row for the items pages; an app reads its rows
+// through the same handler functions as its JSON API.
+type item struct {
+	Slug, Name, Category, Summary string
+	Specs                         [][2]string
+}
+
+func sampleItems() []item {
+	return []item{
+		{"desk-lamp", "Desk lamp", "lighting", "An adjustable lamp for one desk.", [][2]string{{"Height", "45 cm"}, {"Bulb", "E27"}}},
+		{"floor-lamp", "Floor lamp", "lighting", "A tall lamp that lights a corner.", [][2]string{{"Height", "160 cm"}, {"Bulb", "E27"}}},
+		{"oak-chair", "Oak chair", "seating", "A chair in solid oak.", [][2]string{{"Seat height", "46 cm"}, {"Wood", "Oak"}}},
+		{"low-stool", "Low stool", "seating", "A stool that stacks.", [][2]string{{"Seat height", "30 cm"}, {"Stacks", "Up to 6"}}},
+		{"wall-shelf", "Wall shelf", "storage", "One shelf on two brackets.", [][2]string{{"Width", "80 cm"}, {"Load", "15 kg"}}},
+	}
+}
+
+func findItem(slug string) (item, bool) {
+	for _, it := range sampleItems() {
+		if it.Slug == slug {
+			return it, true
+		}
+	}
+	return item{}, false
+}
+
+// appName follows each page's own title in the document title
+// ("Specs · Desk lamp · app").
+const appName = "__LIDZA_APP_NAME__"
+
 func renderPage(w http.ResponseWriter, name string, data map[string]any) {
+	renderPageStatus(w, http.StatusOK, name, data)
+}
+
+func renderPageStatus(w http.ResponseWriter, status int, name string, data map[string]any) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(status)
 	data["Analytics"] = analyticsEnabled
+	data["AppName"] = appName
 	if err := pageTemplates[name].ExecuteTemplate(w, "layout", data); err != nil {
 		slog.Error("render page", "page", name, "error", err)
 	}

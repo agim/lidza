@@ -1,0 +1,12 @@
+---
+// A link back to where the visitor came from on this site, as the
+// browser's Back would; href is the parent, used when there is no such
+// entry and by "open in new tab". src/back.ts does the going back.
+interface Props {
+  href: string
+  class?: string
+}
+const { href, class: className } = Astro.props
+---
+
+<a href={href} class={className} data-back><slot /></a>

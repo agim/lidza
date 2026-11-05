@@ -50,10 +50,49 @@ func TestStaticShell(t *testing.T) {
 	if code, body, _ := get("/.well-known/security.txt"); code != 200 || body != "Contact: mailto:a@example.com" {
 		t.Fatalf(".well-known file: %d %s", code, body)
 	}
+	// A client route with slugs, tabs and search parameters gets the
+	// shell; the API's paths never reach the frontend handler (Split).
+	if code, body, _ := get("/projects/acme-site/settings/members?tab=pending"); code != 200 || body != "<html>shell</html>" {
+		t.Fatalf("nested client route: %d %s", code, body)
+	}
+	// A 404.html beside a shell is a page of the app's, not the fallback.
+	dist["404.html"] = &fstest.MapFile{Data: []byte("<html>not found</html>")}
+	if code, body, _ := get("/posts/42"); code != 200 || body != "<html>shell</html>" {
+		t.Fatalf("client route with a 404.html in the build: %d %s", code, body)
+	}
+	delete(dist, "404.html")
 	// Without a kept shell, the prerendered home is the fallback.
 	delete(dist, ".server/index.html")
 	if code, body, _ := get("/posts/42"); code != 200 || body != "<html>home prerendered</html>" {
 		t.Fatalf("fallback without shell: %d %s", code, body)
+	}
+}
+
+// A build of static pages (astro) with a 404.html answers an address it
+// has no page for with that page and status 404, not the home page.
+func TestStaticNotFoundPage(t *testing.T) {
+	dist := fstest.MapFS{
+		"index.html":                       {Data: []byte("<html>home</html>")},
+		"404.html":                         {Data: []byte("<html>not found</html>")},
+		"items/index.html":                 {Data: []byte("<html>items</html>")},
+		"items/desk-lamp/index.html":       {Data: []byte("<html>desk lamp</html>")},
+		"items/desk-lamp/specs/index.html": {Data: []byte("<html>desk lamp specs</html>")},
+	}
+	h := Static(dist)
+	get := func(path string) (int, string) {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		return rec.Code, rec.Body.String()
+	}
+	for path, want := range map[string]string{"/": "<html>home</html>", "/items?category=seating": "<html>items</html>", "/items/desk-lamp/": "<html>desk lamp</html>", "/items/desk-lamp/specs": "<html>desk lamp specs</html>"} {
+		if code, body := get(path); code != 200 || body != want {
+			t.Errorf("%s: %d %s", path, code, body)
+		}
+	}
+	for _, path := range []string{"/items/no-such-item", "/nope"} {
+		if code, body := get(path); code != 404 || body != "<html>not found</html>" {
+			t.Errorf("%s: %d %s, want the 404 page", path, code, body)
+		}
 	}
 }
 

@@ -76,7 +76,7 @@ func TestNewReact(t *testing.T) {
 	if read("CLAUDE.md") != "@AGENTS.md\n" || read("GEMINI.md") != "@AGENTS.md\n" {
 		t.Errorf("CLAUDE.md and GEMINI.md should be the line @AGENTS.md: %q %q", read("CLAUDE.md"), read("GEMINI.md"))
 	}
-	if !strings.Contains(read("AGENTS.md"), "<!-- lidza:recipes -->`start-with-brief`, `add-api-route`, `add-resource`, `add-sign-in`, `scope-query-to-signed-in-user`, `add-page`, `set-head-of-page`, `add-responsive-image`, `add-pack-capability`, `add-mcp-tool`, `send-email`, `add-background-job`, `publish-live-updates`, `add-llm-feature`, `store-file`, `receive-webhook`, `send-webhooks`, `connect-external-account`, `add-paginated-filterable-list`, `remember-display-preference`, `dates-and-time-zones`, `roles-and-permissions`, `add-teams-and-invitations`, `add-payments`, `sell-feature-to-teams`, `record-audit-event`, `add-admin-pages`, `extend-admin-pages`, `add-recipe`, `write-test`, `organize-application-packages`<!-- /lidza:recipes -->") {
+	if !strings.Contains(read("AGENTS.md"), "<!-- lidza:recipes -->`start-with-brief`, `add-api-route`, `add-resource`, `add-sign-in`, `scope-query-to-signed-in-user`, `add-page`, `set-head-of-page`, `add-responsive-image`, `keep-view-in-address`, `add-pack-capability`, `add-mcp-tool`, `send-email`, `add-background-job`, `publish-live-updates`, `add-llm-feature`, `store-file`, `receive-webhook`, `send-webhooks`, `connect-external-account`, `add-paginated-filterable-list`, `remember-display-preference`, `dates-and-time-zones`, `roles-and-permissions`, `add-teams-and-invitations`, `add-payments`, `sell-feature-to-teams`, `record-audit-event`, `add-admin-pages`, `extend-admin-pages`, `add-recipe`, `write-test`, `organize-application-packages`<!-- /lidza:recipes -->") {
 		t.Errorf("AGENTS.md should list the recipes: %s", read("AGENTS.md"))
 	}
 	// An app recipe: added to the guide, generated, listed in the agent files.
@@ -461,7 +461,7 @@ func TestFrameworkBlockAppDir(t *testing.T) {
 func TestAddPageRecipePerTemplate(t *testing.T) {
 	for template, want := range map[string]string{
 		"react":  "src/router.tsx",
-		"svelte": "src/App.svelte",
+		"svelte": "src/routes.ts",
 		"astro":  "src/pages/things.astro",
 		"htmx":   "pageTemplates",
 	} {
@@ -481,6 +481,62 @@ func TestAddPageRecipePerTemplate(t *testing.T) {
 		}
 		if body := recipes.Skill(page[0]); !strings.Contains(body, want) {
 			t.Errorf("%s: add-page does not mention %s:\n%s", template, want, body)
+		}
+	}
+}
+
+// Every template's guidance carries the navigation rules and names that
+// template's helpers: the guide's section, the recipe, the agent file's
+// line.
+func TestNavigationGuidancePerTemplate(t *testing.T) {
+	for template, helpers := range map[string][]string{
+		"react":  {"src/navigation.tsx", "validateSearch", "useTitle", "scrollRestoration: true", "<BackLink to="},
+		"svelte": {"src/router.svelte.ts", "searchParam", "setSearch", "src/BackLink.svelte", "prerender: false"},
+		"astro":  {"src/components/BackLink.astro", "getStaticPaths", "history.replaceState", "404.astro"},
+		"htmx":   {"data-back", "hx-replace-url", "hx-push-url", "renderPageStatus"},
+	} {
+		cfg := config.Default("shop", template)
+		data := dataFor(&cfg, "")
+		guide, err := renderBytes("lidza-guide.md.tmpl", data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		recipesFile, err := renderBytes("lidza-recipes.md.tmpl", data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		agent, err := renderBytes("agent.md.tmpl", data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		section := string(guide)
+		if i := strings.Index(section, "## Navigation"); i < 0 {
+			t.Fatalf("%s: the guide has no Navigation section", template)
+		} else {
+			section = section[i:]
+			section = section[:strings.Index(section, "\n## Parallel work")]
+		}
+		var recipe string
+		for _, r := range recipes.Parse(string(recipesFile)) {
+			if r.Name == "keep-view-in-address" {
+				recipe = recipes.Skill(r)
+			}
+		}
+		if recipe == "" {
+			t.Fatalf("%s: no keep-view-in-address recipe", template)
+		}
+		for _, rule := range []string{"slug", "search parameter", "replace", "hash", "L025"} {
+			if !strings.Contains(section, rule) || !strings.Contains(recipe, rule) {
+				t.Errorf("%s: %q missing from the guide's section or the recipe", template, rule)
+			}
+		}
+		for _, h := range helpers {
+			if !strings.Contains(section+recipe, h) {
+				t.Errorf("%s: the guidance does not name %s", template, h)
+			}
+		}
+		if !strings.Contains(string(agent), "- Navigation: every view has an address") || !strings.Contains(string(agent), "BackLink") {
+			t.Errorf("%s: the agent file lacks the navigation line", template)
 		}
 	}
 }

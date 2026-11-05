@@ -112,6 +112,10 @@ import (
 //     holding team notes; every session reads it whole, so lasting facts
 //     go in docs/notes.md and an area's documentation in docs/;
 //
+//   - L025: browser navigation that breaks Back, reload or a shared
+//     link in the frontend and templates: hash routing, history.back()
+//     by hand, a link labelled Back to one fixed page (navigation.go);
+//
 // Except for L004, L019 and L020 the findings are warnings: they point at the pattern,
 // the author decides. A comment "lidza:ignore L001" on the line, or the
 // line before, exempts that line from the rule it names.
@@ -168,6 +172,7 @@ func Rules(ctx context.Context, root string) []Diagnostic {
 	out = append(out, migrationNumbers(root)...)
 	out = append(out, migrationSafety(root)...)
 	out = append(out, formTargets(root)...)
+	out = append(out, navigationRules(root)...)
 	out = append(out, rootLayout(root)...)
 	out = append(out, agentFileSize(root)...)
 	return out

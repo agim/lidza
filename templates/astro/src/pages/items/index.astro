@@ -1,0 +1,54 @@
+---
+// The list at /items, its filter in the address (/items?category=seating):
+// a GET form, so it works without script and the filtered view can be
+// linked and reloaded. The script filters in place and replaces the
+// history entry, so Back leaves the list instead of undoing each choice.
+// The items pages show the navigation conventions (docs/lidza-guide.md,
+// "Navigation"); replace them with the app's own.
+import Base from '../../layouts/Base.astro'
+import { categories, items } from '../../items'
+---
+
+<Base title="Items">
+  <h1>Items</h1>
+  <form method="get" action="/items" id="item-filter">
+    <label>
+      Category
+      <select name="category">
+        <option value="">All</option>
+        {categories.map((c) => <option value={c}>{c}</option>)}
+      </select>
+    </label>
+    <noscript><button type="submit">Filter</button></noscript>
+  </form>
+  <ul id="item-list">
+    {
+      items.map((item) => (
+        <li data-category={item.category}>
+          <a href={`/items/${item.slug}`}>{item.name}</a>
+          <p>{item.summary}</p>
+        </li>
+      ))
+    }
+  </ul>
+</Base>
+
+<script>
+  const form = document.getElementById('item-filter') as HTMLFormElement
+  const select = form.elements.namedItem('category') as HTMLSelectElement
+  const apply = () => {
+    for (const li of document.querySelectorAll<HTMLElement>('#item-list li')) {
+      li.hidden = select.value !== '' && li.dataset.category !== select.value
+    }
+  }
+  // The address is the state: read it on load (a link, a reload, Back).
+  select.value = new URLSearchParams(location.search).get('category') ?? ''
+  apply()
+  select.addEventListener('change', () => {
+    const url = new URL(location.href)
+    if (select.value) url.searchParams.set('category', select.value)
+    else url.searchParams.delete('category')
+    history.replaceState(history.state, '', url)
+    apply()
+  })
+</script>

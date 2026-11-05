@@ -469,7 +469,7 @@ func TestGuidanceSurfaces(t *testing.T) {
 		t.Fatal(err)
 	}
 	prompts, err := c.ListPrompts(ctx, mcp.ListPromptsRequest{})
-	if err != nil || len(prompts.Prompts) != 31 { // one per recipe
+	if err != nil || len(prompts.Prompts) != 32 { // one per recipe
 		t.Errorf("prompts: %v %d", err, len(prompts.Prompts))
 	}
 	tools, err := c.ListTools(ctx, mcp.ListToolsRequest{})

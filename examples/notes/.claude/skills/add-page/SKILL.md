@@ -10,6 +10,12 @@ Add a client-side route rendered by React, prerendered at build time.
 
 1. Create `src/pages/Things.tsx` exporting a component.
 2. In `src/router.tsx`, declare `createRoute({ getParentRoute: () => rootRoute, path: '/things', component: Things })` and add it to the route tree.
+   One record is `/things/$slug` (by its slug), a tab a child route, a
+   filter a search parameter (`validateSearch`); link with `<Link>`, link
+   back from a record with `<BackLink to="/things">All things</BackLink>`,
+   and set the title with `useTitle(thing.name)` (`src/navigation.tsx`;
+   recipe "Keep a view in the address"). Never a hash route, never a view
+   chosen by component state alone.
 3. Fetch data with `useQuery({ queryKey: ['things'], queryFn: () => api.listThings() })`
    from `@lidza/client`; never `fetch` by hand.
 4. Routes without parameters are prerendered by `npm run build`; keep

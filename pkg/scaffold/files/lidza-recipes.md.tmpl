@@ -395,6 +395,10 @@ Add a server-rendered page with htmx partials.
    the route: `mux.HandleFunc("GET /things", func(w http.ResponseWriter,
    r *http.Request) { renderPage(w, "things", map[string]any{"Title":
    "Things"}) })`.
+   One record is `GET /things/{slug}` (by its slug), a tab its own
+   route, a filter a `GET` form; link back from a record with `<a
+   href="/things" data-back>All things</a>` (recipe "Keep a view in the
+   address").
 3. Data: call the same handler function the JSON API uses (as
    `/partials/hello` calls `hello`), so the HTML and the API cannot
    disagree; never query the database from `pages.go` directly.
@@ -411,26 +415,33 @@ Add a server-rendered page with htmx partials.
 
 {{if eq .Template "svelte"}}### Add a page
 
-Add a view to the Svelte page, prerendered at build time and hydrated.
+Add a client-side route rendered by Svelte, prerendered at build time.
 
-1. The template is one page: `src/App.svelte`, rendered to `dist/index.html`
-   by `npm run build` (scripts/prerender.mjs) and hydrated by
-   `src/main.ts`. Put a new view in its own component,
-   `src/lib/Things.svelte`, and render it from `App.svelte`.
-2. Every address is the same page: the binary serves `index.html` for
-   any path without a file. Choose the view from `location.pathname`
-   (read it in `onMount`, keep it in `$state`, update it on `popstate`
-   and when a link calls `history.pushState`); the prerendered markup is
-   the default view, so the first render must not read `location`.
+1. Create `src/pages/Things.svelte`. A page with path parameters takes
+   them as a prop: `let { params }: { params: Record<string, string> } =
+   $props()`.
+2. In `src/routes.ts`, add `{ path: '/things', component: Things, title:
+   () => ['Things'] }` (`/things/:slug` for one record, by its slug). Link
+   to it with a plain `<a href="/things">`: the router
+   (`src/router.svelte.ts`) takes the click, pushes a history entry and
+   renders the route; Back, reload and a shared link land on it. Never a
+   hash route, never a view chosen by component state alone (recipe "Keep
+   a view in the address").
 3. Fetch with `api.listThings()` from `@lidza/client` in `onMount`, into
-   `$state`; never `fetch` by hand.
-4. Forms: `validators.CreateThing(values)` from `@lidza/client` returns
+   `$state`; never `fetch` by hand. Routes without `:params` are
+   prerendered by `npm run build`, so the first render must not read
+   `window` or the data; a route whose first render reads the search
+   parameters sets `prerender: false`.
+4. A record's page links back with `<BackLink href="/things">All
+   things</BackLink>` (`src/BackLink.svelte`), and sets
+   `setTitle(thing.name)` once the data arrives.
+5. Forms: `validators.CreateThing(values)` from `@lidza/client` returns
    the field errors the server would, before the request.
-5. Every element must be accessible: `svelte-check` accessibility
+6. Every element must be accessible: `svelte-check` accessibility
    warnings are errors in `lidza check`.
-6. Text in more than one language: `t('things.title')` from `src/i18n.ts`
+7. Text in more than one language: `t('things.title')` from `src/i18n.ts`
    in every string, the key in every `locales/<lang>.json`.
-7. Add a browser test in `e2e/things.spec.ts` (see "Write a test"), then
+8. Add a browser test in `e2e/things.spec.ts` (see "Write a test"), then
    `lidza check` and `lidza test --e2e`.
 
 {{else if eq .Template "astro"}}### Add a page
@@ -444,9 +455,13 @@ Add a page to the Astro site, built to static HTML.
    time, when the API is not running. Data that changes comes in the
    browser: a `<script>` in the page that imports `api` from
    `@lidza/client` and fills the element; never `fetch` by hand.
-3. A route with a parameter (`src/pages/things/[id].astro`) needs
+3. A route with a parameter (`src/pages/things/[slug].astro`) needs
    `getStaticPaths` with every value known at build time; otherwise
-   serve one page and read the id from `location` in its script.
+   serve one page and read the slug from `location.pathname` in its
+   script (never from the hash). A record's page links back with
+   `<BackLink href="/things">All things</BackLink>`
+   (`src/components/BackLink.astro`); recipe "Keep a view in the
+   address" has the rest.
 4. Interactive parts stay small scripts in the page; there is no
    framework runtime unless you add an Astro integration for one.
 5. Every element must be accessible: `lidza check` runs `astro check`
@@ -460,6 +475,12 @@ Add a client-side route rendered by React, prerendered at build time.
 
 1. Create `src/pages/Things.tsx` exporting a component.
 2. In `src/router.tsx`, declare `createRoute({ getParentRoute: () => rootRoute, path: '/things', component: Things })` and add it to the route tree.
+   One record is `/things/$slug` (by its slug), a tab a child route, a
+   filter a search parameter (`validateSearch`); link with `<Link>`, link
+   back from a record with `<BackLink to="/things">All things</BackLink>`,
+   and set the title with `useTitle(thing.name)` (`src/navigation.tsx`;
+   recipe "Keep a view in the address"). Never a hash route, never a view
+   chosen by component state alone.
 3. Fetch data with `useQuery({ queryKey: ['things'], queryFn: () => api.listThings() })`
    from `@lidza/client`; never `fetch` by hand.
 4. Routes without parameters are prerendered by `npm run build`; keep
@@ -537,7 +558,8 @@ SSR sidecar.
    og:image and the twitter tags follow from the fields.
 5. It applies to the shell, the prerendered pages, the pages the SSR
    sidecar renders and, under `lidza dev`, the dev server's. Setting
-   `document.title` in the browser on navigation stays the client's job;
+   `document.title` in the browser on navigation stays the client's job
+   ({{if eq .Template "svelte"}}the route's `title` or `setTitle`{{else if eq .Template "astro"}}each page's own `<title>`{{else}}`useTitle` from `src/navigation.tsx`{{end}});
    the server's head is for the first load and for crawlers.
 6. Test it beside the package that defines `head` (outside the root): call `head` with
    `httptest.NewRequest("GET", "/products/"+id,
@@ -587,6 +609,103 @@ layout shift.
    upload, "Store a file"); this recipe is for the images the app ships.
 6. `alt` describes the image for someone who cannot see it; an image
    that only decorates gets `alt=""`.
+{{- end}}
+
+### Keep a view in the address
+
+Give every view an address that Back, Forward, reload and a shared link
+land on: a record, a tab, a step, a list's filter (the guide's
+"Navigation" has the rules; `lidza check` L025 flags hash routing,
+`history.back()` by hand and a "Back" link fixed to one page).
+
+1. Name the addresses before the code: each screen and record a path
+   with readable slugs (`/projects/acme-site/settings/members`), each tab
+   or wizard step a segment of it (`/checkout/shipping`), each filter,
+   search, sort, page or selected row a search parameter
+   (`/posts?status=draft&page=2`). A slug is lowercase letters, digits
+   and hyphens, unique where it is used; store it on the row (a
+   `slug string @unique` field) and look the record up by it.
+{{- if eq .Template "react"}}
+2. Routes in `src/router.tsx`: `createRoute({ getParentRoute: () =>
+   rootRoute, path: '/posts/$slug', component: PostPage })`, a tab as a
+   child route (`path: '/comments'` under it), each linked with `<Link
+   to="/posts/$slug/comments" params={{"{{"}} slug {{"}}"}}>`. The items routes are
+   the example.
+3. Search parameters on the route, typed, each optional in a link:
+   `validateSearch: (s: { status?: string; q?: string } &
+   SearchSchemaInput) => ({ status: searchChoice(s.status, statuses,
+   'all'), q: searchText(s.q) })` (`src/navigation.tsx`), with `search: {
+   middlewares: [stripSearchParams({ status: 'all', q: '' })] }` so the
+   defaults stay out of the address. In the page: `const route =
+   getRouteApi('/posts')`, `const { status } = route.useSearch()`, and
+   on change `route.useNavigate()({ search: (prev) => ({ ...prev, status
+   }), replace: true })`. A step or a record opened over the list is a
+   new view: no `replace`. A list on `useListState` (recipe "Add a
+   paginated, filterable list") keeps its state there the same way; its
+   route sets `staticData: { prerender: false }`.
+4. The back link: `<BackLink to="/posts">All posts</BackLink>` from
+   `src/navigation.tsx`. The title: `useTitle(post.title)` in the page
+   (the leaf route).
+5. A dialog or a panel over a list that has its own address is a child
+   route rendered in the list's `<Outlet />`; closing it is a `Link` (or
+   `BackLink`) to the list.
+6. An app created before `src/navigation.tsx` takes it with `lidza
+   snippet navigation > src/navigation.tsx` (set `appName`) and adds
+   `scrollRestoration: true` to `createRouter` in `src/router.tsx`.
+{{- else if eq .Template "svelte"}}
+2. Routes in `src/routes.ts`: `{ path: '/posts/:slug', component:
+   PostPage, title: (p) => [nameOf(p.slug)] }` and a tab as its own path
+   (`/posts/:slug/comments`), the same component reading which tab from
+   `isActive(...)`; each linked with a plain `<a href="/posts/{slug}/comments">`.
+   The items routes are the example.
+3. Search parameters: `const status = $derived(searchParam('status',
+   'all'))`, and on change `setSearch({ status }, { defaults: { status:
+   'all' } })`, which replaces the history entry; `{ push: true }` for a
+   step. A route whose first render reads them sets `prerender: false`.
+   From code, `navigate('/posts/' + slug)` pushes.
+4. The back link: `<BackLink href="/posts">All posts</BackLink>` from
+   `src/BackLink.svelte`. The title: the route's `title`, or
+   `setTitle(post.title)` once the data arrives.
+5. An app created before `src/router.svelte.ts` takes `src/router.svelte.ts`,
+   `src/routes.ts`, `src/BackLink.svelte`, `src/App.svelte`,
+   `src/main.ts`, `src/entry-server.ts` and `scripts/prerender.mjs` from
+   a new app (`lidza new tmp --template svelte`) and moves its views into
+   `src/pages/`.
+{{- else if eq .Template "astro"}}
+2. A record is `src/pages/posts/[slug].astro` with `getStaticPaths`; a
+   tab is its own page (`src/pages/posts/[slug]/comments.astro`). The
+   items pages are the example; `src/pages/404.astro` answers any other
+   address with status 404.
+3. A filter is a `GET` form (`action="/posts"`), so it works without
+   script; a script that filters in place reads `location.search` on load
+   and writes the change with `history.replaceState`.
+4. The back link: `<BackLink href="/posts">All posts</BackLink>` from
+   `src/components/BackLink.astro` (`src/back.ts`, loaded by the layout,
+   makes it go back). The title: `<Base title="...">`.
+{{- else if eq .Template "htmx"}}
+2. Routes in `pages.go`: `GET /posts/{slug}` and a tab as its own
+   route (`GET /posts/{slug}/comments`), each rendering the whole page;
+   an unknown slug renders a page with status 404 (`renderPageStatus`).
+   The items routes are the example.
+3. A filter is a `GET` form that htmx swaps and writes to the address:
+   `hx-get="/posts" hx-trigger="change" hx-select="#post-list"
+   hx-target="#post-list" hx-swap="outerHTML" hx-replace-url="true"`; the
+   handler reads `r.URL.Query()`, so a reload shows the same list. A swap
+   that is a new view uses `hx-push-url="true"`.
+4. The back link: `<a href="/posts" data-back>All posts</a>`
+   (`static/back.js`, loaded by the layout, makes it go back). The title:
+   `"Title"` in the page's data.
+{{- end}}
+{{- if .Dist}}
+{{if eq .Template "react"}}7{{else if eq .Template "svelte"}}6{{else}}5{{end}}. Test it in `e2e/` (`e2e/navigation.spec.ts` is the example): open a
+   deep link and reload, change a filter and see it in the URL, follow a
+   link and come back with the back link and with `page.goBack()`, open
+   the detail page in a fresh page and see the back link go to the
+   parent. `lidza check`, then `lidza test --e2e`.
+{{- else}}
+5. Test it in `tests/pages_test.go`: each address answers with its view
+   and title, an unknown slug with 404, the back link's `href` is the
+   parent. `lidza check`, then `lidza test`.
 {{- end}}
 
 ### Add a pack capability
@@ -1242,7 +1361,9 @@ shows an endless table.
    and `until` (instants; until is exclusive), `sort`, `order` (`asc`,
    `desc`), and one parameter per filter.
 3. The page (react template), from `src/list.tsx`: `useListState({
-   filters: ['status'] })` keeps the state in the address,
+   filters: ['status'] })` keeps the state in the address (through the
+   router, replacing the history entry; the list's route sets
+   `staticData: { prerender: false }`),
    `api.listPosts({ query: listQuery(state) })` sends it (the date
    inputs' days become instants in the visitor's zone, until the end of
    the last day), and `ListToolbar` (the search, the range labelled by

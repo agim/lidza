@@ -9,3 +9,10 @@ form { display: flex; gap: 0.5rem; align-items: center; }
    layout turns that off). */
 .htmx-indicator { opacity: 0; }
 .htmx-request .htmx-indicator, .htmx-request.htmx-indicator { opacity: 1; transition: opacity 200ms ease-in; }
+/* The items pages: a list with a filter, an item with tabs. */
+.list { padding: 0; list-style: none; }
+.list li { padding: 0.5rem 0; border-bottom: 1px solid #e0d6cb; }
+.list p { margin: 0; color: #6b5f62; }
+.back { color: #6b5f62; font-size: 0.875rem; }
+nav.tabs { padding: 0; }
+nav.tabs a[aria-current='page'] { font-weight: 600; border-bottom: 2px solid #8a2c5a; }

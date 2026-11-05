@@ -1,0 +1,23 @@
+{{define "content"}}
+<h1>Items</h1>
+<!-- The filter is a GET form: it works without script, and the filtered
+     view has an address that can be linked and reloaded. htmx swaps the
+     list and replaces the history entry (hx-replace-url), so Back leaves
+     the list instead of undoing each choice. -->
+<form method="get" action="/items" hx-get="/items" hx-trigger="change" hx-target="#item-list" hx-select="#item-list" hx-swap="outerHTML" hx-replace-url="true">
+  <label>Category
+    <select name="category">
+      <option value="">All</option>
+      {{range .Categories}}<option value="{{.}}"{{if eq . $.Category}} selected{{end}}>{{.}}</option>{{end}}
+    </select>
+  </label>
+  <noscript><button type="submit">Filter</button></noscript>
+</form>
+<ul id="item-list" class="list">
+  {{range .Items}}
+  <li><a href="/items/{{.Slug}}">{{.Name}}</a><p>{{.Summary}}</p></li>
+  {{else}}
+  <li>No items match.</li>
+  {{end}}
+</ul>
+{{end}}

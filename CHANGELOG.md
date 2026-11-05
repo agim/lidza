@@ -10,7 +10,7 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
-## Unreleased
+## v0.1.133 (2026-11-05)
 
 - `usePreferences` in the react template (`src/preferences.ts`): an
   account's display choices (a list's order, a view, a collapsed panel)

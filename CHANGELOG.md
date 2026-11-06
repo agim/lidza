@@ -10,7 +10,7 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
-## Unreleased
+## v0.1.135 (2026-11-06)
 
 - Browser navigation conventions for every app (`docs/navigation.md`):
   every view has an address that Back, Forward, reload and a shared link

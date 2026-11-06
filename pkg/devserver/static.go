@@ -12,11 +12,17 @@ import (
 // of its own.
 const ShellFile = ".server/index.html"
 
+// NotFoundFile is the page a build of static pages (the astro template's
+// src/pages/404.astro) has for the addresses it has no page for.
+const NotFoundFile = "404.html"
+
 // Static serves a built single-page app from dist: files by path (the
 // .br or .gz copy lidza build stored when the request accepts it), hashed
 // assets under /assets/ with a long cache lifetime, prerendered pages at
 // <path>/index.html, and the shell for every other path (client-side
-// routing). When the build has a page per locale (dist/.locales), pages
+// routing); a build without a shell but with a 404.html is a site of
+// static pages, and an address it has no page for gets that page with
+// status 404. When the build has a page per locale (dist/.locales), pages
 // and the shell come in the request's locale, negotiated as the i18n pack
 // does (WithLocale passes the pack's own negotiation). WithHead sets each
 // page's <head> per request.
@@ -46,8 +52,8 @@ func Static(dist fs.FS, opts ...Option) http.Handler {
 			candidates := []string{path.Join(dir, name, "index.html")}
 			if name != "" {
 				candidates = append(candidates, path.Join(dir, "shell.html"))
-				// Without a kept shell (the svelte template) the one page
-				// serves every path, as below.
+				// Without a kept shell (a svelte build from before it
+				// kept one) the one page serves every path, as below.
 				if !exists(dist, ShellFile) {
 					candidates = append(candidates, path.Join(dir, "index.html"))
 				}
@@ -76,6 +82,15 @@ func Static(dist fs.FS, opts ...Option) http.Handler {
 			}
 			sendFile(w, r, dist, name, tags)
 			return
+		}
+		// A site of static pages has a page for every address it serves;
+		// any other is its 404 page, not the home page with status 200.
+		if name != "" && !exists(dist, ShellFile) && exists(dist, NotFoundFile) {
+			if page, err := fs.ReadFile(dist, NotFoundFile); err == nil {
+				allowInline(w.Header(), page)
+				writePage(w, r, http.StatusNotFound, page)
+				return
+			}
 		}
 		// Any other path is the app's to route in the browser. It gets the
 		// bare shell the prerender kept (dist/.server/index.html), not the

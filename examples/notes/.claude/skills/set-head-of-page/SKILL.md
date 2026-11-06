@@ -36,7 +36,8 @@ SSR sidecar.
    og:image and the twitter tags follow from the fields.
 5. It applies to the shell, the prerendered pages, the pages the SSR
    sidecar renders and, under `lidza dev`, the dev server's. Setting
-   `document.title` in the browser on navigation stays the client's job;
+   `document.title` in the browser on navigation stays the client's job
+   (`useTitle` from `src/navigation.tsx`);
    the server's head is for the first load and for crawlers.
 6. Test it beside the package that defines `head` (outside the root): call `head` with
    `httptest.NewRequest("GET", "/products/"+id,

@@ -15,6 +15,8 @@ What the platform does for an agent, checked end to end on a fresh app:
 | a frontend call to an operation that does not exist | TS2339 error in the page |
 | a field renamed in `schema.lidza` | TS2339 error in the page that reads the old name |
 | an `<img>` without `alt` | `jsx-a11y/alt-text` error |
+| `location.hash = '#/...'`, `history.back()` by hand, a link labelled Back to one page | three L025 warnings; an in-page anchor, a token read from the fragment and `BackLink` are not |
+| navigation guidance | `AGENTS.md`, the guide's "Navigation", the recipe "Keep a view in the address" and its skills name slugs, search parameters, replace, no hash routing, `BackLink` and L025; `src/navigation.tsx` and `e2e/navigation.spec.ts` ship |
 | guidance | the recipes as skills for Claude Code and for Codex and Gemini CLI, the agent files naming them and the tools, the pre-commit hook, `lidza api`, `lidza snippet`, and the MCP prompts, tools and `lidza://api` |
 | `lidza verify` | passes on the fresh app, tests included |
 | `examples/notes` | its own `lidza verify` passes (needs Postgres; skipped otherwise) |

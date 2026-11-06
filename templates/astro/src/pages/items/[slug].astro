@@ -1,0 +1,23 @@
+---
+// One item at /items/<slug>, built for every item (getStaticPaths); its
+// specs tab is its own page, /items/<slug>/specs, so a tab is a link,
+// Back returns to the tab before, and a reload or shared link opens it.
+import Base from '../../layouts/Base.astro'
+import BackLink from '../../components/BackLink.astro'
+import { items, type Item } from '../../items'
+
+export function getStaticPaths() {
+  return items.map((item) => ({ params: { slug: item.slug }, props: { item } }))
+}
+const { item } = Astro.props as { item: Item }
+---
+
+<Base title={item.name}>
+  <BackLink href="/items" class="back">All items</BackLink>
+  <h1>{item.name}</h1>
+  <nav aria-label="Item sections" class="tabs">
+    <a href={`/items/${item.slug}`} aria-current="page">Overview</a>
+    <a href={`/items/${item.slug}/specs`}>Specs</a>
+  </nav>
+  <p>{item.summary}</p>
+</Base>

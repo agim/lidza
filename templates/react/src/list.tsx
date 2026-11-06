@@ -1,7 +1,10 @@
 // A list page's search, filters, date range, sort and paging, kept in the
 // address (so a list can be linked, reloaded and gone back to) and sent to
 // a list route that reads them with list.Read (pkg/list): the routes
-// lidza gen resource writes do.
+// lidza gen resource writes do. A change replaces the history entry
+// through the router, so Back leaves the list rather than undoing each
+// filter; the list's route sets staticData: { prerender: false }, since
+// its first render reads the address.
 //
 //   const [state, set] = useListState({ filters: ['status'] })
 //   const posts = useQuery({ queryKey: ['posts', state], queryFn: () => api.listPosts({ query: listQuery(state) }) })
@@ -16,7 +19,8 @@
 // relevance unless a sort is chosen, with highlights to show:
 //   <Highlight parts={highlightOf(posts.data, post.id)} fallback={post.title} />
 
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useRouter, useRouterState } from '@tanstack/react-router'
 
 export interface ListState {
   q: string
@@ -30,8 +34,8 @@ export interface ListState {
   filters: Record<string, string>
 }
 
-function read(filters: string[], limit: number): ListState {
-  const p = new URLSearchParams(typeof location === 'undefined' ? '' : location.search)
+function read(search: string, filters: string[], limit: number): ListState {
+  const p = new URLSearchParams(search)
   const order = p.get('order')
   return {
     q: p.get('q') ?? '',
@@ -52,17 +56,17 @@ function read(filters: string[], limit: number): ListState {
 export function useListState(options: { filters?: string[]; limit?: number } = {}): [ListState, (patch: Partial<ListState>) => void] {
   const filters = options.filters ?? []
   const limit = options.limit ?? 50
-  const [state, setState] = useState(() => read(filters, limit))
-  useEffect(() => {
-    const back = () => setState(read(filters, limit))
-    addEventListener('popstate', back)
-    return () => removeEventListener('popstate', back)
-    // The filters' names are fixed for a page.
-  }, [])
+  const router = useRouter()
+  // The router's location: Back, Forward and links update it, and the
+  // server render reads the request's.
+  const search = useRouterState({ select: (s) => s.location.searchStr })
+  // The filters' names are fixed for a page.
+  const state = useMemo(() => read(search, filters, limit), [search])
   const set = (patch: Partial<ListState>) => {
     const next = { ...state, ...patch, filters: { ...state.filters, ...patch.filters } }
     if (patch.offset === undefined) next.offset = 0
-    const p = new URLSearchParams(location.search)
+    const at = router.latestLocation
+    const p = new URLSearchParams(at.searchStr)
     const put = (k: string, v: string | number) => (v === '' || v === 0 || (k === 'limit' && v === limit) ? p.delete(k) : p.set(k, String(v)))
     put('q', next.q)
     put('sort', next.sort)
@@ -72,9 +76,8 @@ export function useListState(options: { filters?: string[]; limit?: number } = {
     put('offset', next.offset)
     put('limit', next.limit)
     for (const [k, v] of Object.entries(next.filters)) put(k, v)
-    const search = p.toString()
-    history.replaceState(history.state, '', location.pathname + (search ? '?' + search : '') + location.hash)
-    setState(next)
+    const query = p.toString()
+    router.history.replace(at.pathname + (query ? '?' + query : '') + (at.hash ? '#' + at.hash : ''), at.state)
   }
   return [state, set]
 }

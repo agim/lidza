@@ -35,4 +35,19 @@ func TestPages(t *testing.T) {
 	if code, _ := get("/about"); code != http.StatusOK {
 		t.Fatalf("about: %d", code)
 	}
+	// Every view has an address: the list's filter, an item by its slug,
+	// its tab; the back link is a link to the parent (static/back.js
+	// makes it go back when the previous page is this site's).
+	if code, body := get("/items?category=seating"); code != http.StatusOK || !strings.Contains(body, "Oak chair") || strings.Contains(body, "Desk lamp") || !strings.Contains(body, `value="seating" selected`) {
+		t.Fatalf("filtered list: %d %s", code, body)
+	}
+	if code, body := get("/items/desk-lamp/specs"); code != http.StatusOK || !strings.Contains(body, "<title>Specs · Desk lamp · __LIDZA_APP_NAME__</title>") || !strings.Contains(body, `<a href="/items" class="back" data-back>`) || !strings.Contains(body, "Bulb") {
+		t.Fatalf("item tab: %d %s", code, body)
+	}
+	if code, body := get("/items/no-such-item"); code != http.StatusNotFound || !strings.Contains(body, "No item at this address") {
+		t.Fatalf("unknown item: %d %s", code, body)
+	}
+	if code, _ := get("/static/back.js"); code != http.StatusOK {
+		t.Fatalf("back.js: %d", code)
+	}
 }

@@ -3,16 +3,18 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>{{.Title}}</title>
+    <title>{{if and .Title (ne .Title .AppName)}}{{.Title}} · {{end}}{{.AppName}}</title>
     <meta name="htmx-config" content='{"includeIndicatorStyles": false}' />
     <link rel="stylesheet" href="/static/app.css" />
     <script src="/static/htmx.min.js"></script>
-    <script src="/static/timezone.js"></script>{{if .Analytics}}
+    <script src="/static/timezone.js"></script>
+    <script src="/static/back.js" defer></script>{{if .Analytics}}
     <script src="/static/analytics.js" defer></script>{{end}}
   </head>
   <body>
     <nav>
       <a href="/">Home</a>
+      <a href="/items">Items</a>
       <a href="/about">About</a>
     </nav>
     <main>

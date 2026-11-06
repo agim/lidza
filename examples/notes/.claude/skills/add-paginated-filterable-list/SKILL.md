@@ -27,7 +27,9 @@ shows an endless table.
    and `until` (instants; until is exclusive), `sort`, `order` (`asc`,
    `desc`), and one parameter per filter.
 3. The page (react template), from `src/list.tsx`: `useListState({
-   filters: ['status'] })` keeps the state in the address,
+   filters: ['status'] })` keeps the state in the address (through the
+   router, replacing the history entry; the list's route sets
+   `staticData: { prerender: false }`),
    `api.listPosts({ query: listQuery(state) })` sends it (the date
    inputs' days become instants in the visitor's zone, until the end of
    the last day), and `ListToolbar` (the search, the range labelled by

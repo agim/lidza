@@ -36,7 +36,11 @@ app is always at one address: http://127.0.0.1:3000.
 {{- if .Dist}}
 ├── package.json     frontend ({{.Template}}); npm scripts dev, build, check
 ├── src/             frontend source
+{{- if eq .Template "svelte"}}
+│   ├── routes.ts    client-side routes (src/router.svelte.ts runs them)
+{{- else if eq .Template "react"}}
 │   ├── router.tsx   client-side routes
+{{- end}}
 │   └── pages/       one file per page; API calls via `import { api } from '@lidza/client'`
 ├── .lidza/client/   generated TypeScript client (gitignored, `lidza gen`)
 ├── {{.Dist}}/            frontend build output, embedded into the binary. Never edit.
@@ -248,6 +252,7 @@ What each frontend template ships; the API contract, `lidza check`,
 | Translated pages | `src/i18n.ts`, a page per locale at build | same | none | Go handlers (`i18n.From(ctx).T`) |
 | Analytics reporter | `VITE_ANALYTICS=1` | `VITE_ANALYTICS=1` | `PUBLIC_ANALYTICS=1` | `ANALYTICS_FRONTEND=1`, `static/analytics.js` |
 | Styling | Tailwind v4 | `app.css` | `<style is:global>` in the layout | `static/app.css` |
+| Navigation | TanStack Router, `src/navigation.tsx` (`BackLink`, `useTitle`, search parameters) | `src/router.svelte.ts`, `src/BackLink.svelte` | a page per address, `BackLink.astro` | Go routes, `data-back` links, `hx-push-url` / `hx-replace-url` |
 
 This app uses the **{{.Template}}** template.
 
@@ -262,22 +267,145 @@ Where state lives, from the server out; nothing else holds it.
   with TanStack Query in the react template). A write invalidates the
   queries it changes; the realtime pack's `useLive` invalidates them on
   every open page (recipe "Publish live updates").
-- A list's page, search, filters, range and sort: the address
-  (`useListState` in `src/list.tsx`), so the view can be linked, reloaded
-  and gone back to.
+- Which view is open (a record, a tab, a wizard's step) and how a list
+  is shown (its page, search, filters, range, sort, the selected row):
+  the address, so the view can be linked, reloaded and gone back to
+  ("Navigation" below; `useListState` in `src/list.tsx` for a list in
+  the react template).
 - An account's display choices (a list's order, a view, a collapsed
   panel): the auth pack's preferences, `usePreferences` in
   `src/preferences.ts` in the react template (recipe "Remember a display
   preference"); they follow the account to every browser and device. A
   choice in the address wins over a stored one.
-- An open menu, a draft, a wizard's step: the component, or the address
-  when a reload should keep it.
+- An open menu, a hover, a draft being typed: the component.
 
 There is no global store: the query cache and the address hold what
 outlives a component, preferences what outlives a browser. A client-only
 domain (an editor's document, offline drafts) is the app's own store
 under `src/`, kept apart from what the server knows.
 
+## Navigation
+
+Every view a user can reach has an address, and the browser's Back,
+Forward, reload, bookmarks and shared links work on it as on any
+website. `lidza check` L025 flags hash routing, `history.back()` by hand
+and a "Back" link fixed to one page; recipe "Keep a view in the address"
+has the steps.
+
+1. A screen or a record has a path with readable slugs:
+   `/projects/acme-site/settings/members`, `/posts/hello-world`. A
+   record is found by its slug (or its id when it has no unique name) in
+   a path segment, never by a hash or `?id=`. Slugs are lowercase
+   letters, digits and hyphens: a last segment that ends like a file
+   (`node.js`, `report.pdf`) is answered as a missing file, 404, not as a
+   route.
+2. What picks the view is in the address, never only in component
+   state. A view of its own (a tab, a wizard's step, a record opened over
+   a list) is a path segment: `/posts/hello-world/comments`,
+   `/checkout/shipping`. How a view is shown (a filter, a search, a sort,
+   a page, the selected row, a minor tab) is a search parameter:
+   `/posts?status=draft&sort=title`. A default value is left out of the
+   address.
+3. Push or replace. Going to another view, record or step pushes a
+   history entry: it is a link. Changing a filter, typing in a search,
+   sorting, paging and a redirect to a default replace the current entry,
+   so Back leaves the list instead of undoing each keystroke. A panel or
+   dialog with an address pushes, so Back closes it.
+4. No hash routing: no `location.hash = ...`, no `#/path` links, no
+   `hashchange` router or hash history. The fragment is for an anchor in
+   the page (`/docs/setup#install`) and for a secret the server must not
+   log (an invitation or share token, `/invite#token=...`): read it once,
+   send it in a request body, then drop it with `history.replaceState`.
+5. Links are links: navigation renders `<a href>`, so middle-click, open
+   in a new tab and copy link work; a button is for an action, never for
+   going somewhere, and never a click handler on a `div` that navigates.
+6. Back links go back. A "back" link in the page uses `BackLink`: it
+   goes back through history when the previous entry is this app's, so
+   it lands where the browser's Back would (the list with its filters and
+   scroll), and to the parent path it names when there is none (the page
+   was opened from a link elsewhere or in a new tab). It renders `<a
+   href="parent">`. Name the parent ("All posts"), not "Back". Never a
+   link fixed to one page labelled "Back", never `history.back()` by hand.
+7. The document title follows the view: "Members · Acme site · app".
+   The server's head is for the first load and for crawlers (recipe "Set
+   the head of a page").
+8. Scroll: a new view starts at the top (or at its `#anchor`); Back and
+   Forward return to where it was scrolled.
+9. A deep link and a reload land on the same view: the page reads the
+   whole view from the address on its first render and loads what it
+   needs; an unknown slug shows a not-found view with a link to the
+   parent.{{if .Dist}} The binary serves the frontend for every path outside `/api`,
+   so any path the router knows opens directly; `/api/...` is always the
+   API, an unknown one its 404.{{else}} Every view is a Go route that renders the whole page,
+   the ones htmx swaps in too, so a reload or a shared link works.{{end}}
+10. Test it{{if .Dist}} in the browser suite: open a deep link, reload, follow a
+   link, go back (`page.goBack()` and the back link), and check the
+   filter, the tab and the scroll held.{{else}} in `tests/pages_test.go`: each address (a filter in the
+   query, a slug, a tab) answers with its view and title, an unknown slug
+   with 404, and the back link's `href` is the parent.{{end}}
+{{if eq .Template "react"}}
+In this app (react, TanStack Router; `src/navigation.tsx`, the items
+pages show each rule):
+
+- Routes in `src/router.tsx`: a record `/items/$slug`, its tabs child
+  routes (`/items/$slug/specs`), each a `Link`.
+- Search parameters typed on the route: `validateSearch: (s: { status?:
+  string } & SearchSchemaInput) => ({ status: searchChoice(s.status,
+  statuses, 'all') })` (`searchText`, `searchChoice`, `searchNumber` in
+  `src/navigation.tsx`), defaults left out with `search: { middlewares:
+  [stripSearchParams(defaults)] }`. Read with
+  `getRouteApi('/posts').useSearch()`, change with `navigate({ search:
+  (prev) => ({ ...prev, status }), replace: true })`. A route with
+  `validateSearch` is not prerendered (its HTML would show every address
+  the view without its parameters); a page reading the address another
+  way (`useListState`) sets `staticData: { prerender: false }`.
+- `<BackLink to="/posts">All posts</BackLink>` takes `Link`'s props.
+- `useTitle(post.title)` in the page a route renders (the leaf; a layout
+  route around others never sets it, or it overrides them).
+- `scrollRestoration: true` in `createAppRouter`.
+{{else if eq .Template "svelte"}}
+In this app (svelte; `src/router.svelte.ts`, the items pages show each
+rule):
+
+- Routes in `src/routes.ts`: `{ path: '/items/:slug/specs', component,
+  title: (p) => ['Specs', name(p.slug)] }`. A link is a plain `<a
+  href>`; the router takes clicks on the app's own paths, numbers its
+  history entries and keeps each one's scroll. `navigate(href)` pushes
+  from code, `navigate(href, { replace: true })` replaces.
+- Search parameters: `searchParam('status', 'all')` in a `$derived`,
+  `setSearch({ status }, { defaults: { status: 'all' } })` replaces the
+  entry (`push: true` for a step). A route whose first render reads them
+  sets `prerender: false`.
+- `<BackLink href="/posts">All posts</BackLink>` (`src/BackLink.svelte`).
+- `setTitle(post.title)` once data arrives, else the route's `title`.
+- The build prerenders the routes without `:params` and keeps a shell
+  the binary serves to every other path.
+{{else if eq .Template "astro"}}
+In this app (astro, a page per address; the items pages show each rule):
+
+- A record is `src/pages/items/[slug].astro` with `getStaticPaths`, a tab
+  its own page (`[slug]/specs.astro`); `src/pages/404.astro` is the page
+  for any other address, sent with status 404.
+- A filter is a `GET` form (it works without script); a script that
+  filters in place writes the address with `history.replaceState`.
+- `<BackLink href="/posts">All posts</BackLink>`
+  (`src/components/BackLink.astro`; `src/back.ts` makes it go back).
+- `<Base title="...">` sets the title: "Specs · Desk lamp · app".
+{{else if eq .Template "htmx"}}
+In this app (htmx, pages from Go; the items pages in `pages.go` show each
+rule):
+
+- A record is `GET /items/{slug}`, a tab its own route
+  (`/items/{slug}/specs`); an unknown slug answers 404 with a page.
+- A filter is a `GET` form; with htmx it swaps the list and replaces the
+  address: `hx-get="/items" hx-select="#item-list" hx-target="#item-list"
+  hx-replace-url="true"`. A swap that shows another view uses
+  `hx-push-url="true"`, and its route renders the whole page too, so a
+  reload works.
+- A back link is `<a href="/items" data-back>All items</a>`
+  (`static/back.js` makes it go back).
+- `"Title"` in the page's data sets the title: "Specs · Desk lamp · app".
+{{end}}
 ## Parallel work
 
 Several agents or branches at once, each in its own git worktree

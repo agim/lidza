@@ -386,6 +386,12 @@ Add a client-side route rendered by React, prerendered at build time.
 
 1. Create `src/pages/Things.tsx` exporting a component.
 2. In `src/router.tsx`, declare `createRoute({ getParentRoute: () => rootRoute, path: '/things', component: Things })` and add it to the route tree.
+   One record is `/things/$slug` (by its slug), a tab a child route, a
+   filter a search parameter (`validateSearch`); link with `<Link>`, link
+   back from a record with `<BackLink to="/things">All things</BackLink>`,
+   and set the title with `useTitle(thing.name)` (`src/navigation.tsx`;
+   recipe "Keep a view in the address"). Never a hash route, never a view
+   chosen by component state alone.
 3. Fetch data with `useQuery({ queryKey: ['things'], queryFn: () => api.listThings() })`
    from `@lidza/client`; never `fetch` by hand.
 4. Routes without parameters are prerendered by `npm run build`; keep
@@ -463,7 +469,8 @@ SSR sidecar.
    og:image and the twitter tags follow from the fields.
 5. It applies to the shell, the prerendered pages, the pages the SSR
    sidecar renders and, under `lidza dev`, the dev server's. Setting
-   `document.title` in the browser on navigation stays the client's job;
+   `document.title` in the browser on navigation stays the client's job
+   (`useTitle` from `src/navigation.tsx`);
    the server's head is for the first load and for crawlers.
 6. Test it beside the package that defines `head` (outside the root): call `head` with
    `httptest.NewRequest("GET", "/products/"+id,
@@ -500,6 +507,52 @@ layout shift.
    upload, "Store a file"); this recipe is for the images the app ships.
 6. `alt` describes the image for someone who cannot see it; an image
    that only decorates gets `alt=""`.
+
+### Keep a view in the address
+
+Give every view an address that Back, Forward, reload and a shared link
+land on: a record, a tab, a step, a list's filter (the guide's
+"Navigation" has the rules; `lidza check` L025 flags hash routing,
+`history.back()` by hand and a "Back" link fixed to one page).
+
+1. Name the addresses before the code: each screen and record a path
+   with readable slugs (`/projects/acme-site/settings/members`), each tab
+   or wizard step a segment of it (`/checkout/shipping`), each filter,
+   search, sort, page or selected row a search parameter
+   (`/posts?status=draft&page=2`). A slug is lowercase letters, digits
+   and hyphens, unique where it is used; store it on the row (a
+   `slug string @unique` field) and look the record up by it.
+2. Routes in `src/router.tsx`: `createRoute({ getParentRoute: () =>
+   rootRoute, path: '/posts/$slug', component: PostPage })`, a tab as a
+   child route (`path: '/comments'` under it), each linked with `<Link
+   to="/posts/$slug/comments" params={{ slug }}>`. The items routes are
+   the example.
+3. Search parameters on the route, typed, each optional in a link:
+   `validateSearch: (s: { status?: string; q?: string } &
+   SearchSchemaInput) => ({ status: searchChoice(s.status, statuses,
+   'all'), q: searchText(s.q) })` (`src/navigation.tsx`), with `search: {
+   middlewares: [stripSearchParams({ status: 'all', q: '' })] }` so the
+   defaults stay out of the address. In the page: `const route =
+   getRouteApi('/posts')`, `const { status } = route.useSearch()`,
+   `const navigate = route.useNavigate()`, and on change `navigate({
+   search: (prev) => ({ ...prev, status }), replace: true })`. A step or a record opened over the list is a
+   new view: no `replace`. A list on `useListState` (recipe "Add a
+   paginated, filterable list") keeps its state there the same way; its
+   route sets `staticData: { prerender: false }`.
+4. The back link: `<BackLink to="/posts">All posts</BackLink>` from
+   `src/navigation.tsx`. The title: `useTitle(post.title)` in the page
+   (the leaf route).
+5. A dialog or a panel over a list that has its own address is a child
+   route rendered in the list's `<Outlet />`; closing it is a `Link` (or
+   `BackLink`) to the list.
+6. An app created before `src/navigation.tsx` takes it with `lidza
+   snippet navigation > src/navigation.tsx` (set `appName`) and adds
+   `scrollRestoration: true` to `createRouter` in `src/router.tsx`.
+7. Test it in `e2e/` (`e2e/navigation.spec.ts` is the example): open a
+   deep link and reload, change a filter and see it in the URL, follow a
+   link and come back with the back link and with `page.goBack()`, open
+   the detail page in a fresh page and see the back link go to the
+   parent. `lidza check`, then `lidza test --e2e`.
 
 ### Add a pack capability
 
@@ -1149,7 +1202,9 @@ shows an endless table.
    and `until` (instants; until is exclusive), `sort`, `order` (`asc`,
    `desc`), and one parameter per filter.
 3. The page (react template), from `src/list.tsx`: `useListState({
-   filters: ['status'] })` keeps the state in the address,
+   filters: ['status'] })` keeps the state in the address (through the
+   router, replacing the history entry; the list's route sets
+   `staticData: { prerender: false }`),
    `api.listPosts({ query: listQuery(state) })` sends it (the date
    inputs' days become instants in the visitor's zone, until the end of
    the last day), and `ListToolbar` (the search, the range labelled by

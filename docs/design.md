@@ -87,6 +87,22 @@ rows, fan-out goes through a Valkey bus, compute runs in bounded pools,
 and each app exposes `/metrics`, `/healthz` and `/readyz`.
 `docs/scalability.md` has the rules and the status of each primitive.
 
+## Navigation
+
+An app's views are addresses: a record by its slug in the path, a tab or
+a step as a path segment, a filter or a page as a search parameter, no
+hash routing, back links that go back through history when the previous
+entry is the app's. The address is the one place that survives a reload,
+a new tab, a shared link and the Back button, so state that picks the
+view lives there and not in a component. The rules sit in the guidance
+every app inherits (the guide's "Navigation", a line in `AGENTS.md`), each
+template ships the helpers and an example (`BackLink`, typed search
+parameters, the title per view, scroll restoration), and `lidza check`
+L025 flags hash routing and fixed back links. The binary serves every
+path outside `/api` to the frontend, so a client route opens directly.
+`docs/navigation.md` has the rules, the helpers per template and the
+steps for an existing app.
+
 ## Admin pages
 
 The admin pages are server-rendered Go templates inside the binary, so

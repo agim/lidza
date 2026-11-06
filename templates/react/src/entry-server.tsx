@@ -77,11 +77,17 @@ export async function renderShell(template: string, locale: string): Promise<str
   return localizePage(template)
 }
 
-// staticPaths lists the routes without parameters.
+// staticPaths lists the routes to prerender: those without path
+// parameters, but for a route that reads its search parameters
+// (validateSearch, or staticData.prerender false): its HTML would show
+// the view without them to every address that has them (/items?q=oak),
+// so it is served as the shell and renders in the browser.
 export function staticPaths(): string[] {
   const router = createAppRouter(createMemoryHistory({ initialEntries: ['/'] }))
-  const byPath = (router as unknown as { routesByPath: Record<string, unknown> }).routesByPath ?? {}
-  return Object.keys(byPath).filter((p) => !p.includes('$') && !p.includes('*'))
+  const byPath = (router as unknown as { routesByPath: Record<string, { options: { validateSearch?: unknown; staticData?: { prerender?: boolean } } }> }).routesByPath ?? {}
+  return Object.entries(byPath)
+    .filter(([p, route]) => !p.includes('$') && !p.includes('*') && !route.options.validateSearch && route.options.staticData?.prerender !== false)
+    .map(([p]) => p)
 }
 
 // pageModes lists the routes that ship without the client runtime

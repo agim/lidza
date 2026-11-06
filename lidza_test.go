@@ -54,6 +54,19 @@ func TestHandlerProduction(t *testing.T) {
 	if code, _ := get(t, h, "/api/v1/nope"); code != 404 {
 		t.Fatalf("unknown api route: %d", code)
 	}
+	// Client routes with slugs and tabs reach the frontend on reload; the
+	// API's paths never do, an unknown one included, and a path that only
+	// starts with the letters "api" is a client route.
+	for _, path := range []string{"/projects/acme-site/settings/members", "/items/desk-lamp?tab=specs", "/apiary"} {
+		if code, body := get(t, h, path); code != 200 || body != "<h1>built</h1>" {
+			t.Errorf("client route %s: %d %s", path, code, body)
+		}
+	}
+	for _, path := range []string{"/api", "/api/", "/api/v1/nope", "/api/v2/items/desk-lamp"} {
+		if code, body := get(t, h, path); code != 404 || strings.Contains(body, "built") {
+			t.Errorf("API path %s: %d %s, want the API's 404", path, code, body)
+		}
+	}
 }
 
 func TestHandlerDev(t *testing.T) {

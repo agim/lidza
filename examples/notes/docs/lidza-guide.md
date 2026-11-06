@@ -242,6 +242,7 @@ What each frontend template ships; the API contract, `lidza check`,
 | Translated pages | `src/i18n.ts`, a page per locale at build | same | none | Go handlers (`i18n.From(ctx).T`) |
 | Analytics reporter | `VITE_ANALYTICS=1` | `VITE_ANALYTICS=1` | `PUBLIC_ANALYTICS=1` | `ANALYTICS_FRONTEND=1`, `static/analytics.js` |
 | Styling | Tailwind v4 | `app.css` | `<style is:global>` in the layout | `static/app.css` |
+| Navigation | TanStack Router, `src/navigation.tsx` (`BackLink`, `useTitle`, search parameters) | `src/router.svelte.ts`, `src/BackLink.svelte` | a page per address, `BackLink.astro` | Go routes, `data-back` links, `hx-push-url` / `hx-replace-url` |
 
 This app uses the **react** template.
 
@@ -256,21 +257,99 @@ Where state lives, from the server out; nothing else holds it.
   with TanStack Query in the react template). A write invalidates the
   queries it changes; the realtime pack's `useLive` invalidates them on
   every open page (recipe "Publish live updates").
-- A list's page, search, filters, range and sort: the address
-  (`useListState` in `src/list.tsx`), so the view can be linked, reloaded
-  and gone back to.
+- Which view is open (a record, a tab, a wizard's step) and how a list
+  is shown (its page, search, filters, range, sort, the selected row):
+  the address, so the view can be linked, reloaded and gone back to
+  ("Navigation" below; `useListState` in `src/list.tsx` for a list in
+  the react template).
 - An account's display choices (a list's order, a view, a collapsed
   panel): the auth pack's preferences, `usePreferences` in
   `src/preferences.ts` in the react template (recipe "Remember a display
   preference"); they follow the account to every browser and device. A
   choice in the address wins over a stored one.
-- An open menu, a draft, a wizard's step: the component, or the address
-  when a reload should keep it.
+- An open menu, a hover, a draft being typed: the component.
 
 There is no global store: the query cache and the address hold what
 outlives a component, preferences what outlives a browser. A client-only
 domain (an editor's document, offline drafts) is the app's own store
 under `src/`, kept apart from what the server knows.
+
+## Navigation
+
+Every view a user can reach has an address, and the browser's Back,
+Forward, reload, bookmarks and shared links work on it as on any
+website. `lidza check` L025 flags hash routing, `history.back()` by hand
+and a "Back" link fixed to one page; recipe "Keep a view in the address"
+has the steps.
+
+1. A screen or a record has a path with readable slugs:
+   `/projects/acme-site/settings/members`, `/posts/hello-world`. A
+   record is found by its slug (or its id when it has no unique name) in
+   a path segment, never by a hash or `?id=`. Slugs are lowercase
+   letters, digits and hyphens: a last segment that ends like a file
+   (`node.js`, `report.pdf`) is answered as a missing file, 404, not as a
+   route.
+2. What picks the view is in the address, never only in component
+   state. A view of its own (a tab, a wizard's step, a record opened over
+   a list) is a path segment: `/posts/hello-world/comments`,
+   `/checkout/shipping`. How a view is shown (a filter, a search, a sort,
+   a page, the selected row, a minor tab) is a search parameter:
+   `/posts?status=draft&sort=title`. A default value is left out of the
+   address.
+3. Push or replace. Going to another view, record or step pushes a
+   history entry: it is a link. Changing a filter, typing in a search,
+   sorting, paging and a redirect to a default replace the current entry,
+   so Back leaves the list instead of undoing each keystroke. A panel or
+   dialog with an address pushes, so Back closes it.
+4. No hash routing: no `location.hash = ...`, no `#/path` links, no
+   `hashchange` router or hash history. The fragment is for an anchor in
+   the page (`/docs/setup#install`) and for a secret the server must not
+   log (an invitation or share token, `/invite#token=...`): read it once,
+   send it in a request body, then drop it with `history.replaceState`.
+5. Links are links: navigation renders `<a href>`, so middle-click, open
+   in a new tab and copy link work; a button is for an action, never for
+   going somewhere, and never a click handler on a `div` that navigates.
+6. Back links go back. A "back" link in the page uses `BackLink`: it
+   goes back through history when the previous entry is this app's, so
+   it lands where the browser's Back would (the list with its filters and
+   scroll), and to the parent path it names when there is none (the page
+   was opened from a link elsewhere or in a new tab). It renders `<a
+   href="parent">`. Name the parent ("All posts"), not "Back". Never a
+   link fixed to one page labelled "Back", never `history.back()` by hand.
+7. The document title follows the view: "Members · Acme site · app".
+   The server's head is for the first load and for crawlers (recipe "Set
+   the head of a page").
+8. Scroll: a new view starts at the top (or at its `#anchor`); Back and
+   Forward return to where it was scrolled.
+9. A deep link and a reload land on the same view: the page reads the
+   whole view from the address on its first render and loads what it
+   needs; an unknown slug shows a not-found view with a link to the
+   parent. The binary serves the frontend for every path outside `/api`,
+   so any path the router knows opens directly; `/api/...` is always the
+   API, an unknown one its 404.
+10. Test it in the browser suite: open a deep link, reload, follow a
+   link, go back (`page.goBack()` and the back link), and check the
+   filter, the tab and the scroll held.
+
+In this app (react, TanStack Router; `src/navigation.tsx`, the items
+pages show each rule):
+
+- Routes in `src/router.tsx`: a record `/items/$slug`, its tabs child
+  routes (`/items/$slug/specs`), each a `Link`.
+- Search parameters typed on the route: `validateSearch: (s: { status?:
+  string } & SearchSchemaInput) => ({ status: searchChoice(s.status,
+  statuses, 'all') })` (`searchText`, `searchChoice`, `searchNumber` in
+  `src/navigation.tsx`), defaults left out with `search: { middlewares:
+  [stripSearchParams(defaults)] }`. Read with
+  `getRouteApi('/posts').useSearch()`, change with `navigate({ search:
+  (prev) => ({ ...prev, status }), replace: true })`. A route with
+  `validateSearch` is not prerendered (its HTML would show every address
+  the view without its parameters); a page reading the address another
+  way (`useListState`) sets `staticData: { prerender: false }`.
+- `<BackLink to="/posts">All posts</BackLink>` takes `Link`'s props.
+- `useTitle(post.title)` in the page a route renders (the leaf; a layout
+  route around others never sets it, or it overrides them).
+- `scrollRestoration: true` in `createAppRouter`.
 
 ## Parallel work
 

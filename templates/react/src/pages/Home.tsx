@@ -1,7 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
 import { api } from '@lidza/client'
+import { useTitle } from '../navigation'
 
 export function Home() {
+  useTitle()
   const health = useQuery({ queryKey: ['health'], queryFn: () => api.health() })
   const greeting = useQuery({ queryKey: ['hello', 'world'], queryFn: () => api.hello({ name: 'world' }) })
 

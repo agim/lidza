@@ -41,9 +41,10 @@ const aboutRoute = createRoute({ getParentRoute: () => rootRoute, path: '/about'
 const routeTree = rootRoute.addChildren([homeRoute, aboutRoute])
 
 // createAppRouter builds a router for the browser (no history given) or for
-// server rendering (a memory history at one path).
+// server rendering (a memory history at one path). A new view starts at
+// the top; Back and Forward return to where the page was scrolled.
 export function createAppRouter(history?: RouterHistory) {
-  return createRouter({ routeTree, defaultErrorComponent: RouteError, history })
+  return createRouter({ routeTree, defaultErrorComponent: RouteError, history, scrollRestoration: true })
 }
 
 declare module '@tanstack/react-router' {
@@ -59,5 +60,11 @@ declare module '@tanstack/react-router' {
     static?: boolean
     /** With static: scripts from src/enhance/ the page loads, by name. */
     enhance?: string[]
+    /**
+     * false: not prerendered, for a page whose first render depends on
+     * the address's search parameters without validateSearch (useListState);
+     * a route with validateSearch is skipped anyway.
+     */
+    prerender?: boolean
   }
 }

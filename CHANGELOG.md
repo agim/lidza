@@ -10,6 +10,55 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
+## Unreleased
+
+- Browser navigation conventions for every app (`docs/navigation.md`):
+  every view has an address that Back, Forward, reload and a shared link
+  land on. The guide's new "Navigation" section, a line in the
+  framework block of `AGENTS.md` and the recipe "Keep a view in the
+  address" give the rules: a record by its slug in the path, a tab or a
+  wizard's step as a path segment, a filter, search, sort, page or
+  selected row as a search parameter that replaces the history entry (a
+  new view pushes one), no hash routing (the fragment is for in-page
+  anchors and secrets), links as `<a href>`, back links that go back
+  through history when the previous entry is the app's and to the parent
+  otherwise, the title following the view, scroll restored on Back. The
+  recipes "Add a page" and "Add a paginated, filterable list" follow
+  them.
+- `lidza check` L025 warns on hash routing (`location.hash = ...`, a
+  `hashchange` router, a hash history, `#/` links), `history.back()` by
+  hand and a link labelled "Back" to one fixed page, in the frontend,
+  the htmx views and static scripts.
+- react template: `src/navigation.tsx` with `BackLink` (TanStack Router
+  `Link` props; back through history while the router's previous entry
+  is the app's, else to its `to`, rendered as that `<a href>`), `useTitle`
+  and the search-parameter parsers `searchText`, `searchChoice` and
+  `searchNumber` for `validateSearch`; `scrollRestoration: true`; items
+  pages showing a filter in the search parameters, `/items/$slug` with a
+  back link and tabs as child routes; `e2e/navigation.spec.ts`. A route
+  with `validateSearch` or `staticData: { prerender: false }` is not
+  prerendered, so an address with search parameters no longer hydrates
+  the markup of the address without them. `useListState` reads and writes
+  the address through the router, so the router's location and
+  `useSearch` stay current. For an app created before:
+  `lidza snippet navigation > src/navigation.tsx`.
+- svelte template: client-side routes (`src/router.svelte.ts` over
+  `src/routes.ts`): plain `<a href>` links, numbered history entries,
+  scroll kept per entry, `searchParam` and `setSearch`, `BackLink.svelte`,
+  a title per route; the build prerenders each route without `:params`
+  and keeps a shell for every other path. The same items pages and
+  browser test as the react template.
+- astro template: `BackLink.astro` with `src/back.ts`, items pages with a
+  filter in the address and tabs as pages, `src/pages/404.astro`, and a
+  title per page with the app's name.
+- htmx template: items pages with a `GET` filter that htmx swaps with
+  `hx-replace-url`, `/items/{slug}` and its tab as Go routes, a 404 page
+  for an unknown slug, `data-back` links (`static/back.js`) and a title
+  per page with the app's name.
+- A build of static pages with a `404.html` and no shell (the astro
+  template) answers an address it has no page for with that page and
+  status 404, not the home page with 200.
+
 ## v0.1.134 (2026-11-06)
 
 - Dependencies: brotli 1.2.8, pgx 5.12.0 (puddle 2.2.3), mcp-go 1.5.0.

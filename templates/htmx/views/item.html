@@ -1,0 +1,22 @@
+{{define "content"}}
+{{with .Item}}
+<!-- Back to where the visitor came from on this site (the list, filtered
+     as they left it; static/back.js), else to the parent, /items. -->
+<a href="/items" class="back" data-back>All items</a>
+<h1>{{.Name}}</h1>
+<!-- Each tab is a page of its own, so a tab is a link and Back returns
+     to the tab before. -->
+<nav aria-label="Item sections" class="tabs">
+  <a href="/items/{{.Slug}}"{{if eq $.Tab "overview"}} aria-current="page"{{end}}>Overview</a>
+  <a href="/items/{{.Slug}}/specs"{{if eq $.Tab "specs"}} aria-current="page"{{end}}>Specs</a>
+</nav>
+{{if eq $.Tab "specs"}}
+<dl>{{range .Specs}}<dt>{{index . 0}}</dt><dd>{{index . 1}}</dd>{{end}}</dl>
+{{else}}
+<p>{{.Summary}}</p>
+{{end}}
+{{else}}
+<h1>No item at this address</h1>
+<p><a href="/items">All items</a></p>
+{{end}}
+{{end}}

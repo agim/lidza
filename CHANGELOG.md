@@ -10,7 +10,7 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
-## Unreleased
+## v0.1.134 (2026-11-06)
 
 - Dependencies: brotli 1.2.8, pgx 5.12.0 (puddle 2.2.3), mcp-go 1.5.0.
 - `lidza credentials list`, `show` and `unset` say on stderr when the

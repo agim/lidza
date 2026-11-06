@@ -195,10 +195,16 @@ func savedSettings(ctx context.Context, dir string) (store *db.CredentialStore, 
 	defer cancel()
 	pool, err := db.Open(cctx, db.Config{URL: values["DATABASE_URL"], MaxConns: 1, ConnectTimeout: 2 * time.Second})
 	if err != nil {
+		// Said, not swallowed: a value saved from the admin pages would
+		// otherwise be listed as absent, or left in place by unset.
+		fmt.Fprintf(os.Stderr, "note: the settings saved from the admin pages could not be read (database unreachable): %v\n", err)
 		return nil, nil, done
 	}
 	var exists bool
 	if err := pool.QueryRow(cctx, `SELECT to_regclass('credential') IS NOT NULL`).Scan(&exists); err != nil || !exists {
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "note: the settings saved from the admin pages could not be read: %v\n", err)
+		}
 		pool.Close()
 		return nil, nil, done
 	}

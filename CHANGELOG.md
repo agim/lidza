@@ -59,6 +59,14 @@ these rules cover.
   template) answers an address it has no page for with that page and
   status 404, not the home page with 200.
 
+## v0.1.134 (2026-11-06)
+
+- Dependencies: brotli 1.2.8, pgx 5.12.0 (puddle 2.2.3), mcp-go 1.5.0.
+- `lidza credentials list`, `show` and `unset` say on stderr when the
+  settings saved from the admin pages could not be read (the database
+  unreachable, a query failing) instead of silently treating them as
+  absent; `unset` then no longer looks like it removed a saved value.
+
 ## v0.1.133 (2026-11-05)
 
 - `usePreferences` in the react template (`src/preferences.ts`): an

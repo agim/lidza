@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	gover "go/version"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/mod/modfile"
 	"golang.org/x/mod/semver"
 
 	"github.com/agim/lidza/pkg/config"
@@ -122,6 +124,13 @@ func runUpdate(ctx context.Context, args []string) error {
 	if err != nil {
 		fmt.Println("[update] not in a project; the CLI is updated")
 		return nil
+	}
+	// The go line names the toolchain the app was last built with, patch
+	// included, so every app reads the same; never moved back.
+	if from, to, err := alignGoLine(ctx, abs); err != nil {
+		fmt.Println("[update] go.mod's go line left alone:", err)
+	} else if to != "" {
+		fmt.Printf("[update] go.mod: go %s -> %s (the toolchain this CLI was built with)\n", from, to)
 	}
 	have, _ := moduleVersion(ctx, abs)
 	if strings.HasPrefix(have, "dev") || strings.Contains(have, "=>") {
@@ -449,4 +458,31 @@ func repin(path, target string) (int, error) {
 		return 0, nil
 	}
 	return 1, os.WriteFile(path, next, 0o644)
+}
+
+// alignGoLine raises dir/go.mod's go line to the running toolchain's
+// full version (scaffold.GoVersion) when it is older, and returns the
+// change; a newer or equal line, or a development toolchain's language
+// version already met, is left as it is.
+func alignGoLine(ctx context.Context, dir string) (from, to string, err error) {
+	path := filepath.Join(dir, "go.mod")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", "", err
+	}
+	mod, err := modfile.Parse(path, data, nil)
+	if err != nil {
+		return "", "", err
+	}
+	want := scaffold.GoVersion()
+	if mod.Go != nil {
+		from = mod.Go.Version
+		if gover.Compare("go"+from, "go"+want) >= 0 {
+			return from, "", nil
+		}
+	}
+	if err := run(ctx, dir, "go", "mod", "edit", "-go="+want); err != nil {
+		return from, "", err
+	}
+	return from, want, nil
 }

@@ -1,6 +1,6 @@
 module notes
 
-go 1.27
+go 1.27.3
 
 require (
 	github.com/agim/lidza v0.0.0

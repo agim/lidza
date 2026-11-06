@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -133,9 +134,18 @@ func TestNewRejects(t *testing.T) {
 	}
 }
 
-func TestGoMinor(t *testing.T) {
-	if v := goMinor(); !strings.HasPrefix(v, "1.") || strings.Count(v, ".") != 1 {
-		t.Fatalf("goMinor = %q", v)
+func TestGoVersion(t *testing.T) {
+	v := GoVersion()
+	if want := strings.TrimPrefix(runtime.Version(), "go"); !strings.Contains(want, " ") && v != want {
+		t.Fatalf("GoVersion = %q, toolchain %q", v, want)
+	}
+	if !strings.HasPrefix(v, "1.") {
+		t.Fatalf("GoVersion = %q", v)
+	}
+	for in, want := range map[string]string{"1.27.3": "1.27", "1.27": "1.27", "devel go1.28-abc Mon": "1.28", "1.27.3-foo": "1.27"} {
+		if got := goLang(in); got != want {
+			t.Errorf("goLang(%q) = %q, want %q", in, got, want)
+		}
 	}
 }
 

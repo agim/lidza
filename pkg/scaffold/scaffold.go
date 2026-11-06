@@ -183,6 +183,10 @@ func New(ctx context.Context, opt Options) error {
 
 type templateData struct {
 	Name, Module, LidzaDir, Template, Dist, DevCmd, DevURL, Go string
+	// GoImage is the Go minor version, the golang image tag the Dockerfile
+	// builds with (it floats to the newest patch); Go is the full version
+	// of the go line.
+	GoImage string
 	// LidzaVersion is the framework version for `go install` in the
 	// Dockerfile and `go get` in go.mod: the release or commit the CLI was
 	// built from, else latest.
@@ -225,7 +229,8 @@ func dataFor(cfg *config.Config, lidzaDir string) templateData {
 		Dist:              cfg.Frontend.Dist,
 		DevCmd:            cfg.Frontend.Dev,
 		DevURL:            cfg.Frontend.URL,
-		Go:                goMinor(),
+		Go:                GoVersion(),
+		GoImage:           goLang(GoVersion()),
 		LidzaVersion:      moduleVersion(),
 		SQLCInstall:       pack.SQLCInstall,
 		DecisionsLine:     DecisionsLine,
@@ -677,7 +682,7 @@ func deployFiles(dir string, cfg *config.Config, force, k8s bool) (written, kept
 		data.LidzaVersion = app.Lidza
 	}
 	if app.Go != "" {
-		data.Go = app.Go
+		data.GoImage = app.Go
 	}
 	data.Rust = hasRustPacks(dir)
 	files := []struct{ src, dst string }{
@@ -790,7 +795,6 @@ func ensureEmptyDir(dir string) error {
 	return nil
 }
 
-// goMinor returns the running toolchain's "1.N" for the go directive.
 // Versions are what an app's go.mod pins: the framework release (with a
 // versioned replace applied), the Go minor version (the toolchain line
 // when newer than the go line), and the path of a local framework
@@ -850,10 +854,29 @@ func hasRustPacks(dir string) bool {
 	return false
 }
 
-func goMinor() string {
+// GoVersion is the running toolchain's full version ("1.27.3") for the
+// go line of a new app's go.mod, which lidza update raises an older line
+// to: the line then states the toolchain the app was last built with,
+// patch included, and every app reads the same. A development build of
+// Go ("devel go1.28-...") has no patch: its language version then.
+func GoVersion() string {
 	v := strings.TrimPrefix(runtime.Version(), "go")
-	if i := strings.LastIndex(v, "."); i > strings.Index(v, ".") {
+	if strings.ContainsAny(v, " -+") || strings.Count(v, ".") != 2 {
+		return goLang(v)
+	}
+	return v
+}
+
+// goLang is the "1.N" of a Go version string ("1.27.3", "devel go1.28-abc").
+func goLang(v string) string {
+	if i := strings.Index(v, "go1."); i >= 0 {
+		v = v[i+2:]
+	}
+	if i := strings.IndexAny(v, " -+"); i >= 0 {
 		v = v[:i]
+	}
+	if lang := strings.TrimPrefix(gover.Lang("go"+v), "go"); lang != "" {
+		return lang
 	}
 	return v
 }

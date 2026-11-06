@@ -6,6 +6,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/agim/lidza/pkg/scaffold"
 	"testing"
 
 	"github.com/agim/lidza/pkg/config"
@@ -212,5 +214,30 @@ func TestUpdateDirtyAndCommit(t *testing.T) {
 	}
 	if st := git("status", "--porcelain"); st != "M main.go" {
 		t.Fatalf("the app's own work was committed or lost: %q", st)
+	}
+}
+
+func TestAlignGoLine(t *testing.T) {
+	ctx := context.Background()
+	want := scaffold.GoVersion()
+	for _, c := range []struct{ line, to string }{
+		{"go 1.24", want},
+		{"go " + want, ""},
+		{"go 1.99", ""},
+	} {
+		dir := t.TempDir()
+		os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module example.com/app\n\n"+c.line+"\n"), 0o644)
+		from, to, err := alignGoLine(ctx, dir)
+		if err != nil || to != c.to || from != strings.TrimPrefix(c.line, "go ") {
+			t.Fatalf("%s: from %q to %q, %v", c.line, from, to, err)
+		}
+		data, _ := os.ReadFile(filepath.Join(dir, "go.mod"))
+		wantLine := c.line
+		if c.to != "" {
+			wantLine = "go " + c.to
+		}
+		if !strings.Contains(string(data), wantLine+"\n") {
+			t.Fatalf("%s: go.mod now %q", c.line, data)
+		}
 	}
 }

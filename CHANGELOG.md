@@ -10,6 +10,15 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
+## Unreleased
+
+- `lidza new` writes the full Go version in the `go` line of `go.mod`
+  (`go 1.27.3`, not `go 1.27`), and `lidza update` raises an older line
+  to the version the CLI was built with, never lowering it: every app
+  then states the toolchain it was last built with, patch included. The
+  Dockerfile keeps the minor image tag (`golang:1.27-bookworm`), which
+  floats to the newest patch.
+
 ## v0.1.135 (2026-11-06)
 
 - Browser navigation conventions for every app (`docs/navigation.md`):

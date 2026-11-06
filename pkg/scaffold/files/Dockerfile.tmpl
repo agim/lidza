@@ -6,7 +6,7 @@
 # the framework at a local checkout (--lidza-dir) cannot build here: pin a
 # published version first.
 
-FROM golang:{{.Go}}-bookworm AS build
+FROM golang:{{.GoImage}}-bookworm AS build
 ENV CGO_ENABLED=0
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl \
  && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \

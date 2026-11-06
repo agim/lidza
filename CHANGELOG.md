@@ -10,6 +10,14 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
+## Unreleased
+
+- Dependencies: brotli 1.2.8, pgx 5.12.0 (puddle 2.2.3), mcp-go 1.5.0.
+- `lidza credentials list`, `show` and `unset` say on stderr when the
+  settings saved from the admin pages could not be read (the database
+  unreachable, a query failing) instead of silently treating them as
+  absent; `unset` then no longer looks like it removed a saved value.
+
 ## v0.1.133 (2026-11-05)
 
 - `usePreferences` in the react template (`src/preferences.ts`): an

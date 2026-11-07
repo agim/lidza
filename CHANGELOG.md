@@ -10,6 +10,27 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
+## Unreleased
+
+- Pages are built from the app's components: the guide's new "Pages and
+  components" section (one layout, one type scale, room between blocks,
+  a component for every control, never the browser's own `<select>`,
+  `<dialog>`, `confirm()` or `alert()`, state decided first, dry,
+  accessible by construction), a line in the framework block of
+  `AGENTS.md`, the recipe "Build a page from the components"
+  (every template) and a step in "Add a page". The react template ships
+  `src/ui.tsx`: `Page`, `Section`, `Stack`, `Row`, `Notice`, `Empty`,
+  `Button` (tones, `to` for a link), `Field` with `TextInput`, `TextArea`
+  and `SearchInput`, `Select` (a combobox over a listbox with the
+  keyboard and a screen reader as the browser's has), `Dialog` and
+  `Drawer` on the `<dialog>` element; its pages and `src/list.tsx` are
+  built from them, and `lidza snippet ui` brings the file to an existing
+  app.
+- `lidza check` L026 warns on a `<select>`, a `<dialog>` written by hand,
+  `confirm()`, `alert()` or `prompt()` in a page of an app that has
+  `src/ui.tsx` (or `src/ui/`); the components themselves, tests and
+  build output are exempt, and `lidza:ignore L026` exempts a line.
+
 ## v0.1.137 (2026-11-07)
 
 - Breadcrumbs are links: rule 10 of the navigation conventions

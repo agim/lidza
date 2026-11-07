@@ -1,5 +1,6 @@
 import { getRouteApi, Link, Outlet } from '@tanstack/react-router'
 import { BackLink, Breadcrumbs, useTitle } from '../../navigation'
+import { Page } from '../../ui'
 import { findItem } from './data'
 
 // One item at /items/<slug>, its tabs as child routes: /items/<slug> is
@@ -16,17 +17,22 @@ export function ItemPage() {
   const item = findItem(slug)
   if (!item) return <ItemNotFound />
   return (
-    <div className="space-y-4">
-      {/* Where this view sits: each ancestor a link to its own address. */}
-      <Breadcrumbs>
-        <Link to="/items">Items</Link>
-        <span>{item.name}</span>
-      </Breadcrumbs>
-      <h1 className="text-3xl font-semibold tracking-tight">{item.name}</h1>
-      {/* Where the visitor was: the list, filtered as they left it; /items when opened directly. */}
-      <BackLink to="/items" className="text-sm text-muted hover:text-brand">
-        All items
-      </BackLink>
+    <Page
+      title={item.name}
+      above={
+        /* Where this view sits: each ancestor a link to its own address. */
+        <Breadcrumbs>
+          <Link to="/items">Items</Link>
+          <span>{item.name}</span>
+        </Breadcrumbs>
+      }
+      actions={
+        /* Where the visitor was: the list, filtered as they left it; /items when opened directly. */
+        <BackLink to="/items" className="text-sm text-muted hover:text-brand">
+          All items
+        </BackLink>
+      }
+    >
       <nav aria-label="Item sections" className="flex gap-4 border-b border-line">
         <Link to="/items/$slug" params={{ slug }} activeOptions={{ exact: true }} className={tab}>
           Overview
@@ -36,7 +42,7 @@ export function ItemPage() {
         </Link>
       </nav>
       <Outlet />
-    </div>
+    </Page>
   )
 }
 
@@ -44,12 +50,11 @@ export function ItemPage() {
 function ItemNotFound() {
   useTitle('Not found')
   return (
-    <div className="space-y-4">
-      <h1 className="text-3xl font-semibold tracking-tight">No item at this address</h1>
+    <Page title="No item at this address">
       <Link to="/items" className="text-brand">
         All items
       </Link>
-    </div>
+    </Page>
   )
 }
 

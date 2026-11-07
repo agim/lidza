@@ -3,16 +3,19 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, validators, type Credentials, type FieldError, type Session } from '@lidza/client'
 import { usePreferences } from '../preferences'
 import { useTitle } from '../navigation'
+import { Button, Empty, Field, Notice, Page, Row, Select, Stack, TextInput } from '../ui'
 
 // Every request goes through the generated client: api.currentSession, api.login,
 // api.listNotes, ... are typed from the Go handlers, and lidza check fails
 // here when a handler changes shape. currentSession answers 200 for a
 // visitor too (user null), so the page never produces an error to ask.
+// The page is built from src/ui.tsx: Page, Field, Button, Select, Notice
+// and Empty; nothing here styles a control or a heading by hand.
 export function Home() {
   useTitle()
   const session = useQuery({ queryKey: ['session'], queryFn: () => api.currentSession() })
   if (session.isPending) return <p className="text-muted">Loading…</p>
-  if (session.isError) return <p className="text-danger">{String(session.error)}</p>
+  if (session.isError) return <Notice tone="danger">{String(session.error)}</Notice>
   return session.data.user ? <Notes session={session.data.user} /> : <SignIn />
 }
 
@@ -38,50 +41,37 @@ function SignIn() {
   const problem = (field: string) => errors.find((e) => e.field === field)?.message
 
   return (
-    <form className="max-w-sm space-y-4" onSubmit={send('login')}>
-      <h1 className="text-3xl font-semibold tracking-tight">Notes</h1>
-      <p className="text-muted">Sign in, or register with a new email.</p>
-      <label className="block">
-        <span className="mb-1 block text-sm font-medium">Email</span>
-        <input
-          type="email"
-          name="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className="w-full rounded border border-line px-3 py-2"
-          autoComplete="email"
-        />
-        {problem('email') && <span className="text-sm text-danger">{problem('email')}</span>}
-      </label>
-      <label className="block">
-        <span className="mb-1 block text-sm font-medium">Password</span>
-        <input
-          type="password"
-          name="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="w-full rounded border border-line px-3 py-2"
-          autoComplete="current-password"
-        />
-        {problem('password') && <span className="text-sm text-danger">{problem('password')}</span>}
-      </label>
-      {submit.isError && <p className="text-sm text-danger">{submit.error.message}</p>}
-      <div className="flex gap-3">
-        <button type="submit" className="rounded bg-brand px-4 py-2 text-white" disabled={submit.isPending}>
-          Sign in
-        </button>
-        <button type="button" className="rounded border border-line px-4 py-2" onClick={send('register')} disabled={submit.isPending}>
-          Register
-        </button>
-      </div>
-    </form>
+    <Page title="Notes" lede="Sign in, or register with a new email.">
+      <form className="max-w-sm" onSubmit={send('login')}>
+        <Stack>
+          <Field label="Email" error={problem('email')}>
+            <TextInput type="email" name="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
+          </Field>
+          <Field label="Password" error={problem('password')}>
+            <TextInput type="password" name="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />
+          </Field>
+          {submit.isError && <Notice tone="danger">{submit.error.message}</Notice>}
+          <Row>
+            <Button type="submit" disabled={submit.isPending}>
+              Sign in
+            </Button>
+            <Button tone="secondary" onClick={send('register')} disabled={submit.isPending}>
+              Register
+            </Button>
+          </Row>
+        </Stack>
+      </form>
+    </Page>
   )
 }
 
 // The order of the list is a display choice of the account, kept by the
 // auth pack (src/preferences.ts): it follows the user to another browser.
 type NoteOrder = 'newest' | 'oldest'
-const noteOrders: NoteOrder[] = ['newest', 'oldest']
+const noteOrders: { value: NoteOrder; label: string }[] = [
+  { value: 'newest', label: 'Newest first' },
+  { value: 'oldest', label: 'Oldest first' },
+]
 
 // Notes lists the signed-in user's notes and adds or deletes one. Every
 // mutation invalidates the list, which refetches through the client.
@@ -92,7 +82,7 @@ function Notes({ session }: { session: Session }) {
     { read: api.preferences, write: api.patchPreferences },
     session.userId,
     { 'notes.order': 'newest' as NoteOrder },
-    { accept: (_, value) => noteOrders.includes(value as NoteOrder) },
+    { accept: (_, value) => noteOrders.some((o) => o.value === value) },
   )
   const order = prefs.values['notes.order']
   const items = notes.data?.items ?? []
@@ -121,60 +111,47 @@ function Notes({ session }: { session: Session }) {
   }
 
   return (
-    <div className="space-y-6">
-      <header className="flex items-baseline justify-between">
-        <h1 className="text-3xl font-semibold tracking-tight">Your notes</h1>
+    <Page
+      title="Your notes"
+      actions={
         <p className="text-sm text-muted">
           {session.email}{' '}
-          <button type="button" className="ml-2 underline" onClick={() => signOut.mutate()}>
+          <Button tone="quiet" className="px-1 py-0 underline" onClick={() => signOut.mutate()}>
             Sign out
-          </button>
+          </Button>
         </p>
-      </header>
-      <form className="flex gap-3" onSubmit={add}>
-        <label className="flex-1">
-          <span className="sr-only">Title</span>
-          <input
-            name="title"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="What to remember"
-            className="w-full rounded border border-line px-3 py-2"
-          />
-        </label>
-        <button type="submit" className="rounded bg-brand px-4 py-2 text-white" disabled={title.trim() === '' || create.isPending}>
-          Add note
-        </button>
+      }
+    >
+      <form onSubmit={add}>
+        <Row>
+          <TextInput name="title" aria-label="Title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="What to remember" className="flex-1" />
+          <Button type="submit" disabled={title.trim() === '' || create.isPending}>
+            Add note
+          </Button>
+        </Row>
       </form>
-      {create.isError && <p className="text-sm text-danger">{create.error.message}</p>}
+      {create.isError && <Notice tone="danger">{create.error.message}</Notice>}
       {notes.isPending && <p className="text-muted">Loading…</p>}
-      {notes.isError && <p className="text-danger">{String(notes.error)}</p>}
-      {notes.data && notes.data.total === 0 && <p className="text-muted">No notes yet.</p>}
+      {notes.isError && <Notice tone="danger">{String(notes.error)}</Notice>}
+      {notes.data && notes.data.total === 0 && <Empty title="No notes yet." />}
       {notes.data && notes.data.total > 0 && (
-        <label className="flex items-center gap-2 text-sm text-muted">
-          Order
-          <select
-            name="order"
-            value={order}
-            onChange={(e) => prefs.set({ 'notes.order': e.target.value as NoteOrder })}
-            className="rounded border border-line bg-white px-2 py-1 text-ink"
-          >
-            <option value="newest">Newest first</option>
-            <option value="oldest">Oldest first</option>
-          </select>
-        </label>
+        <Stack>
+          <Row>
+            <Select label="Order" prefix value={order} options={noteOrders} onChange={(value) => prefs.set({ 'notes.order': value })} />
+          </Row>
+          {prefs.error && <Notice tone="danger">{prefs.error.message}</Notice>}
+          <ul className="divide-y divide-line rounded-lg border border-line bg-white">
+            {shown.map((note) => (
+              <li key={note.id} className="flex items-center justify-between px-4 py-3">
+                <span>{note.title}</span>
+                <Button tone="quiet" className="px-1 py-0 text-sm underline" onClick={() => remove.mutate(note.id)}>
+                  Delete
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </Stack>
       )}
-      {prefs.error && <p className="text-sm text-danger">{prefs.error.message}</p>}
-      <ul className="divide-y divide-line rounded-lg border border-line bg-white">
-        {shown.map((note) => (
-          <li key={note.id} className="flex items-center justify-between px-4 py-3">
-            <span>{note.title}</span>
-            <button type="button" className="text-sm text-muted underline" onClick={() => remove.mutate(note.id)}>
-              Delete
-            </button>
-          </li>
-        ))}
-      </ul>
-    </div>
+    </Page>
   )
 }

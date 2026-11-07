@@ -241,7 +241,7 @@ What each frontend template ships; the API contract, `lidza check`,
 | Time zone cookie | `src/timezone.ts` | same | same | inline in `views/layout.html` |
 | Translated pages | `src/i18n.ts`, a page per locale at build | same | none | Go handlers (`i18n.From(ctx).T`) |
 | Analytics reporter | `VITE_ANALYTICS=1` | `VITE_ANALYTICS=1` | `PUBLIC_ANALYTICS=1` | `ANALYTICS_FRONTEND=1`, `static/analytics.js` |
-| Styling | Tailwind v4 | `app.css` | `<style is:global>` in the layout | `static/app.css` |
+| Styling | Tailwind v4 tokens, components in `src/ui.tsx` | `app.css` | `<style is:global>` in the layout | `static/app.css` |
 | Navigation | TanStack Router, `src/navigation.tsx` (`BackLink`, `useTitle`, search parameters) | `src/router.svelte.ts`, `src/BackLink.svelte` | a page per address, `BackLink.astro` | Go routes, `data-back` links, `hx-push-url` / `hx-replace-url` |
 
 This app uses the **react** template.
@@ -358,6 +358,61 @@ pages show each rule):
 - `useTitle(post.title)` in the page a route renders (the leaf; a layout
   route around others never sets it, or it overrides them).
 - `scrollRestoration: true` in `createAppRouter`.
+
+## Pages and components
+
+Every page is built from the app's components, so the app reads as one
+thing and a change to the look is made once. `lidza check` L026 flags the
+browser's own controls in a page; recipe "Build a page from the app's
+components" has the steps.
+
+1. One layout. Every page has the same shape: the title and its lede,
+   the page's actions beside them, a trail or back link above, the
+   content below with the same space between every block. No page draws
+   its own header, card or column widths.
+2. One type scale. Heading sizes, body and muted text come from the
+   components and the tokens (`src/index.css`); a page never sets a font
+   size, a weight or a colour by hand, and never a raw colour.
+3. Room between things. Blocks are spaced by the layout components, so
+   nothing butts against its neighbour and no page types margins of its
+   own.
+4. Components, not hand-rolled markup. A button, a labelled field, a
+   dropdown, a message, an empty state, a modal and a side panel are each
+   one component, so the same control looks and behaves the same on every
+   page. The second copy of a pattern becomes a component; a paste never
+   does.
+5. Never the browser's own. No `<select>`, no `<dialog>` by hand, no
+   `confirm()`, `alert()` or `prompt()`: they take the browser's look, not
+   the app's. The app's dropdown, dialog and drawer keep the keyboard and
+   screen-reader behaviour.
+6. State is decided first (the "State" section): before a page is
+   written, each piece of its state has its place, the address, the
+   query cache, a preference or the component; a global store is never
+   added for convenience.
+7. Dry. One query per data shape, one formatter per kind of value
+   (`src/datetime.ts`), one list toolbar (`src/list.tsx`); a helper two
+   pages need moves under `src/`.
+8. Accessible by construction. The components carry the roles, labels
+   and keyboard handling; a page adds the words (a field's label, a
+   dropdown's label, a button's name). `lidza check` runs the
+   accessibility rules.
+
+In this app (react; `src/ui.tsx` holds the components, the pages show
+them):
+
+- `Page` (title, lede, actions, `above` for `Breadcrumbs` or `BackLink`),
+  `Section` (a card), `Stack` and `Row` (spacing), `Notice` (a message
+  with a tone), `Empty` (an empty list with what to do).
+- `Button` (`tone`: primary, secondary, quiet, danger; `to` makes it a
+  link), `Field` (label, hint, error) around `TextInput`, `TextArea` or
+  `Select`, `SearchInput` for a toolbar, `inputClass` for a bare input.
+- `Select` (a combobox over a listbox: arrows, Home, End, Enter, Escape,
+  type-ahead; `prefix` shows "Label: value" in a toolbar), `Dialog` (a
+  confirmation with its actions), `Drawer` (a side panel).
+- The look lives in `src/index.css` (the tokens) and `src/ui.tsx`; a page
+  never restyles them. An app created before `src/ui.tsx` takes it with
+  `lidza snippet ui > src/ui.tsx`; L026 then lists the native controls
+  left to move.
 
 ## Parallel work
 

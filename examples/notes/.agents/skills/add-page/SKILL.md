@@ -33,7 +33,11 @@ Add a client-side route rendered by React, prerendered at build time.
    field errors the server would, before the request.
 7. Every element must be accessible: `lidza check` fails on `jsx-a11y`
    errors (missing `alt`, click handlers on non-interactive elements, ...).
-8. Style with Tailwind utilities; colors and fonts come from the `@theme`
+8. Build it from the app's components (`src/ui.tsx`, recipe "Build a
+   page from the components"): `Page` for the layout, `Section`,
+   `Field` with `TextInput` or `Select`, `Button`, `Notice`, `Empty`,
+   `Dialog`; never a `<select>`, `confirm()` or a hand-styled heading or
+   button (`lidza check` L026). Colors and fonts come from the `@theme`
    tokens in `src/index.css` (`bg-brand`, `text-ink`, `border-line`,
    `text-muted`, `text-danger`). Change the tokens, not the classes, to
    rebrand. No other CSS framework.

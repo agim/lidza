@@ -1,5 +1,6 @@
 import { getRouteApi, Link } from '@tanstack/react-router'
 import { useTitle } from '../../navigation'
+import { Empty, Page, Row, SearchInput, Select } from '../../ui'
 import { categories, items } from './data'
 
 // The list's filter and search are search parameters (/items?category=seating&q=oak),
@@ -15,31 +16,17 @@ export function ItemList() {
   const shown = items.filter((item) => (category === 'all' || item.category === category) && item.name.toLowerCase().includes(q.toLowerCase()))
 
   return (
-    <div className="space-y-4">
-      <h1 className="text-3xl font-semibold tracking-tight">Items</h1>
-      <div className="flex flex-wrap gap-2">
-        <input
-          type="search"
-          aria-label="Search items"
-          placeholder="Search items"
-          value={q}
-          onChange={(e) => navigate({ search: (prev) => ({ ...prev, q: e.target.value }), replace: true })}
-          className="min-w-48 flex-1 rounded border border-line bg-white px-2 py-1 text-sm"
-        />
-        <select
-          aria-label="Category"
+    <Page title="Items">
+      <Row>
+        <SearchInput label="Search items" value={q} onChange={(q) => navigate({ search: (prev) => ({ ...prev, q }), replace: true })} className="flex-1" />
+        <Select
+          label="Category"
+          prefix
           value={category}
-          onChange={(e) => navigate({ search: (prev) => ({ ...prev, category: e.target.value as typeof category }), replace: true })}
-          className="rounded border border-line bg-white px-2 py-1 text-sm"
-        >
-          <option value="all">Category: All</option>
-          {categories.map((c) => (
-            <option key={c} value={c}>
-              Category: {c}
-            </option>
-          ))}
-        </select>
-      </div>
+          options={[{ value: 'all', label: 'All' }, ...categories.map((c) => ({ value: c, label: c }))]}
+          onChange={(category) => navigate({ search: (prev) => ({ ...prev, category }), replace: true })}
+        />
+      </Row>
       <ul className="divide-y divide-line rounded-lg border border-line bg-white">
         {shown.map((item) => (
           <li key={item.slug} className="px-4 py-3">
@@ -49,8 +36,8 @@ export function ItemList() {
             <p className="text-sm text-muted">{item.summary}</p>
           </li>
         ))}
-        {shown.length === 0 && <li className="px-4 py-3 text-muted">No items match.</li>}
       </ul>
-    </div>
+      {shown.length === 0 && <Empty title="No items match." />}
+    </Page>
   )
 }

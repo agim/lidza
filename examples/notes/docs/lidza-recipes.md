@@ -409,7 +409,11 @@ Add a client-side route rendered by React, prerendered at build time.
    field errors the server would, before the request.
 7. Every element must be accessible: `lidza check` fails on `jsx-a11y`
    errors (missing `alt`, click handlers on non-interactive elements, ...).
-8. Style with Tailwind utilities; colors and fonts come from the `@theme`
+8. Build it from the app's components (`src/ui.tsx`, recipe "Build a
+   page from the components"): `Page` for the layout, `Section`,
+   `Field` with `TextInput` or `Select`, `Button`, `Notice`, `Empty`,
+   `Dialog`; never a `<select>`, `confirm()` or a hand-styled heading or
+   button (`lidza check` L026). Colors and fonts come from the `@theme`
    tokens in `src/index.css` (`bg-brand`, `text-ink`, `border-line`,
    `text-muted`, `text-danger`). Change the tokens, not the classes, to
    rebrand. No other CSS framework.
@@ -477,6 +481,41 @@ SSR sidecar.
    nil).WithContext(srv.Context())` (`srv` from `lidzatest.Start`) and
    check `Title`, `Canonical` and the 404 `Status`. `lidza check`, then
    `lidza test`.
+
+### Build a page from the components
+
+Make a page that reads like every other page of this app: the same
+layout, type, spacing and controls, from the app's components, so the
+look is defined once (the guide's "Pages and components").
+
+1. Decide the state before the markup: what lives in the address (a
+   record, a tab, a filter; recipe "Keep a view in the address"), what
+   the query cache holds (`useQuery` on `@lidza/client`), what is an
+   account preference (`usePreferences`) and what stays in the component.
+   No global store.
+2. Start from `Page` (`src/ui.tsx`): `title`, a `lede` when the title
+   needs a line under it, the page's `actions` (a `Button`, `to="/new"`
+   for a link), and `above` for `Breadcrumbs` or `BackLink`. Put the
+   content in `Section`s or a `Stack`; `Row` lays controls side by side.
+   Never a hand-written `<h1>`, card or margin.
+3. Controls: `Field label="Title" error={problem('title')}` around a
+   `TextInput`, `TextArea` or `Select`; `SearchInput` in a toolbar;
+   `Button` with a `tone` (primary once per view, secondary, quiet,
+   danger); `Notice tone="danger"` for an error, `Empty` for a list with
+   nothing in it; `Dialog` for a confirmation ("Delete this post?" with
+   its action), `Drawer` for filters or a form beside the page. Never
+   `<select>`, `<dialog>` by hand, `confirm()` or `alert()`: `lidza check`
+   L026 names each one.
+4. A pattern used twice is a component: add it to `src/ui.tsx` (or
+   `src/ui/`) with the tokens from `src/index.css`, then use it in both
+   places. Change the look there, never in a page.
+5. An app created before `src/ui.tsx`: `lidza snippet ui > src/ui.tsx`,
+   then move the pages onto it one at a time, the native controls L026
+   lists first.
+6. `lidza check` (L026 and the accessibility rules), `lidza test --e2e`
+   (a `Select` is `getByRole('combobox', { name })`, its choices
+   `getByRole('option', { name })`), and `lidza audit layout` at a phone
+   and a desktop width: nothing crowded, nothing sideways.
 
 ### Add a responsive image
 

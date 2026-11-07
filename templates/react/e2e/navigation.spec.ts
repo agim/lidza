@@ -19,7 +19,8 @@ test('a filter lives in the address and the back link returns to it', async ({ p
   await page.goto('/')
   await page.getByRole('link', { name: 'Items', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Items' })).toBeVisible()
-  await page.getByRole('combobox', { name: 'Category' }).selectOption('seating')
+  await page.getByRole('combobox', { name: 'Category' }).click()
+  await page.getByRole('option', { name: 'seating' }).click()
   await expect(page).toHaveURL(/\/items\?category=seating$/)
   await expect(page.getByRole('link', { name: 'Desk lamp' })).toHaveCount(0)
 
@@ -30,7 +31,7 @@ test('a filter lives in the address and the back link returns to it', async ({ p
   await expect(back).toHaveAttribute('href', '/items')
   await back.click()
   await expect(page).toHaveURL(/\/items\?category=seating$/)
-  await expect(page.getByRole('combobox', { name: 'Category' })).toHaveValue('seating')
+  await expect(page.getByRole('combobox', { name: 'Category' })).toHaveText(/Category: seating/)
 
   // The filter replaced the entry: Back from the list goes home.
   await page.goBack()

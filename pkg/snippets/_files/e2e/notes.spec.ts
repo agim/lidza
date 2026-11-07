@@ -54,11 +54,12 @@ test('the order of the list follows the account', async ({ page }) => {
   const rows = page.getByRole('listitem')
   await expect(rows.first()).toContainText('Second note')
 
-  await page.getByLabel('Order').selectOption('oldest')
+  await page.getByRole('combobox', { name: 'Order' }).click()
+  await page.getByRole('option', { name: 'Oldest first' }).click()
   await expect(rows.first()).toContainText('First note')
 
   await page.reload()
-  await expect(page.getByLabel('Order')).toHaveValue('oldest')
+  await expect(page.getByRole('combobox', { name: 'Order' })).toHaveText(/Oldest first/)
   await expect(rows.first()).toContainText('First note')
 
   await page.getByRole('button', { name: 'Sign out' }).click()

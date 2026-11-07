@@ -21,6 +21,7 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useRouter, useRouterState } from '@tanstack/react-router'
+import { Button, inputClass, Select } from './ui'
 
 export interface ListState {
   q: string
@@ -107,7 +108,7 @@ export function listQuery(s: ListState): Record<string, string | number | undefi
   return q
 }
 
-const field = 'rounded border border-line bg-white px-2 py-1 text-sm'
+const field = inputClass + ' w-auto'
 
 /**
  * ListToolbar is one compact row: the search (sent as you stop typing),
@@ -151,7 +152,7 @@ export function ListToolbar(props: {
   )
 }
 
-/** FilterSelect is a filter whose trigger reads "Status: Draft", or "Status: All". */
+/** FilterSelect is a filter whose trigger reads "Status: Draft", or "Status: All" (the app's Select, src/ui.tsx). */
 export function FilterSelect(props: {
   label: string
   name: string
@@ -160,16 +161,7 @@ export function FilterSelect(props: {
   set: (patch: Partial<ListState>) => void
 }) {
   const value = props.state.filters[props.name] ?? ''
-  return (
-    <select aria-label={props.label} value={value} onChange={(e) => props.set({ filters: { [props.name]: e.target.value } })} className={field}>
-      <option value="">{props.label}: All</option>
-      {props.options.map((o) => (
-        <option key={o.value} value={o.value}>
-          {props.label}: {o.label}
-        </option>
-      ))}
-    </select>
-  )
+  return <Select label={props.label} prefix value={value} options={[{ value: '', label: 'All' }, ...props.options]} onChange={(v) => props.set({ filters: { [props.name]: v } })} />
 }
 
 /** SortHead is a column header that sorts by its field, again to reverse. */
@@ -198,12 +190,12 @@ export function Pager(props: { total: number; state: ListState; set: (patch: Par
         {first}–{last} of {total}
       </span>
       <span className="flex gap-2">
-        <button type="button" disabled={state.offset === 0} onClick={() => set({ offset: Math.max(0, state.offset - state.limit) })} className={field + ' disabled:opacity-40'}>
+        <Button tone="secondary" disabled={state.offset === 0} onClick={() => set({ offset: Math.max(0, state.offset - state.limit) })}>
           Previous
-        </button>
-        <button type="button" disabled={last >= total} onClick={() => set({ offset: state.offset + state.limit })} className={field + ' disabled:opacity-40'}>
+        </Button>
+        <Button tone="secondary" disabled={last >= total} onClick={() => set({ offset: state.offset + state.limit })}>
           Next
-        </button>
+        </Button>
       </span>
     </nav>
   )

@@ -116,6 +116,11 @@ import (
 //     link in the frontend and templates: hash routing, history.back()
 //     by hand, a link labelled Back to one fixed page (navigation.go);
 //
+//   - L026: the browser's own controls in a page of an app that has the
+//     app's components (src/ui.tsx): a <select>, a <dialog> by hand,
+//     confirm(), alert() or prompt(); the app's Select, Dialog and
+//     Drawer instead (ui.go);
+//
 // Except for L004, L019 and L020 the findings are warnings: they point at the pattern,
 // the author decides. A comment "lidza:ignore L001" on the line, or the
 // line before, exempts that line from the rule it names.
@@ -173,6 +178,7 @@ func Rules(ctx context.Context, root string) []Diagnostic {
 	out = append(out, migrationSafety(root)...)
 	out = append(out, formTargets(root)...)
 	out = append(out, navigationRules(root)...)
+	out = append(out, uiRules(root)...)
 	out = append(out, rootLayout(root)...)
 	out = append(out, agentFileSize(root)...)
 	return out

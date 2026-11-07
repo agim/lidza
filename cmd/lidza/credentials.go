@@ -76,7 +76,7 @@ func runCredentials(ctx context.Context, args []string) error {
 			return err
 		}
 		fmt.Printf("removed %s from %s\n", strings.Join(rest, ", "), credentials.File)
-		store, saved, done := savedSettings(ctx, abs)
+		store, saved, done := savedSettings(ctx, abs, false)
 		defer done()
 		for _, n := range rest {
 			if _, ok := saved[n]; !ok {
@@ -89,7 +89,7 @@ func runCredentials(ctx context.Context, args []string) error {
 		}
 		return nil
 	case "list":
-		_, saved, done := savedSettings(ctx, abs)
+		_, saved, done := savedSettings(ctx, abs, false)
 		defer done()
 		raw, err := credentials.Read(abs)
 		if err != nil {
@@ -113,7 +113,9 @@ func runCredentials(ctx context.Context, args []string) error {
 		if err != nil {
 			return err
 		}
-		_, saved, done := savedSettings(ctx, abs)
+		// One NAME is a value for a script or a test to read whole: no
+		// note beside it.
+		_, saved, done := savedSettings(ctx, abs, len(rest) == 1)
 		defer done()
 		if len(rest) == 0 {
 			// Every value, decrypted, as edit shows the file.
@@ -185,7 +187,8 @@ func runCredentials(ctx context.Context, args []string) error {
 // db pack they live, sealed, in the app database's credential table and
 // win over the file. Empty when the app has no database, it is not
 // reachable, or nothing was saved; done closes the connection.
-func savedSettings(ctx context.Context, dir string) (store *db.CredentialStore, saved map[string]string, done func()) {
+// quiet keeps the note about an unreadable database off stderr.
+func savedSettings(ctx context.Context, dir string, quiet bool) (store *db.CredentialStore, saved map[string]string, done func()) {
 	done = func() {}
 	values, err := env.Values(dir)
 	if err != nil || values["DATABASE_URL"] == "" {
@@ -197,12 +200,14 @@ func savedSettings(ctx context.Context, dir string) (store *db.CredentialStore, 
 	if err != nil {
 		// Said, not swallowed: a value saved from the admin pages would
 		// otherwise be listed as absent, or left in place by unset.
-		fmt.Fprintf(os.Stderr, "note: the settings saved from the admin pages could not be read (database unreachable): %v\n", err)
+		if !quiet {
+			fmt.Fprintf(os.Stderr, "note: the settings saved from the admin pages could not be read (database unreachable): %v\n", err)
+		}
 		return nil, nil, done
 	}
 	var exists bool
 	if err := pool.QueryRow(cctx, `SELECT to_regclass('credential') IS NOT NULL`).Scan(&exists); err != nil || !exists {
-		if err != nil {
+		if err != nil && !quiet {
 			fmt.Fprintf(os.Stderr, "note: the settings saved from the admin pages could not be read: %v\n", err)
 		}
 		pool.Close()
@@ -210,7 +215,9 @@ func savedSettings(ctx context.Context, dir string) (store *db.CredentialStore, 
 	}
 	store = db.NewCredentialStore(pool, dir)
 	if err := store.Load(cctx); err != nil {
-		fmt.Fprintf(os.Stderr, "note: the settings saved from the admin pages could not be read: %v\n", err)
+		if !quiet {
+			fmt.Fprintf(os.Stderr, "note: the settings saved from the admin pages could not be read: %v\n", err)
+		}
 		pool.Close()
 		return nil, nil, done
 	}

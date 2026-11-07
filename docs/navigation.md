@@ -42,19 +42,24 @@ inherits, the templates show them, and a check catches what slips.
 8. A new view starts at the top; Back and Forward restore the scroll.
 9. A deep link and a reload land on the same view; an unknown slug shows
    a not-found view linking to the parent.
+10. A breadcrumb trail is links: every crumb but the last is an `<a href>`
+   to that ancestor's address, the last is the view itself marked
+   `aria-current="page"`, in a `<nav aria-label="Breadcrumb">`. The trail
+   is the app's structure; it does not replace the back link, which is
+   the visitor's history.
 
 ## What each template ships
 
 | | Routes | Search parameters | Back link | Title | Scroll |
 |---|---|---|---|---|---|
-| react | TanStack Router, `src/router.tsx` | `validateSearch` with `searchText`, `searchChoice`, `searchNumber` and `stripSearchParams`; `useListState` for lists | `BackLink` in `src/navigation.tsx` (TanStack's `useCanGoBack`) | `useTitle` | `scrollRestoration: true` |
+| react | TanStack Router, `src/router.tsx` | `validateSearch` with `searchText`, `searchChoice`, `searchNumber` and `stripSearchParams`; `useListState` for lists | `BackLink` and `Breadcrumbs` in `src/navigation.tsx` (TanStack's `useCanGoBack`) | `useTitle` | `scrollRestoration: true` |
 | svelte | `src/router.svelte.ts` over `src/routes.ts`; plain `<a href>` | `searchParam`, `setSearch` | `src/BackLink.svelte` (the router numbers its entries in `history.state`) | the route's `title`, `setTitle` | kept per entry by the router |
 | astro | a page per address, `getStaticPaths` | a `GET` form, `history.replaceState` in the page's script | `src/components/BackLink.astro`, `src/back.ts` (the Navigation API, else a same-origin referrer) | `<Base title>` | the browser |
 | htmx | Go routes in `pages.go` | a `GET` form with `hx-replace-url`; `hx-push-url` for a new view | `data-back` on a link, `static/back.js` | `"Title"` in the page data | the browser |
 
 Each template's items pages are the example: a list filtered by a search
 parameter (`/items?category=seating`), an item at `/items/<slug>` with a
-back link, and its tabs as paths (`/items/<slug>/specs`). The react and
+breadcrumb trail and a back link, and its tabs as paths (`/items/<slug>/specs`). The react and
 svelte templates test them in `e2e/navigation.spec.ts` (filter in the
 URL, back link to the filtered list, Back after a filter, tab and reload,
 deep link, scroll, unknown slug); the astro template in its own

@@ -1,5 +1,5 @@
 import { getRouteApi, Link, Outlet } from '@tanstack/react-router'
-import { BackLink, useTitle } from '../../navigation'
+import { BackLink, Breadcrumbs, useTitle } from '../../navigation'
 import { findItem } from './data'
 
 // One item at /items/<slug>, its tabs as child routes: /items/<slug> is
@@ -17,11 +17,16 @@ export function ItemPage() {
   if (!item) return <ItemNotFound />
   return (
     <div className="space-y-4">
-      {/* Back to where the visitor came from in this app (the list, filtered as they left it); /items when opened directly. */}
+      {/* Where this view sits: each ancestor a link to its own address. */}
+      <Breadcrumbs>
+        <Link to="/items">Items</Link>
+        <span>{item.name}</span>
+      </Breadcrumbs>
+      <h1 className="text-3xl font-semibold tracking-tight">{item.name}</h1>
+      {/* Where the visitor was: the list, filtered as they left it; /items when opened directly. */}
       <BackLink to="/items" className="text-sm text-muted hover:text-brand">
         All items
       </BackLink>
-      <h1 className="text-3xl font-semibold tracking-tight">{item.name}</h1>
       <nav aria-label="Item sections" className="flex gap-4 border-b border-line">
         <Link to="/items/$slug" params={{ slug }} activeOptions={{ exact: true }} className={tab}>
           Overview

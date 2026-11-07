@@ -644,8 +644,10 @@ land on: a record, a tab, a step, a list's filter (the guide's
    paginated, filterable list") keeps its state there the same way; its
    route sets `staticData: { prerender: false }`.
 4. The back link: `<BackLink to="/posts">All posts</BackLink>` from
-   `src/navigation.tsx`. The title: `useTitle(post.title)` in the page
-   (the leaf route).
+   `src/navigation.tsx`. The trail, above the heading:
+   `<Breadcrumbs><Link to="/posts">Posts</Link><span>{post.title}</span></Breadcrumbs>`,
+   every ancestor a `Link`, the view last. The title:
+   `useTitle(post.title)` in the page (the leaf route).
 5. A dialog or a panel over a list that has its own address is a child
    route rendered in the list's `<Outlet />`; closing it is a `Link` (or
    `BackLink`) to the list.
@@ -664,8 +666,10 @@ land on: a record, a tab, a step, a list's filter (the guide's
    step. A route whose first render reads them sets `prerender: false`.
    From code, `navigate('/posts/' + slug)` pushes.
 4. The back link: `<BackLink href="/posts">All posts</BackLink>` from
-   `src/BackLink.svelte`. The title: the route's `title`, or
-   `setTitle(post.title)` once the data arrives.
+   `src/BackLink.svelte`. A breadcrumb trail is `<nav
+   aria-label="Breadcrumb"><ol>` with an `<a href>` per ancestor and the
+   view last with `aria-current="page"`. The title: the route's `title`,
+   or `setTitle(post.title)` once the data arrives.
 5. An app created before `src/router.svelte.ts` takes `src/router.svelte.ts`,
    `src/routes.ts`, `src/BackLink.svelte`, `src/App.svelte`,
    `src/main.ts`, `src/entry-server.ts` and `scripts/prerender.mjs` from
@@ -681,7 +685,9 @@ land on: a record, a tab, a step, a list's filter (the guide's
    and writes the change with `history.replaceState`.
 4. The back link: `<BackLink href="/posts">All posts</BackLink>` from
    `src/components/BackLink.astro` (`src/back.ts`, loaded by the layout,
-   makes it go back). The title: `<Base title="...">`.
+   makes it go back). A breadcrumb trail is `<nav
+   aria-label="Breadcrumb"><ol>` with an `<a href>` per ancestor and the
+   view last with `aria-current="page"`. The title: `<Base title="...">`.
 {{- else if eq .Template "htmx"}}
 2. Routes in `pages.go`: `GET /posts/{slug}` and a tab as its own
    route (`GET /posts/{slug}/comments`), each rendering the whole page;
@@ -693,8 +699,10 @@ land on: a record, a tab, a step, a list's filter (the guide's
    handler reads `r.URL.Query()`, so a reload shows the same list. A swap
    that is a new view uses `hx-push-url="true"`.
 4. The back link: `<a href="/posts" data-back>All posts</a>`
-   (`static/back.js`, loaded by the layout, makes it go back). The title:
-   `"Title"` in the page's data.
+   (`static/back.js`, loaded by the layout, makes it go back). A
+   breadcrumb trail is `<nav aria-label="Breadcrumb"><ol>` with an `<a
+   href>` per ancestor and the view last with `aria-current="page"`. The
+   title: `"Title"` in the page's data.
 {{- end}}
 {{- if .Dist}}
 {{if eq .Template "react"}}7{{else if eq .Template "svelte"}}6{{else}}5{{end}}. Test it in `e2e/` (`e2e/navigation.spec.ts` is the example): open a

@@ -21,7 +21,7 @@ func TestNavigationGuidance(t *testing.T) {
 		}
 	}
 	guide := mustRead(t, "docs/lidza-guide.md")
-	for _, phrase := range []string{"## Navigation", "push", "secret", "<a href>", "title follows the view", "Scroll", "A deep link and a reload", "validateSearch", "useTitle", "scrollRestoration: true", "page.goBack()"} {
+	for _, phrase := range []string{"## Navigation", "push", "secret", "<a href>", "Breadcrumbs are links", "title follows the view", "Scroll", "A deep link and a reload", "validateSearch", "useTitle", "scrollRestoration: true", "page.goBack()"} {
 		if !strings.Contains(guide, phrase) {
 			t.Errorf("the guide's Navigation section lacks %q", phrase)
 		}
@@ -32,8 +32,8 @@ func TestNavigationGuidance(t *testing.T) {
 			t.Errorf("%s is empty", path)
 		}
 	}
-	if body := mustRead(t, "src/navigation.tsx"); !strings.Contains(body, "export const BackLink") || !strings.Contains(body, "export function useTitle") {
-		t.Errorf("src/navigation.tsx lacks BackLink or useTitle")
+	if body := mustRead(t, "src/navigation.tsx"); !strings.Contains(body, "export const BackLink") || !strings.Contains(body, "export function useTitle") || !strings.Contains(body, "export function Breadcrumbs") {
+		t.Errorf("src/navigation.tsx lacks BackLink, useTitle or Breadcrumbs")
 	}
 }
 

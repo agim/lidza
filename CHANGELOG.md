@@ -10,6 +10,23 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
+## Unreleased
+
+- Breadcrumbs are links: rule 10 of the navigation conventions
+  (`docs/navigation.md`, the guide's "Navigation", the recipe "Keep a
+  view in the address", `AGENTS.md`). Every crumb but the last is a link
+  to that ancestor's address, the last is the view itself marked the
+  current page; the trail is the app's structure and does not replace
+  the back link. The react template ships `Breadcrumbs` in
+  `src/navigation.tsx` (`lidza snippet navigation`), shown on the items
+  page and checked in `e2e/navigation.spec.ts`; the other templates get
+  the markup.
+- `lidza credentials show NAME` prints the value alone again. Since
+  v0.1.134 it also wrote the note about an unreadable database to
+  stderr, so a script or test reading the whole output (the platform
+  evals in CI, where a fresh app has no database yet) saw two lines.
+  `list`, `show` and `unset` keep the note.
+
 ## v0.1.136 (2026-11-06)
 
 - `lidza new` writes the full Go version in the `go` line of `go.mod`

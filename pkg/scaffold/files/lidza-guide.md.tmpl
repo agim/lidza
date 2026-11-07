@@ -326,19 +326,25 @@ has the steps.
    was opened from a link elsewhere or in a new tab). It renders `<a
    href="parent">`. Name the parent ("All posts"), not "Back". Never a
    link fixed to one page labelled "Back", never `history.back()` by hand.
-7. The document title follows the view: "Members · Acme site · app".
+7. Breadcrumbs are links. A trail shows where a view sits: every crumb
+   but the last is a link to that ancestor's address (the project, then
+   its settings), the last is the view itself, marked the current page;
+   never plain text for an ancestor, never a button. The trail is the
+   app's structure and does not replace the back link, which is the
+   visitor's history.
+8. The document title follows the view: "Members · Acme site · app".
    The server's head is for the first load and for crawlers (recipe "Set
    the head of a page").
-8. Scroll: a new view starts at the top (or at its `#anchor`); Back and
+9. Scroll: a new view starts at the top (or at its `#anchor`); Back and
    Forward return to where it was scrolled.
-9. A deep link and a reload land on the same view: the page reads the
+10. A deep link and a reload land on the same view: the page reads the
    whole view from the address on its first render and loads what it
    needs; an unknown slug shows a not-found view with a link to the
    parent.{{if .Dist}} The binary serves the frontend for every path outside `/api`,
    so any path the router knows opens directly; `/api/...` is always the
    API, an unknown one its 404.{{else}} Every view is a Go route that renders the whole page,
    the ones htmx swaps in too, so a reload or a shared link works.{{end}}
-10. Test it{{if .Dist}} in the browser suite: open a deep link, reload, follow a
+11. Test it{{if .Dist}} in the browser suite: open a deep link, reload, follow a
    link, go back (`page.goBack()` and the back link), and check the
    filter, the tab and the scroll held.{{else}} in `tests/pages_test.go`: each address (a filter in the
    query, a slug, a tab) answers with its view and title, an unknown slug
@@ -360,6 +366,8 @@ pages show each rule):
   the view without its parameters); a page reading the address another
   way (`useListState`) sets `staticData: { prerender: false }`.
 - `<BackLink to="/posts">All posts</BackLink>` takes `Link`'s props.
+- `<Breadcrumbs><Link to="/posts">Posts</Link><span>{post.title}</span></Breadcrumbs>`
+  above the heading: `Link`s to the ancestors, the view last.
 - `useTitle(post.title)` in the page a route renders (the leaf; a layout
   route around others never sets it, or it overrides them).
 - `scrollRestoration: true` in `createAppRouter`.
@@ -377,6 +385,8 @@ rule):
   entry (`push: true` for a step). A route whose first render reads them
   sets `prerender: false`.
 - `<BackLink href="/posts">All posts</BackLink>` (`src/BackLink.svelte`).
+- A breadcrumb trail is `<nav aria-label="Breadcrumb"><ol><li><a
+  href="/posts">Posts</a></li><li aria-current="page">{title}</li></ol></nav>`.
 - `setTitle(post.title)` once data arrives, else the route's `title`.
 - The build prerenders the routes without `:params` and keeps a shell
   the binary serves to every other path.
@@ -390,6 +400,8 @@ In this app (astro, a page per address; the items pages show each rule):
   filters in place writes the address with `history.replaceState`.
 - `<BackLink href="/posts">All posts</BackLink>`
   (`src/components/BackLink.astro`; `src/back.ts` makes it go back).
+- A breadcrumb trail is `<nav aria-label="Breadcrumb"><ol><li><a
+  href="/posts">Posts</a></li><li aria-current="page">{title}</li></ol></nav>`.
 - `<Base title="...">` sets the title: "Specs · Desk lamp · app".
 {{else if eq .Template "htmx"}}
 In this app (htmx, pages from Go; the items pages in `pages.go` show each

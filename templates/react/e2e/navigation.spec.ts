@@ -55,6 +55,10 @@ test('a tab is an address: reload keeps it, Back returns to the tab before', asy
 
 test('opened directly, the back link goes to the parent', async ({ page }) => {
   await page.goto('/items/desk-lamp/specs?ref=mail')
+  // The trail: the ancestor a link to its address, the view the current page.
+  const trail = page.getByRole('navigation', { name: 'Breadcrumb' })
+  await expect(trail.getByRole('link', { name: 'Items' })).toHaveAttribute('href', '/items')
+  await expect(trail.getByText('Desk lamp')).toHaveAttribute('aria-current', 'page')
   await page.getByRole('link', { name: 'All items' }).click()
   await expect(page).toHaveURL(/\/items$/)
   await expect(page.getByRole('link', { name: 'Desk lamp' })).toBeVisible()

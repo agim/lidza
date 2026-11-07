@@ -8,6 +8,10 @@
 //     the parent; an <a href="/posts">, so a new tab opens the parent.
 //   useTitle(post.title)
 //     the document title follows the route: "Hello world · app".
+//   <Breadcrumbs><Link to="/posts">Posts</Link><span>{post.title}</span></Breadcrumbs>
+//     the trail of a view's ancestors, each a link to its own address,
+//     the view itself last; where a back link is the visitor's history,
+//     the trail is the app's structure.
 //   validateSearch: (s: { status?: string; q?: string; page?: number } & SearchSchemaInput) =>
 //     ({ status: searchChoice(s.status, statuses, 'all'), q: searchText(s.q), page: searchNumber(s.page, 1) })
 //     a route's search parameters, typed, each optional in a link (the
@@ -18,7 +22,7 @@
 // A filter, a search box, a sort or a page replaces the history entry;
 // another view (a record, a tab, a wizard step) is a link and pushes one.
 
-import { forwardRef, useEffect, type AnchorHTMLAttributes, type MouseEvent } from 'react'
+import { Children, cloneElement, forwardRef, isValidElement, useEffect, type AnchorHTMLAttributes, type MouseEvent, type ReactNode } from 'react'
 import { createLink, useCanGoBack, useRouter } from '@tanstack/react-router'
 
 /** The app's name, the last part of every document title. */
@@ -84,4 +88,31 @@ export function searchChoice<T extends string>(value: unknown, choices: readonly
 export function searchNumber(value: unknown, fallback: number): number {
   const n = typeof value === 'number' ? value : Number(value)
   return Number.isInteger(n) && n >= 1 ? n : fallback
+}
+
+/**
+ * Breadcrumbs is the trail from the app's root to this view: every crumb
+ * but the last is a `Link` to that ancestor's address (never text, never
+ * a button), the last is the view itself, marked the current page. Place
+ * it above the heading. It does not replace a back link: the trail is
+ * where the view sits, the back link where the visitor was.
+ */
+export function Breadcrumbs({ children, className }: { children: ReactNode; className?: string }) {
+  const crumbs = Children.toArray(children)
+  return (
+    <nav aria-label="Breadcrumb" className={className}>
+      <ol className="flex flex-wrap items-center gap-1 text-sm text-muted">
+        {crumbs.map((crumb, i) => {
+          const last = i === crumbs.length - 1
+          const current = last && isValidElement<{ 'aria-current'?: string; className?: string }>(crumb) ? cloneElement(crumb, { 'aria-current': 'page', className: [crumb.props.className, 'text-ink'].filter(Boolean).join(' ') }) : crumb
+          return (
+            <li key={i} className="flex items-center gap-1">
+              {i > 0 && <span aria-hidden="true">/</span>}
+              {current}
+            </li>
+          )
+        })}
+      </ol>
+    </nav>
+  )
 }

@@ -540,8 +540,10 @@ land on: a record, a tab, a step, a list's filter (the guide's
    paginated, filterable list") keeps its state there the same way; its
    route sets `staticData: { prerender: false }`.
 4. The back link: `<BackLink to="/posts">All posts</BackLink>` from
-   `src/navigation.tsx`. The title: `useTitle(post.title)` in the page
-   (the leaf route).
+   `src/navigation.tsx`. The trail, above the heading:
+   `<Breadcrumbs><Link to="/posts">Posts</Link><span>{post.title}</span></Breadcrumbs>`,
+   every ancestor a `Link`, the view last. The title:
+   `useTitle(post.title)` in the page (the leaf route).
 5. A dialog or a panel over a list that has its own address is a child
    route rendered in the list's `<Outlet />`; closing it is a `Link` (or
    `BackLink`) to the list.

@@ -10,7 +10,7 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
-## Unreleased
+## v0.1.137 (2026-11-07)
 
 - Breadcrumbs are links: rule 10 of the navigation conventions
   (`docs/navigation.md`, the guide's "Navigation", the recipe "Keep a

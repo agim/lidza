@@ -10,7 +10,7 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
-## Unreleased
+## v0.1.138 (2026-11-08)
 
 - Pages are built from the app's components: the guide's new "Pages and
   components" section (one layout, one type scale, room between blocks,

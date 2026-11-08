@@ -10,6 +10,14 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
+## Unreleased
+
+- The built-in MCP endpoint (`/mcp` on a running app) answers behind a
+  proxy that forwards the public Host header to a loopback listener, as
+  the deploy platform does: mcp-go's DNS-rebinding guard, which refused
+  that pairing with 403, is off, since every request must carry the
+  bearer token, which a rebinding page cannot supply (#82).
+
 ## v0.1.138 (2026-11-08)
 
 - Pages are built from the app's components: the guide's new "Pages and

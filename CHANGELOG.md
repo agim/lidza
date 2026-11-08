@@ -10,7 +10,7 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
-## Unreleased
+## v0.1.139 (2026-11-08)
 
 - The built-in MCP endpoint (`/mcp` on a running app) answers behind a
   proxy that forwards the public Host header to a loopback listener, as

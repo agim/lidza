@@ -141,7 +141,11 @@ func mcpHTTP(app App, services *Services) http.Handler {
 	if len(app.Tools) == 0 || token == "" {
 		return nil
 	}
-	inner := server.NewStreamableHTTPServer(mcpServer(app, services), server.WithEndpointPath(MCPPath), server.WithStateLess(true))
+	// Applications listen on loopback behind a proxy that forwards the
+	// public Host header. mcp-go's DNS-rebinding guard rejects that pairing
+	// with 403, so it is off: every request must carry the bearer token
+	// below, which a rebinding page cannot supply.
+	inner := server.NewStreamableHTTPServer(mcpServer(app, services), server.WithEndpointPath(MCPPath), server.WithStateLess(true), server.WithDisableLocalhostProtection(true))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ") != token {
 			w.Header().Set("Content-Type", "application/json")

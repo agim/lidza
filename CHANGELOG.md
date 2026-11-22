@@ -10,7 +10,7 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
-## Unreleased
+## v0.1.140 (2026-11-22)
 
 - Go 1.27.4 in the framework's and the reference app's `go` line
   (GO-2026-6859), so `lidza new` and `lidza update` write 1.27.4 for

@@ -61,18 +61,25 @@ var (
 	navigationChecks = []struct {
 		re      *regexp.Regexp
 		message string
+		// except, when set, clears a match it finds inside the matched text.
+		except *regexp.Regexp
 	}{
 		{
 			regexp.MustCompile(`\blocation\.hash\s*=[^=]|\bcreateHash(?:History|Router)\b|\bhashHistory\b|addEventListener\(\s*['"]hashchange['"]|\bonhashchange\b|svelte-spa-router|\b(?:href|to)\s*=\s*\{?\s*["'` + "`" + `]#/`),
 			"hash routing: give the view a path through the router (/posts/hello-world, /posts/hello-world/comments, ?status=draft), so Back, reload and a shared link land on it. The fragment is for an anchor in the page or a secret kept from the server (read it, then drop it with history.replaceState). Guide: \"Navigation\"",
+			nil,
 		},
 		{
 			regexp.MustCompile(`\bhistory\.(?:back\(\s*\)|go\(\s*-1\s*\))`),
 			"history.back() by hand leaves the app when the page was opened from a link elsewhere or in a new tab: use BackLink with the parent's path (react: src/navigation.tsx; svelte: src/BackLink.svelte; astro: src/components/BackLink.astro; htmx: data-back on the link), which goes back only when the previous entry is this app's. Guide: \"Navigation\"",
+			nil,
 		},
 		{
 			regexp.MustCompile(`(?i)<(?:a|Link)\b(?:[^>]|=>)*?>\s*(?:←|&larr;|‹|&lsaquo;|&lt;|<-|\{?\s*["']?←["']?\s*\}?)?\s*Back\b`),
 			"a link labelled Back to one fixed page does not return where the browser's Back would (the list with its filters and scroll): use BackLink with the parent's path (react: src/navigation.tsx; svelte: src/BackLink.svelte; astro: src/components/BackLink.astro; htmx: data-back on the link) and name the parent (\"All posts\"). Guide: \"Navigation\"",
+			// "Back to top" and other in-page anchors (#top, #) stay on the page, so
+			// they are not navigation; "#/..." is hash routing and stays flagged.
+			regexp.MustCompile(`\b(?:href|to)\s*=\s*\{?\s*["'` + "`" + `]#(?:[^/"'` + "`" + `]|["'` + "`" + `])`),
 		},
 	}
 )
@@ -89,8 +96,13 @@ func checkNavigation(rel, content string) []Diagnostic {
 			continue
 		}
 		for _, c := range navigationChecks {
-			if loc := c.re.FindStringIndex(l); loc != nil {
+			// Every match on the line, so an exempt anchor cannot hide a real one beside it.
+			for _, loc := range c.re.FindAllStringIndex(l, -1) {
+				if c.except != nil && c.except.MatchString(l[loc[0]:loc[1]]) {
+					continue
+				}
 				out = append(out, Diagnostic{Layer: "frontend", Tool: "lidza rules", Severity: "warning", Code: "L025", File: rel, Line: i + 1, Column: loc[0] + 1, Message: c.message})
+				break
 			}
 		}
 	}

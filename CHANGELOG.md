@@ -10,6 +10,13 @@ change. A release without one is additive: an app updates with
 `lidza update --migrate`. `docs/versioning.md` defines the public API
 these rules cover.
 
+## Unreleased
+
+- `lidza check` L025 no longer flags an in-page anchor labelled Back, such
+  as "Back to top" (`href="#top"`, `href="#"`); a Back link to a page or to
+  a `#/...` hash route is still flagged, also beside an in-page one on the
+  same line.
+
 ## v0.1.140 (2026-11-22)
 
 - Go 1.27.4 in the framework's and the reference app's `go` line

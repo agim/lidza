@@ -12,23 +12,24 @@ import (
 
 func TestNavigationRules(t *testing.T) {
 	flagged := map[string]string{
-		"hash assignment":      "location.hash = '#/posts/' + id",
-		"window hash":          "window.location.hash = `#/settings`",
-		"hash listener":        "window.addEventListener('hashchange', route)",
-		"onhashchange":         "window.onhashchange = route",
-		"hash history":         "const history = createHashHistory()",
-		"hash link":            `<a href="#/posts/1">Post</a>`,
-		"hash Link":            `<Link to="#/settings">Settings</Link>`,
-		"history.back":         "<button onClick={() => history.back()}>Back</button>",
-		"router back":          "router.history.back()",
-		"go -1":                "window.history.go(-1)",
-		"fixed back link":      `<Link to="/posts" className="text-sm">Back</Link>`,
-		"arrow back link":      `<a href="/posts">← Back to posts</a>`,
-		"entity back link":     `<a href="/posts">&larr; Back</a>`,
-		"back after arrow fn":  `<Link to="/posts" onClick={() => track('back')}>Back</Link>`,
-		"svelte fixed back":    `<a href="/posts" class="back">Back</a>`,
-		"hash router package":  "import Router from 'svelte-spa-router'",
-		"lowercase back label": `<a href="/">back</a>`,
+		"hash assignment":                 "location.hash = '#/posts/' + id",
+		"window hash":                     "window.location.hash = `#/settings`",
+		"hash listener":                   "window.addEventListener('hashchange', route)",
+		"onhashchange":                    "window.onhashchange = route",
+		"hash history":                    "const history = createHashHistory()",
+		"hash link":                       `<a href="#/posts/1">Post</a>`,
+		"hash Link":                       `<Link to="#/settings">Settings</Link>`,
+		"history.back":                    "<button onClick={() => history.back()}>Back</button>",
+		"router back":                     "router.history.back()",
+		"go -1":                           "window.history.go(-1)",
+		"fixed back link":                 `<Link to="/posts" className="text-sm">Back</Link>`,
+		"arrow back link":                 `<a href="/posts">← Back to posts</a>`,
+		"entity back link":                `<a href="/posts">&larr; Back</a>`,
+		"back after arrow fn":             `<Link to="/posts" onClick={() => track('back')}>Back</Link>`,
+		"svelte fixed back":               `<a href="/posts" class="back">Back</a>`,
+		"hash router package":             "import Router from 'svelte-spa-router'",
+		"lowercase back label":            `<a href="/">back</a>`,
+		"real back beside an in-page one": `<a href="#top">Back to top</a> <a href="/posts">Back</a>`,
 	}
 	for name, line := range flagged {
 		if got := checkNavigation("src/x.tsx", "const a = 1\n"+line+"\n"); len(got) != 1 || got[0].Code != "L025" || got[0].Line != 2 {
@@ -37,6 +38,9 @@ func TestNavigationRules(t *testing.T) {
 	}
 	allowed := map[string]string{
 		"in-page anchor":      `<a href="#install">Install</a>`,
+		"back to top":         `<a className="text-link" href="#top">Back to top <span aria-hidden="true">↑</span></a>`,
+		"back to top, svelte": `<a href="#top" class="top">Back to top</a>`,
+		"bare fragment back":  `<a href="#">Back to top</a>`,
 		"reading a token":     "const token = location.hash.slice(1)",
 		"comparing the hash":  "if (location.hash === '#new') open()",
 		"dropping the secret": "history.replaceState(null, '', location.pathname + location.search)",
@@ -54,6 +58,14 @@ func TestNavigationRules(t *testing.T) {
 		if got := checkNavigation("src/x.tsx", line+"\n"); len(got) != 0 {
 			t.Errorf("%s: %q gave %v, want none", name, line, got)
 		}
+	}
+	// "#/..." is hash routing, not an in-page anchor: a Back link to it is still flagged.
+	backToHashRoute := false
+	for _, d := range checkNavigation("src/x.tsx", "<a href=\"#/posts\">Back</a>\n") {
+		backToHashRoute = backToHashRoute || strings.Contains(d.Message, "labelled Back")
+	}
+	if !backToHashRoute {
+		t.Errorf("a Back link to a hash route was not flagged as a fixed Back link")
 	}
 	if got := checkNavigation("src/x.ts", "// lidza:ignore L025 (the previous entry is this app's)\nhistory.back()\n"); len(got) != 0 {
 		t.Errorf("ignore on the line before: %v", got)
